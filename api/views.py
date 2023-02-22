@@ -60,7 +60,7 @@ def coach_signup(request):
     password = request.data.get('password')
 
     # Check if required data is provided
-    if not all([name, email, meet_link, phone, level, rating, area_of_expertise, username, password]):
+    if not all([name, email, meet_link, phone, level, area_of_expertise, username, password]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
