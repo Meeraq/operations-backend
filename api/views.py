@@ -130,7 +130,7 @@ def pmo_login(request):
         return Response({'error': 'Please provide both email and password'},
                         status=400)
 
-    user = authenticate(email=email, password=password,type="pmo")
+    user = authenticate(username=email, password=password,type="pmo")
     if not user:
         return Response({'error': 'Invalid credentials'},
                         status=401)
