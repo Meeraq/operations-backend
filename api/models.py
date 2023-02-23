@@ -93,7 +93,7 @@ class Project(models.Model):
     end_date= models.DateField(auto_now_add=True)
     hr=models.ManyToManyField(HR)
     coaches=models.ManyToManyField(Coach)
-    participant=models.ManyToManyField(Participant)
+    learner=models.ManyToManyField(Participant)
     total_sessions=models.IntegerField(default=0, blank=True)
     cost_per_session=models.IntegerField(default=0, blank=True)
     sessions_per_employee=models.IntegerField(default=0, blank=True)

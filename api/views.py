@@ -3,7 +3,7 @@ from os import name
 from django.shortcuts import render
 from django.db import transaction
 from .serializers import CoachSerializer
-import jwt
+# import jwt
 import uuid
 from datetime import datetime, timedelta
 from rest_framework.response import Response
@@ -298,4 +298,20 @@ def create_learner(request):
     except Exception as e:
         # Return error response if any exception occurs
         return Response({'error': str(e)}, status=500)
+
+
+@api_view(["POST"])
+def get_coaches_by_project(request):
+    project_id = request.data['project_id']
+    project= Project.objects.get(id=project_id)
+    coaches= project.coaches.name
+    return Response({"message": "Success"}, status=200)
+
+@api_view(["POST"])
+def get_learners_by_project(request):
+    project_id = request.data['project_id']
+    project= Project.objects.get(id=project_id)
+    learner= project.learner.name
+    return Response({"message": "Success"}, status=200)
+
 
