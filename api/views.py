@@ -1,15 +1,17 @@
 from datetime import date
 from os import name
 from django.shortcuts import render
-from django.db import transaction
+from django.db import transaction,IntegrityError
 from .serializers import CoachSerializer
+from django.utils.crypto import get_random_string
 import jwt
 import uuid
+from rest_framework.exceptions import AuthenticationFailed
 from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view
-from .models import Profile,Pmo, Coach, Project, Organisation, HR, Participant
+from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 
@@ -159,7 +161,6 @@ def pmo_login(request):
 
 
 
-
 @api_view(['POST'])
 def coach_login(request):
     email = request.data.get('email')
@@ -219,6 +220,88 @@ def getManagementToken(request):
     return Response({"message": "Success", "management_token": management_token}, status=200)
 
 
+@api_view(['POST'])
+def create_user_without_password(request):
+    try:
+        with transaction.atomic():
+            # Check if username field is provided
+            if 'username' not in request.data:
+                raise ValueError('Username field is required')
+            # Create user object with unusable password
+            user = User.objects.create_user(
+                username=request.data['username'],
+                email=request.data['username'])
+            user.set_unusable_password()
+            user.save()
+
+            # Create the learner profile
+            learner_profile = Profile.objects.create(user=user, type='learner')
+
+            # Create the learner object
+            learner = Learner.objects.create(user=learner_profile, name=request.data.get('name'), email=request.data['username'], phone=request.data.get('phone'))
+
+            # Return success response
+            return Response({}, status=200)
+
+    except ValueError as e:
+        # Handle missing or invalid request data
+        return Response({'error': str(e)}, status=400)
+
+    except IntegrityError:
+        # Handle username or email already exists
+        return Response({'error': 'Username or email already exists'}, status=409)
+
+    except Exception as e:
+        # Handle any other exceptions
+        transaction.set_rollback(True) # Rollback the transaction
+        return Response({'error': str(e)}, status=500) 
+
+
+@api_view(['POST'])
+def otp_generation(request):
+    try:
+        learner = Learner.objects.get(email=request.data['email'])
+        try:
+            # Check if OTP already exists for the learner
+            otp_obj = OTP.objects.get(learner=learner)
+            otp_obj.delete()
+        except OTP.DoesNotExist:
+            pass
+
+        # Generate OTP and save it to the database
+        otp = get_random_string(length=6, allowed_chars='0123456789')
+        created_otp = OTP.objects.create(learner=learner, otp=otp)
+
+        return Response({'success': True,'otp':created_otp.otp})
+
+    except Learner.DoesNotExist:
+        # Handle the case where the learner with the given email does not exist
+        return Response({'error': 'Learner with the given email does not exist.'}, status=400)
+
+    except Exception as e:
+        # Handle any other exceptions
+        return Response({'error': str(e)}, status=500)
+
+@api_view(['POST'])
+def otp_validation(request):
+    otp_obj = OTP.objects.filter(learner__email=request.data['email'], otp=request.data['otp']).order_by('-created_at').first()
+
+    if otp_obj is None:
+        raise AuthenticationFailed('Invalid OTP')
+
+    learner = otp_obj.learner
+    token, created = Token.objects.get_or_create(user=learner.user.user)
+
+    # Delete the OTP object after it has been validated
+    otp_obj.delete()
+
+    learner_data = {'name':learner.name,'email': learner.email,'phone': learner.email, 'token': token.key}
+
+    return Response({ 'learner': learner_data},status=200)
+
+
+
+
 
 
 @api_view(['POST'])
@@ -234,20 +317,14 @@ def create_project(request):
     )
     organisation.save()
 
-    # hr= HR.objects.get(hr_id=id)
-    # coach= Coach.objects.get(coach_id=id)
     project= Project(
     name= request.data['project_name'],
     organisation= organisation,
-    # coach_assigned= coach_assigned,
     total_sessions= request.data['total_session'],
-    # project_validity= date ,
     cost_per_session= request.data['cost_per_session'],
-    # currency= request.data['currency'],
     sessions_per_employee= request.data['sessions_per_employee']
 )
     project.save()
-    # print(project,project.coaches)
 
     for coach in request.data["coach_id"]:
         single_coach = Coach.objects.get(id=coach)
@@ -255,17 +332,6 @@ def create_project(request):
         project.coaches.add(single_coach)
 
     # for participant in request.data['participant']:
-    #     data = Participant(
-
-    #     )
-    #     data.save()
-    #     project.participant.add(data)
-
-
-    # if  create_project.save():
-    #     return Response({'message': "Project saved Successfully"}, status=200)
-    # else:
-    #     return Response({'error': "Project couldn't be save sucessfully"}, status=400)
     return Response({'message': "Project saved Successfully"}, status=200)
     
     
@@ -291,9 +357,9 @@ def create_learner(request):
             # Create the learner Profile linked to the User
             learner_profile = Profile.objects.create(user=user, type='learner')
             # Create the learner User using the Profile
-            participant_user = Participant.objects.create(user=learner_profile, name=name, email=email, phone=phone)
+            learner = Learner.objects.create(user=learner_profile, name=name, email=email, phone=phone)
         # Return success response
-        return Response({'message': 'Participant user created successfully.'}, status=201)
+        return Response({'message': 'Learner user created successfully.'}, status=201)
 
     except Exception as e:
         # Return error response if any exception occurs

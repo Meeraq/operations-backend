@@ -49,7 +49,7 @@ class Coach(models.Model):
         return self.name
 
 
-class Participant(models.Model):
+class Learner(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name= models.CharField(max_length=100)
     email=models.EmailField()
@@ -93,10 +93,15 @@ class Project(models.Model):
     end_date= models.DateField(auto_now_add=True)
     hr=models.ManyToManyField(HR)
     coaches=models.ManyToManyField(Coach)
-    participant=models.ManyToManyField(Participant)
+    participant=models.ManyToManyField(Learner)
     total_sessions=models.IntegerField(default=0, blank=True)
     cost_per_session=models.IntegerField(default=0, blank=True)
     sessions_per_employee=models.IntegerField(default=0, blank=True)
-    
+
+
+class OTP(models.Model):
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
