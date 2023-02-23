@@ -3,13 +3,21 @@ from os import name
 from django.shortcuts import render
 from django.db import transaction
 from .serializers import CoachSerializer
+import jwt
+import uuid
+from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view
 from .models import Profile,Pmo, Coach, Project, Organisation, HR, Participant
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
+
 # Create your views here.
+
+import environ
+
+env = environ.Env()
 
 # Create pmo user
 @api_view(['POST'])
@@ -54,7 +62,7 @@ def coach_signup(request):
     password = request.data.get('password')
 
     # Check if required data is provided
-    if not all([name, email, meet_link, phone, level, rating, area_of_expertise, username, password]):
+    if not all([name, email, meet_link, phone, level, area_of_expertise, username, password]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
@@ -148,6 +156,67 @@ def pmo_login(request):
             'phone': pmo.phone
         }
     })
+
+
+
+
+@api_view(['POST'])
+def coach_login(request):
+    email = request.data.get('email')
+    password = request.data.get('password')
+
+    if email is None or password is None:
+        return Response({'error': 'Please provide both email and password'},
+                        status=400)
+
+    user = authenticate(username=email, password=password)
+
+    if not user:
+        return Response({'error': 'Invalid credentials'},
+                        status=401)
+
+    try:
+        coach = Coach.objects.get(user=user.profile)
+    except Coach.DoesNotExist:
+        return Response({'error': 'Coach not found'},
+                        status=404)
+
+    # Return the coach information in the response
+    coach_data = {
+        'id': coach.id,
+        'name': coach.name,
+        'email': coach.email,
+        'meet_link': coach.meet_link,
+        'phone': coach.phone,
+        'level': coach.level,
+        'rating': coach.rating,
+        'area_of_expertise': coach.area_of_expertise,
+        'completed_sessions': coach.completed_sessions,
+        'is_approved': coach.is_approved
+    }
+    
+    return Response({'coach': coach_data}, status=200)
+
+
+def generateManagementToken():
+    expires = 24 * 3600
+    now = datetime.utcnow()
+    exp = now + timedelta(seconds=expires)
+    return jwt.encode(payload={
+        'access_key': env('100MS_APP_ACCESS_KEY'),
+        'type': 'management',
+        'version': 2,
+        'jti': str(uuid.uuid4()),
+        'iat': now,
+        'exp': exp,
+        'nbf': now
+    }, key=env('100MS_APP_SECRET'))
+
+
+@api_view(["GET"])
+def getManagementToken(request):
+    management_token = generateManagementToken()
+    return Response({"message": "Success", "management_token": management_token}, status=200)
 
 
 
