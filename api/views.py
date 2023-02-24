@@ -2,9 +2,9 @@ from datetime import date
 from os import name
 from django.shortcuts import render
 from django.db import transaction,IntegrityError
-from .serializers import CoachSerializer
+from .serializers import CoachSerializer,LearnerSerializer
 from django.utils.crypto import get_random_string
-import jwt
+# import jwt
 import uuid
 from rest_framework.exceptions import AuthenticationFailed
 from datetime import datetime, timedelta
@@ -300,41 +300,83 @@ def otp_validation(request):
     return Response({ 'learner': learner_data},status=200)
 
 
-
-
-
-
 @api_view(['POST'])
 def create_project(request):
-    # date= date.today()
-    # organisation= Organisation.objects.get(organisation_id=id)
-    # organisation_name= 
-    # organisation_image= 
-
-    # print(organisation_name,organisation_image)
     organisation= Organisation(
         name=request.data['organisation_name'], image_url=request.data['image_url']
     )
     organisation.save()
-
     project= Project(
-    name= request.data['project_name'],
-    organisation= organisation,
-    total_sessions= request.data['total_session'],
-    cost_per_session= request.data['cost_per_session'],
-    sessions_per_employee= request.data['sessions_per_employee']
-)
+        name=request.data['project_name'],
+        organisation=organisation,
+        total_sessions=request.data['total_session'],
+        cost_per_session=request.data['cost_per_session'],
+        sessions_per_employee=request.data['sessions_per_employee']
+    )
     project.save()
-
     for coach in request.data["coach_id"]:
         single_coach = Coach.objects.get(id=coach)
-        print(single_coach)
         project.coaches.add(single_coach)
 
-    # for participant in request.data['participant']:
+    try:
+        learners = create_learners(request.data['learners'])
+        for learner in learners:
+            project.learner.add(learner)
+    except Exception as e:
+        # Handle any exceptions from create_learners
+        return Response({'error': str(e)}, status=500)
+
     return Response({'message': "Project saved Successfully"}, status=200)
-    
-    
+
+
+def create_learners(learners_data):
+    try:
+        with transaction.atomic():
+            if not learners_data:
+                raise ValueError('Learners data is required')
+            learners = []
+            for learner_data in learners_data:
+                # Check if username field is provided
+                if 'email' not in learner_data:
+                    raise ValueError('Username field is required')
+
+                # Check if user already exists
+                user = User.objects.filter(username=learner_data['email']).first()
+                if user:
+                    # If user exists, check if learner already exists
+                    learner_profile = Profile.objects.filter(user=user, type='learner').first()
+                    if learner_profile:
+                        learners.append(learner_profile.learner)
+                        continue
+
+                # If learner does not exist, create the user object with an unusable password
+                user = User.objects.create_user(
+                    username=learner_data['email'],
+                    email=learner_data.get('email', learner_data['email'])
+                    )
+                user.set_unusable_password()
+                user.save()
+
+                # Create the learner profile
+                learner_profile = Profile.objects.create(user=user, type='learner')
+
+                # Create the learner object
+                learner = Learner.objects.create(user=learner_profile, name=learner_data.get('name'), email=learner_data['email'], phone=learner_data.get('phone'))
+                learners.append(learner)
+
+            # Return response with learners created or already existing
+            serializer = LearnerSerializer(learners, many=True)
+            return learners
+
+    except ValueError as e:
+        # Handle missing or invalid request data
+        raise ValueError(str(e))
+
+    except Exception as e:
+        # Handle any other exceptions
+        transaction.set_rollback(True) # Rollback the transaction
+        raise Exception(str(e))
+
 # Create participant user
 @api_view(['POST'])
 def create_learner(request):
@@ -379,5 +421,7 @@ def get_learners_by_project(request):
     project= Project.objects.get(id=project_id)
     learner= project.learner.name
     return Response({"message": "Success"}, status=200)
+
+
 
 
