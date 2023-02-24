@@ -2,7 +2,7 @@ from datetime import date
 from os import name
 from django.shortcuts import render
 from django.db import transaction,IntegrityError
-from .serializers import CoachSerializer,LearnerSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer
 from django.utils.crypto import get_random_string
 # import jwt
 import uuid
@@ -41,7 +41,7 @@ def create_pmo(request):
             # Create the PMO Profile linked to the User
             pmo_profile = Profile.objects.create(user=user, type='pmo')
             # Create the PMO User using the Profile
-            pmo_user = Pmo.objects.create(profile=pmo_profile, name=name, email=email, phone=phone)
+            pmo_user = Pmo.objects.create(user=pmo_profile, name=name, email=email, phone=phone)
         # Return success response
         return Response({'message': 'PMO user created successfully.'}, status=201)
 
@@ -148,7 +148,7 @@ def pmo_login(request):
                         status=401)
 
     token, _ = Token.objects.get_or_create(user=user)
-    pmo = Pmo.objects.get(profile=user.profile)
+    pmo = Pmo.objects.get(user=user.profile)
 
     return Response({
         'token': token.key,
@@ -421,9 +421,7 @@ def get_learners_by_project(request):
     project= Project.objects.get(id=project_id)
     learner= project.learner.name
     return Response({"message": "Success"}, status=200)
-    
-#get projects details
-#get project
+
 
 @api_view(["GET"])
 def project_details(request, project_id):
@@ -431,15 +429,11 @@ def project_details(request, project_id):
         project = Project.objects.get(id=project_id)
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    data = {
-        "id": project.id,
-        "name": project.name,
-    }
-    return Response({"message": "Success"}, status=200)
+    serializer =  ProjectDepthTwoSerializer(project)
+    return Response(serializer.data, status=200)
 
-@api_view(["GET"])
-def get_projects_list(request):
-    projects= Project.objects.all()
-    return Response({"message": "Success"}, status=200)
-
-
+@api_view(['GET'])
+def get_projects(request):
+    projects = Project.objects.all()
+    serializer = ProjectSerializer(projects, many=True)
+    return Response(serializer.data)

@@ -17,6 +17,6 @@ urlpatterns =[
     	path('validate-otp/', views.otp_validation, name='validate_otp'),
    		path('create-project/', views.create_project, name='create-project'),
     	path('learner/', views.create_learner, name='learner'),
+    	path('projects/all/',views.get_projects),
     	path('project-details/<int:project_id>/', views.project_details, name='project-details'), 
-        path('get-projects-list/', views.get_projects_list, name='get-projects-list')
 ]
