@@ -26,7 +26,7 @@ class Profile(models.Model):
 
 
 class Pmo(models.Model):
-    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()    
     phone = models.CharField(max_length=25)
@@ -38,7 +38,7 @@ class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
-    meet_link = models.CharField(max_length=50)
+    meet_link = models.CharField(max_length=50,blank=True)
     phone = models.CharField(max_length=25)    
     level = models.CharField(max_length=50)
     rating = models.CharField(max_length=20)
@@ -78,7 +78,7 @@ class HR(models.Model):
 
 class Organisation(models.Model):
     name= models.CharField(max_length=100)
-    image_url = models.ImageField(upload_to='images/')
+    image_url = models.CharField(max_length=200)
     
 class Project(models.Model):
     user_choice = [
@@ -93,7 +93,7 @@ class Project(models.Model):
     end_date= models.DateField(auto_now_add=True)
     hr=models.ManyToManyField(HR)
     coaches=models.ManyToManyField(Coach)
-    participant=models.ManyToManyField(Learner)
+    learner=models.ManyToManyField(Learner)
     total_sessions=models.IntegerField(default=0, blank=True)
     cost_per_session=models.IntegerField(default=0, blank=True)
     sessions_per_employee=models.IntegerField(default=0, blank=True)
