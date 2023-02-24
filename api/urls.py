@@ -14,8 +14,9 @@ urlpatterns =[
     path('get-learners-by-project/', views.get_learners_by_project, name='get-learners-by-project'),
 		path('create_user_without_password/',views.create_user_without_password),
 		path('generate-otp/', views.otp_generation, name='generate_otp'),
-		path('validate-otp/', views.otp_validation, name='validate_otp'),
-  	path('create-project/', views.create_project, name='create-project'),
-		path('learner/', views.create_learner, name='learner'),
-		# path('project-details', views.project_details, name='project-details') 
+    	path('validate-otp/', views.otp_validation, name='validate_otp'),
+   		path('create-project/', views.create_project, name='create-project'),
+    	path('learner/', views.create_learner, name='learner'),
+    	path('project-details/<int:project_id>/', views.project_details, name='project-details'), 
+        path('get-projects-list/', views.get_projects_list, name='get-projects-list')
 ]

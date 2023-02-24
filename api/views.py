@@ -421,7 +421,25 @@ def get_learners_by_project(request):
     project= Project.objects.get(id=project_id)
     learner= project.learner.name
     return Response({"message": "Success"}, status=200)
+    
+#get projects details
+#get project
 
+@api_view(["GET"])
+def project_details(request, project_id):
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    data = {
+        "id": project.id,
+        "name": project.name,
+    }
+    return Response({"message": "Success"}, status=200)
 
+@api_view(["GET"])
+def get_projects_list(request):
+    projects= Project.objects.all()
+    return Response({"message": "Success"}, status=200)
 
 
