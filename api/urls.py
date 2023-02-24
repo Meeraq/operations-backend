@@ -18,5 +18,6 @@ urlpatterns =[
    		path('create-project/', views.create_project, name='create-project'),
     	path('learner/', views.create_learner, name='learner'),
     	path('project-details/<int:project_id>/', views.project_details, name='project-details'), 
-        path('get-projects-list/', views.get_projects_list, name='get-projects-list')
+        path('get-projects-list/', views.get_projects_list, name='get-projects-list'),
+        path('request-slot/<int:project_id>/', views.request_slot, name='request-slot')
 ]

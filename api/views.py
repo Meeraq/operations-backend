@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view
-from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR
+from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 
@@ -377,7 +377,7 @@ def create_learners(learners_data):
         transaction.set_rollback(True) # Rollback the transaction
         raise Exception(str(e))
 
-# Create participant user
+# Create learner user
 @api_view(['POST'])
 def create_learner(request):
     # Get data from request
@@ -422,9 +422,8 @@ def get_learners_by_project(request):
     learner= project.learner.name
     return Response({"message": "Success"}, status=200)
     
-#get projects details
-#get project
 
+#get projects details
 @api_view(["GET"])
 def project_details(request, project_id):
     try:
@@ -435,11 +434,30 @@ def project_details(request, project_id):
         "id": project.id,
         "name": project.name,
     }
-    return Response({"message": "Success"}, status=200)
+    return Response(data,{"message": "Success"}, status=200)
 
+
+#get project list
 @api_view(["GET"])
 def get_projects_list(request):
     projects= Project.objects.all()
     return Response({"message": "Success"}, status=200)
+
+
+@api_view(["POST"])
+def request_slot(request, project_id):
+    project= request.data['project_id']
+    learner= request.data['learner_id']
+    availibilty = Availibility (
+        start_time= request.data['start_time'],
+        end_time= request.data['end_time']
+    )
+    availibilty.save()
+    return Response({"message": "Success"}, status=200)
+
+
+
+    
+
 
 
