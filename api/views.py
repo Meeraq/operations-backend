@@ -2,7 +2,7 @@ from datetime import date
 from os import name
 from django.shortcuts import render
 from django.db import transaction,IntegrityError
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer
 from django.utils.crypto import get_random_string
 # import jwt
 import uuid
@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view
-from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility
+from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 
@@ -295,7 +295,7 @@ def otp_validation(request):
     # Delete the OTP object after it has been validated
     otp_obj.delete()
 
-    learner_data = {'name':learner.name,'email': learner.email,'phone': learner.email, 'token': token.key}
+    learner_data = {'id':learner.id,'name':learner.name,'email': learner.email,'phone': learner.email, 'token': token.key}
 
     return Response({ 'learner': learner_data},status=200)
 
@@ -433,7 +433,7 @@ def project_details(request, project_id):
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     serializer =  ProjectDepthTwoSerializer(project)
-    return Response(data,serializer.data, status=200)
+    return Response(serializer.data, status=200)
 
 
 @api_view(['GET'])
@@ -441,3 +441,34 @@ def get_projects(request):
     projects = Project.objects.all()
     serializer = ProjectSerializer(projects, many=True)
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+def get_projects_of_learner(request,learner_id):
+    projects = Project.objects.filter(learner__id = learner_id)
+    serializer = ProjectSerializer(projects, many=True)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+def create_session_request(request):
+    time_arr = []
+    for time in request.data['availibility']:
+        availibility_serilizer = AvailibilitySerializer(data = time)
+        if availibility_serilizer.is_valid():
+            avil_id = availibility_serilizer.save()
+            time_arr.append(avil_id.id)
+        else:
+            return Response({"message": str(availibility_serilizer.errors),}, status=401)
+    session = {
+           "learner": request.data['learner'],
+           "project": request.data['project'],
+           "availibility":time_arr
+		      }
+    session_serilizer = SessionRequestSerializer(data = session)
+    if session_serilizer.is_valid():
+        session_serilizer.save()
+        return Response({"message": "Success"}, status=201)
+    else:
+        return Response({"message": str(session_serilizer.errors),}, status=401)
+    
+    

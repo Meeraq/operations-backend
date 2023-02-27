@@ -14,11 +14,11 @@ urlpatterns =[
     path('get-learners-by-project/', views.get_learners_by_project, name='get-learners-by-project'),
 		path('create_user_without_password/',views.create_user_without_password),
 		path('generate-otp/', views.otp_generation, name='generate_otp'),
-    	path('validate-otp/', views.otp_validation, name='validate_otp'),
-   		path('create-project/', views.create_project, name='create-project'),
-    	path('learner/', views.create_learner, name='learner'),
-    	path('projects/all/',views.get_projects),
-    	path('project-details/<int:project_id>/', views.project_details, name='project-details'), 
-        path('get-projects-list/', views.get_projects_list, name='get-projects-list'),
-        path('request-slot/<int:project_id>/', views.request_slot, name='request-slot')
+    path('validate-otp/', views.otp_validation, name='validate_otp'),
+   	path('create-project/', views.create_project, name='create-project'),
+    path('learner/', views.create_learner, name='learner'),
+    path('projects/all/',views.get_projects),
+    path('project-details/<int:project_id>/', views.project_details, name='project-details'),
+    path('projects/learner/<int:learner_id>/',views.get_projects_of_learner),
+    path('session-request/create/', views.create_session_request)
 ]

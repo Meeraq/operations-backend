@@ -105,6 +105,14 @@ class OTP(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 class Availibility(models.Model):
-    start_time=models.TimeField()
-    end_time=models.TimeField()
+    start_time=models.CharField(max_length=30)
+    end_time=models.CharField(max_length=30)
 
+
+class SessionRequest(models.Model):
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    availibility=models.ManyToManyField(Availibility)
+    is_booked = models.BooleanField(blank=True,default=False)
+
+    
