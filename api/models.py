@@ -114,15 +114,16 @@ class SessionRequest(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     availibility=models.ManyToManyField(Availibility)
     is_booked = models.BooleanField(blank=True,default=False)
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, default=False)
 
 
-class BookedSession(models.Model):
+class Session(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
-    availibilty = models.ForeignKey(Availibility, on_delete=models.CASCADE)
-    organisation = models.ForeignKey(Organisation, on_delete=models.CASCADE)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    confirmed_availability = models.ForeignKey(Availibility, on_delete=models.CASCADE)
+    session_request = models.ForeignKey(SessionRequest, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20,default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 
 
 

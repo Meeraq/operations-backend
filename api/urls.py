@@ -21,5 +21,6 @@ urlpatterns =[
     path('project-details/<int:project_id>/', views.project_details, name='project-details'),
     path('projects/learner/<int:learner_id>/',views.get_projects_of_learner),
     path('session-request/create/', views.create_session_request),
-    path('view-session-request/<int:project_id>', views.view_session_request)
+    path('session-requests/<int:coach_id>/', views.session_requests_by_coach),
+    path('sessions/book/', views.book_session)
 ]    

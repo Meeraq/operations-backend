@@ -1,8 +1,9 @@
 from datetime import date
 from os import name
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
+
 from django.db import transaction,IntegrityError
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer
 from django.utils.crypto import get_random_string
 # import jwt
 import uuid
@@ -11,7 +12,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view
-from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, BookedSession
+from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 
@@ -474,42 +475,23 @@ def create_session_request(request):
 
 #Coach- view session request
 @api_view(["GET"])
-def view_session_request(request, project_id):
-    project= SessionRequest.objects.filter(id=project_id)
-    project_name= project.name
-    view_session=SessionRequest.objects.filter(project= project_id)
-    serializer= SessionRequestSerializer(view_session, many=False)
-    return Response(serializer.data)
-
+def session_requests_by_coach(request, coach_id):
+    coach = get_object_or_404(Coach, id=coach_id)
+    session_requests = SessionRequest.objects.filter(project__coaches=coach,is_booked=False)
+    serializer = SessionRequestDepthOneSerializer(session_requests, many=True)
+    return Response(serializer.data, status=200)
 
 @api_view(['POST'])
-def book_session(request, availibilty_id, coach_id):
-    availability= SessionRequest.objects.get(id= availibilty_id)
-    booked_stats= availability.is_booked
-    coach= SessionRequest.objects.get(id=coach_id)
-    
-    try:
-        availability = Availibility.objects.get(id=availability)
-    except Availibility.DoesNotExist:
-        return Response({"message": "Invalid availability ID"}, status=400)
-
-    try:
-        coach = Coach.objects.get(id=coach_id)
-    except Coach.DoesNotExist:
-        return Response({"message": "Invalid coach ID"}, status=400)
-
-    booked_stats = True
-    booked_stats.save()
-
-
-
-    return Response({"message": "Session booked successfully"}, status=201)
-
-
-#add learner
-#edit project
-#closing project
-
+def book_session(request):
+    serializer = SessionSerializer(data=request.data)
+    if serializer.is_valid():
+        session = serializer.save()
+        # Mark the session request as booked
+        session_request = session.session_request
+        session_request.is_booked = True
+        session_request.save()
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
 
 
 
