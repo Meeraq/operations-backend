@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view
-from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest
+from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, BookedSession
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 
@@ -456,7 +456,7 @@ def create_session_request(request):
         availibility_serilizer = AvailibilitySerializer(data = time)
         if availibility_serilizer.is_valid():
             avil_id = availibility_serilizer.save()
-            time_arr.append(avil_id.id)
+            time_arr.append(avil_id.id) 
         else:
             return Response({"message": str(availibility_serilizer.errors),}, status=401)
     session = {
@@ -470,5 +470,47 @@ def create_session_request(request):
         return Response({"message": "Success"}, status=201)
     else:
         return Response({"message": str(session_serilizer.errors),}, status=401)
+   
+
+#Coach- view session request
+@api_view(["GET"])
+def view_session_request(request, project_id):
+    project= SessionRequest.objects.filter(id=project_id)
+    project_name= project.name
+    view_session=SessionRequest.objects.filter(project= project_id)
+    serializer= SessionRequestSerializer(view_session, many=False)
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+def book_session(request, availibilty_id, coach_id):
+    availability= SessionRequest.objects.get(id= availibilty_id)
+    booked_stats= availability.is_booked
+    coach= SessionRequest.objects.get(id=coach_id)
     
+    try:
+        availability = Availibility.objects.get(id=availability)
+    except Availibility.DoesNotExist:
+        return Response({"message": "Invalid availability ID"}, status=400)
+
+    try:
+        coach = Coach.objects.get(id=coach_id)
+    except Coach.DoesNotExist:
+        return Response({"message": "Invalid coach ID"}, status=400)
+
+    booked_stats = True
+    booked_stats.save()
+
+
+
+    return Response({"message": "Session booked successfully"}, status=201)
+
+
+#add learner
+#edit project
+#closing project
+
+
+
+
     

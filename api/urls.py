@@ -20,5 +20,6 @@ urlpatterns =[
     path('projects/all/',views.get_projects),
     path('project-details/<int:project_id>/', views.project_details, name='project-details'),
     path('projects/learner/<int:learner_id>/',views.get_projects_of_learner),
-    path('session-request/create/', views.create_session_request)
-]
+    path('session-request/create/', views.create_session_request),
+    path('view-session-request/<int:project_id>', views.view_session_request)
+]    
