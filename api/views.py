@@ -1,12 +1,13 @@
 from datetime import date
 from os import name
 from django.shortcuts import render, get_object_or_404
-
 from django.db import transaction,IntegrityError
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer
 from django.utils.crypto import get_random_string
 # import jwt
 import uuid
+from django.db.models import IntegerField
+from django.db.models.functions import Cast
 from rest_framework.exceptions import AuthenticationFailed
 from datetime import datetime, timedelta
 from rest_framework.response import Response
@@ -15,6 +16,8 @@ from rest_framework.decorators import api_view
 from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
+from django.utils import timezone
+
 
 # Create your views here.
 
@@ -477,7 +480,7 @@ def create_session_request(request):
 @api_view(["GET"])
 def session_requests_by_coach(request, coach_id):
     coach = get_object_or_404(Coach, id=coach_id)
-    session_requests = SessionRequest.objects.filter(project__coaches=coach,is_booked=False)
+    session_requests = SessionRequest.objects.filter(project__coaches=coach, is_booked=False)
     serializer = SessionRequestDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
 
@@ -495,4 +498,41 @@ def book_session(request):
 
 
 
-    
+@api_view(["GET"])
+def get_upcoming_session_coach(request, coach_id):
+    coach = get_object_or_404(Coach, id=coach_id)
+    current_timestamp =  int(timezone.now().timestamp() * 1000)
+    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField()))
+    res = sessions.filter(coach=coach,start_time_int__gt=current_timestamp)
+    # print((res[0].start_time_int < current_timestamp),'res')
+    serializer = SessionsDepthTwoSerializer(res, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+def get_past_session_coach(request, coach_id):
+    coach = get_object_or_404(Coach, id=coach_id)
+    current_timestamp = int(timezone.now().timestamp() * 1000)
+    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField())).filter(start_time_int__lt=current_timestamp,coach=coach)
+    serializer = SessionsDepthTwoSerializer(sessions, many=True)
+    return Response(serializer.data, status=200)
+
+
+
+@api_view(["GET"])
+def get_upcoming_session_learner(request, learner_id):
+    learner = get_object_or_404(Learner, id=learner_id)
+    current_timestamp =  int(timezone.now().timestamp() * 1000)
+    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField())).filter(start_time_int__gt=current_timestamp,session_request__learner=learner)
+    serializer = SessionsDepthTwoSerializer(sessions, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+def get_past_session_learner(request, learner_id):
+    learner = get_object_or_404(Learner, id=learner_id)
+    current_timestamp = int(timezone.now().timestamp() * 1000)
+    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField())).filter(start_time_int__lt=current_timestamp,session_request__learner=learner)
+    serializer = SessionsDepthTwoSerializer(sessions, many=True)
+    return Response(serializer.data, status=200)
+

@@ -22,5 +22,9 @@ urlpatterns =[
     path('projects/learner/<int:learner_id>/',views.get_projects_of_learner),
     path('session-request/create/', views.create_session_request),
     path('session-requests/<int:coach_id>/', views.session_requests_by_coach),
-    path('sessions/book/', views.book_session)
+    path('sessions/book/', views.book_session),
+    path('sessions/upcoming/coach/<int:coach_id>/',views.get_upcoming_session_coach),
+    path('sessions/past/coach/<int:coach_id>/',views.get_past_session_coach),
+    path('sessions/upcoming/learner/<int:learner_id>/',views.get_upcoming_session_learner),
+    path('sessions/past/learner/<int:learner_id>/',views.get_past_session_learner)
 ]    

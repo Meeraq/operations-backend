@@ -54,3 +54,8 @@ class SessionSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class SessionsDepthTwoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Session
+        fields = '__all__'
+        depth = 2
