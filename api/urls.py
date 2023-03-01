@@ -1,4 +1,4 @@
-from django.urls import path, include
+from django.urls import path
 from . import views
 
 urlpatterns =[
@@ -26,6 +26,8 @@ urlpatterns =[
     path('sessions/upcoming/coach/<int:coach_id>/',views.get_upcoming_session_coach),
     path('sessions/past/coach/<int:coach_id>/',views.get_past_session_coach),
     path('sessions/upcoming/learner/<int:learner_id>/',views.get_upcoming_session_learner),
+    path('sessions/past/learner/<int:learner_id>/',views.get_past_session_learner),
+    path('add-learner/<int:project_id>/', views.add_learner),
     path('sessions/past/learner/<int:learner_id>/',views.get_past_session_learner),
     path('sessions/upcoming/',views.get_upcoming_session),
     path('sessions/past/',views.get_past_session),
