@@ -536,3 +536,24 @@ def get_past_session_learner(request, learner_id):
     serializer = SessionsDepthTwoSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
+
+@api_view(["GET"])
+def get_upcoming_session(request):
+    current_timestamp =  int(timezone.now().timestamp() * 1000)
+    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField())).filter(start_time_int__gt=current_timestamp)
+    serializer = SessionsDepthTwoSerializer(sessions, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+def get_past_session(request):
+    current_timestamp = int(timezone.now().timestamp() * 1000)
+    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField())).filter(start_time_int__lt=current_timestamp)
+    serializer = SessionsDepthTwoSerializer(sessions, many=True)
+    return Response(serializer.data, status=200)
+
+@api_view(["GET"])
+def get_session_requests(request):
+    session_requests = SessionRequest.objects.filter(is_booked=False)
+    serializer = SessionRequestDepthOneSerializer(session_requests, many=True)
+    return Response(serializer.data, status=200)
