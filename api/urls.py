@@ -18,6 +18,8 @@ urlpatterns =[
    	path('create-project/', views.create_project, name='create-project'),
     path('learner/', views.create_learner, name='learner'),
     path('projects/all/',views.get_projects),
+    path('projects/ongoing/',views.get_ongoing_projects),
+    path('projects/completed/',views.get_completed_projects),
     path('project-details/<int:project_id>/', views.project_details, name='project-details'),
     path('projects/learner/<int:learner_id>/',views.get_projects_of_learner),
     path('session-request/create/', views.create_session_request),
@@ -32,4 +34,9 @@ urlpatterns =[
     path('sessions/upcoming/',views.get_upcoming_session),
     path('sessions/past/',views.get_past_session),
 		path('session-requests/all/', views.get_session_requests),
+    path('management-token/',views.get_management_token),
+    path('projects/complete/',views.complete_project),
+    path('sessions/coach/join/',views.mark_coach_joined_session),
+    path('sessions/learner/join/',views.mark_learner_joined_session),
+    path('session-requests/count/', views.get_session_request_count)
 ]    
