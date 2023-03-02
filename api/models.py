@@ -38,7 +38,7 @@ class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
-    meet_link = models.CharField(max_length=50,blank=True)
+    room_id = models.CharField(max_length=50,blank=True)
     phone = models.CharField(max_length=25)    
     level = models.CharField(max_length=50)
     rating = models.CharField(max_length=20)
@@ -81,22 +81,23 @@ class Organisation(models.Model):
     image_url = models.CharField(max_length=200)
     
 class Project(models.Model):
-    user_choice = [
+    project_type_choice = [
         ('cod', 'cod'),
         ('4+2', '4+2'),
         ('cas', 'cas')
     ]
     name= models.CharField(max_length=100)
     organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
-    project_type= models.CharField(max_length=50, choices=user_choice, default='cod')
+    project_type= models.CharField(max_length=50, choices=project_type_choice, default='cod')
     start_date= models.DateField(auto_now_add=True)
     end_date= models.DateField(auto_now_add=True)
-    hr=models.ManyToManyField(HR)
-    coaches=models.ManyToManyField(Coach)
-    learner=models.ManyToManyField(Learner)
+    hr=models.ManyToManyField(HR,blank=True)
+    coaches=models.ManyToManyField(Coach,blank=True)
+    learner=models.ManyToManyField(Learner,blank=True)
     total_sessions=models.IntegerField(default=0, blank=True)
     cost_per_session=models.IntegerField(default=0, blank=True)
     sessions_per_employee=models.IntegerField(default=0, blank=True)
+    status = models.CharField(max_length=30,default='Ongoing')
 
 
 class OTP(models.Model):
@@ -122,6 +123,8 @@ class Session(models.Model):
     session_request = models.ForeignKey(SessionRequest, on_delete=models.CASCADE)
     status = models.CharField(max_length=20,default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
+    coach_joined = models.BooleanField(blank=True,default=False)
+    learner_joined = models.BooleanField(blank=True,default=False)
 
 
 

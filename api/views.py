@@ -4,7 +4,7 @@ from django.shortcuts import render, get_object_or_404
 from django.db import transaction,IntegrityError
 from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer
 from django.utils.crypto import get_random_string
-# import jwt
+import jwt
 import uuid
 from django.db.models import IntegerField
 from django.db.models.functions import Cast
@@ -59,7 +59,7 @@ def coach_signup(request):
     # Get data from request
     name = request.data.get('name')
     email = request.data.get('email')
-    meet_link = request.data.get('meet_link')
+    room_id = request.data.get('room_id')
     phone = request.data.get('phone')
     level = request.data.get('level')
     rating = request.data.get('rating')
@@ -68,7 +68,7 @@ def coach_signup(request):
     password = request.data.get('password')
 
     # Check if required data is provided
-    if not all([name, email, meet_link, phone, level, area_of_expertise, username, password]):
+    if not all([name, email, room_id, phone, level, area_of_expertise, username, password]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
@@ -80,7 +80,7 @@ def coach_signup(request):
             coach_profile = Profile.objects.create(user=user, type='coach')
 
             # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, name=name, email=email, meet_link=meet_link, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise)
+            coach_user = Coach.objects.create(user=coach_profile, name=name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise)
 
 						# approve coach
             coach = Coach.objects.get(id=coach_user.id)
@@ -191,7 +191,7 @@ def coach_login(request):
         'id': coach.id,
         'name': coach.name,
         'email': coach.email,
-        'meet_link': coach.meet_link,
+        'room_id': coach.room_id,
         'phone': coach.phone,
         'level': coach.level,
         'rating': coach.rating,
@@ -219,7 +219,7 @@ def generateManagementToken():
 
 
 @api_view(["GET"])
-def getManagementToken(request):
+def get_management_token(request):
     management_token = generateManagementToken()
     return Response({"message": "Success", "management_token": management_token}, status=200)
 
@@ -448,6 +448,19 @@ def get_projects(request):
 
 
 @api_view(['GET'])
+def get_ongoing_projects(request):
+    projects = Project.objects.filter(status="Ongoing")
+    serializer = ProjectSerializer(projects, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def get_completed_projects(request):
+    projects = Project.objects.filter(status="Completed")
+    serializer = ProjectSerializer(projects, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
 def get_projects_of_learner(request,learner_id):
     projects = Project.objects.filter(learner__id = learner_id)
     serializer = ProjectSerializer(projects, many=True)
@@ -502,10 +515,8 @@ def book_session(request):
 def get_upcoming_session_coach(request, coach_id):
     coach = get_object_or_404(Coach, id=coach_id)
     current_timestamp =  int(timezone.now().timestamp() * 1000)
-    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField()))
-    res = sessions.filter(coach=coach,start_time_int__gt=current_timestamp)
-    # print((res[0].start_time_int < current_timestamp),'res')
-    serializer = SessionsDepthTwoSerializer(res, many=True)
+    sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(coach=coach,end_time_int__gt=current_timestamp)
+    serializer = SessionsDepthTwoSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
 
@@ -513,7 +524,7 @@ def get_upcoming_session_coach(request, coach_id):
 def get_past_session_coach(request, coach_id):
     coach = get_object_or_404(Coach, id=coach_id)
     current_timestamp = int(timezone.now().timestamp() * 1000)
-    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField())).filter(start_time_int__lt=current_timestamp,coach=coach)
+    sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(end_time_int__lt=current_timestamp,coach=coach)
     serializer = SessionsDepthTwoSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
@@ -523,7 +534,7 @@ def get_past_session_coach(request, coach_id):
 def get_upcoming_session_learner(request, learner_id):
     learner = get_object_or_404(Learner, id=learner_id)
     current_timestamp =  int(timezone.now().timestamp() * 1000)
-    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField())).filter(start_time_int__gt=current_timestamp,session_request__learner=learner)
+    sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(end_time_int__gt=current_timestamp,session_request__learner=learner)
     serializer = SessionsDepthTwoSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
@@ -532,7 +543,7 @@ def get_upcoming_session_learner(request, learner_id):
 def get_past_session_learner(request, learner_id):
     learner = get_object_or_404(Learner, id=learner_id)
     current_timestamp = int(timezone.now().timestamp() * 1000)
-    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField())).filter(start_time_int__lt=current_timestamp,session_request__learner=learner)
+    sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(end_time_int__lt=current_timestamp,session_request__learner=learner)
     serializer = SessionsDepthTwoSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
@@ -540,7 +551,7 @@ def get_past_session_learner(request, learner_id):
 @api_view(["GET"])
 def get_upcoming_session(request):
     current_timestamp =  int(timezone.now().timestamp() * 1000)
-    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField())).filter(start_time_int__gt=current_timestamp)
+    sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(end_time_int__gt=current_timestamp)
     serializer = SessionsDepthTwoSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
@@ -548,7 +559,7 @@ def get_upcoming_session(request):
 @api_view(["GET"])
 def get_past_session(request):
     current_timestamp = int(timezone.now().timestamp() * 1000)
-    sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField())).filter(start_time_int__lt=current_timestamp)
+    sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(end_time_int__lt=current_timestamp)
     serializer = SessionsDepthTwoSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
@@ -557,3 +568,37 @@ def get_session_requests(request):
     session_requests = SessionRequest.objects.filter(is_booked=False)
     serializer = SessionRequestDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
+
+
+
+@api_view(['POST'])
+def complete_project(request):
+    project = get_object_or_404(Project, id=request.data['project_id'])
+    project.status = 'Completed'
+    project.save()
+    project_serializer = ProjectSerializer(project)
+    return Response(project_serializer.data,status=200)
+
+
+@api_view(['POST'])
+def mark_coach_joined_session(request):
+    session = get_object_or_404(Session, id=request.data['session_id'])
+    session.coach_joined = True
+    session.save()
+    session_serializer = SessionSerializer(session)
+    return Response(session_serializer.data,status=200)
+
+
+@api_view(['POST'])
+def mark_learner_joined_session(request):
+    session = get_object_or_404(Session, id=request.data['session_id'])
+    session.learner_joined = True
+    session.save()
+    session_serializer = SessionSerializer(session)
+    return Response(session_serializer.data,status=200)
+
+@api_view(['GET'])
+def get_session_request_count(request):
+    session_requests = SessionRequest.objects.filter(is_booked=False)
+    count = len(session_requests)
+    return Response({'session_request_count':count },status=200)
