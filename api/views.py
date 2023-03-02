@@ -336,15 +336,23 @@ def create_project(request):
         cost_per_session=request.data['cost_per_session'],
         sessions_per_employee=request.data['sessions_per_employee']
     )
+    coach_emails=[]
     project.save()
+    project_name= project.name
     for coach in request.data["coach_id"]:
         single_coach = Coach.objects.get(id=coach)
+        coach_emails.append(single_coach.email)
         project.coaches.add(single_coach)
+
+    # Send email notification to the coach
+    subject = f'Hey Coach! You have assigned to a project {project_name}'
+    message = f'Dear {coach_emails},\n\nPlease be there to book slots requested by learner in this {project_name}. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, coach_emails)
 
     try:
         learners = create_learners(request.data['learners'])
         for learner in learners:
-            project.learner.add(learner)
+            project.learner.add(learner)    
     except Exception as e:
         # Handle any exceptions from create_learners
         return Response({'error': str(e)}, status=500)
@@ -514,6 +522,23 @@ def book_session(request):
         session_request.save()
         return Response(serializer.data, status=201)
     return Response(serializer.errors, status=400)
+
+        # coach_name= session.coach.name
+        # print(coach_name)
+        # email=coach_name.email
+        # print(email)
+        # learner=Session.session_request.learner
+
+    # Send email notification to the coach
+    # subject = 'Hello coach your session is booked.'
+    # message = f'Dear {coach_name},\n\nThank you booking slots of learner.Please be ready on date and time to complete session. Best of luck!'
+    # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+    
+
+
+
+
+
     
 
 @api_view(["GET"])
@@ -553,55 +578,6 @@ def get_past_session_learner(request, learner_id):
     sessions = Session.objects.annotate(start_time_int=Cast('confirmed_availability__start_time', IntegerField())).filter(start_time_int__lt=current_timestamp,session_request__learner=learner)
     serializer = SessionsDepthTwoSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
-
-@api_view(["POST"])
-def add_learner(request, project_id):
-    try:
-        project = Project.objects.get(id=project_id)
-    except Project.DoesNotExist:
-        raise ParseError("Invalid project id provided.")
-
-    email = request.data.get('email')
-    if not email:
-        raise ValidationError("Email is required.")
-
-    with transaction.atomic():
-        # Create user and learner profile
-        user = User.objects.create_user(username=email, email=email)
-        learner_profile = Profile.objects.create(user=user, type='learner')
-
-        # Create learner
-        learner_data = {'name': request.data.get('name'), 'email': email, 'phone': request.data.get('phone')}
-        learner = Learner.objects.create(user=learner_profile, **learner_data)
-
-        # Add learner to project
-        project.learner.add(learner)
-        project.save()
-
-    serializer = ProjectSerializer(project)
-    return Response(serializer.data, status=201)
-
-# def add_learner(request, project_id):
-#     project= Project.objects.get(id=project_id)
-
-#     user = User.objects.create_user(
-#         username=request.data['email'],
-#         email= request.data['email']
-#         )
-#     user.set_unusable_password()
-#     user.save()
-
-#     # Create the learner Profile linked to the User
-#     learner_profile = Profile.objects.create(user=user, type='learner')
-#     # Create the learner User using the Profile
-#     learner = Learner.objects.create(user=learner_profile, name=request.data['name'], email=request.data['email'], phone=request.data['phone'])
-#     project.learner.add(learner)
-#     project.save()
-#     serializers= ProjectSerializer(project)
-#     return Response(serializers.data, status=201)
-
-
-
 
 @api_view(["POST"])
 def add_learner(request, project_id):
