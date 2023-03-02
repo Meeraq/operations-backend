@@ -2,8 +2,12 @@ from datetime import date
 from os import name
 from django.shortcuts import render, get_object_or_404
 from django.db import transaction,IntegrityError
+from django.core.mail import EmailMessage
+from rest_framework.exceptions import ParseError, ValidationError
+from operationsBackend import settings
 from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer
 from django.utils.crypto import get_random_string
+import jwt
 import jwt
 import uuid
 from django.db.models import IntegerField
@@ -16,12 +20,16 @@ from rest_framework.decorators import api_view
 from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
+from django.core.mail import send_mail
+
 from django.utils import timezone
 
 
 # Create your views here.
 
 import environ
+
+from api import serializers
 
 env = environ.Env()
 
@@ -67,6 +75,7 @@ def coach_signup(request):
     username = request.data.get('email') # keeping username and email same
     password = request.data.get('password')
 
+
     # Check if required data is provided
     if not all([name, email, room_id, phone, level, area_of_expertise, username, password]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
@@ -86,7 +95,18 @@ def coach_signup(request):
             coach = Coach.objects.get(id=coach_user.id)
             # Change the is_approved field to True
             coach.is_approved = True
-            coach.save()						
+            coach.save()	
+            
+
+            # Send email notification to the coach
+            subject = 'Welcome to our coaching platform'
+            message = f'Dear {name},\n\nThank you for signing up to our coaching platform. Your profile has been registered and approved by PMO. Best of luck!'
+            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+
+            # Send email notification to the admin
+            admin_email = 'jatin@meeraq.com'
+            admin_message = f'A new coach {name} has signed up on our coaching platform. Please login to the admin portal to review and approve their profile.'
+            send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])			
 
             # Return success response
         return Response({'message': 'Coach user created successfully.'}, status=201)
@@ -508,8 +528,7 @@ def book_session(request):
         session_request.save()
         return Response(serializer.data, status=201)
     return Response(serializer.errors, status=400)
-
-
+    
 
 @api_view(["GET"])
 def get_upcoming_session_coach(request, coach_id):
@@ -547,6 +566,82 @@ def get_past_session_learner(request, learner_id):
     serializer = SessionsDepthTwoSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
+@api_view(["POST"])
+def add_learner(request, project_id):
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        raise ParseError("Invalid project id provided.")
+
+    email = request.data.get('email')
+    if not email:
+        raise ValidationError("Email is required.")
+
+    with transaction.atomic():
+        # Create user and learner profile
+        user = User.objects.create_user(username=email, email=email)
+        learner_profile = Profile.objects.create(user=user, type='learner')
+
+        # Create learner
+        learner_data = {'name': request.data.get('name'), 'email': email, 'phone': request.data.get('phone')}
+        learner = Learner.objects.create(user=learner_profile, **learner_data)
+
+        # Add learner to project
+        project.learner.add(learner)
+        project.save()
+
+    serializer = ProjectSerializer(project)
+    return Response(serializer.data, status=201)
+
+# def add_learner(request, project_id):
+#     project= Project.objects.get(id=project_id)
+
+#     user = User.objects.create_user(
+#         username=request.data['email'],
+#         email= request.data['email']
+#         )
+#     user.set_unusable_password()
+#     user.save()
+
+#     # Create the learner Profile linked to the User
+#     learner_profile = Profile.objects.create(user=user, type='learner')
+#     # Create the learner User using the Profile
+#     learner = Learner.objects.create(user=learner_profile, name=request.data['name'], email=request.data['email'], phone=request.data['phone'])
+#     project.learner.add(learner)
+#     project.save()
+#     serializers= ProjectSerializer(project)
+#     return Response(serializers.data, status=201)
+
+
+
+
+@api_view(["POST"])
+def add_learner(request, project_id):
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        raise ParseError("Invalid project id provided.")
+
+    email = request.data.get('email')
+    if not email:
+        raise ValidationError("Email is required.")
+
+    with transaction.atomic():
+        # Create user and learner profile
+        user = User.objects.create_user(username=email, email=email)
+        learner_profile = Profile.objects.create(user=user, type='learner')
+
+        # Create learner
+        learner_data = {'name': request.data.get('name'), 'email': email, 'phone': request.data.get('phone')}
+        learner = Learner.objects.create(user=learner_profile, **learner_data)
+
+        # Add learner to project
+        project.learner.add(learner)
+        project.save()
+
+    serializer = ProjectSerializer(project)
+    return Response(serializer.data, status=201)
+
 
 @api_view(["GET"])
 def get_upcoming_session(request):
@@ -562,6 +657,7 @@ def get_past_session(request):
     sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(end_time_int__lt=current_timestamp)
     serializer = SessionsDepthTwoSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
+
 
 @api_view(["GET"])
 def get_session_requests(request):
