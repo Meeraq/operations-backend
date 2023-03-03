@@ -295,8 +295,14 @@ def otp_generation(request):
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars='0123456789')
         created_otp = OTP.objects.create(learner=learner, otp=otp)
+    
+        # Send OTP on email to learner
+        subject = f'Meeraq Login Otp'
+        message = f'Dear {learner.name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [learner.email])
 
         return Response({'success': True,'otp':created_otp.otp})
+    
 
     except Learner.DoesNotExist:
         # Handle the case where the learner with the given email does not exist
@@ -399,6 +405,7 @@ def create_learners(learners_data):
             # Return response with learners created or already existing
             serializer = LearnerSerializer(learners, many=True)
             return learners
+
 
     except ValueError as e:
         # Handle missing or invalid request data
