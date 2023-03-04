@@ -38,5 +38,8 @@ urlpatterns =[
     path('projects/complete/',views.complete_project),
     path('sessions/coach/join/',views.mark_coach_joined_session),
     path('sessions/learner/join/',views.mark_learner_joined_session),
-    path('session-requests/count/', views.get_session_request_count)
+    path('session-requests/count/', views.get_session_request_count),
+    path('session-requests/pending/learner/<int:learner_id>/', views.get_pending_session_requests_by_learner),
+		path('session-requests/all/learner/<int:learner_id>/', views.get_all_session_requests_by_learner)
+
 ]    

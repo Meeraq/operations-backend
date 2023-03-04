@@ -115,6 +115,7 @@ class SessionRequest(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     availibility=models.ManyToManyField(Availibility)
     is_booked = models.BooleanField(blank=True,default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class Session(models.Model):

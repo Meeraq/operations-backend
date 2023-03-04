@@ -681,3 +681,19 @@ def get_session_request_count(request):
     session_requests = SessionRequest.objects.filter(is_booked=False)
     count = len(session_requests)
     return Response({'session_request_count':count },status=200)
+
+
+
+@api_view(["GET"])
+def get_pending_session_requests_by_learner(request,learner_id):
+    session_requests = SessionRequest.objects.filter(is_booked=False,learner__id=learner_id)
+    serializer = SessionRequestDepthOneSerializer(session_requests, many=True)
+    return Response(serializer.data, status=200)
+
+
+
+@api_view(["GET"])
+def get_all_session_requests_by_learner(request,learner_id):
+    session_requests = SessionRequest.objects.filter(learner__id=learner_id)
+    serializer = SessionRequestDepthOneSerializer(session_requests, many=True)
+    return Response(serializer.data, status=200)
