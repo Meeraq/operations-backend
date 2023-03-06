@@ -9,6 +9,31 @@ from django.db import models
 from rest_framework.authtoken.models import Token
 from django.contrib.auth.models import User
 from django.core.validators import URLValidator
+from django_rest_passwordreset.signals import reset_password_token_created
+from django.urls import reverse
+from django.dispatch import receiver
+from django.core.mail import send_mail
+
+
+
+@receiver(reset_password_token_created)
+def password_reset_token_created(sender, instance, reset_password_token, *args, **kwargs):
+    print(reset_password_token.key)
+    email_plaintext_message = "{}?token={}".format(reverse('password_reset:reset-password-request'), reset_password_token.key)
+    subject = 'Meeraq - Forgot Password'
+    message = f'Dear {reset_password_token.user.first_name},\n\nYour reset password link is http://localhost:3000/reset-password/{reset_password_token.key}'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email])			
+
+    # send_mail(
+    #     # title:
+    #     "Password Reset for {title}".format(title="Some website title"),
+    #     # message:
+    #     email_plaintext_message,
+    #     # from:
+    #     "noreply@somehost.local",
+    #     # to:
+    #     [reset_password_token.user.email]
+    # )
 
 
 class Profile(models.Model):
@@ -40,8 +65,8 @@ class Coach(models.Model):
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
     age = models.IntegerField(default=0, blank=True)
-    gender = models.CharField(max_length=50)
-    domain = models.CharField(max_length=50)
+    gender = models.CharField(max_length=50,blank=True)
+    domain = models.CharField(max_length=50,blank=True)
     room_id = models.CharField(max_length=50,blank=True)
     phone = models.CharField(max_length=25)    
     level = models.CharField(max_length=50)

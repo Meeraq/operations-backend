@@ -43,7 +43,8 @@ INSTALLED_APPS = [
 		'rest_framework',
 		'api',
 		'rest_framework.authtoken',
-		'corsheaders'
+    'django_rest_passwordreset',
+		'corsheaders',
 ]
 
 MIDDLEWARE = [

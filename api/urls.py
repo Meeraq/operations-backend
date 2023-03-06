@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path,include
 from . import views
 
 urlpatterns =[
@@ -8,6 +8,7 @@ urlpatterns =[
 		path('coaches/<int:coach_id>/approve/',views.approve_coach),
     path('pmo-login/', views.pmo_login, name='pmo-login'),
 	  path('coach-login/', views.coach_login, name='coach-login'),
+    path('password_reset/', include('django_rest_passwordreset.urls', namespace='password_reset')),
     path('create-project/', views.create_project, name='create-project'),
     path('learner/', views.create_learner, name='learner'),
 		path('get-coaches-by-project/', views.get_coaches_by_project, name='get-coaches-by-project'),
@@ -41,5 +42,4 @@ urlpatterns =[
     path('session-requests/count/', views.get_session_request_count),
     path('session-requests/pending/learner/<int:learner_id>/', views.get_pending_session_requests_by_learner),
 		path('session-requests/all/learner/<int:learner_id>/', views.get_all_session_requests_by_learner)
-
 ]    
