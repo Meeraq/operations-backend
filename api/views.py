@@ -65,8 +65,13 @@ def create_pmo(request):
 @api_view(['POST'])
 def coach_signup(request):
     # Get data from request
-    name = request.data.get('name')
+    first_name = request.data.get('first_name')
+    last_name = request.data.get('last_name')
+    print(first_name,last_name)
     email = request.data.get('email')
+    age = request.data.get('age') 
+    gender = request.data.get('gender')
+    domain = request.data.get('domain')
     room_id = request.data.get('room_id')
     phone = request.data.get('phone')
     level = request.data.get('level')
@@ -77,7 +82,7 @@ def coach_signup(request):
 
 
     # Check if required data is provided
-    if not all([name, email, room_id, phone, level, area_of_expertise, username, password]):
+    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level, area_of_expertise, username, password]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
@@ -89,7 +94,7 @@ def coach_signup(request):
             coach_profile = Profile.objects.create(user=user, type='coach')
 
             # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, name=name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise)
+            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise)
 
 						# approve coach
             coach = Coach.objects.get(id=coach_user.id)
@@ -101,12 +106,12 @@ def coach_signup(request):
             # Send email notification to the coach
             subject = 'Welcome to our coaching platform'
             message = f'Dear {name},\n\nThank you for signing up to our coaching platform. Your profile has been registered and approved by PMO. Best of luck!'
-            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+            # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
 
             # Send email notification to the admin
             admin_email = 'jatin@meeraq.com'
             admin_message = f'A new coach {name} has signed up on our coaching platform. Please login to the admin portal to review and approve their profile.'
-            send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])			
+            # send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])			
 
             # Return success response
         return Response({'message': 'Coach user created successfully.'}, status=201)

@@ -36,8 +36,12 @@ class Pmo(models.Model):
 
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
-    name = models.CharField(max_length=50)
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
     email = models.EmailField()
+    age = models.IntegerField(default=0, blank=True)
+    gender = models.CharField(max_length=50)
+    domain = models.CharField(max_length=50)
     room_id = models.CharField(max_length=50,blank=True)
     phone = models.CharField(max_length=25)    
     level = models.CharField(max_length=50)
