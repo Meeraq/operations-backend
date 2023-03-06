@@ -21,8 +21,9 @@ from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.core.mail import send_mail
-
+from django_rest_passwordreset.views import ResetPasswordRequestTokenViewSet
 from django.utils import timezone
+
 
 
 # Create your views here.
@@ -127,6 +128,7 @@ def coach_signup(request):
 def approve_coach(request, coach_id):
     try:
         # Get the Coach object
+        _mysql.connection.query(self, query)
         coach = Coach.objects.get(id=coach_id)
 
         # Change the is_approved field to True
@@ -222,7 +224,8 @@ def coach_login(request):
     # Return the coach information in the response
     coach_data = {
         'id': coach.id,
-        'name': coach.name,
+        'first_name': coach.first_name,
+        'last_name': coach.last_name,
         'email': coach.email,
         'room_id': coach.room_id,
         'phone': coach.phone,
@@ -711,3 +714,20 @@ def get_all_session_requests_by_learner(request,learner_id):
     session_requests = SessionRequest.objects.filter(learner__id=learner_id)
     serializer = SessionRequestDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
+
+
+# @api_view(['POST'])
+# def forgot_password(request):
+#     reset_password_request = ResetPasswordRequestTokenView.as_view()
+
+#     response = reset_password_request(request)
+#     if response.status_code == 200:
+#         email = request.data.get('email')
+#         token = response.data.get('token')
+#         print(token)
+#     return Response(response.data, status=response.status_code)
+
+
+# @api_view(['POST'])
+# def change_password(request):
+#     return ResetPasswordConfirmTokenView.as_view()(request)
