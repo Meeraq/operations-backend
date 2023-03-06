@@ -116,9 +116,11 @@ def coach_signup(request):
             # Return success response
         return Response({'message': 'Coach user created successfully.'}, status=201)
 
+    except IntegrityError:
+        return Response({'error': 'A coach user with this email already exists.'}, status=400)
     except Exception as e:
-        # Return error response if any exception occurs
-        return Response({'error': str(e)}, status=500)
+        # Return error response if any other exception occurs
+        return Response({'error': 'An error occurred while creating the coach user.'}, status=500)
 
 
 @api_view(['PUT'])
@@ -160,7 +162,11 @@ def get_coaches(request):
         # Return error response if any exception occurs
         return Response({'error': str(e)}, status=500)
 
-
+def updateLastLogin(email):
+    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user = User.objects.get(username=email)
+    user.last_login = today 
+    user.save()
 
 @api_view(['POST'])
 def pmo_login(request):
@@ -179,12 +185,14 @@ def pmo_login(request):
     token, _ = Token.objects.get_or_create(user=user)
     pmo = Pmo.objects.get(user=user.profile)
 
+    updateLastLogin(pmo.email)
     return Response({
         'token': token.key,
         'pmo': {
             'name': pmo.name,
             'email': pmo.email,
-            'phone': pmo.phone
+            'phone': pmo.phone,
+            'last_login': pmo.user.user.last_login
         }
     })
 
@@ -222,9 +230,10 @@ def coach_login(request):
         'rating': coach.rating,
         'area_of_expertise': coach.area_of_expertise,
         'completed_sessions': coach.completed_sessions,
-        'is_approved': coach.is_approved
+        'is_approved': coach.is_approved,
+        'last_login': coach.user.user.last_login
     }
-    
+    updateLastLogin(coach.email)
     return Response({'coach': coach_data}, status=200)
 
 
@@ -330,8 +339,8 @@ def otp_validation(request):
     # Delete the OTP object after it has been validated
     otp_obj.delete()
 
-    learner_data = {'id':learner.id,'name':learner.name,'email': learner.email,'phone': learner.email, 'token': token.key}
-
+    learner_data = {'id':learner.id,'name':learner.name,'email': learner.email,'phone': learner.email,'last_login': learner.user.user.last_login ,'token': token.key}
+    updateLastLogin(learner.email)
     return Response({ 'learner': learner_data},status=200)
 
 
