@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -662,7 +662,7 @@ def get_past_session(request):
 @api_view(["GET"])
 def get_session_requests(request):
     session_requests = SessionRequest.objects.filter(is_booked=False)
-    serializer = SessionRequestDepthOneSerializer(session_requests, many=True)
+    serializer = SessionRequestDepthTwoSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
 
 
