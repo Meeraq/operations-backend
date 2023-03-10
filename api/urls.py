@@ -18,6 +18,7 @@ urlpatterns =[
     path('validate-otp/', views.otp_validation, name='validate_otp'),
    	path('create-project/', views.create_project, name='create-project'),
     path('learner/', views.create_learner, name='learner'),
+    path('projects/edit/<int:project_id>/',views.edit_project),
     path('projects/all/',views.get_projects),
     path('projects/ongoing/',views.get_ongoing_projects),
     path('projects/completed/',views.get_completed_projects),
@@ -41,5 +42,7 @@ urlpatterns =[
     path('sessions/learner/join/',views.mark_learner_joined_session),
     path('session-requests/count/', views.get_session_request_count),
     path('session-requests/pending/learner/<int:learner_id>/', views.get_pending_session_requests_by_learner),
-		path('session-requests/all/learner/<int:learner_id>/', views.get_all_session_requests_by_learner)
+		path('session-requests/all/learner/<int:learner_id>/', views.get_all_session_requests_by_learner),
+		path('session-requests/delete/<int:session_request_id>/',views.delete_session_request),
+    path('dashboard/',views.get_dashboard_details)
 ]    

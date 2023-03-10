@@ -357,8 +357,10 @@ def create_project(request):
         name=request.data['project_name'],
         organisation=organisation,
         total_sessions=request.data['total_session'],
+				end_date=request.data['end_date'],
         cost_per_session=request.data['cost_per_session'],
-        sessions_per_employee=request.data['sessions_per_employee']
+        sessions_per_employee=request.data['sessions_per_employee'],
+        session_duration= request.data['session_duration']
     )
     coach_emails=[]
     project.save()
@@ -502,7 +504,7 @@ def get_projects(request):
 @api_view(['GET'])
 def get_ongoing_projects(request):
     projects = Project.objects.filter(status="Ongoing")
-    serializer = ProjectSerializer(projects, many=True)
+    serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data)
 
 @api_view(['GET'])
@@ -731,3 +733,49 @@ def get_all_session_requests_by_learner(request,learner_id):
 # @api_view(['POST'])
 # def change_password(request):
 #     return ResetPasswordConfirmTokenView.as_view()(request)
+
+
+@api_view(['POST'])
+def edit_project(request,project_id):            
+		print(project_id)
+		organisation= Organisation(
+        name=request.data['organisation_name'], image_url=request.data['image_url']
+    )
+		organisation.save()
+		project = Project.objects.get(id=project_id)
+		project.name = request.data['project_name']
+		project.organisation = organisation
+		project.total_sessions = request.data['total_sessions']
+		project.cost_per_session = request.data['cost_per_session']
+		project.session_duration = request.data['session_duration']
+		project.sessions_per_employee = request.data['sessions_per_employee']
+		project.currency=request.data['currency']
+		project.end_date = request.data['end_date']
+		project.coaches.clear()
+		for coach_id in request.data['coach_id']:
+				coach = Coach.objects.get(id = coach_id)
+				project.coaches.add(coach)
+		project.save()
+		return Response({},status=200)
+
+
+@api_view(['POST'])
+def delete_session_request(request, session_request_id):
+		session_request = SessionRequest.objects.get(id = session_request_id)
+		session_request.delete()
+		return Response({'deleted_session_request_id': session_request_id})
+
+
+@api_view(['GET'])
+def get_dashboard_details(request):
+    current_datetime = timezone.localtime(timezone.now())
+    start_of_day = current_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day = start_of_day + timedelta(days=1)
+    today_sessions = Session.objects.filter(
+        confirmed_availability__start_time__gte=start_of_day.timestamp() * 1000,
+        confirmed_availability__start_time__lt=end_of_day.timestamp() * 1000
+    )
+    sessions_serializer = SessionsDepthTwoSerializer(today_sessions,many=True)
+    session_requests = SessionRequest.objects.filter(is_booked=False)
+    # session_requests_serializer = SessionRequestDepthTwoSerializer(session_requests, many=True)
+    return Response({'todays_sessions': sessions_serializer.data,'session_requests_count': len(session_requests)})
