@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view
-from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session
+from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session, CoachInvites
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.core.mail import send_mail
@@ -779,3 +779,38 @@ def get_dashboard_details(request):
     session_requests = SessionRequest.objects.filter(is_booked=False)
     # session_requests_serializer = SessionRequestDepthTwoSerializer(session_requests, many=True)
     return Response({'todays_sessions': sessions_serializer.data,'session_requests_count': len(session_requests)})
+
+
+@api_view(['POST'])
+def invite_coach(request):
+    serializer = CoachInvitesSerializer(data=request.data)
+    if serializer.is_valid():
+        invite = serializer.save()
+        subject = f'Meeraq Portal invitation'
+        message = f'Dear {invite.name} \n\n Sign up on Meeraq coach portal'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [invite.email])
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(['GET'])
+def get_coach_invites(request):
+    invites = CoachInvites.objects.order_by('-created_at')
+    serializer = CoachInvitesSerializer(invites, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+def get_projects_and_sessions_by_coach(request,coach_id):
+    projects = Project.objects.filter(coaches__id=coach_id)
+    sessions = Session.objects.filter(session_request__project__in=projects,coach__id=coach_id)
+    session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
+    sessions_dict = {}
+    for session in session_serializer.data:
+        project_id = session['session_request']['project']['id']
+        if project_id in sessions_dict:
+            sessions_dict[project_id].append(session)
+        else:
+            sessions_dict[project_id] = [session]
+    project_serializer = ProjectDepthTwoSerializer(projects,many=True)
+    return Response({'projects': project_serializer.data, 'session_per_project':sessions_dict})

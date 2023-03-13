@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Pmo,Coach,Profile,Learner,Project,SessionRequest,Availibility,Session
+from .models import Pmo,Coach,Profile,Learner,Project,SessionRequest,Availibility,Session,CoachInvites
 from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
@@ -65,3 +65,9 @@ class SessionsDepthTwoSerializer(serializers.ModelSerializer):
         model = Session
         fields = '__all__'
         depth = 2
+
+
+class CoachInvitesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachInvites
+        fields = '__all__'

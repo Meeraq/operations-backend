@@ -105,6 +105,12 @@ class HR(models.Model):
     def __str__(self):
         return self.name
 
+class CoachInvites(models.Model):
+    name= models.CharField(max_length=100)
+    email = models.EmailField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class Organisation(models.Model):
     name= models.CharField(max_length=100)
     image_url = models.CharField(max_length=200)

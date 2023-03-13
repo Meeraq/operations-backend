@@ -44,5 +44,8 @@ urlpatterns =[
     path('session-requests/pending/learner/<int:learner_id>/', views.get_pending_session_requests_by_learner),
 		path('session-requests/all/learner/<int:learner_id>/', views.get_all_session_requests_by_learner),
 		path('session-requests/delete/<int:session_request_id>/',views.delete_session_request),
-    path('dashboard/',views.get_dashboard_details)
+    path('dashboard/',views.get_dashboard_details),
+    path('coach-invites/all/',views.get_coach_invites),
+    path('coach-invites/create/',views.invite_coach),
+		path('project-and-sessions/coach/<int:coach_id>/',views.get_projects_and_sessions_by_coach)
 ]    
