@@ -75,7 +75,7 @@ class Coach(models.Model):
     completed_sessions = models.IntegerField(blank=True,default=0)
     is_approved = models.BooleanField(blank=True,default=False)
     def __str__(self):
-        return self.name
+        return self.first_name
 
 
 class Learner(models.Model):

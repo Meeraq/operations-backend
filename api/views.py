@@ -10,6 +10,7 @@ from django.utils.crypto import get_random_string
 import jwt
 import jwt
 import uuid
+import pytz
 from django.db.models import IntegerField
 from django.db.models.functions import Cast
 from rest_framework.exceptions import AuthenticationFailed
@@ -68,7 +69,6 @@ def coach_signup(request):
     # Get data from request
     first_name = request.data.get('first_name')
     last_name = request.data.get('last_name')
-    print(first_name,last_name)
     email = request.data.get('email')
     age = request.data.get('age') 
     gender = request.data.get('gender')
@@ -80,10 +80,9 @@ def coach_signup(request):
     area_of_expertise = request.data.get('area_of_expertise')
     username = request.data.get('email') # keeping username and email same
     password = request.data.get('password')
-
-
+    
     # Check if required data is provided
-    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level, area_of_expertise, username, password]):
+    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level, username, password]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
@@ -768,8 +767,13 @@ def delete_session_request(request, session_request_id):
 
 @api_view(['GET'])
 def get_dashboard_details(request):
+    local_time = timezone.localtime(timezone.now())
+    india_tz = pytz.timezone('Asia/Kolkata')
+    india_time = local_time.astimezone(india_tz)
+    print(india_time)
     current_datetime = timezone.localtime(timezone.now())
-    start_of_day = current_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
+    print(current_datetime)
+    start_of_day = india_time.replace(hour=0, minute=0, second=0, microsecond=0)
     end_of_day = start_of_day + timedelta(days=1)
     today_sessions = Session.objects.filter(
         confirmed_availability__start_time__gte=start_of_day.timestamp() * 1000,
