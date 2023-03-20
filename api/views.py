@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,HrSerializer, ProjectDepthTwoSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view
-from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session
+from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session,OTP_HR
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from django.core.mail import send_mail
@@ -68,7 +68,6 @@ def coach_signup(request):
     # Get data from request
     first_name = request.data.get('first_name')
     last_name = request.data.get('last_name')
-    print(first_name,last_name)
     email = request.data.get('email')
     age = request.data.get('age') 
     gender = request.data.get('gender')
@@ -81,6 +80,7 @@ def coach_signup(request):
     username = request.data.get('email') # keeping username and email same
     password = request.data.get('password')
 
+    # print(first_name, last_name, email, age, gender, domain, room_id, phone, level, area_of_expertise, username, password)
 
     # Check if required data is provided
     if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level, area_of_expertise, username, password]):
@@ -107,12 +107,12 @@ def coach_signup(request):
             # Send email notification to the coach
             subject = 'Welcome to our coaching platform'
             message = f'Dear {name},\n\nThank you for signing up to our coaching platform. Your profile has been registered and approved by PMO. Best of luck!'
-            # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
 
             # Send email notification to the admin
             admin_email = 'jatin@meeraq.com'
             admin_message = f'A new coach {name} has signed up on our coaching platform. Please login to the admin portal to review and approve their profile.'
-            # send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])			
+            send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])			
 
             # Return success response
         return Response({'message': 'Coach user created successfully.'}, status=201)
@@ -358,6 +358,7 @@ def create_project(request):
         organisation=organisation,
         total_sessions=request.data['total_session'],
         cost_per_session=request.data['cost_per_session'],
+        currency=request.data['currency'],
         sessions_per_employee=request.data['sessions_per_employee']
     )
     coach_emails=[]
@@ -372,6 +373,14 @@ def create_project(request):
     subject = f'Hey Coach! You have assigned to a project {project_name}'
     message = f'Dear {coach_emails},\n\nPlease be there to book slots requested by learner in this {project_name}. Best of luck!'
     send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, coach_emails)
+    
+    hrs= create_hr(request.data['hr'])
+    for hr in hrs:
+        project.hr.add(hr)
+
+    # except Exception as e:
+    #     # Handle any exceptions from create_learners
+    #     return Response({'error': str(e)}, status=500)
 
     try:
         learners = create_learners(request.data['learners'])
@@ -404,20 +413,21 @@ def create_learners(learners_data):
                         learners.append(learner_profile.learner)
                         continue
 
+                else:
                 # If learner does not exist, create the user object with an unusable password
-                user = User.objects.create_user(
+                    user = User.objects.create_user(
                     username=learner_data['email'],
                     email=learner_data.get('email', learner_data['email'])
                     )
-                user.set_unusable_password()
-                user.save()
+                    user.set_unusable_password()
+                    user.save()
 
                 # Create the learner profile
-                learner_profile = Profile.objects.create(user=user, type='learner')
+                    learner_profile = Profile.objects.create(user=user, type='learner')
 
                 # Create the learner object
-                learner = Learner.objects.create(user=learner_profile, name=learner_data.get('name'), email=learner_data['email'], phone=learner_data.get('phone'))
-                learners.append(learner)
+                    learner = Learner.objects.create(user=learner_profile, name=learner_data.get('name'), email=learner_data['email'], phone=learner_data.get('phone'))
+                    learners.append(learner)
 
             # Return response with learners created or already existing
             serializer = LearnerSerializer(learners, many=True)
@@ -430,7 +440,7 @@ def create_learners(learners_data):
 
     except Exception as e:
         # Handle any other exceptions
-        transaction.set_rollback(True) # Rollback the transaction
+        # transaction.set_rollback(True) # Rollback the transaction
         raise Exception(str(e))
 
 # Create learner user
@@ -558,26 +568,25 @@ def book_session(request):
         session_request = session.session_request
         session_request.is_booked = True
         session_request.save()
-        return Response(serializer.data, status=201)
-    return Response(serializer.errors, status=400)
 
-        # coach_name= session.coach.name
-        # print(coach_name)
-        # email=coach_name.email
-        # print(email)
-        # learner=Session.session_request.learner
+        coach=session.coach
+        coach_email=coach.email
+        learner=session.session_request.learner
+        learner_email= learner.email
 
     # Send email notification to the coach
-    # subject = 'Hello coach your session is booked.'
-    # message = f'Dear {coach_name},\n\nThank you booking slots of learner.Please be ready on date and time to complete session. Best of luck!'
-    # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+    subject = 'Hello coach your session is booked.'
+    message = f'Dear {coach.first_name},\n\nThank you booking slots of learner.Please be ready on date and time to complete session. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach_email])
     
 
+    # Send email notification to the learner
+    subject = 'Hello learner your session is booked.'
+    message = f'Dear {learner.name},\n\nThank you booking slots of learner.Please be ready on date and time to complete session. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [learner_email])
 
-
-
-
-    
+    return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
 
 @api_view(["GET"])
 def get_upcoming_session_coach(request, coach_id):
@@ -728,6 +737,200 @@ def get_all_session_requests_by_learner(request,learner_id):
 #     return Response(response.data, status=response.status_code)
 
 
-# @api_view(['POST'])
-# def change_password(request):
-#     return ResetPasswordConfirmTokenView.as_view()(request)
+@api_view(['POST'])
+def otp_generation_hr(request):
+    try:
+        hr = HR.objects.get(email=request.data['email'])
+        try:
+            # Check if OTP already exists for the hr
+            otp_obj = OTP_HR.objects.get(hr=hr)
+            otp_obj.delete()
+        except OTP_HR.DoesNotExist:
+            pass
+
+        # Generate OTP and save it to the database
+        otp = get_random_string(length=6, allowed_chars='0123456789')
+        created_otp = OTP_HR.objects.create(hr=hr, otp=otp)
+    
+        # Send OTP on email to hr
+        subject = f'Meeraq Login Otp'
+        message = f'Dear {hr.first_name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [hr.email])
+
+        return Response({'success': True,'otp':created_otp.otp})
+    
+
+    except HR.DoesNotExist:
+        # Handle the case where the hr with the given email does not exist
+        return Response({'error': 'HR with the given email does not exist.'}, status=400)
+
+    except Exception as e:
+        # Handle any other exceptions
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+def otp_validation_hr(request):
+    otp_obj = OTP_HR.objects.filter(hr__email=request.data['email'], otp=request.data['otp']).order_by('-created_at').first()
+
+    if otp_obj is None:
+        raise AuthenticationFailed('Invalid OTP')
+
+    hr = otp_obj.hr
+    token, created = Token.objects.get_or_create(user=hr.user.user)
+
+    # Delete the OTP object after it has been validated
+    otp_obj.delete()
+
+    hr_data = {'id':hr.id,'name':hr.first_name,'email': hr.email,'phone': hr.phone,'last_login': hr.user.user.last_login ,'token': token.key}
+    updateLastLogin(hr.email)
+    return Response({ 'hr': hr_data},status=200) 
+
+
+@api_view(['GET'])
+def get_ongoing_projects_of_hr(request,hr_id):
+    projects = Project.objects.filter(hr__id = hr_id,status="Ongoing")
+    serializer = ProjectDepthTwoSerializer(projects, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(['GET'])
+def get_completed_projects_of_hr(request,hr_id):
+    projects = Project.objects.filter(hr__id = hr_id, status="Completed")
+    serializer = ProjectDepthTwoSerializer(projects, many=True)
+    return Response(serializer.data, status=200)
+
+@api_view(['POST'])
+def add_coach(request):
+    # Get data from request
+    first_name = request.data.get('first_name')
+    last_name = request.data.get('last_name')
+    email = request.data.get('email')
+    age = request.data.get('age') 
+    gender = request.data.get('gender')
+    domain = request.data.get('domain')
+    room_id = request.data.get('room_id')
+    phone = request.data.get('phone')
+    level = request.data.get('level')
+    rating = "5"
+    area_of_expertise = request.data['area_of_expertise']
+    username = request.data.get('email') # keeping username and email same
+    password = request.data.get('password')
+
+    print(first_name, last_name, email, age, gender, domain, room_id, phone, level,  username, password)
+
+    # Check if required data is provided
+    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level,  username, password]):
+        return Response({'error': 'All required fields must be provided.'}, status=400)
+
+    try:
+        # Create the Django User
+        with transaction.atomic():
+            user = User.objects.create_user(username=username, password=password,email=email)
+
+            # Create the Coach Profile linked to the User
+            coach_profile = Profile.objects.create(user=user, type='coach')
+
+            # Create the Coach User using the Profile
+            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise)
+
+			# approve coach
+            coach = Coach.objects.get(id=coach_user.id)
+            # Change the is_approved field to True
+            coach.is_approved = True
+            coach.save()	
+            
+            full_name = coach_user.first_name + " " + coach_user.last_name
+
+
+            # Send email notification to the coach
+            subject = 'Welcome to our coaching platform'
+            message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {password}\n\n Click on the link to login or reset the password http://localhost:3003/'
+            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+
+            # # Send email notification to the admin
+            admin_email = 'jatin@meeraq.com'
+            admin_message = f'Dear PMO! \n\n A new coach {full_name} has been added on our coaching platform.'
+            send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])			
+
+            # Return success response
+        return Response({'message': 'Coach user created successfully.'}, status=201)
+
+    except IntegrityError:
+        return Response({'error': 'A coach user with this email already exists.'}, status=400)
+    
+    except Exception as e:
+        # Return error response if any other exception occurs
+        return Response({'error': 'An error occurred while creating the coach user.'}, status=500)
+
+
+
+@api_view(['GET'])
+def get_hr(request):
+    try:
+        # Get all the Coach objects
+        hr = HR.objects.all()
+
+        # Serialize the Coach objects
+        serializer = HrSerializer(hr, many=True)
+
+        # Return the serialized Coach objects as the response
+        return Response(serializer.data, status=200)
+
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({'error': str(e)}, status=500)
+
+
+def create_hr(hrs_data):
+    try:
+            if not hrs_data:
+                raise ValueError('HR data is required')
+            hrs = []
+            for hr_data in hrs_data:
+                print('email',hr_data)
+                # Check if username field is provided
+                # if 'email' not in hr_data:
+                #     raise ValueError('Username field is required')
+
+                # Check if user already exists
+                user = User.objects.filter(username=hr_data).first()
+                if user:
+                    # If user exists, check if hr already exists
+                    print('user exists',user)
+                    hr_profile = HR.objects.get(user__user=user)
+                    print(hr_profile,'hr_profile')
+                    if hr_profile:
+                        hrs.append(hr_profile)
+                        continue
+                else:
+                # If HR does not exist, create the user object with an unusable password
+                    user = User.objects.create_user(
+                        username=hr_data,
+                        email=hr_data
+                        )
+                    user.set_unusable_password()
+                    user.save()
+
+                # Create the hr profile
+                    hr_profile = Profile.objects.create(user=user, type='hr')
+
+                # Create the hr object
+                    hr = HR.objects.create(user=hr_profile , email=hr_data)
+                    hrs.append(hr)
+
+            # Return response with hr created or already existing
+            serializer = HrSerializer(hrs, many=True)
+            print(hrs,'helloo')
+            return hrs
+
+
+    except ValueError as e:
+        # Handle missing or invalid request data
+        raise ValueError(str(e))
+
+    except Exception as e:
+        # Handle any other exceptions
+        # transaction.set_rollback(True) # Rollback the transaction
+        raise Exception(str(e))
+

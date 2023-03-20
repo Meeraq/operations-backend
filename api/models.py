@@ -75,7 +75,7 @@ class Coach(models.Model):
     completed_sessions = models.IntegerField(blank=True,default=0)
     is_approved = models.BooleanField(blank=True,default=False)
     def __str__(self):
-        return self.name
+        return self.first_name
 
 
 class Learner(models.Model):
@@ -89,21 +89,16 @@ class Learner(models.Model):
     def __str__(self):
         return self.name
     
-
-
 class HR(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
-    name = models.CharField(max_length=50)
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
     email = models.EmailField()
-    meet_link = models.CharField(max_length=50)
-    phone = models.CharField( max_length=25)    
-    level = models.CharField(max_length=50)
-    rating = models.CharField(max_length=20)
-    area_of_expertise = models.CharField(max_length=50)
-    completed_sessions = models.IntegerField(blank=True,default=0)
-    is_approved = models.BooleanField(blank=True,default=False)
+    phone = models.CharField( max_length=25)
+    organisation = models.CharField(max_length=50)
+    
     def __str__(self):
-        return self.name
+        return self.first_name
 
 class Organisation(models.Model):
     name= models.CharField(max_length=100)
@@ -125,12 +120,18 @@ class Project(models.Model):
     learner=models.ManyToManyField(Learner,blank=True)
     total_sessions=models.IntegerField(default=0, blank=True)
     cost_per_session=models.IntegerField(default=0, blank=True)
+    currency= models.CharField(max_length=50, default="Rs")
     sessions_per_employee=models.IntegerField(default=0, blank=True)
     status = models.CharField(max_length=30,default='Ongoing')
 
 
 class OTP(models.Model):
     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    otp = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class OTP_HR(models.Model):
+    hr = models.ForeignKey(HR, on_delete=models.CASCADE)
     otp = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
 
