@@ -98,7 +98,13 @@ class HR(models.Model):
     organisation = models.CharField(max_length=50)
     
     def __str__(self):
-        return self.first_name
+        return self.name
+
+class CoachInvites(models.Model):
+    name= models.CharField(max_length=100)
+    email = models.EmailField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
 
 class Organisation(models.Model):
     name= models.CharField(max_length=100)
@@ -114,13 +120,14 @@ class Project(models.Model):
     organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type= models.CharField(max_length=50, choices=project_type_choice, default='cod')
     start_date= models.DateField(auto_now_add=True)
-    end_date= models.DateField(auto_now_add=True)
+    end_date= models.DateField()
+    session_duration=models.CharField(max_length=20)
     hr=models.ManyToManyField(HR,blank=True)
     coaches=models.ManyToManyField(Coach,blank=True)
     learner=models.ManyToManyField(Learner,blank=True)
     total_sessions=models.IntegerField(default=0, blank=True)
     cost_per_session=models.IntegerField(default=0, blank=True)
-    currency= models.CharField(max_length=50, default="Rs")
+    currency= models.CharField(max_length=30, default="Rupees")
     sessions_per_employee=models.IntegerField(default=0, blank=True)
     status = models.CharField(max_length=30,default='Ongoing')
 
