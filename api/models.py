@@ -61,6 +61,7 @@ class Pmo(models.Model):
 
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    profile_pic = models.ImageField(upload_to='post_images')
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
