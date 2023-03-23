@@ -80,10 +80,12 @@ def coach_signup(request):
     area_of_expertise = request.data.get('area_of_expertise')
     username = request.data.get('email') # keeping username and email same
     password = request.data.get('password')
+    profile_pic = request.data['profile_pic']
+    print(profile_pic)
     
     # Check if required data is provided
-    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level, username, password]):
-        return Response({'error': 'All required fields must be provided.'}, status=400)
+    # if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level, username, password]):
+    #     return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
         # Create the Django User
@@ -94,7 +96,7 @@ def coach_signup(request):
             coach_profile = Profile.objects.create(user=user, type='coach')
 
             # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise)
+            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise,profile_pic=profile_pic)
 
 						# approve coach
             coach = Coach.objects.get(id=coach_user.id)
@@ -120,6 +122,7 @@ def coach_signup(request):
         return Response({'error': 'A coach user with this email already exists.'}, status=400)
     except Exception as e:
         # Return error response if any other exception occurs
+        print(e)
         return Response({'error': 'An error occurred while creating the coach user.'}, status=500)
 
 
