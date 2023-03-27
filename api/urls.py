@@ -55,5 +55,5 @@ urlpatterns =[
     path('projects/completed/hr/<int:hr_id>/',views.get_completed_projects_of_hr),
     path('add-coach/', views.add_coach),
     path('hr/all/',views.get_hr),
-
+		path('coaches/profile/<int:coach_id>/',views.update_coach_profile)
 ] 
