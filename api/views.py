@@ -148,7 +148,20 @@ def approve_coach(request, coach_id):
     except Exception as e:
         # Return error response if any other exception occurs
         return Response({'error': str(e)}, status=500)
+    
+@api_view(['PUT'])
+def update_coach_profile(request, coach_id):
+    try:
+        coach = Coach.objects.get(id=coach_id)
+    except Coach.DoesNotExist:
+        return Response(status=404)
 
+    serializer = CoachSerializer(coach, data=request.data, partial=True)  # partial argument added here
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=200)
+
+    return Response(serializer.errors, status=400)
 
 
 @api_view(['GET'])
@@ -225,23 +238,9 @@ def coach_login(request):
                         status=404)
 
     # Return the coach information in the response
-    coach_data = {
-        'id': coach.id,
-        'first_name': coach.first_name,
-        'last_name': coach.last_name,
-        'email': coach.email,
-        'room_id': coach.room_id,
-        'phone': coach.phone,
-        'level': coach.level,
-        'rating': coach.rating,
-        'area_of_expertise': coach.area_of_expertise,
-        'completed_sessions': coach.completed_sessions,
-        'is_approved': coach.is_approved,
-        'last_login': coach.user.user.last_login
-    }
+    coach_serializer = CoachSerializer(coach)
     updateLastLogin(coach.email)
-    return Response({'coach': coach_data}, status=200)
-
+    return Response({'coach': coach_serializer.data}, status=200)
 
 def generateManagementToken():
     expires = 24 * 3600

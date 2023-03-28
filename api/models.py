@@ -71,8 +71,15 @@ class Coach(models.Model):
     phone = models.CharField(max_length=25)    
     level = models.CharField(max_length=50)
     rating = models.CharField(max_length=20)
-    area_of_expertise = models.CharField(max_length=50)
+    area_of_expertise = models.JSONField(default=list)
     completed_sessions = models.IntegerField(blank=True,default=0)
+    profile_pic = models.ImageField(upload_to='post_images',blank=True)
+    level_pic=models.ImageField(upload_to='post_images',blank=True)
+    education_pic=models.ImageField(upload_to='post_images',blank=True)
+    corporate_experience =  models.TextField(blank=True)
+    coaching_experience = models.TextField(blank=True)
+    years_of_corporate_experience = models.CharField(max_length=20,blank=True)
+    years_of_coaching_experience = models.CharField(max_length=20,blank=True)
     is_approved = models.BooleanField(blank=True,default=False)
     def __str__(self):
         return self.first_name
