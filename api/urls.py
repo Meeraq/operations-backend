@@ -56,4 +56,7 @@ urlpatterns =[
     path('add-coach/', views.add_coach),
     path('hr/all/',views.get_hr),
 		path('coaches/profile/<int:coach_id>/',views.update_coach_profile)
+		path('add_hr/',views.create_hr)
+		path('add_organisation/',views.add_organisation)
+		path('get_organisation/',views.get_organisation)
 ] 

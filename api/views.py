@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -1180,7 +1180,6 @@ def get_hr(request):
         # Return error response if any exception occurs
         return Response({'error': str(e)}, status=500)
 
-
 def create_hr(hrs_data):
     try:
             if not hrs_data:
@@ -1233,3 +1232,26 @@ def create_hr(hrs_data):
         # transaction.set_rollback(True) # Rollback the transaction
         raise Exception(str(e))
 
+
+@api_view(['GET'])
+def get_organisation(request):
+    orgs=Organisation.objects.all()
+    serializer = OrganisationSerializer(orgs, many=True)
+    return Response(serializer.data, status=200)
+
+
+
+@api_view(['POST'])
+def add_organisation(request):
+    org = Organisation.objects.create(name=request.data.get('name',''), image_url=request.data.get('image_url',''))
+    orgs=Organisation.objects.all()
+    serializer = OrganisationSerializer(orgs, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(['POST'])
+def add_hr(request):
+    hr = HR.objects.create(email=request.data.get('email'))
+    hrs=HR.objects.all()
+    serializer = HrSerializer(HR, many=True)
+    return Response(serializer.data, status=200)

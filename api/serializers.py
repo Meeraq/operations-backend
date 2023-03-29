@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Pmo,Coach,Profile,Learner,Project,SessionRequest,Availibility,Session,CoachInvites,HR
+from .models import Pmo,Coach,Profile,Learner,Project,SessionRequest,Availibility,Session,CoachInvites,HR,Organisation
 from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
@@ -76,4 +76,9 @@ class CoachInvitesSerializer(serializers.ModelSerializer):
 class HrSerializer(serializers.ModelSerializer):
     class Meta:
         model = HR
+        fields = '__all__'
+
+class OrganisationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organisation
         fields = '__all__'
