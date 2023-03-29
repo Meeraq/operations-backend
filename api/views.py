@@ -351,11 +351,14 @@ def otp_validation(request):
 
 @api_view(['POST'])
 def create_project(request):
-    organisation= Organisation(
-        name=request.data['organisation_name'], image_url=request.data['image_url']
-    )
+    organisation = Organisation.objects.filter(name=request.data['organisation_name']).first()
+    if not organisation:
+        organisation= Organisation(
+            name=request.data['organisation_name'], image_url=request.data['image_url']
+        )
     organisation.save()
     project= Project(
+        project_type = request.data['project_type'],
         name=request.data['project_name'],
         organisation=organisation,
         total_sessions=request.data['total_session'],
