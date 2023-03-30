@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -17,22 +17,26 @@ from rest_framework.exceptions import AuthenticationFailed
 from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view,permission_classes
+from rest_framework.permissions import IsAuthenticated,AllowAny
 from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session, CoachInvites,OTP_HR
 from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session
 from rest_framework.authtoken.models import Token
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate,login
 from django.core.mail import send_mail
-from django_rest_passwordreset.views import ResetPasswordRequestTokenViewSet
 from django.utils import timezone
+from rest_framework import status
+from django.http import HttpResponse,JsonResponse
+from django.middleware.csrf import get_token
+
+
+
 
 
 
 # Create your views here.
 
 import environ
-
-from api import serializers
 
 env = environ.Env()
 
@@ -1229,4 +1233,100 @@ def create_hr(hrs_data):
         # Handle any other exceptions
         # transaction.set_rollback(True) # Rollback the transaction
         raise Exception(str(e))
+    
 
+@api_view(['POST'])
+def login(request):
+    email = request.data.get('email')
+    password = request.data.get('password')
+
+    if email is None or password is None:
+        return Response({'error': 'Please provide both email and password'},
+                        status=400)
+    # Authenticate the user
+    user = authenticate(username=email, password=password)
+
+    if not user:
+        return Response({'error': 'Invalid credentials'}, status=400)
+
+    # Get the user's profile
+    if user.profile.type == 'coach':
+        serializer = CoachDepthOneSerializer(user.profile.coach)
+    elif user.profile.type == 'pmo':
+        serializer = PmoDepthOneSerializer(user.profile.pmo)
+    elif user.profile.type == 'learner':
+        serializer = LearnerDepthOneSerializer(user.profile.learner)
+    elif user.profile.type == 'hr':
+        serializer = HrDepthOneSerializer(user.profile.hr)
+    else:
+        return Response({'error': 'Invalid user type'}, status=400)
+    response = Response(serializer.data)
+    response.set_cookie('my_cookie', 'my_value')
+    return response
+  
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def test(request):
+    print('hello from test')
+    # return Response()
+    username = request.data.get('username')
+    password = request.data.get('password')
+    user = authenticate(request._request,username=username, password=password)
+    if user is not None:
+        login(request._request,user)
+        request._request.session.save() # Save the session before setting the cookie
+        response = HttpResponse(status=status.HTTP_200_OK)
+        print(request._request.session.session_key)
+        response.set_cookie(key='sessionid', value=request._request.session.session_key,samesite=False)
+        return response
+    else:
+        return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def my_view(request):
+    print(request.user.is_authenticated)
+    # Only authenticated users can access this view
+    return Response({'message': 'Hello, World!'})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_csrf(request):
+    response = Response({"Info": "Success - Set CSRF cookie"})
+    response["X-CSRFToken"] = get_token(request)
+    return response
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def loginView(request):
+    username = "sreerag@meeraq.com"
+    password = "Password@123"
+
+    if username is None or password is None:
+        return JsonResponse({"info": "Username and Password is needed"})
+
+    user = authenticate(username=username, password=password)
+
+    if user is None:
+        return JsonResponse({"info": "User does not exist"}, status=400)
+
+    login(request._request, user)
+    request._request.session.save() # Save the session before setting the cookie
+    print(request._request.session)
+    print(request._request.session.session_key)
+    response = HttpResponse(status=status.HTTP_200_OK)
+    response.set_cookie(key='sessionid', value=request._request.session.session_key,samesite=False)
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def who_am_i(request):
+    # print(request.ṣession)
+    print(request._request.session.session_key)
+    return Response()
