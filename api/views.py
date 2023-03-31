@@ -1276,12 +1276,10 @@ def logout_view(request):
 def session_view(request):
     user = request.user
     user_data = get_user_data(user)
-    return Response({'isAuthenticated': True, 'user': user_data})
     if user_data:
-        print('helo')
+        return Response({'isAuthenticated': True, 'user': user_data})
     else:
         return Response({'error': 'Invalid user type'}, status=400)
-
 
 def get_user_data(user):
     if user.profile.type == 'coach':
@@ -1295,3 +1293,61 @@ def get_user_data(user):
     else:
         return None
     return serializer.data
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def generate_otp(request):
+    try:
+        user = User.objects.get(username=request.data['email'])
+        try:
+            # Check if OTP already exists for the user
+            otp_obj = OTP.objects.get(user=user)
+            otp_obj.delete()
+        except OTP.DoesNotExist:
+            pass
+
+        # Generate OTP and save it to the database
+        otp = get_random_string(length=6, allowed_chars='0123456789')
+        created_otp = OTP.objects.create(user=user, otp=otp)
+    
+        # Send OTP on email to learner
+        subject = f'Meeraq Login Otp'
+        message = f'Dear {user.username} \n\n Your OTP for login on meeraq portal is {created_otp.otp}'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
+
+        return Response({'success': True,'otp':created_otp.otp})
+    
+
+    except User.DoesNotExist:
+        # Handle the case where the user with the given email does not exist
+        return Response({'error': 'User with the given email does not exist.'}, status=400)
+
+    except Exception as e:
+        # Handle any other exceptions
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def validate_otp(request):
+    otp_obj = OTP.objects.filter(user__username=request.data['email'], otp=request.data['otp']).order_by('-created_at').first()
+
+    if otp_obj is None:
+        raise AuthenticationFailed('Invalid OTP')
+
+    user = otp_obj.user
+    # token, created = Token.objects.get_or_create(user=learner.user.user)
+
+    # Delete the OTP object after it has been validated
+    otp_obj.delete()
+    login(request,user)
+    user_data = get_user_data(user)
+    if user_data:
+        return Response({'detail': 'Successfully logged in.', 'user': user_data})
+    else:
+        logout(request)
+        return Response({'error': 'Invalid user type'}, status=400)
+    
+    # learner_data = {'id':learner.id,'name':learner.name,'email': learner.email,'phone': learner.email,'last_login': learner.user.user.last_login ,'token': token.key}
+    # updateLastLogin(learner.email)
+    # return Response({ 'learner': learner_data},status=200)

@@ -33,7 +33,7 @@ def password_reset_token_created(sender, instance, reset_password_token, *args, 
     #     "noreply@somehost.local",
     #     # to:
     #     [reset_password_token.user.email]
-    # )
+    # )		
 
 
 class Profile(models.Model):
@@ -140,7 +140,7 @@ class Project(models.Model):
 
 
 class OTP(models.Model):
-    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     otp = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
 
