@@ -56,13 +56,8 @@ urlpatterns =[
     path('add-coach/', views.add_coach),
     path('hr/all/',views.get_hr),
 		path('coaches/profile/<int:coach_id>/',views.update_coach_profile),
-		# path('login/',views.login),
-    # path('test/',views.test),
-		# path('test_myview/',views.my_view),
-
-		path("csrf/", views.get_csrf, name="api-csrf"),
-    path("login_test/", views.loginView, name="api-login"),
-    path("whoami/", views.who_am_i, name="whoami"),
-
-	
-] 
+ 		path('csrf/', views.get_csrf, name='api-csrf'),
+    path('login/', views.login_view, name='api-login'),
+    path('logout/', views.logout_view, name='api-logout'),
+    path('session/', views.session_view, name='api-session'),
+]
