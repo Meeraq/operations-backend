@@ -25,8 +25,6 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate,login,logout
 from django.core.mail import send_mail
 from django.utils import timezone
-from rest_framework import status
-from django.http import HttpResponse,JsonResponse
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
 
