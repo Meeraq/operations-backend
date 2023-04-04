@@ -1255,3 +1255,20 @@ def add_hr(request):
     hrs=HR.objects.all()
     serializer = HrSerializer(HR, many=True)
     return Response(serializer.data, status=200)
+
+# Filter API for Coaches
+# 
+# @api_view(['POST'])
+# def filter_coach(request):
+#     from django.db.models import F, Func, Q
+#     print(request.data)
+#     filter=request.data.get('filter','').lower()
+#     # coaches = Coach.objects.filter(area_of_expertise__contains=request.data.get('filter','')).all()
+#     coaches = Coach.objects.annotate(first_name_lower=Func(
+#         F('first_name'), function='LOWER'),last_name_lower=Func(
+#         F('last_name'), function='LOWER'),email_lower=Func(
+#         F('email'), function='LOWER'),domain_lower=Func(
+#         F('domain'), function='LOWER'),area_of_expertise_lower=Func(
+#         F('area_of_expertise'), function='LOWER')).filter(Q(first_name_lower__contains=filter)|Q(last_name_lower__contains=filter)).all()
+#     serializer = CoachSerializer(coaches, many=True)
+#     return Response(serializer.data, status=200)
