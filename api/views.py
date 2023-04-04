@@ -1303,4 +1303,5 @@ def send_consent(request):
         message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, ["sanket.udgirkar@incentius.com"])
     project.coaches = coach_list
+    project.save()
     return Response(status=200)
