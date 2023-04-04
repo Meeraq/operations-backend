@@ -60,4 +60,5 @@ urlpatterns =[
 		path('add_organisation/',views.add_organisation),
 		path('get_organisation/',views.get_organisation),
 		# path('filter_coach/',views.filter_coach),
+    path('add_project_structure/',views.add_project_struture),
 ] 

@@ -1272,3 +1272,14 @@ def add_hr(request):
 #         F('area_of_expertise'), function='LOWER')).filter(Q(first_name_lower__contains=filter)|Q(last_name_lower__contains=filter)).all()
 #     serializer = CoachSerializer(coaches, many=True)
 #     return Response(serializer.data, status=200)
+
+@api_view(['POST'])
+def add_project_struture(request):
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.project_structure=request.data.get('project_structure',[])
+    project.status['project_details'] = 'complete'
+    project.save()
+    return Response(status=200)
