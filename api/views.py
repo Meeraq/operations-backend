@@ -1283,3 +1283,24 @@ def add_project_struture(request):
     project.status['project_details'] = 'complete'
     project.save()
     return Response(status=200)
+
+
+@api_view(['POST'])
+def send_consent(request):
+    # Get all the Coach objects
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    coaches = Coach.objects.all()
+    coach_list = []
+    for coach in coaches:
+        print(coach)
+        print(coach.id)
+        coach_list.append(dict(id=coach.id,status="Consent Sent"))
+        # Send email notification to the coach
+        subject = 'Concern for {project.name} Project'
+        message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, ["sanket.udgirkar@incentius.com"])
+    project.coaches = coach_list
+    return Response(status=200)
