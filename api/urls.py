@@ -55,5 +55,11 @@ urlpatterns =[
     path('projects/completed/hr/<int:hr_id>/',views.get_completed_projects_of_hr),
     path('add-coach/', views.add_coach),
     path('hr/all/',views.get_hr),
-		path('coaches/profile/<int:coach_id>/',views.update_coach_profile)
-] 
+		path('coaches/profile/<int:coach_id>/',views.update_coach_profile),
+ 		path('csrf/', views.get_csrf, name='api-csrf'),
+    path('login/', views.login_view, name='api-login'),
+    path('logout/', views.logout_view, name='api-logout'),
+    path('session/', views.session_view, name='api-session'),
+		path('otp/generate/',views.generate_otp),
+    path('otp/validate/',views.validate_otp)
+]

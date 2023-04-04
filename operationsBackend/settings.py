@@ -138,10 +138,6 @@ USE_L10N = True
 
 USE_TZ = True
 
-CORS_ALLOW_ALL_ORIGINS = True
-
-
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.2/howto/static-files/
 
@@ -154,3 +150,22 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
+
+CSRF_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_HTTPONLY = True
+SESSION_COOKIE_HTTPONLY = True
+
+# PROD ONLY
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
+
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+		'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+]
+
+CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
+CORS_ALLOW_CREDENTIALS = True

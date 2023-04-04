@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -17,22 +17,22 @@ from rest_framework.exceptions import AuthenticationFailed
 from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view,permission_classes
+from rest_framework.permissions import IsAuthenticated,AllowAny
 from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session, CoachInvites,OTP_HR
 from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session
 from rest_framework.authtoken.models import Token
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate,login,logout
 from django.core.mail import send_mail
-from django_rest_passwordreset.views import ResetPasswordRequestTokenViewSet
 from django.utils import timezone
+from django.middleware.csrf import get_token
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 
 
 # Create your views here.
 
 import environ
-
-from api import serializers
 
 env = environ.Env()
 
@@ -1230,3 +1230,122 @@ def create_hr(hrs_data):
         # transaction.set_rollback(True) # Rollback the transaction
         raise Exception(str(e))
 
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_csrf(request):
+    response = Response({'detail': 'CSRF cookie set'})
+    response['X-CSRFToken'] = get_token(request)
+    return response
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_view(request):
+    data = request.data
+    username = data.get('username')
+    password = data.get('password')
+    if username is None or password is None:
+        raise ValidationError({'detail': 'Please provide username and password.'})
+    user = authenticate(request, username=username, password=password)
+
+    if user is None:
+        raise AuthenticationFailed({'detail': 'Invalid credentials.'})
+
+    login(request, user)
+    user_data = get_user_data(user)
+    if user_data:
+        return Response({'detail': 'Successfully logged in.', 'user': user_data})
+    else:
+        logout(request)
+        return Response({'error': 'Invalid user type'}, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def logout_view(request):
+    if not request.user.is_authenticated:
+        raise AuthenticationFailed({'detail': 'You\'re not logged in.'})
+
+    logout(request)
+    return Response({'detail': 'Successfully logged out.'})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@ensure_csrf_cookie
+def session_view(request):
+    user = request.user
+    user_data = get_user_data(user)
+    if user_data:
+        return Response({'isAuthenticated': True, 'user': user_data})
+    else:
+        return Response({'error': 'Invalid user type'}, status=400)
+
+def get_user_data(user):
+    if user.profile.type == 'coach':
+        serializer = CoachDepthOneSerializer(user.profile.coach)
+    elif user.profile.type == 'pmo':
+        serializer = PmoDepthOneSerializer(user.profile.pmo)
+    elif user.profile.type == 'learner':
+        serializer = LearnerDepthOneSerializer(user.profile.learner)
+    elif user.profile.type == 'hr':
+        serializer = HrDepthOneSerializer(user.profile.hr)
+    else:
+        return None
+    return serializer.data
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def generate_otp(request):
+    try:
+        user = User.objects.get(username=request.data['email'])
+        try:
+            # Check if OTP already exists for the user
+            otp_obj = OTP.objects.get(user=user)
+            otp_obj.delete()
+        except OTP.DoesNotExist:
+            pass
+
+        # Generate OTP and save it to the database
+        otp = get_random_string(length=6, allowed_chars='0123456789')
+        created_otp = OTP.objects.create(user=user, otp=otp)
+    
+        # Send OTP on email to learner
+        subject = f'Meeraq Login Otp'
+        message = f'Dear {user.username} \n\n Your OTP for login on meeraq portal is {created_otp.otp}'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
+
+        return Response({'success': True,'otp':created_otp.otp})
+    
+
+    except User.DoesNotExist:
+        # Handle the case where the user with the given email does not exist
+        return Response({'error': 'User with the given email does not exist.'}, status=400)
+
+    except Exception as e:
+        # Handle any other exceptions
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def validate_otp(request):
+    otp_obj = OTP.objects.filter(user__username=request.data['email'], otp=request.data['otp']).order_by('-created_at').first()
+
+    if otp_obj is None:
+        raise AuthenticationFailed('Invalid OTP')
+
+    user = otp_obj.user
+    # token, created = Token.objects.get_or_create(user=learner.user.user)
+
+    # Delete the OTP object after it has been validated
+    otp_obj.delete()
+    login(request,user)
+    user_data = get_user_data(user)
+    if user_data:
+        return Response({'detail': 'Successfully logged in.', 'user': user_data})
+    else:
+        logout(request)
+        return Response({'error': 'Invalid user type'}, status=400)
+    
+    # learner_data = {'id':learner.id,'name':learner.name,'email': learner.email,'phone': learner.email,'last_login': learner.user.user.last_login ,'token': token.key}
+    # updateLastLogin(learner.email)
+    # return Response({ 'learner': learner_data},status=200)

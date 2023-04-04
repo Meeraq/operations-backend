@@ -7,6 +7,29 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['email', 'password', 'is_staff']
 
+class PmoDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Pmo
+        fields = '__all__'
+        depth=1
+
+class CoachDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Coach
+        fields = '__all__'
+        depth=1
+
+class HrDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HR
+        fields = '__all__'
+        depth=1
+
+class LearnerDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Learner
+        fields = '__all__'
+        depth=1
 
 class CoachSerializer(serializers.ModelSerializer):
     class Meta:
