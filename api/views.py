@@ -1276,7 +1276,7 @@ def add_hr(request):
 @api_view(['POST'])
 def add_project_struture(request):
     try:
-        project = Project.objects.get(id=project_id)
+        project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     project.project_structure=request.data.get('project_structure',[])
