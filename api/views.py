@@ -373,6 +373,7 @@ def create_project_cass(request):
             coach_approval='pending',
             chemistry_session='pending',
             coach_selected='pending',
+            project_live='pending'
     )
     )
     hr_emails=[]
@@ -410,7 +411,8 @@ def create_project(request):
         cost_per_session=request.data['cost_per_session'],
         currency=request.data['currency'],
         sessions_per_employee=request.data['sessions_per_employee'],
-        session_duration= request.data['session_duration']
+        session_duration= request.data['session_duration'],
+        status=dict(project_live='pending')
     )
     hr_emails=[]
     coach_emails=[]
@@ -569,13 +571,13 @@ def get_projects(request):
 
 @api_view(['GET'])
 def get_ongoing_projects(request):
-    projects = Project.objects.filter(status="Ongoing")
+    projects = Project.objects.filter(status__project_live='pending')
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data)
 
 @api_view(['GET'])
 def get_completed_projects(request):
-    projects = Project.objects.filter(status="Completed")
+    projects = Project.objects.filter(status__project_live="complete")
     serializer = ProjectSerializer(projects, many=True)
     return Response(serializer.data)
 
@@ -851,14 +853,14 @@ def otp_validation_hr(request):
 
 @api_view(['GET'])
 def get_ongoing_projects_of_hr(request,hr_id):
-    projects = Project.objects.filter(hr__id = hr_id,status="Ongoing")
+    projects = Project.objects.filter(hr__id = hr_id,status__project_live="pending")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data, status=200)
 
 
 @api_view(['GET'])
 def get_completed_projects_of_hr(request,hr_id):
-    projects = Project.objects.filter(hr__id = hr_id, status="Completed")
+    projects = Project.objects.filter(hr__id = hr_id, status__project_live="complete")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data, status=200)
 
@@ -1139,14 +1141,14 @@ def otp_validation_hr(request):
 
 @api_view(['GET'])
 def get_ongoing_projects_of_hr(request,hr_id):
-    projects = Project.objects.filter(hr__id = hr_id,status="Ongoing")
+    projects = Project.objects.filter(hr__id = hr_id,status__project_live="pending")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data, status=200)
 
 
 @api_view(['GET'])
 def get_completed_projects_of_hr(request,hr_id):
-    projects = Project.objects.filter(hr__id = hr_id, status="Completed")
+    projects = Project.objects.filter(hr__id = hr_id, status__project_live="complete")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data, status=200)
 
@@ -1444,21 +1446,18 @@ def add_hr(request):
     return Response(serializer.data, status=200)
 
 # Filter API for Coaches
-# 
-# @api_view(['POST'])
-# def filter_coach(request):
-#     from django.db.models import F, Func, Q
-#     print(request.data)
-#     filter=request.data.get('filter','').lower()
-#     # coaches = Coach.objects.filter(area_of_expertise__contains=request.data.get('filter','')).all()
-#     coaches = Coach.objects.annotate(first_name_lower=Func(
-#         F('first_name'), function='LOWER'),last_name_lower=Func(
-#         F('last_name'), function='LOWER'),email_lower=Func(
-#         F('email'), function='LOWER'),domain_lower=Func(
-#         F('domain'), function='LOWER'),area_of_expertise_lower=Func(
-#         F('area_of_expertise'), function='LOWER')).filter(Q(first_name_lower__contains=filter)|Q(last_name_lower__contains=filter)).all()
-#     serializer = CoachSerializer(coaches, many=True)
-#     return Response(serializer.data, status=200)
+# Expected input "filters": [{"key":"area_of_expertise","value":"test"},...]
+@api_view(['POST'])
+def filter_coach(request):
+    filters=request.data.get('filters',[])
+    temp={}
+    for filter in filters:
+        print(filter)
+        if filter['key'] in ["area_of_expertise", "years_of_coaching_experience", "gender"] and filter['value'] is not None and filter['value']!='':
+            temp[filter['key']] = filter['value']
+    coaches = Coach.objects.filter(**temp).all()
+    serializer = CoachSerializer(coaches, many=True)
+    return Response(serializer.data, status=200)
 
 @api_view(['POST'])
 def add_project_struture(request):
@@ -1479,7 +1478,7 @@ def send_consent(request):
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    coaches = Coach.objects.all()
+    coaches = Coach.objects.filter(id__in=request.data.get('coach_list',[])).all()
     coach_list = []
     for coach in coaches:
         print(coach)
@@ -1490,5 +1489,26 @@ def send_consent(request):
         message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach.email])
     project.coaches = coach_list
+    project.save()
+    return Response(status=200)
+
+# Filter API for Coaches
+# Expected input 
+# "project_id": 1
+# "coach_id": 1
+# "status": Consent Approved/Consent Rejected
+@api_view(['POST'])
+def receive_coach_consent(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    for coach in project.coaches:
+        try:
+            if coach['id']==request.data.get('coach_id',''):
+                coach['status'] = request.data.get('status','')
+        except Exception as e:
+            print(e)
+            return Response({"message": "Coach not Found"}, status=400)
     project.save()
     return Response(status=200)
