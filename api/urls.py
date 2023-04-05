@@ -62,10 +62,12 @@ urlpatterns =[
     path('session/', views.session_view, name='api-session'),
 		path('otp/generate/',views.generate_otp),
     path('otp/validate/',views.validate_otp),
-		path('add_hr/',views.create_hr),
+		path('add_hr/',views.add_hr),
 		path('add_organisation/',views.add_organisation),
 		path('get_organisation/',views.get_organisation),
-		# path('filter_coach/',views.filter_coach),
+    path('create-project-cass/', views.create_project_cass),
     path('add_project_structure/',views.add_project_struture),
     path('send_consent/',views.send_consent),
+
+
 ] 

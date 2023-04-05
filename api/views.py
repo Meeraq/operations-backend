@@ -348,6 +348,37 @@ def otp_validation(request):
     updateLastLogin(learner.email)
     return Response({ 'learner': learner_data},status=200)
 
+@api_view(['POST'])
+def create_project_cass(request):
+    organisation = Organisation.objects.filter(name=request.data['organisation_name']).first()
+    if not organisation:
+        organisation= Organisation(
+            name=request.data['organisation_name'], image_url=request.data['image_url']
+        )
+    organisation.save()
+    # print(organisation.name, organisation.image_url, "details of org")
+    print(organisation)
+    project= Project(
+        name=request.data['project_name'],
+        organisation=organisation,
+        currency=request.data['currency'],
+        project_type= 'cass'
+    )
+    hr_emails=[]
+    project.save()
+    project_name= project.name
+    print(request.data["hr"], "HR ID")
+    for hr in request.data["hr"]:
+        single_hr = HR.objects.get(id=hr)
+        print(single_hr)
+        hr_emails.append(single_hr.email)
+        # project.hr.add(single_hr)
+    # hrs= create_hr(request.data['hr'])
+    # for hr in hrs:
+        # project.hr.add(hr)
+
+    return Response({'message': "Project saved Successfully"}, status=200)
+
 
 @api_view(['POST'])
 def create_project(request):
@@ -357,17 +388,20 @@ def create_project(request):
             name=request.data['organisation_name'], image_url=request.data['image_url']
         )
     organisation.save()
+
+    
     project= Project(
         project_type = request.data['project_type'],
         name=request.data['project_name'],
         organisation=organisation,
         total_sessions=request.data['total_session'],
-				end_date=request.data['end_date'],
+		end_date=request.data['end_date'],
         cost_per_session=request.data['cost_per_session'],
         currency=request.data['currency'],
         sessions_per_employee=request.data['sessions_per_employee'],
         session_duration= request.data['session_duration']
     )
+    hr_emails=[]
     coach_emails=[]
     project.save()
     project_name= project.name
@@ -381,13 +415,19 @@ def create_project(request):
     message = f'Dear {coach_emails},\n\nPlease be there to book slots requested by learner in this {project_name}. Best of luck!'
     send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, coach_emails)
     
+
+    project_name= project.name
+    print(project_name) 
+    for hr in request.data["hr_id"]:
+        single_hr = HR.objects.get(id=hr)
+        print(single_hr)
+        hr_emails.append(single_hr.email)
+        project.hr.add(single_hr)
+
+
     hrs= create_hr(request.data['hr'])
     for hr in hrs:
         project.hr.add(hr)
-
-    # except Exception as e:
-    #     # Handle any exceptions from create_learners
-    #     return Response({'error': str(e)}, status=500)
 
     try:
         learners = create_learners(request.data['learners'])
@@ -1362,6 +1402,7 @@ def get_organisation(request):
 
 @api_view(['POST'])
 def add_organisation(request):
+    print(request.data.get('image_url',''))
     org = Organisation.objects.create(name=request.data.get('name',''), image_url=request.data.get('image_url',''))
     orgs=Organisation.objects.all()
     serializer = OrganisationSerializer(orgs, many=True)
@@ -1370,7 +1411,14 @@ def add_organisation(request):
 
 @api_view(['POST'])
 def add_hr(request):
-    hr = HR.objects.create(email=request.data.get('email'))
+    
+    hr = HR.objects.create(
+        first_name = request.data.get('first_name'),
+        last_name = request.data.get('last_name'),
+        email=request.data.get('email'),
+        phone = request.data.get('phone'),
+        # organisation= request.data.get('organisation')
+        )
     hrs=HR.objects.all()
     serializer = HrSerializer(HR, many=True)
     return Response(serializer.data, status=200)
