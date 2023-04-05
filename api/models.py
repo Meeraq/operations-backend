@@ -123,6 +123,17 @@ class Project(models.Model):
         ('4+2', '4+2'),
         ('cas', 'cas')
     ]
+    default_status=dict(
+            coach_list='pending',
+            coach_concern='pending',
+            hr_review='pending',
+            interview='pending',
+            empanelment='pending',
+            project_details='pending',
+            coaches_acceptance='pending',
+            chemistry_session='pending',
+            launch_project='pending',
+    )
     name= models.CharField(max_length=100)
     organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type= models.CharField(max_length=50, choices=project_type_choice, default='cod')
@@ -130,13 +141,14 @@ class Project(models.Model):
     end_date= models.DateField()
     session_duration=models.CharField(max_length=20)
     hr=models.ManyToManyField(HR,blank=True)
-    coaches=models.ManyToManyField(Coach,blank=True)
+    coaches=models.JSONField(default=list)
     learner=models.ManyToManyField(Learner,blank=True)
     total_sessions=models.IntegerField(default=0, blank=True)
     cost_per_session=models.IntegerField(default=0, blank=True)
     currency= models.CharField(max_length=30, default="Rupees")
     sessions_per_employee=models.IntegerField(default=0, blank=True)
-    status = models.CharField(max_length=30,default='Ongoing')
+    status = models.JSONField(default=default_status)
+    project_structure = models.JSONField(default=list)
 
 
 class OTP(models.Model):

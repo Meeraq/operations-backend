@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -351,11 +351,14 @@ def otp_validation(request):
 
 @api_view(['POST'])
 def create_project(request):
-    organisation= Organisation(
-        name=request.data['organisation_name'], image_url=request.data['image_url']
-    )
+    organisation = Organisation.objects.filter(name=request.data['organisation_name']).first()
+    if not organisation:
+        organisation= Organisation(
+            name=request.data['organisation_name'], image_url=request.data['image_url']
+        )
     organisation.save()
     project= Project(
+        project_type = request.data['project_type'],
         name=request.data['project_name'],
         organisation=organisation,
         total_sessions=request.data['total_session'],
@@ -1177,7 +1180,6 @@ def get_hr(request):
         # Return error response if any exception occurs
         return Response({'error': str(e)}, status=500)
 
-
 def create_hr(hrs_data):
     try:
             if not hrs_data:
@@ -1349,3 +1351,76 @@ def validate_otp(request):
     # learner_data = {'id':learner.id,'name':learner.name,'email': learner.email,'phone': learner.email,'last_login': learner.user.user.last_login ,'token': token.key}
     # updateLastLogin(learner.email)
     # return Response({ 'learner': learner_data},status=200)
+
+@api_view(['GET'])
+def get_organisation(request):
+    orgs=Organisation.objects.all()
+    serializer = OrganisationSerializer(orgs, many=True)
+    return Response(serializer.data, status=200)
+
+
+
+@api_view(['POST'])
+def add_organisation(request):
+    org = Organisation.objects.create(name=request.data.get('name',''), image_url=request.data.get('image_url',''))
+    orgs=Organisation.objects.all()
+    serializer = OrganisationSerializer(orgs, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(['POST'])
+def add_hr(request):
+    hr = HR.objects.create(email=request.data.get('email'))
+    hrs=HR.objects.all()
+    serializer = HrSerializer(HR, many=True)
+    return Response(serializer.data, status=200)
+
+# Filter API for Coaches
+# 
+# @api_view(['POST'])
+# def filter_coach(request):
+#     from django.db.models import F, Func, Q
+#     print(request.data)
+#     filter=request.data.get('filter','').lower()
+#     # coaches = Coach.objects.filter(area_of_expertise__contains=request.data.get('filter','')).all()
+#     coaches = Coach.objects.annotate(first_name_lower=Func(
+#         F('first_name'), function='LOWER'),last_name_lower=Func(
+#         F('last_name'), function='LOWER'),email_lower=Func(
+#         F('email'), function='LOWER'),domain_lower=Func(
+#         F('domain'), function='LOWER'),area_of_expertise_lower=Func(
+#         F('area_of_expertise'), function='LOWER')).filter(Q(first_name_lower__contains=filter)|Q(last_name_lower__contains=filter)).all()
+#     serializer = CoachSerializer(coaches, many=True)
+#     return Response(serializer.data, status=200)
+
+@api_view(['POST'])
+def add_project_struture(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.project_structure=request.data.get('project_structure',[])
+    project.status['project_details'] = 'complete'
+    project.save()
+    return Response(status=200)
+
+
+@api_view(['POST'])
+def send_consent(request):
+    # Get all the Coach objects
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    coaches = Coach.objects.all()
+    coach_list = []
+    for coach in coaches:
+        print(coach)
+        print(coach.id)
+        coach_list.append(dict(id=coach.id,status="Consent Sent"))
+        # Send email notification to the coach
+        subject = 'Concern for {project.name} Project'
+        message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, ["sanket.udgirkar@incentius.com"])
+    project.coaches = coach_list
+    project.save()
+    return Response(status=200)
