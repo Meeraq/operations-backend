@@ -350,7 +350,7 @@ def otp_validation(request):
 
 @api_view(['POST'])
 def create_project_cass(request):
-    organisation = Organisation.objects.filter(name=request.data['organisation_name']).first()
+    organisation = Organisation.objects.filter(id=request.data['organisation_name']).first()
     if not organisation:
         organisation= Organisation(
             name=request.data['organisation_name'], image_url=request.data['image_url']
@@ -362,7 +362,18 @@ def create_project_cass(request):
         name=request.data['project_name'],
         organisation=organisation,
         currency=request.data['currency'],
-        project_type= 'cass'
+        project_type= 'cass',
+        end_date=datetime.now()+timedelta(days=365),
+        status=dict(
+            project_structure='pending',
+            coach_consent='pending',
+            list_to_hr='pending',
+            interviews='pending',
+            empanel='pending',
+            coach_approval='pending',
+            chemistry_session='pending',
+            coach_selected='pending',
+    )
     )
     hr_emails=[]
     project.save()
@@ -371,7 +382,7 @@ def create_project_cass(request):
     for hr in request.data["hr"]:
         single_hr = HR.objects.get(id=hr)
         print(single_hr)
-        hr_emails.append(single_hr.email)
+        # hr_emails.append(single_hr.email)
         # project.hr.add(single_hr)
     # hrs= create_hr(request.data['hr'])
     # for hr in hrs:
@@ -1411,16 +1422,25 @@ def add_organisation(request):
 
 @api_view(['POST'])
 def add_hr(request):
-    
+    # Create the Django User
+    user = User.objects.create_user(username=request.data.get('email'),email=request.data.get('email'))
+    user.set_unusable_password()
+    user.save()
+    # Create the PMO Profile linked to the User
+    hr_profile = Profile.objects.create(user=user, type='hr')
+    # Get organization
+    organisation = Organisation.objects.filter(id=request.data.get('organisation')).first()
+    # Create the PMO User using the Profile    
     hr = HR.objects.create(
+        user=hr_profile,
         first_name = request.data.get('first_name'),
         last_name = request.data.get('last_name'),
         email=request.data.get('email'),
         phone = request.data.get('phone'),
-        # organisation= request.data.get('organisation')
+        organisation= organisation
         )
     hrs=HR.objects.all()
-    serializer = HrSerializer(HR, many=True)
+    serializer = HrSerializer(hrs, many=True)
     return Response(serializer.data, status=200)
 
 # Filter API for Coaches
