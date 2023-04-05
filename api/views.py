@@ -1468,7 +1468,7 @@ def send_consent(request):
         # Send email notification to the coach
         subject = 'Concern for {project.name} Project'
         message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
-        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, ["sanket.udgirkar@incentius.com"])
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach.email])
     project.coaches = coach_list
     project.save()
     return Response(status=200)
