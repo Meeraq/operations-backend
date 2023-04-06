@@ -1076,7 +1076,7 @@ def get_coach_invites(request):
 
 @api_view(['GET'])
 def get_projects_and_sessions_by_coach(request,coach_id):
-    projects = Project.objects.filter(coaches__contains=[{'id': 1}])
+    projects = Project.objects.filter(coaches_status__coach__id=coach_id)
     sessions = Session.objects.filter(session_request__project__in=projects,coach__id=coach_id)
     session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
     sessions_dict = {}
@@ -1514,12 +1514,15 @@ def receive_coach_consent(request):
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    for coach in project.coaches:
+    for coach_status in project.coaches_status.all():
         try:
-            if coach['id']==request.data.get('coach_id',''):
-                coach['status'] = request.data.get('status','')
+            if coach_status.coach.id==request.data.get('coach_id',''):
+                if coach_status.status=='Consent Sent':
+                    coach_status.status = request.data.get('status','')
+                    coach_status.save()
+                else:
+                    return Response({"message": "Consent already sent"}, status=400)
         except Exception as e:
             print(e)
             return Response({"message": "Coach not Found"}, status=400)
-    project.save()
     return Response(status=200)
