@@ -115,7 +115,7 @@ class CoachInvites(models.Model):
 
 class Organisation(models.Model):
     name= models.CharField(max_length=100)
-    image_url = models.CharField(max_length=200)
+    image_url = models.ImageField(upload_to='post_images',blank=True)
     
 class Project(models.Model):
     project_type_choice = [
@@ -127,7 +127,7 @@ class Project(models.Model):
     organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type= models.CharField(max_length=50, choices=project_type_choice, default='cod')
     start_date= models.DateField(auto_now_add=True)
-    end_date= models.DateField(blank=True)
+    end_date= models.DateField(blank=True,null=True)
     session_duration=models.CharField(max_length=20)
     hr=models.ManyToManyField(HR,blank=True)
     coaches=models.JSONField(default=list)

@@ -1324,7 +1324,7 @@ def logout_view(request):
     return Response({'detail': 'Successfully logged out.'})
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 @ensure_csrf_cookie
 def session_view(request):
     user = request.user
@@ -1333,9 +1333,10 @@ def session_view(request):
         return Response({'isAuthenticated': True, 'user': user_data})
     else:
         return Response({'error': 'Invalid user type'}, status=400)
-
 def get_user_data(user):
-    if user.profile.type == 'coach':
+    if not user.profile:
+        return None
+    elif user.profile.type == 'coach':
         serializer = CoachDepthOneSerializer(user.profile.coach)
     elif user.profile.type == 'pmo':
         serializer = PmoDepthOneSerializer(user.profile.pmo)
@@ -1466,9 +1467,9 @@ def add_project_struture(request):
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     project.project_structure=request.data.get('project_structure',[])
-    project.status['project_details'] = 'complete'
+    project.status['project_structure'] = 'complete'
     project.save()
-    return Response(status=200)
+    return Response({'message': "Structure added"},status=200)
 
 
 @api_view(['POST'])
@@ -1491,7 +1492,16 @@ def send_consent(request):
     project.coaches = coach_list
     project.save()
     return Response(status=200)
-
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_project_details(request,project_id):
+		try:
+				project = Project.objects.get(id=project_id)
+				serializer = ProjectSerializer(project)
+				return Response(serializer.data)
+		except Project.DoesNotExist: 
+				return Response({"message": "Project does not exist"}, status=400)
+                
 # Filter API for Coaches
 # Expected input 
 # "project_id": 1
