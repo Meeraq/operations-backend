@@ -117,6 +117,10 @@ class Organisation(models.Model):
     name= models.CharField(max_length=100)
     image_url = models.ImageField(upload_to='post_images',blank=True)
     
+class CoachStatus(models.Model):
+		coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
+		status = models.CharField(max_length=50,blank=True,default="")
+                
 class Project(models.Model):
     project_type_choice = [
         ('cod', 'cod'),
@@ -130,7 +134,8 @@ class Project(models.Model):
     end_date= models.DateField(blank=True,null=True)
     session_duration=models.CharField(max_length=20)
     hr=models.ManyToManyField(HR,blank=True)
-    coaches=models.JSONField(default=list)
+    coaches=models.ManyToManyField(Coach,blank=True)
+    coaches_status = models.ManyToManyField(CoachStatus,blank=True)
     learner=models.ManyToManyField(Learner,blank=True)
     total_sessions=models.IntegerField(default=0, blank=True)
     cost_per_session=models.IntegerField(default=0, blank=True)
@@ -171,8 +176,4 @@ class Session(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     coach_joined = models.BooleanField(blank=True,default=False)
     learner_joined = models.BooleanField(blank=True,default=False)
-
-
-
-
 

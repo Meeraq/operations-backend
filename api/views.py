@@ -19,7 +19,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework.permissions import IsAuthenticated,AllowAny
-from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session, CoachInvites,OTP_HR
+from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session, CoachInvites,OTP_HR,CoachStatus
 from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate,login,logout
@@ -1480,18 +1480,19 @@ def send_consent(request):
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     coaches = Coach.objects.filter(id__in=request.data.get('coach_list',[])).all()
-    coach_list = []
+    coach_status = []
     for coach in coaches:
-        print(coach)
-        print(coach.id)
-        coach_list.append(dict(id=coach.id,status="Consent Sent"))
-        # Send email notification to the coach
+        status = CoachStatus.objects.create(coach=coach,status="Consent Sent")
+        status.save()
+        coach_status.append(status)
         subject = 'Concern for {project.name} Project'
         message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach.email])
-    project.coaches = coach_list
+    # project.coaches = coach_list
+    project.coaches_status.add(*coach_status)
     project.save()
     return Response(status=200)
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_project_details(request,project_id):
