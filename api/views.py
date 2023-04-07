@@ -1541,8 +1541,8 @@ def complete_coach_consent(request):
 
 @api_view(['GET'])
 def get_interview_data(request,project_id):
-    sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='interview').all()
-    serializer=SessionRequestCaasSerializer(sessions)
+    sessions=SessionRequestCaas.objects.filter(project__id=project_id)
+    serializer=SessionRequestCaasSerializer(sessions,many=True)
     return Response(serializer.data,status=200)
 
 @api_view(['POST'])
@@ -1587,7 +1587,9 @@ def create_session_request_caas(request):
     session = {
            "hr": request.data['hr'],
            "project": request.data['project'],
-           "availibility":time_arr
+           "availibility":time_arr,
+           "coach":request.data['coach'],
+           "session_type": request.data['session_type']
 		      }
     session_serilizer = SessionRequestCaasSerializer(data = session)
     if session_serilizer.is_valid():

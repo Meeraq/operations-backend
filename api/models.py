@@ -179,9 +179,11 @@ class Session(models.Model):
 
 class SessionRequestCaas(models.Model):
     hr = models.ForeignKey(HR, on_delete=models.CASCADE)
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE,default=None)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-    availibility=models.ManyToManyField(Availibility)
+    availibility=models.ManyToManyField(Availibility,related_name="requested_availability")
+    confirmed_availability = models.ForeignKey(Availibility,related_name="confirmed_availability", on_delete=models.CASCADE,default=None)
     is_booked = models.BooleanField(blank=True,default=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    session_type = models.CharField(max_length=50)
+    session_type = models.CharField(max_length=50,default='')
