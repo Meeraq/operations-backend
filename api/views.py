@@ -1490,6 +1490,7 @@ def send_consent(request):
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach.email])
     # project.coaches = coach_list
     project.coaches_status.add(*coach_status)
+    project.status['coach_list'] = 'complete'
     project.save()
     return Response(status=200)
 
