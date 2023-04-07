@@ -1076,7 +1076,7 @@ def get_coach_invites(request):
 
 @api_view(['GET'])
 def get_projects_and_sessions_by_coach(request,coach_id):
-    projects = Project.objects.filter(coaches_status__coach__id=coach_id)
+    projects = Project.objects.filter(coaches_status__coach__id=coach_id,coaches_status__status='Consent Sent')
     sessions = Session.objects.filter(session_request__project__in=projects,coach__id=coach_id)
     session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
     sessions_dict = {}
