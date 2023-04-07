@@ -366,8 +366,9 @@ def create_project_cass(request):
         end_date=datetime.now()+timedelta(days=365),
         status=dict(
             project_structure='pending',
+            coach_list='pending',
             coach_consent='pending',
-            list_to_hr='pending',
+            coach_list_to_hr='pending',
             interviews='pending',
             empanel='pending',
             coach_approval='pending',
@@ -1490,15 +1491,16 @@ def send_consent(request):
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach.email])
     # project.coaches = coach_list
     project.coaches_status.add(*coach_status)
+    project.status['coach_list'] = 'complete'
     project.save()
-    return Response(status=200)
+    return Response({"message":"consent sent successfully"},status=200)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_project_details(request,project_id):
 		try:
 				project = Project.objects.get(id=project_id)
-				serializer = ProjectSerializer(project)
+				serializer = ProjectDepthTwoSerializer(project)
 				return Response(serializer.data)
 		except Project.DoesNotExist: 
 				return Response({"message": "Project does not exist"}, status=400)
@@ -1526,3 +1528,13 @@ def receive_coach_consent(request):
             print(e)
             return Response({"message": "Coach not Found"}, status=400)
     return Response(status=200)
+
+@api_view(['POST'])
+def complete_coach_consent(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['coach_consent'] = 'complete'
+    project.save()
+    return Response({'message': "coach consent completed"},status=200)

@@ -71,7 +71,7 @@ urlpatterns =[
     path('project/caas/<int:project_id>/',views.get_project_details),
     path('filter_coach/',views.filter_coach),
     path('receive_coach_consent/',views.receive_coach_consent),
-
+		path('complete_coach_consent/',views.complete_coach_consent)
 
 
 ] 
