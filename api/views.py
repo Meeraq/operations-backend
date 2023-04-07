@@ -1544,3 +1544,54 @@ def get_interview_data(request,project_id):
     sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='interview').all()
     serializer=SessionRequestCaasSerializer(sessions)
     return Response(serializer.data,status=200)
+
+@api_view(['POST'])
+def book_session_caas(request):
+    serializer = SessionRequestCaas(data=request.data)
+    if serializer.is_valid():
+        session = serializer.save()
+        # Mark the session request as booked
+        session_request = session.session_request
+        session_request.is_booked = True
+        session_request.save()
+
+        coach=session.coach
+        coach_email=coach.email
+        hr=session.session_request.hr
+        he_email= hr.email
+
+    # Send email notification to the coach
+    subject = 'Hello coach your session is booked.'
+    message = f'Dear {coach.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach_email])
+    
+
+    # Send email notification to the learner
+    subject = 'Hello learner your session is booked.'
+    message = f'Dear {hr.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [he_email])
+
+    return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+@api_view(['POST'])
+def create_session_request_caas(request):
+    time_arr = []
+    for time in request.data['availibility']:
+        availibility_serilizer = AvailibilitySerializer(data = time)
+        if availibility_serilizer.is_valid():
+            avil_id = availibility_serilizer.save()
+            time_arr.append(avil_id.id) 
+        else:
+            return Response({"message": str(availibility_serilizer.errors),}, status=401)
+    session = {
+           "hr": request.data['hr'],
+           "project": request.data['project'],
+           "availibility":time_arr
+		      }
+    session_serilizer = SessionRequestCaasSerializer(data = session)
+    if session_serilizer.is_valid():
+        session_serilizer.save()
+        return Response({"message": "Success"}, status=201)
+    else:
+        return Response({"message": str(session_serilizer.errors),}, status=401)
