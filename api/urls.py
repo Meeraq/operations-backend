@@ -75,5 +75,8 @@ urlpatterns =[
     path('get-interview-data/<int:project_id>/',views.get_interview_data),
     path('sessions/book/',views.book_session_caas),
     path('session-request-caas/create/', views.create_session_request_caas),
+		path('complete_coach_list_to_hr/',views.complete_coach_list_to_hr),
+    path('session-requests-caas/all/hr/<int:hr_id>/',views.get_session_requests_of_hr)
+]
 
-] 
+

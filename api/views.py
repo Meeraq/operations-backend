@@ -1539,9 +1539,29 @@ def complete_coach_consent(request):
     project.save()
     return Response({'message': "coach consent completed"},status=200)
 
+
+
+@api_view(['POST'])
+def complete_coach_list_to_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['coach_list_to_hr'] = 'complete'
+    project.save()
+    return Response({'message': "coach list to hr completed"},status=200)
+
+
 @api_view(['GET'])
 def get_interview_data(request,project_id):
-    sessions=SessionRequestCaas.objects.filter(project__id=project_id)
+    sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='interview').all()
+    serializer=SessionRequestCaasSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
+
+
+@api_view(['GET'])
+def get_session_requests_of_hr(request,hr_id):
+    sessions=SessionRequestCaas.objects.filter(hr__id = hr_id).all()
     serializer=SessionRequestCaasSerializer(sessions,many=True)
     return Response(serializer.data,status=200)
 
@@ -1585,10 +1605,10 @@ def create_session_request_caas(request):
         else:
             return Response({"message": str(availibility_serilizer.errors),}, status=401)
     session = {
-           "hr": request.data['hr'],
-           "project": request.data['project'],
+           "hr": request.data['hr_id'],
+           "project": request.data['project_id'],
            "availibility":time_arr,
-           "coach":request.data['coach'],
+           "coach":request.data['coach_id'],
            "session_type": request.data['session_type']
 		      }
     session_serilizer = SessionRequestCaasSerializer(data = session)
