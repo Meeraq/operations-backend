@@ -177,3 +177,11 @@ class Session(models.Model):
     coach_joined = models.BooleanField(blank=True,default=False)
     learner_joined = models.BooleanField(blank=True,default=False)
 
+class SessionRequestCaas(models.Model):
+    hr = models.ForeignKey(HR, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    availibility=models.ManyToManyField(Availibility)
+    is_booked = models.BooleanField(blank=True,default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    session_type = models.CharField(max_length=50)

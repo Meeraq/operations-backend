@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer,SessionRequestCaasSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -19,7 +19,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework.permissions import IsAuthenticated,AllowAny
-from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session, CoachInvites,OTP_HR,CoachStatus
+from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session, CoachInvites,OTP_HR,CoachStatus,SessionRequestCaas
 from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate,login,logout
@@ -1538,3 +1538,9 @@ def complete_coach_consent(request):
     project.status['coach_consent'] = 'complete'
     project.save()
     return Response({'message': "coach consent completed"},status=200)
+
+@api_view(['GET'])
+def get_interview_data(request,project_id):
+    sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='interview').all()
+    serializer=SessionRequestCaasSerializer(sessions)
+    return Response(serializer.data,status=200)
