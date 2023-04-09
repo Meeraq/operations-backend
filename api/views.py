@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer,SessionRequestCaasSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -19,7 +19,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework.permissions import IsAuthenticated,AllowAny
-from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session, CoachInvites,OTP_HR,CoachStatus
+from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session, CoachInvites,OTP_HR,CoachStatus,SessionRequestCaas
 from .models import Profile, Pmo, Coach, OTP, Learner, Project, Organisation, HR, Availibility,SessionRequest, Session
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate,login,logout
@@ -366,8 +366,9 @@ def create_project_cass(request):
         end_date=datetime.now()+timedelta(days=365),
         status=dict(
             project_structure='pending',
+            coach_list='pending',
             coach_consent='pending',
-            list_to_hr='pending',
+            coach_list_to_hr='pending',
             interviews='pending',
             empanel='pending',
             coach_approval='pending',
@@ -1492,14 +1493,14 @@ def send_consent(request):
     project.coaches_status.add(*coach_status)
     project.status['coach_list'] = 'complete'
     project.save()
-    return Response(status=200)
+    return Response({"message":"consent sent successfully"},status=200)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_project_details(request,project_id):
 		try:
 				project = Project.objects.get(id=project_id)
-				serializer = ProjectSerializer(project)
+				serializer = ProjectDepthTwoSerializer(project)
 				return Response(serializer.data)
 		except Project.DoesNotExist: 
 				return Response({"message": "Project does not exist"}, status=400)
@@ -1527,3 +1528,92 @@ def receive_coach_consent(request):
             print(e)
             return Response({"message": "Coach not Found"}, status=400)
     return Response(status=200)
+
+@api_view(['POST'])
+def complete_coach_consent(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['coach_consent'] = 'complete'
+    project.save()
+    return Response({'message': "coach consent completed"},status=200)
+
+
+
+@api_view(['POST'])
+def complete_coach_list_to_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['coach_list_to_hr'] = 'complete'
+    project.save()
+    return Response({'message': "coach list to hr completed"},status=200)
+
+
+@api_view(['GET'])
+def get_interview_data(request,project_id):
+    sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='interview').all()
+    serializer=SessionRequestCaasSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
+
+
+@api_view(['GET'])
+def get_session_requests_of_hr(request,hr_id):
+    sessions=SessionRequestCaas.objects.filter(hr__id = hr_id).all()
+    serializer=SessionRequestCaasSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
+
+@api_view(['POST'])
+def book_session_caas(request):
+    serializer = SessionRequestCaas(data=request.data)
+    if serializer.is_valid():
+        session = serializer.save()
+        # Mark the session request as booked
+        session_request = session.session_request
+        session_request.is_booked = True
+        session_request.save()
+
+        coach=session.coach
+        coach_email=coach.email
+        hr=session.session_request.hr
+        he_email= hr.email
+
+    # Send email notification to the coach
+    subject = 'Hello coach your session is booked.'
+    message = f'Dear {coach.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach_email])
+    
+
+    # Send email notification to the learner
+    subject = 'Hello learner your session is booked.'
+    message = f'Dear {hr.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [he_email])
+
+    return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+@api_view(['POST'])
+def create_session_request_caas(request):
+    time_arr = []
+    for time in request.data['availibility']:
+        availibility_serilizer = AvailibilitySerializer(data = time)
+        if availibility_serilizer.is_valid():
+            avil_id = availibility_serilizer.save()
+            time_arr.append(avil_id.id) 
+        else:
+            return Response({"message": str(availibility_serilizer.errors),}, status=401)
+    session = {
+           "hr": request.data['hr_id'],
+           "project": request.data['project_id'],
+           "availibility":time_arr,
+           "coach":request.data['coach_id'],
+           "session_type": request.data['session_type']
+		      }
+    session_serilizer = SessionRequestCaasSerializer(data = session)
+    if session_serilizer.is_valid():
+        session_serilizer.save()
+        return Response({"message": "Success"}, status=201)
+    else:
+        return Response({"message": str(session_serilizer.errors),}, status=401)

@@ -71,7 +71,12 @@ urlpatterns =[
     path('project/caas/<int:project_id>/',views.get_project_details),
     path('filter_coach/',views.filter_coach),
     path('receive_coach_consent/',views.receive_coach_consent),
+		path('complete_coach_consent/',views.complete_coach_consent),
+    path('get-interview-data/<int:project_id>/',views.get_interview_data),
+    path('sessions/book/',views.book_session_caas),
+    path('session-request-caas/create/', views.create_session_request_caas),
+		path('complete_coach_list_to_hr/',views.complete_coach_list_to_hr),
+    path('session-requests-caas/all/hr/<int:hr_id>/',views.get_session_requests_of_hr)
+]
 
 
-
-] 
