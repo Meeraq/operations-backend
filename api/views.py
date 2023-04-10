@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer,SessionRequestCaasSerializer,SessionRequestCaasDepthTwoSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer,SessionRequestCaasSerializer,SessionRequestCaasDepthTwoSerializer,SessionRequestCaasDepthOneSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -1567,7 +1567,7 @@ def complete_empanelment(request):
 @api_view(['GET'])
 def get_interview_data(request,project_id):
     sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='interview').all()
-    serializer=SessionRequestCaasSerializer(sessions,many=True)
+    serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
     return Response(serializer.data,status=200)
 
 
