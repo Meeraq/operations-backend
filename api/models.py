@@ -118,8 +118,9 @@ class Organisation(models.Model):
     image_url = models.ImageField(upload_to='post_images',blank=True)
     
 class CoachStatus(models.Model):
-		coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
-		status = models.CharField(max_length=50,blank=True,default="")
+    coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
+    status = models.CharField(max_length=50,blank=True,default="")
+    learner_id = models.JSONField(default=[])
                 
 class Project(models.Model):
     project_type_choice = [
@@ -189,3 +190,14 @@ class SessionRequestCaas(models.Model):
     is_booked = models.BooleanField(blank=True,default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     session_type = models.CharField(max_length=50,default='')
+
+
+class SessionCaas(models.Model):
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    confirmed_availability = models.ForeignKey(Availibility, on_delete=models.CASCADE)
+    session_request = models.ForeignKey(SessionRequestCaas, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20,default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    coach_joined = models.BooleanField(blank=True,default=False)
+    learner_joined = models.BooleanField(blank=True,default=False)
+    hr_joined = models.BooleanField(blank=True,default=False)

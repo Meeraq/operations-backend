@@ -73,14 +73,19 @@ urlpatterns =[
     path('receive_coach_consent/',views.receive_coach_consent),
 		path('complete_coach_consent/',views.complete_coach_consent),
     path('get-interview-data/<int:project_id>/',views.get_interview_data),
-    path('sessions/book/',views.book_session_caas),
+    path('sessions/book/caas',views.book_session_caas),
     path('session-request-caas/create/', views.create_session_request_caas),
 		path('complete_coach_list_to_hr/',views.complete_coach_list_to_hr),
+    path('session-requests-caas/all/hr/<int:hr_id>/',views.get_session_requests_of_hr),
+    path('session-requests-caas/all/coach/<int:coach_id>/',views.get_session_requests_of_coach),
+    path('accept-coach-caas/hr',views.accept_coach_caas_hr),
+    path('accept-coach-caas/learner',views.accept_coach_caas_learner),
 		path('complete_empanelment/',views.complete_empanelment),
     path('session-requests-caas/all/hr/<int:hr_id>/',views.get_session_requests_of_hr),
     path('projects/learners/add/',views.add_learner_to_project),
     path('send_contract/',views.send_contract),
-    path('approve-contract/',views.approve_contract)
+    path('approve-contract/',views.approve_contract),
+    path('get-chemistry-session-data/<int:project_id>/',views.get_chemistry_session_data),
 ]
 
 
