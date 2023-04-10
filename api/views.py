@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer,SessionRequestCaasSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer,SessionRequestCaasSerializer,SessionRequestCaasDepthTwoSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -1579,31 +1579,38 @@ def get_session_requests_of_hr(request,hr_id):
 
 @api_view(['POST'])
 def book_session_caas(request):
-    serializer = SessionRequestCaas(data=request.data)
-    if serializer.is_valid():
-        session = serializer.save()
-        # Mark the session request as booked
-        session_request = session.session_request
-        session_request.is_booked = True
-        session_request.save()
+    print(request.data)
+    session_request = SessionRequestCaas.objects.get(id=request.data.get('session_request'))
+    session_request.confirmed_availability = Availibility.objects.get(id=request.data.get('confirmed_availability'))
+    session_request.is_booked = True
+    session_request.save()
+    # if serializer.is_valid():
+    #     session = serializer.save()
+    #     # Mark the session request as booked
+    #     session_request = session.session_request
+    #     session_request.is_booked = True
+    #     session_request.save()
 
-        coach=session.coach
-        coach_email=coach.email
-        hr=session.session_request.hr
-        he_email= hr.email
+    #     coach=session.coach
+    #     coach_email=coach.email
+    #     hr=session.session_request.hr
+    #     he_email= hr.email
+    # else:
+    #     print(serializer.errors)
+    #     return Response(serializer.errors,status=400)
 
     # Send email notification to the coach
     subject = 'Hello coach your session is booked.'
-    message = f'Dear {coach.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach_email])
+    message = f'Dear {session_request.coach.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.coach.email])
     
 
-    # Send email notification to the learner
+    # # Send email notification to the learner
     subject = 'Hello learner your session is booked.'
-    message = f'Dear {hr.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [he_email])
+    message = f'Dear {session_request.hr.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.hr.email])
 
-    return Response(serializer.data, status=201)
+    return Response({"message":"Success"}, status=201)
     return Response(serializer.errors, status=400)
 
 @api_view(['POST'])
@@ -1630,7 +1637,31 @@ def create_session_request_caas(request):
     else:
         return Response({"message": str(session_serilizer.errors),}, status=401)
 
+@api_view(['GET'])
+def get_session_requests_of_coach(request,coach_id):
+    sessions=SessionRequestCaas.objects.filter(coach__id = coach_id).all()
+    serializer=SessionRequestCaasDepthTwoSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
 
+@api_view(['POST'])
+def accept_coach_caas(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    for coach in project.coaches_status.all():
+        if coach.coach_id==request.data.get('coach_id'):
+            print(coach.id)
+            print(coach.status)
+            if coach.status not in ["HR Selected","HR Rejected"]:
+                coach.status=request.data.get('status')
+                coach.save()
+                print("->")
+                print(coach.status)
+            else:
+                return Response({"error": "Status Already Updated"}, status=400)
+    project.save()
+    return Response({"message": "Status Updated Successfully"},status=200)
 @api_view(['POST'])
 def add_learner_to_project(request):
     print(request.data)
