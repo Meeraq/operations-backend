@@ -1553,6 +1553,16 @@ def complete_coach_list_to_hr(request):
     project.save()
     return Response({'message': "coach list to hr completed"},status=200)
 
+@api_view(['POST'])
+def complete_empanelment(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['empanel'] = 'complete'
+    project.save()
+    return Response({'message': "Empanel completed"},status=200)
+
 
 @api_view(['GET'])
 def get_interview_data(request,project_id):
@@ -1627,7 +1637,6 @@ def create_session_request_caas(request):
     else:
         return Response({"message": str(session_serilizer.errors),}, status=401)
 
-
 @api_view(['GET'])
 def get_session_requests_of_coach(request,coach_id):
     sessions=SessionRequestCaas.objects.filter(coach__id = coach_id).all()
@@ -1653,3 +1662,18 @@ def accept_coach_caas(request):
                 return Response({"error": "Status Already Updated"}, status=400)
     project.save()
     return Response({"message": "Status Updated Successfully"},status=200)
+@api_view(['POST'])
+def add_learner_to_project(request):
+    print(request.data)
+    try:
+        project = Project.objects.get(id=request.data['project_id'])
+    except Project.DoesNotExist:
+        return Response({'error': 'Project does not exist.'}, status=404)
+    try:
+        learners = create_learners(request.data['learners'])
+        for learner in learners:
+            project.learner.add(learner)    
+    except Exception as e:
+        # Handle any exceptions from create_learners
+        return Response({'error': str(e)}, status=500)
+    return Response({},status=201)
