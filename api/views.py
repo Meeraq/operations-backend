@@ -1661,7 +1661,7 @@ def get_session_requests_of_coach(request,coach_id):
     return Response(serializer.data,status=200)
 
 @api_view(['POST'])
-def accept_coach_caas(request):
+def accept_coach_caas_hr(request):
     try:
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
@@ -1694,3 +1694,22 @@ def add_learner_to_project(request):
         # Handle any exceptions from create_learners
         return Response({'error': str(e)}, status=500)
     return Response({},status=201)
+
+
+@api_view(['POST'])
+def accept_coach_caas_learner(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    cnt=len(project.coaches_status.filter(learner_id__contains=request.data.get('learner_id')))
+    print(cnt)
+    if cnt==0:
+        for coach in project.coaches_status.filter(coach__id=request.data.get('coach_id')).all():
+            coach.status=request.data.get('status')
+            if request.data.get('status')=='Learner Selected':
+                coach.learner_id.append(request.data.get('learner_id'))
+            coach.save()
+    else:
+        return Response({"error": "Coach Already Selected"},status=400)
+    return Response({"message": "Status Updated Successfully"},status=200)

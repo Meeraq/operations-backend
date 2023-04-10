@@ -118,8 +118,9 @@ class Organisation(models.Model):
     image_url = models.ImageField(upload_to='post_images',blank=True)
     
 class CoachStatus(models.Model):
-		coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
-		status = models.CharField(max_length=50,blank=True,default="")
+    coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
+    status = models.CharField(max_length=50,blank=True,default="")
+    learner_id = models.JSONField(default=[])
                 
 class Project(models.Model):
     project_type_choice = [
