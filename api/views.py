@@ -1572,6 +1572,13 @@ def get_interview_data(request,project_id):
 
 
 @api_view(['GET'])
+def get_chemistry_session_data(request,project_id):
+    sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='chemistry_session').all()
+    serializer=SessionRequestCaasDepthTwoSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
+
+
+@api_view(['GET'])
 def get_session_requests_of_hr(request,hr_id):
     sessions=SessionRequestCaas.objects.filter(hr__id = hr_id).all()
     serializer=SessionRequestCaasSerializer(sessions,many=True)
@@ -1606,9 +1613,14 @@ def book_session_caas(request):
     
 
     # # Send email notification to the learner
-    subject = 'Hello learner your session is booked.'
-    message = f'Dear {session_request.hr.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.hr.email])
+    if session_request.session_type=='interview':
+        subject = 'Hello hr your session is booked.'
+        message = f'Dear {session_request.hr.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.hr.email])
+    if session_request.session_type=='chemistry_session':
+        subject = 'Hello learner your session is booked.'
+        message = f'Dear {session_request.learner.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.learner.email])
 
     return Response({"message":"Success"}, status=201)
     return Response(serializer.errors, status=400)
@@ -1624,13 +1636,18 @@ def create_session_request_caas(request):
         else:
             return Response({"message": str(availibility_serilizer.errors),}, status=401)
     session = {
-           "hr": request.data['hr_id'],
            "project": request.data['project_id'],
            "availibility":time_arr,
            "coach":request.data['coach_id'],
            "session_type": request.data['session_type']
 		      }
+    if session['session_type']=='interview':
+        session['hr'] = request.data['hr_id']
+    elif session['session_type']=='chemistry_session':
+        session['learner'] = request.data['learner_id']
     session_serilizer = SessionRequestCaasSerializer(data = session)
+    print(session_serilizer.is_valid())
+    print(session_serilizer.errors)
     if session_serilizer.is_valid():
         session_serilizer.save()
         return Response({"message": "Success"}, status=201)
@@ -1644,7 +1661,7 @@ def get_session_requests_of_coach(request,coach_id):
     return Response(serializer.data,status=200)
 
 @api_view(['POST'])
-def accept_coach_caas(request):
+def accept_coach_caas_hr(request):
     try:
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
@@ -1677,3 +1694,22 @@ def add_learner_to_project(request):
         # Handle any exceptions from create_learners
         return Response({'error': str(e)}, status=500)
     return Response({},status=201)
+
+
+@api_view(['POST'])
+def accept_coach_caas_learner(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    cnt=len(project.coaches_status.filter(learner_id__contains=request.data.get('learner_id')))
+    print(cnt)
+    if cnt==0:
+        for coach in project.coaches_status.filter(coach__id=request.data.get('coach_id')).all():
+            coach.status=request.data.get('status')
+            if request.data.get('status')=='Learner Selected':
+                coach.learner_id.append(request.data.get('learner_id'))
+            coach.save()
+    else:
+        return Response({"error": "Coach Already Selected"},status=400)
+    return Response({"message": "Status Updated Successfully"},status=200)
