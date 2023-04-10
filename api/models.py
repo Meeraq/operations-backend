@@ -123,9 +123,9 @@ class CoachStatus(models.Model):
                 
 class Project(models.Model):
     project_type_choice = [
-        ('cod', 'cod'),
+        ('COD', 'COD'),
         ('4+2', '4+2'),
-        ('cas', 'cas')
+        ('CAAS', 'CAAS')
     ]
     name= models.CharField(max_length=100)
     organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
