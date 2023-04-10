@@ -143,6 +143,8 @@ class Project(models.Model):
     sessions_per_employee=models.IntegerField(default=0, blank=True)
     status = models.JSONField(default=list)
     project_structure = models.JSONField(default=list)
+    interview_allowed = models.BooleanField(blank=True,default=False)
+    chemistry_allowed = models.BooleanField(blank=True,default=False)
 
 
 class OTP(models.Model):
