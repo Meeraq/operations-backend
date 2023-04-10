@@ -81,7 +81,8 @@ urlpatterns =[
     path('accept-coach-caas/',views.accept_coach_caas),
 		path('complete_empanelment/',views.complete_empanelment),
     path('session-requests-caas/all/hr/<int:hr_id>/',views.get_session_requests_of_hr),
-    path('projects/learners/add/',views.add_learner_to_project)
+    path('projects/learners/add/',views.add_learner_to_project),
+    path('get-chemistry-session-data/<int:project_id>/',views.get_chemistry_session_data),
 ]
 
 
