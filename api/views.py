@@ -1569,31 +1569,38 @@ def get_session_requests_of_hr(request,hr_id):
 
 @api_view(['POST'])
 def book_session_caas(request):
-    serializer = SessionCaasSerializer(data=request.data)
-    if serializer.is_valid():
-        session = serializer.save()
-        # Mark the session request as booked
-        session_request = session.session_request
-        session_request.is_booked = True
-        session_request.save()
+    print(request.data)
+    session_request = SessionRequestCaas.objects.get(id=request.data.get('session_request'))
+    session_request.confirmed_availability = Availibility.objects.get(id=request.data.get('confirmed_availability'))
+    session_request.is_booked = True
+    session_request.save()
+    # if serializer.is_valid():
+    #     session = serializer.save()
+    #     # Mark the session request as booked
+    #     session_request = session.session_request
+    #     session_request.is_booked = True
+    #     session_request.save()
 
-        coach=session.coach
-        coach_email=coach.email
-        hr=session.session_request.hr
-        he_email= hr.email
+    #     coach=session.coach
+    #     coach_email=coach.email
+    #     hr=session.session_request.hr
+    #     he_email= hr.email
+    # else:
+    #     print(serializer.errors)
+    #     return Response(serializer.errors,status=400)
 
     # Send email notification to the coach
     subject = 'Hello coach your session is booked.'
-    message = f'Dear {coach.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach_email])
+    message = f'Dear {session_request.coach.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.coach.email])
     
 
-    # Send email notification to the learner
+    # # Send email notification to the learner
     subject = 'Hello learner your session is booked.'
-    message = f'Dear {hr.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [he_email])
+    message = f'Dear {session_request.hr.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.hr.email])
 
-    return Response(serializer.data, status=201)
+    return Response({"message":"Success"}, status=201)
     return Response(serializer.errors, status=400)
 
 @api_view(['POST'])
@@ -1629,9 +1636,20 @@ def get_session_requests_of_coach(request,coach_id):
 
 @api_view(['POST'])
 def accept_coach_caas(request):
-    project=Project.objects.filter(id=request.data.id)
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
     for coach in project.coaches_status.all():
-        if coach.coach_id==request.data.coach_id:
-            coach.status=request.data.status
+        if coach.coach_id==request.data.get('coach_id'):
+            print(coach.id)
+            print(coach.status)
+            if coach.status not in ["HR Selected","HR Rejected"]:
+                coach.status=request.data.get('status')
+                coach.save()
+                print("->")
+                print(coach.status)
+            else:
+                return Response({"error": "Status Already Updated"}, status=400)
     project.save()
-    return Response(status=200)
+    return Response({"message": "Status Updated Successfully"},status=200)
