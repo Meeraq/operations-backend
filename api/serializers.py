@@ -111,6 +111,12 @@ class SessionRequestCaasSerializer(serializers.ModelSerializer):
         model = SessionRequestCaas
         fields = '__all__'
         
+class SessionRequestCaasDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SessionRequestCaas
+        fields = '__all__'
+        depth=1
+        
 class SessionRequestCaasDepthTwoSerializer(serializers.ModelSerializer):
     class Meta:
         model = SessionRequestCaas
