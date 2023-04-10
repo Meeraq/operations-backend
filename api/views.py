@@ -362,7 +362,7 @@ def create_project_cass(request):
         name=request.data['project_name'],
         organisation=organisation,
         currency=request.data['currency'],
-        project_type= 'cass',
+        project_type= 'CAAS',
         interview_allowed= request.data['interview_allowed'],
         chemistry_allowed= request.data['chemistry_allowed'],
         end_date=datetime.now()+timedelta(days=365),
