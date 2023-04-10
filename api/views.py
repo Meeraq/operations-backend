@@ -5,7 +5,7 @@ from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from operationsBackend import settings
-from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer,SessionRequestCaasSerializer
+from .serializers import CoachSerializer,LearnerSerializer,ProjectSerializer,ProjectDepthTwoSerializer,SessionRequestSerializer,AvailibilitySerializer,SessionRequestDepthOneSerializer,SessionSerializer,SessionsDepthTwoSerializer,SessionRequestDepthTwoSerializer,CoachInvitesSerializer,HrSerializer, ProjectDepthTwoSerializer, OrganisationSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,HrDepthOneSerializer,LearnerDepthOneSerializer,SessionRequestCaasSerializer,SessionRequestCaasDepthTwoSerializer,SessionCaasSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -1569,7 +1569,7 @@ def get_session_requests_of_hr(request,hr_id):
 
 @api_view(['POST'])
 def book_session_caas(request):
-    serializer = SessionRequestCaas(data=request.data)
+    serializer = SessionCaasSerializer(data=request.data)
     if serializer.is_valid():
         session = serializer.save()
         # Mark the session request as booked
@@ -1619,3 +1619,19 @@ def create_session_request_caas(request):
         return Response({"message": "Success"}, status=201)
     else:
         return Response({"message": str(session_serilizer.errors),}, status=401)
+
+
+@api_view(['GET'])
+def get_session_requests_of_coach(request,coach_id):
+    sessions=SessionRequestCaas.objects.filter(coach__id = coach_id).all()
+    serializer=SessionRequestCaasDepthTwoSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
+
+@api_view(['POST'])
+def accept_coach_caas(request):
+    project=Project.objects.filter(id=request.data.id)
+    for coach in project.coaches_status.all():
+        if coach.coach_id==request.data.coach_id:
+            coach.status=request.data.status
+    project.save()
+    return Response(status=200)
