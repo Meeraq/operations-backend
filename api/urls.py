@@ -78,7 +78,9 @@ urlpatterns =[
 		path('complete_coach_list_to_hr/',views.complete_coach_list_to_hr),
 		path('complete_empanelment/',views.complete_empanelment),
     path('session-requests-caas/all/hr/<int:hr_id>/',views.get_session_requests_of_hr),
-    path('projects/learners/add/',views.add_learner_to_project)
+    path('projects/learners/add/',views.add_learner_to_project),
+    path('send_contract/',views.send_contract),
+    path('approve-contract/',views.approve_contract)
 ]
 
 

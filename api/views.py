@@ -1646,3 +1646,34 @@ def add_learner_to_project(request):
         # Handle any exceptions from create_learners
         return Response({'error': str(e)}, status=500)
     return Response({},status=201)
+
+
+@api_view(['POST'])
+def send_contract(request):
+    # Get all the Coach objects
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    
+    coach_statuses = project.coaches_status.filter(coach__id__in=request.data.get('coach_list',[]))
+    for status in coach_statuses:
+        status.status="Contract Send"
+        status.save()
+
+    return Response({"message":"contract sent successfully"},status=200)
+
+
+
+@api_view(['POST'])
+def approve_contract(request):
+    # Get all the Coach objects
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    
+    status = project.coaches_status.get(coach__id=request.data.get('coach_id',[]))
+    status.status="Contract Approved"
+    status.save()
+    return Response({"message":"contract sent successfully"},status=200)
