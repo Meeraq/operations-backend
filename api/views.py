@@ -159,7 +159,8 @@ def update_coach_profile(request, coach_id):
     serializer = CoachSerializer(coach, data=request.data, partial=True)  # partial argument added here
     if serializer.is_valid():
         serializer.save()
-        return Response(serializer.data, status=200)
+        depth_serializer = CoachDepthOneSerializer(coach)
+        return Response(depth_serializer.data, status=200)
 
     return Response(serializer.errors, status=400)
 
