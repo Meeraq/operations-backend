@@ -1476,7 +1476,7 @@ def add_project_struture(request):
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     project.project_structure=request.data.get('project_structure',[])
-    project.status['project_structure'] = 'complete'
+    # project.status['project_structure'] = 'complete'
     project.save()
     return Response({'message': "Structure added"},status=200)
 
@@ -1588,6 +1588,48 @@ def complete_empanelment(request):
     project.save()
     return Response({'message': "Empanel completed"},status=200)
 
+
+@api_view(['POST'])
+def complete_interview(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['interviews'] = 'complete'
+    project.save()
+    return Response({'message': "Empanel completed"},status=200)
+
+
+
+@api_view(['POST'])
+def complete_project_structure(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['project_structure'] = 'complete'
+    project.save()
+    return Response({'message': "Empanel completed"},status=200)
+
+@api_view(['POST'])
+def complete_coach_approval(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['coach_approval'] = 'complete'
+    project.save()
+    return Response({'message': "Empanel completed"},status=200)
+
+@api_view(['POST'])
+def complete_chemistry_sessions(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['chemistry_session'] = 'complete'
+    project.save()
+    return Response({'message': "Empanel completed"},status=200)
 
 @api_view(['GET'])
 def get_interview_data(request,project_id):
@@ -1731,10 +1773,14 @@ def accept_coach_caas_learner(request):
     cnt=len(project.coaches_status.filter(learner_id__contains=request.data.get('learner_id')))
     print(cnt)
     if cnt==0:
-        for coach in project.coaches_status.filter(coach__id=request.data.get('coach_id')).all():
+        print('inside if',request.data.get('coach_id'))
+        for coach in project.coaches_status.filter(coach__id=request.data.get('coach_id')):
+            print(coach)
             coach.status=request.data.get('status')
             if request.data.get('status')=='Learner Selected':
+                print('inside inner if')
                 coach.learner_id.append(request.data.get('learner_id'))
+            print('before coach save')
             coach.save()
     else:
         return Response({"error": "Coach Already Selected"},status=400)

@@ -120,7 +120,7 @@ class Organisation(models.Model):
 class CoachStatus(models.Model):
     coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
     status = models.CharField(max_length=50,blank=True,default="")
-    learner_id = models.JSONField(default=[])
+    learner_id = models.JSONField(default=[],blank=True)
                 
 class Project(models.Model):
     project_type_choice = [
@@ -143,7 +143,7 @@ class Project(models.Model):
     currency= models.CharField(max_length=30, default="Rupees")
     sessions_per_employee=models.IntegerField(default=0, blank=True)
     status = models.JSONField(default=list)
-    project_structure = models.JSONField(default=list)
+    project_structure = models.JSONField(default=list,blank=True)
     interview_allowed = models.BooleanField(blank=True,default=False)
     chemistry_allowed = models.BooleanField(blank=True,default=False)
 
