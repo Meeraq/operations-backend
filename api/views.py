@@ -1079,7 +1079,7 @@ def get_coach_invites(request):
 
 @api_view(['GET'])
 def get_projects_and_sessions_by_coach(request,coach_id):
-    projects = Project.objects.filter(coaches_status__coach__id=coach_id,coaches_status__status='Consent Sent')
+    projects = Project.objects.filter(coaches_status__coach__id=coach_id)
     sessions = Session.objects.filter(session_request__project__in=projects,coach__id=coach_id)
     session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
     sessions_dict = {}
@@ -1497,6 +1497,25 @@ def send_consent(request):
     project.save()
     return Response({"message":"consent sent successfully"},status=200)
 
+@api_view(['POST'])
+def select_coaches(request):
+    # Get all the Coach objects
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    coaches = Coach.objects.filter(id__in=request.data.get('coach_list',[])).all()
+    coach_status = []
+    for coach in coaches:
+        status = project.coaches_status.get(coach=coach)
+        status.status = "HR Selected"
+        status.save()
+    # project.coaches = coach_list
+    project.status['coach_list_to_hr'] = 'complete'
+    project.save()
+    return Response({"message":"consent sent successfully"},status=200)
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_project_details(request,project_id):
@@ -1679,6 +1698,7 @@ def accept_coach_caas_hr(request):
                 return Response({"error": "Status Already Updated"}, status=400)
     project.save()
     return Response({"message": "Status Updated Successfully"},status=200)
+
 @api_view(['POST'])
 def add_learner_to_project(request):
     print(request.data)
@@ -1725,7 +1745,7 @@ def send_contract(request):
     
     coach_statuses = project.coaches_status.filter(coach__id__in=request.data.get('coach_list',[]))
     for status in coach_statuses:
-        status.status="Contract Send"
+        status.status="Contract Sent"
         status.save()
 
     return Response({"message":"contract sent successfully"},status=200)

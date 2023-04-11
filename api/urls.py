@@ -68,6 +68,7 @@ urlpatterns =[
     path('create-project-cass/', views.create_project_cass),
     path('add_project_structure/',views.add_project_struture),
     path('send_consent/',views.send_consent),
+    path('select_coaches/',views.select_coaches),
     path('project/caas/<int:project_id>/',views.get_project_details),
     path('filter_coach/',views.filter_coach),
     path('receive_coach_consent/',views.receive_coach_consent),
