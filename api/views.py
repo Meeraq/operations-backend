@@ -387,7 +387,7 @@ def create_project_cass(request):
         single_hr = HR.objects.get(id=hr)
         print(single_hr)
         # hr_emails.append(single_hr.email)
-        # project.hr.add(single_hr)
+        project.hr.add(single_hr)
     # hrs= create_hr(request.data['hr'])
     # for hr in hrs:
         # project.hr.add(hr)
