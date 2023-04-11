@@ -385,12 +385,18 @@ def create_project_cass(request):
     print(request.data["hr"], "HR ID")
     for hr in request.data["hr"]:
         single_hr = HR.objects.get(id=hr)
-        print(single_hr)
-        # hr_emails.append(single_hr.email)
-        # project.hr.add(single_hr)
+        # print(single_hr)
+        project.hr.add(single_hr)
+        # Send email notification to the HR
+        subject = f'Hey HR! You have been assigned to a project {project_name}'
+        message = f'Dear {single_hr.first_name},\n\n You can use your email to log-in via OTP.'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [single_hr.email])
+
+
     # hrs= create_hr(request.data['hr'])
     # for hr in hrs:
-        # project.hr.add(hr)
+    #     project.hr.add(hr)
+
 
     return Response({'message': "Project saved Successfully"}, status=200)
 
