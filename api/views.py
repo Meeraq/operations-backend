@@ -595,7 +595,7 @@ def get_completed_projects(request):
 @api_view(['GET'])
 def get_projects_of_learner(request,learner_id):
     projects = Project.objects.filter(learner__id = learner_id)
-    serializer = ProjectSerializer(projects, many=True)
+    serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data)
 
 @api_view(['POST'])
@@ -1317,9 +1317,12 @@ def login_view(request):
         raise AuthenticationFailed({'detail': 'Invalid credentials.'})
 
     login(request, user)
+    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user.last_login = today 
+    user.save()
     user_data = get_user_data(user)
     if user_data:
-        return Response({'detail': 'Successfully logged in.', 'user': user_data})
+        return Response({'detail': 'Successfully logged in.', 'user': {**user_data,'last_login': user.last_login}})
     else:
         logout(request)
         return Response({'error': 'Invalid user type'}, status=400)
@@ -1407,7 +1410,7 @@ def validate_otp(request):
     login(request,user)
     user_data = get_user_data(user)
     if user_data:
-        return Response({'detail': 'Successfully logged in.', 'user': user_data})
+        return Response({'detail': 'Successfully logged in.', 'user': {**user_data,'last_login': user.last_login}})
     else:
         logout(request)
         return Response({'error': 'Invalid user type'}, status=400)
