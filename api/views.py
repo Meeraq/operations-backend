@@ -399,7 +399,7 @@ def create_project_cass(request):
     #     project.hr.add(hr)
 
 
-    return Response({'message': "Project saved Successfully"}, status=200)
+    return Response({'message': "Project created succesfully"}, status=200)
 
 
 @api_view(['POST'])
@@ -460,7 +460,7 @@ def create_project(request):
         # Handle any exceptions from create_learners
         return Response({'error': str(e)}, status=500)
 
-    return Response({'message': "Project saved Successfully"}, status=200)
+    return Response({'message': "Project created!"}, status=200)
 
 
 def create_learners(learners_data):
@@ -655,7 +655,7 @@ def book_session(request):
     message = f'Dear {learner.name},\n\nThank you booking slots of learner.Please be ready on date and time to complete session. Best of luck!'
     send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [learner_email])
 
-    return Response(serializer.data, status=201)
+    return Response({'message':'','details':serializer.data}, status=201)
     return Response(serializer.errors, status=400)
 
 
@@ -723,7 +723,7 @@ def add_learner(request, project_id):
         project.save()
 
     serializer = ProjectSerializer(project)
-    return Response(serializer.data, status=201)
+    return Response({'message':'Learner Added Successfully','details':serializer.data}, status=201)
 
 
 @api_view(["GET"])
@@ -756,7 +756,7 @@ def complete_project(request):
     project.status = 'Completed'
     project.save()
     project_serializer = ProjectSerializer(project)
-    return Response(project_serializer.data,status=200)
+    return Response({'message':'Project marked as complete!','details':project_serializer.data},status=200)
 
 
 @api_view(['POST'])
@@ -765,7 +765,7 @@ def mark_coach_joined_session(request):
     session.coach_joined = True
     session.save()
     session_serializer = SessionSerializer(session)
-    return Response(session_serializer.data,status=200)
+    return Response({"message":"","details":session_serializer.data},status=200)
 
 
 @api_view(['POST'])
@@ -774,7 +774,7 @@ def mark_learner_joined_session(request):
     session.learner_joined = True
     session.save()
     session_serializer = SessionSerializer(session)
-    return Response(session_serializer.data,status=200)
+    return Response({'message':'','details':session_serializer.data},status=200)
 
 @api_view(['GET'])
 def get_session_request_count(request):
@@ -1035,14 +1035,14 @@ def edit_project(request,project_id):
 				coach = Coach.objects.get(id = coach_id)
 				project.coaches.add(coach)
 		project.save()
-		return Response({},status=200)
+		return Response({'message':'Project details updated!','details':{}},status=200)
 
 
 @api_view(['POST'])
 def delete_session_request(request, session_request_id):
 		session_request = SessionRequest.objects.get(id = session_request_id)
 		session_request.delete()
-		return Response({'deleted_session_request_id': session_request_id})
+		return Response({'message':'','details':{'deleted_session_request_id': session_request_id}})
 
 
 @api_view(['GET'])
@@ -1073,7 +1073,7 @@ def invite_coach(request):
         subject = f'Meeraq Portal invitation'
         message = f'Dear {invite.name} \n\n Sign up on Meeraq coach portal'
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [invite.email])
-        return Response(serializer.data, status=201)
+        return Response({'message':'Coach Invited Successfully!','details':serializer.data}, status=201)
     return Response(serializer.errors, status=400)
 
 
@@ -1382,7 +1382,7 @@ def generate_otp(request):
         message = f'Dear {user.username} \n\n Your OTP for login on meeraq portal is {created_otp.otp}'
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
 
-        return Response({'success': True,'otp':created_otp.otp})
+        return Response({'message':'OTP sent over email!','details':{'success': True,'otp':created_otp.otp}})
     
 
     except User.DoesNotExist:
@@ -1457,7 +1457,7 @@ def add_hr(request):
         )
     hrs=HR.objects.all()
     serializer = HrSerializer(hrs, many=True)
-    return Response(serializer.data, status=200)
+    return Response({'message':'HR added succesfully','details':serializer.data}, status=200)
 
 # Filter API for Coaches
 # Expected input "filters": [{"key":"area_of_expertise","value":"test"},...]
@@ -1482,7 +1482,7 @@ def add_project_struture(request):
     project.project_structure=request.data.get('project_structure',[])
     # project.status['project_structure'] = 'complete'
     project.save()
-    return Response({'message': "Structure added"},status=200)
+    return Response({'message': "Structure added","details":''},status=200)
 
 
 @api_view(['POST'])
@@ -1505,7 +1505,7 @@ def send_consent(request):
     project.coaches_status.add(*coach_status)
     project.status['coach_list'] = 'complete'
     project.save()
-    return Response({"message":"consent sent successfully"},status=200)
+    return Response({"message":"consent sent successfully",'details':''},status=200)
 
 @api_view(['POST'])
 def select_coaches(request):
@@ -1568,7 +1568,7 @@ def complete_coach_consent(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.status['coach_consent'] = 'complete'
     project.save()
-    return Response({'message': "coach consent completed"},status=200)
+    return Response({'message': "Coach list sent","details":""},status=200)
 
 
 
@@ -1580,7 +1580,7 @@ def complete_coach_list_to_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.status['coach_list_to_hr'] = 'complete'
     project.save()
-    return Response({'message': "coach list to hr completed"},status=200)
+    return Response({'message': "Coach list sent",'details':{}},status=200)
 
 @api_view(['POST'])
 def complete_empanelment(request):
@@ -1590,7 +1590,7 @@ def complete_empanelment(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.status['empanel'] = 'complete'
     project.save()
-    return Response({'message': "Empanel completed"},status=200)
+    return Response({'message': "Coach list sent",'details':''},status=200)
 
 
 @api_view(['POST'])
@@ -1693,7 +1693,7 @@ def book_session_caas(request):
         message = f'Dear {session_request.learner.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.learner.email])
 
-    return Response({"message":"Success"}, status=201)
+    return Response({"message":"Session booked successfully!"}, status=201)
     return Response(serializer.errors, status=400)
 
 @api_view(['POST'])
@@ -1721,7 +1721,7 @@ def create_session_request_caas(request):
     print(session_serilizer.errors)
     if session_serilizer.is_valid():
         session_serilizer.save()
-        return Response({"message": "Success"}, status=201)
+        return Response({"message": "Requested successfully"}, status=201)
     else:
         return Response({"message": str(session_serilizer.errors),}, status=401)
 
@@ -1749,7 +1749,7 @@ def accept_coach_caas_hr(request):
             else:
                 return Response({"error": "Status Already Updated"}, status=400)
     project.save()
-    return Response({"message": "Status Updated Successfully"},status=200)
+    return Response({"message": "Requested succesfully"},status=200)
 
 @api_view(['POST'])
 def add_learner_to_project(request):
@@ -1765,7 +1765,7 @@ def add_learner_to_project(request):
     except Exception as e:
         # Handle any exceptions from create_learners
         return Response({'error': str(e)}, status=500)
-    return Response({},status=201)
+    return Response({'message':'Learners added succesfully','details':''},status=201)
 
 
 @api_view(['POST'])
@@ -1788,7 +1788,7 @@ def accept_coach_caas_learner(request):
             coach.save()
     else:
         return Response({"error": "Coach Already Selected"},status=400)
-    return Response({"message": "Status Updated Successfully"},status=200)
+    return Response({"message": "Coach list sent"},status=200)
 
 
 @api_view(['POST'])
@@ -1804,7 +1804,7 @@ def send_contract(request):
         status.status="Contract Sent"
         status.save()
 
-    return Response({"message":"contract sent successfully"},status=200)
+    return Response({"message":"contract sent successfully",'details':''},status=200)
 
 
 
@@ -1819,4 +1819,4 @@ def approve_contract(request):
     status = project.coaches_status.get(coach__id=request.data.get('coach_id',[]))
     status.status="Contract Approved"
     status.save()
-    return Response({"message":"contract sent successfully"},status=200)
+    return Response({"message":"Approved",details:''},status=200)
