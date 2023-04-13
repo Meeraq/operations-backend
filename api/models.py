@@ -95,14 +95,19 @@ class Learner(models.Model):
 
     def __str__(self):
         return self.name
-    
+
+
+class Organisation(models.Model):
+    name= models.CharField(max_length=100)
+    image_url = models.ImageField(upload_to='post_images',blank=True)
+
 class HR(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField( max_length=25)
-    organisation = models.CharField(max_length=50)
+    organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     
     def __str__(self):
         return self.first_name
@@ -113,10 +118,6 @@ class CoachInvites(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
-class Organisation(models.Model):
-    name= models.CharField(max_length=100)
-    image_url = models.ImageField(upload_to='post_images',blank=True)
-    
 class CoachStatus(models.Model):
     coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
     status = models.CharField(max_length=50,blank=True,default="")
