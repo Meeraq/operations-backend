@@ -1318,6 +1318,10 @@ def login_view(request):
     if username is None or password is None:
         raise ValidationError({'detail': 'Please provide username and password.'})
     user = authenticate(request, username=username, password=password)
+    check_user = Profile.objects.get(user__username=username)
+    if check_user:
+        if check_user.type == 'hr':
+            raise AuthenticationFailed({'detail': 'Try login with OTP.'})
 
     if user is None:
         raise AuthenticationFailed({'detail': 'Invalid credentials.'})
