@@ -1392,7 +1392,7 @@ def generate_otp(request):
         message = f'Dear {user.username} \n\n Your OTP for login on meeraq portal is {created_otp.otp}'
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
 
-        return Response({'message':'OTP has been sent to your E-mail!','details':{'success': True,'otp':created_otp.otp}})
+        return Response({'message':f'OTP has been sent to {user.username}!','details':{'success': True,'otp':created_otp.otp}})
     
 
     except User.DoesNotExist:
