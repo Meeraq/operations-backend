@@ -120,10 +120,10 @@ def coach_signup(request):
             send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])			
 
             # Return success response
-        return Response({'message': 'Coach user created successfully.'}, status=201)
+        return Response({'message': 'Signed up successfully.'}, status=201)
 
     except IntegrityError:
-        return Response({'error': 'A coach user with this email already exists.'}, status=400)
+        return Response({'error': 'A user with this email already exists.'}, status=400)
     except Exception as e:
         # Return error response if any other exception occurs
         return Response({'error': 'An error occurred while creating the coach user.'}, status=500)
