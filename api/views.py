@@ -79,6 +79,8 @@ def coach_signup(request):
     level = request.data.get('level')
     rating = request.data.get('rating')
     area_of_expertise = request.data.get('area_of_expertise')
+    years_of_coaching_experience = request.data.get('years_of_coaching_experience')
+    years_of_corporate_experience = request.data.get('years_of_corporate_experience')
     username = request.data.get('email') # keeping username and email same
     password = request.data.get('password')
     
@@ -86,7 +88,7 @@ def coach_signup(request):
     # print(first_name, last_name, email, age, gender, domain, room_id, phone, level, area_of_expertise, username, password)
 
     # Check if required data is provided
-    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level, username, password]):
+    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, years_of_coaching_experience, years_of_corporate_experience,  level, username, password]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
@@ -98,7 +100,7 @@ def coach_signup(request):
             coach_profile = Profile.objects.create(user=user, type='coach')
 
             # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise)
+            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name,domain=domain, age=age, gender=gender, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise, years_of_corporate_experience=years_of_corporate_experience, years_of_coaching_experience=years_of_coaching_experience)
 
 						# approve coach
             coach = Coach.objects.get(id=coach_user.id)
@@ -874,68 +876,68 @@ def get_completed_projects_of_hr(request,hr_id):
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data, status=200)
 
-@api_view(['POST'])
-def add_coach(request):
-    # Get data from request
-    first_name = request.data.get('first_name')
-    last_name = request.data.get('last_name')
-    email = request.data.get('email')
-    age = request.data.get('age') 
-    gender = request.data.get('gender')
-    domain = request.data.get('domain')
-    room_id = request.data.get('room_id')
-    phone = request.data.get('phone')
-    level = request.data.get('level')
-    rating = "5"
-    area_of_expertise = request.data['area_of_expertise']
-    username = request.data.get('email') # keeping username and email same
-    password = request.data.get('password')
+# @api_view(['POST'])
+# def add_coach(request):
+#     # Get data from request
+#     first_name = request.data.get('first_name')
+#     last_name = request.data.get('last_name')
+#     email = request.data.get('email')
+#     age = request.data.get('age') 
+#     gender = request.data.get('gender')
+#     domain = request.data.get('domain')
+#     room_id = request.data.get('room_id')
+#     phone = request.data.get('phone')
+#     level = request.data.get('level')
+#     rating = "5"
+#     area_of_expertise = request.data['area_of_expertise']
+#     username = request.data.get('email') # keeping username and email same
+#     password = request.data.get('password')
 
-    print(first_name, last_name, email, age, gender, domain, room_id, phone, level,  username, password)
+#     print(first_name, last_name, email, age, gender, domain, room_id, phone, level,  username, password)
 
-    # Check if required data is provided
-    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level,  username, password]):
-        return Response({'error': 'All required fields must be provided.'}, status=400)
+#     # Check if required data is provided
+#     if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level,  username, password]):
+#         return Response({'error': 'All required fields must be provided.'}, status=400)
 
-    try:
-        # Create the Django User
-        with transaction.atomic():
-            user = User.objects.create_user(username=username, password=password,email=email)
+#     try:
+#         # Create the Django User
+#         with transaction.atomic():
+#             user = User.objects.create_user(username=username, password=password,email=email)
 
-            # Create the Coach Profile linked to the User
-            coach_profile = Profile.objects.create(user=user, type='coach')
+#             # Create the Coach Profile linked to the User
+#             coach_profile = Profile.objects.create(user=user, type='coach')
 
-            # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise)
+#             # Create the Coach User using the Profile
+#             coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise)
 
-			# approve coach
-            coach = Coach.objects.get(id=coach_user.id)
-            # Change the is_approved field to True
-            coach.is_approved = True
-            coach.save()	
+# 			# approve coach
+#             coach = Coach.objects.get(id=coach_user.id)
+#             # Change the is_approved field to True
+#             coach.is_approved = True
+#             coach.save()	
             
-            full_name = coach_user.first_name + " " + coach_user.last_name
+#             full_name = coach_user.first_name + " " + coach_user.last_name
 
 
-            # Send email notification to the coach
-            subject = 'Welcome to our coaching platform'
-            message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {password}\n\n Click on the link to login or reset the password http://localhost:3003/'
-            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+#             # Send email notification to the coach
+#             subject = 'Welcome to our coaching platform'
+#             message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {password}\n\n Click on the link to login or reset the password http://localhost:3003/'
+#             send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
 
-            # # Send email notification to the admin
-            admin_email = 'jatin@meeraq.com'
-            admin_message = f'Dear PMO! \n\n A new coach {full_name} has been added on our coaching platform.'
-            send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])			
+#             # # Send email notification to the admin
+#             admin_email = 'jatin@meeraq.com'
+#             admin_message = f'Dear PMO! \n\n A new coach {full_name} has been added on our coaching platform.'
+#             send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])			
 
-            # Return success response
-        return Response({'message': 'Coach added successfully.'}, status=201)
+#             # Return success response
+#         return Response({'message': 'Coach added successfully.'}, status=201)
 
-    except IntegrityError:
-        return Response({'error': 'A coach user with this email already exists.'}, status=400)
+#     except IntegrityError:
+#         return Response({'error': 'A coach user with this email already exists.'}, status=400)
     
-    except Exception as e:
-        # Return error response if any other exception occurs
-        return Response({'error': 'An error occurred while creating the coach user.'}, status=500)
+#     except Exception as e:
+#         # Return error response if any other exception occurs
+#         return Response({'error': 'An error occurred while creating the coach user.'}, status=500)
 
 
 
@@ -1176,13 +1178,17 @@ def add_coach(request):
     level = request.data.get('level')
     rating = "5"
     area_of_expertise = request.data['area_of_expertise']
+    years_of_coaching_experience = request.data.get('years_of_coaching_experience'),
+    years_of_corporate_experience = request.data.get('years_of_corporate_experience'),
     username = request.data.get('email') # keeping username and email same
     password = request.data.get('password')
-
+    print(str(years_of_coaching_experience[0]),str(years_of_corporate_experience[0]))
     print(first_name, last_name, email, age, gender, domain, room_id, phone, level,  username, password)
+    # return Response({'error': 'A coach user with this email already exists.'}, status=400)
+
 
     # Check if required data is provided
-    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level,  username, password]):
+    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level,years_of_corporate_experience, years_of_coaching_experience,  username, password]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
@@ -1194,7 +1200,7 @@ def add_coach(request):
             coach_profile = Profile.objects.create(user=user, type='coach')
 
             # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise)
+            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience[0], years_of_coaching_experience=years_of_coaching_experience[0]  )
 
 			# approve coach
             coach = Coach.objects.get(id=coach_user.id)
@@ -1433,31 +1439,37 @@ def add_organisation(request):
     org = Organisation.objects.create(name=request.data.get('name',''), image_url=request.data.get('image_url',''))
     orgs=Organisation.objects.all()
     serializer = OrganisationSerializer(orgs, many=True)
-    return Response(serializer.data, status=200)
+    return Response({'message': "Organisation added successfully." ,'details':serializer.data}, status=200)
 
 
 @api_view(['POST'])
 def add_hr(request):
-    # Create the Django User
-    user = User.objects.create_user(username=request.data.get('email'),email=request.data.get('email'))
-    user.set_unusable_password()
-    user.save()
-    # Create the PMO Profile linked to the User
-    hr_profile = Profile.objects.create(user=user, type='hr')
-    # Get organization
-    organisation = Organisation.objects.filter(id=request.data.get('organisation')).first()
-    # Create the PMO User using the Profile    
-    hr = HR.objects.create(
-        user=hr_profile,
-        first_name = request.data.get('first_name'),
-        last_name = request.data.get('last_name'),
-        email=request.data.get('email'),
-        phone = request.data.get('phone'),
-        organisation= organisation
-        )
-    hrs=HR.objects.all()
-    serializer = HrSerializer(hrs, many=True)
-    return Response({'message':'HR added succesfully','details':serializer.data}, status=200)
+    try:
+        # Check if user with given email already exists
+        if User.objects.filter(email=request.data.get('email')).exists():
+            raise ValueError('User with given email already exists')
+        # Create the Django User
+        user = User.objects.create_user(username=request.data.get('email'),email=request.data.get('email'))
+        user.set_unusable_password()
+        user.save()
+        # Create the PMO Profile linked to the User
+        hr_profile = Profile.objects.create(user=user, type='hr')
+        # Get organization
+        organisation = Organisation.objects.filter(id=request.data.get('organisation')).first()
+        # Create the PMO User using the Profile    
+        hr = HR.objects.create(
+            user=hr_profile,
+            first_name = request.data.get('first_name'),
+            last_name = request.data.get('last_name'),
+            email=request.data.get('email'),
+            phone = request.data.get('phone'),
+            organisation= organisation
+            )
+        hrs=HR.objects.all()
+        serializer = HrSerializer(hrs, many=True)
+        return Response({'message':'HR added successfully','details':serializer.data}, status=200)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
 
 # Filter API for Coaches
 # Expected input "filters": [{"key":"area_of_expertise","value":"test"},...]
