@@ -1184,6 +1184,7 @@ def add_coach(request):
     years_of_corporate_experience = request.data.get('years_of_corporate_experience'),
     username = request.data.get('email') # keeping username and email same
     password = request.data.get('password')
+    profile_pic=request.data.get('profile_pic',None)
     # return Response({'error': 'A coach user with this email already exists.'}, status=400)
 
 
@@ -1200,7 +1201,7 @@ def add_coach(request):
             coach_profile = Profile.objects.create(user=user, type='coach')
 
             # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, education=education, rating=rating, area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience[0], years_of_coaching_experience=years_of_coaching_experience[0]  )
+            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, education=education, rating=rating, area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience[0], years_of_coaching_experience=years_of_coaching_experience[0],profile_pic=profile_pic  )
 
 			# approve coach
             coach = Coach.objects.get(id=coach_user.id)

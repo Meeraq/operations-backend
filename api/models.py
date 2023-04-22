@@ -74,7 +74,7 @@ class Coach(models.Model):
     area_of_expertise = models.JSONField(default=list)
     completed_sessions = models.IntegerField(blank=True,default=0)
     profile_pic = models.ImageField(upload_to='post_images',blank=True)
-    level=models.CharField(max_length=50)
+    # level=models.CharField(max_length=50)
     education=models.CharField(max_length=50, blank=True)
     corporate_experience =  models.TextField(blank=True)
     coaching_experience = models.TextField(blank=True)
