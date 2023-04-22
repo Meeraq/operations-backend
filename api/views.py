@@ -77,6 +77,7 @@ def coach_signup(request):
     room_id = request.data.get('room_id')
     phone = request.data.get('phone')
     level = request.data.get('level')
+    education = request.data.get('education')
     rating = request.data.get('rating')
     area_of_expertise = request.data.get('area_of_expertise')
     years_of_coaching_experience = request.data.get('years_of_coaching_experience')
@@ -88,7 +89,7 @@ def coach_signup(request):
     # print(first_name, last_name, email, age, gender, domain, room_id, phone, level, area_of_expertise, username, password)
 
     # Check if required data is provided
-    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, years_of_coaching_experience, years_of_corporate_experience,  level, username, password]):
+    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, years_of_coaching_experience, years_of_corporate_experience,  level, education, username, password]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
@@ -100,7 +101,7 @@ def coach_signup(request):
             coach_profile = Profile.objects.create(user=user, type='coach')
 
             # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name,domain=domain, age=age, gender=gender, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise, years_of_corporate_experience=years_of_corporate_experience, years_of_coaching_experience=years_of_coaching_experience)
+            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name,domain=domain, age=age, gender=gender, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, education=education, rating=rating, area_of_expertise=area_of_expertise, years_of_corporate_experience=years_of_corporate_experience, years_of_coaching_experience=years_of_coaching_experience)
 
 						# approve coach
             coach = Coach.objects.get(id=coach_user.id)
@@ -1176,19 +1177,18 @@ def add_coach(request):
     room_id = request.data.get('room_id')
     phone = request.data.get('phone')
     level = request.data.get('level')
+    education = request.data.get('education') 
     rating = "5"
     area_of_expertise = request.data['area_of_expertise']
     years_of_coaching_experience = request.data.get('years_of_coaching_experience'),
     years_of_corporate_experience = request.data.get('years_of_corporate_experience'),
     username = request.data.get('email') # keeping username and email same
     password = request.data.get('password')
-    print(str(years_of_coaching_experience[0]),str(years_of_corporate_experience[0]))
-    print(first_name, last_name, email, age, gender, domain, room_id, phone, level,  username, password)
     # return Response({'error': 'A coach user with this email already exists.'}, status=400)
 
 
     # Check if required data is provided
-    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level,years_of_corporate_experience, years_of_coaching_experience,  username, password]):
+    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level, education, years_of_corporate_experience, years_of_coaching_experience,  username, password]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
@@ -1200,7 +1200,7 @@ def add_coach(request):
             coach_profile = Profile.objects.create(user=user, type='coach')
 
             # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience[0], years_of_coaching_experience=years_of_coaching_experience[0]  )
+            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, education=education, rating=rating, area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience[0], years_of_coaching_experience=years_of_coaching_experience[0]  )
 
 			# approve coach
             coach = Coach.objects.get(id=coach_user.id)
