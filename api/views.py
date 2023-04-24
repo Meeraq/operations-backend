@@ -488,17 +488,25 @@ def create_learners(learners_data):
 
                 else:
                 # If learner does not exist, create the user object with an unusable password
+                    import string
+                    import random
+                    temp_password=''.join(random.choices(string.ascii_uppercase +string.ascii_lowercase+
+                                            string.digits, k=8))
                     user = User.objects.create_user(
                     username=learner_data['email'],
+                    password=temp_password,
                     email=learner_data.get('email', learner_data['email'])
                     )
-                    user.set_unusable_password()
+                    # user.set_unusable_password()
                     user.save()
 
                 # Create the learner profile
                     learner_profile = Profile.objects.create(user=user, type='learner')
 
                 # Create the learner object
+                    subject = 'Welcome to Meeraq'
+                    message = f'Dear {learner_data.get("name")},\n\nYour Account has been created with Meeraq your username is {learner_data["email"]} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
+                    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [learner_data['email']])
                     learner = Learner.objects.create(user=learner_profile, name=learner_data.get('name'), email=learner_data['email'], phone=learner_data.get('phone'))
                     learners.append(learner)
 
@@ -1320,9 +1328,9 @@ def login_view(request):
         raise ValidationError({'detail': 'Please provide username and password.'})
     user = authenticate(request, username=username, password=password)
     check_user = Profile.objects.get(user__username=username)
-    if check_user:
-        if check_user.type == 'hr':
-            raise AuthenticationFailed({'detail': 'Try login with OTP.'})
+    # if check_user:
+    #     if check_user.type == 'hr':
+    #         raise AuthenticationFailed({'detail': 'Try login with OTP.'})
 
     if user is None:
         raise AuthenticationFailed({'detail': 'Invalid credentials.'})
@@ -1454,8 +1462,11 @@ def add_hr(request):
         if User.objects.filter(email=request.data.get('email')).exists():
             raise ValueError('User with given email already exists')
         # Create the Django User
-        user = User.objects.create_user(username=request.data.get('email'),email=request.data.get('email'))
-        user.set_unusable_password()
+        import string
+        import random
+        temp_password=''.join(random.choices(string.ascii_uppercase +string.ascii_lowercase+
+                                            string.digits, k=8))
+        user = User.objects.create_user(username=request.data.get('email'),password=temp_password,email=request.data.get('email'))
         user.save()
         # Create the PMO Profile linked to the User
         hr_profile = Profile.objects.create(user=user, type='hr')
@@ -1470,6 +1481,9 @@ def add_hr(request):
             phone = request.data.get('phone'),
             organisation= organisation
             )
+        subject = 'Welcome to Meeraq'
+        message = f'Dear {request.data.get("first_name")},\n\nYour Account has been created with Meeraq your username is {request.data.get("email")} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [request.data.get('email')])
         hrs=HR.objects.all()
         serializer = HrSerializer(hrs, many=True)
         return Response({'message':'HR added successfully','details':serializer.data}, status=200)
