@@ -1855,3 +1855,15 @@ def approve_contract(request):
     status.status="Contract Approved"
     status.save()
     return Response({"message":"Contract approved.",'details':''},status=200)
+
+
+@api_view(['POST'])
+def complete_cass_step(request):
+    try:
+        step=request.data.get("step")
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['step'] = 'complete'
+    project.save()
+    return Response({'message': "Project Is Live."},status=200)
