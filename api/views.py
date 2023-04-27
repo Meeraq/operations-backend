@@ -1867,3 +1867,26 @@ def complete_cass_step(request):
     project.status['step'] = 'complete'
     project.save()
     return Response({'message': "Project Is Live."},status=200)
+
+@api_view(['POST'])
+def mark_as_incomplete(request):
+    stepList = ["coach_list", "coach_consent", "coach_list_to_hr",
+                "interviews", "empanel",  "coach_approval", "chemistry_session", "coach_selected"]
+    try:
+        step=request.data.get("step")
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    flag=False
+    statuses=project.status
+    for item in stepList:
+        print(item==step)
+        print(flag)
+        if step==item:
+            flag=True
+        if flag:
+            statuses[item]='pending'
+    print(statuses)
+    project.status=statuses
+    project.save()
+    return Response({'message': "Marked as Incomplete."},status=200)
