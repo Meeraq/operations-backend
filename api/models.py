@@ -120,7 +120,7 @@ class CoachInvites(models.Model):
 
 class CoachStatus(models.Model):
     coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
-    status = models.CharField(max_length=50,blank=True,default="")
+    status = models.JSONField(default=dict,blank=True)
     learner_id = models.JSONField(default=[],blank=True)
                 
 class Project(models.Model):

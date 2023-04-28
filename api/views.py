@@ -1526,7 +1526,7 @@ def send_consent(request):
     coaches = Coach.objects.filter(id__in=request.data.get('coach_list',[])).all()
     coach_status = []
     for coach in coaches:
-        status = CoachStatus.objects.create(coach=coach,status="Consent Sent")
+        status = CoachStatus.objects.create(coach=coach,status=dict(consent="sent",hr="pending",contract="pending",learner="pending"))
         status.save()
         coach_status.append(status)
         subject = 'Concent for {project.name} Project'
@@ -1549,7 +1549,7 @@ def select_coaches(request):
     coach_status = []
     for coach in coaches:
         status = project.coaches_status.get(coach=coach)
-        status.status = "HR Selected"
+        status.status['hr'] = "Selected"
         status.save()
     # project.coaches = coach_list
     project.status['coach_list_to_hr'] = 'complete'
@@ -1581,11 +1581,12 @@ def receive_coach_consent(request):
     for coach_status in project.coaches_status.all():
         try:
             if coach_status.coach.id==request.data.get('coach_id',''):
-                if coach_status.status=='Consent Sent':
-                    coach_status.status = request.data.get('status','')
-                    coach_status.save()
-                else:
-                    return Response({"message": "Consent already sent"}, status=400)
+                coach_status.status[request.data.get('status','').split(" ")[0].lower()]=request.data.get('status','').split(" ")[1].lower()
+                if request.data.get('status','').split(" ")[0].lower()=='contract':
+                    coach_status.status['consent'] = "approved"
+                coach_status.save()
+                # else:
+                #     return Response({"message": "Consent already sent"}, status=400)
         except Exception as e:
             print(e)
             return Response({"message": "Coach not Found"}, status=400)
@@ -1772,7 +1773,7 @@ def accept_coach_caas_hr(request):
             print(coach.id)
             print(coach.status)
             if coach.status not in ["HR Selected","HR Rejected"]:
-                coach.status=request.data.get('status')
+                coach.status['hr']=request.data.get('status').split(" ")[1].lower()
                 coach.save()
                 print("->")
                 print(coach.status)
@@ -1812,7 +1813,7 @@ def accept_coach_caas_learner(request):
     cnt=len(project.coaches_status.filter(learner_id__contains=request.data.get('learner_id')))
     if cnt==0:
         for coach in project.coaches_status.filter(coach__id=request.data.get('coach_id')):
-            coach.status=request.data.get('status')
+            coach.status['learner']=request.data.get('status').split(" ")[1].lower()
             if request.data.get('status')=='Learner Selected':
                 coach.learner_id.append(request.data.get('learner_id'))
             coach.save()
@@ -1836,7 +1837,7 @@ def send_contract(request):
     
     coach_statuses = project.coaches_status.filter(coach__id__in=request.data.get('coach_list',[]))
     for status in coach_statuses:
-        status.status="Contract Sent"
+        status.status['contract']="sent"
         status.save()
 
     return Response({"message":"Contract sent successfully",'details':''},status=200)
@@ -1852,7 +1853,7 @@ def approve_contract(request):
         return Response({"message": "Project does not exist"}, status=400)
     
     status = project.coaches_status.get(coach__id=request.data.get('coach_id',[]))
-    status.status="Contract Approved"
+    status.status['contract']="approved"
     status.save()
     return Response({"message":"Contract approved.",'details':''},status=200)
 
