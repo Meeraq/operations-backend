@@ -27,7 +27,7 @@ from django.core.mail import send_mail
 from django.utils import timezone
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
-
+import json
 
 
 # Create your views here.
@@ -1187,7 +1187,7 @@ def add_coach(request):
     level = request.data.get('level')
     education = request.data.get('education') 
     rating = "5"
-    area_of_expertise = request.data['area_of_expertise']
+    area_of_expertise = json.loads(request.data['area_of_expertise'])
     years_of_coaching_experience = request.data.get('years_of_coaching_experience'),
     years_of_corporate_experience = request.data.get('years_of_corporate_experience'),
     username = request.data.get('email') # keeping username and email same
