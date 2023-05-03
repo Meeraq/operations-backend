@@ -592,13 +592,13 @@ def get_projects(request):
 
 @api_view(['GET'])
 def get_ongoing_projects(request):
-    projects = Project.objects.filter(status__project_live='pending')
+    projects = Project.objects.filter(steps__project_live='pending')
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data)
 
 @api_view(['GET'])
 def get_completed_projects(request):
-    projects = Project.objects.filter(status__project_live="complete")
+    projects = Project.objects.filter(steps__project_live="complete")
     serializer = ProjectSerializer(projects, many=True)
     return Response(serializer.data)
 
@@ -874,14 +874,14 @@ def otp_validation_hr(request):
 
 @api_view(['GET'])
 def get_ongoing_projects_of_hr(request,hr_id):
-    projects = Project.objects.filter(hr__id = hr_id,status__project_live="pending")
+    projects = Project.objects.filter(hr__id = hr_id,steps__project_live="pending")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data, status=200)
 
 
 @api_view(['GET'])
 def get_completed_projects_of_hr(request,hr_id):
-    projects = Project.objects.filter(hr__id = hr_id, status__project_live="complete")
+    projects = Project.objects.filter(hr__id = hr_id, steps__project_live="complete")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data, status=200)
 
@@ -1162,14 +1162,14 @@ def otp_validation_hr(request):
 
 @api_view(['GET'])
 def get_ongoing_projects_of_hr(request,hr_id):
-    projects = Project.objects.filter(hr__id = hr_id,status__project_live="pending")
+    projects = Project.objects.filter(hr__id = hr_id,steps__project_live="pending")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data, status=200)
 
 
 @api_view(['GET'])
 def get_completed_projects_of_hr(request,hr_id):
-    projects = Project.objects.filter(hr__id = hr_id, status__project_live="complete")
+    projects = Project.objects.filter(hr__id = hr_id, steps__project_live="complete")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data, status=200)
 
