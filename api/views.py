@@ -361,26 +361,28 @@ def create_project_cass(request):
         )
     organisation.save()
     # print(organisation.name, organisation.image_url, "details of org")
-    print(organisation)
     project= Project(
         name=request.data['project_name'],
         organisation=organisation,
         currency=request.data['currency'],
         project_type= 'CAAS',
         interview_allowed= request.data['interview_allowed'],
-        chemistry_allowed= request.data['chemistry_allowed'],
+        # chemistry_allowed= request.data['chemistry_allowed'],
+        specific_coach= request.data['specific_coach'],
+        empanelment= request.data['empanelment'],
         end_date=datetime.now()+timedelta(days=365),
         steps=dict(
-            project_structure='pending',
-            coach_list='pending',
-            coach_consent='pending',
-            coach_list_to_hr='pending',
-            interviews='pending',
-            empanel='pending',
-            coach_approval='pending',
-            chemistry_session='pending',
-            coach_selected='pending',
-            project_live='pending'
+            project_structure={'status' : 'pending'},
+            coach_list={'status' : 'pending'},
+            coach_consent={'status' : 'pending'},
+            coach_list_to_hr={'status' : 'pending'},
+            interviews={'status' : 'pending'},
+            add_learners={'status' : 'pending'},
+            coach_approval={'status' : 'pending'},
+            chemistry_session={'status' : 'pending'},
+            coach_selected={'status' : 'pending'},
+            final_coaches={'status' : 'pending'},
+            project_live= 'pending'
     )
     )
     hr_emails=[]
@@ -1526,15 +1528,29 @@ def send_consent(request):
     coaches = Coach.objects.filter(id__in=request.data.get('coach_list',[])).all()
     coach_status = []
     for coach in coaches:
-        status = CoachStatus.objects.create(coach=coach,status=dict(consent="sent",hr="pending",contract="pending",learner="pending"))
+        status = CoachStatus.objects.create(coach=coach,status=dict(
+					consent={
+          	'status': "sent", 
+          	'response_date': None,
+       		 },
+						hr= {
+          	'status': None, 
+          	'session_id': None,
+          	'response_date': None,
+        		},
+            learner={
+          	'status': None,
+          	'session_id': None,
+          	'response_date': None,
+        }), consent_expiry_date = request.data['consent_expiry_date'])
         status.save()
         coach_status.append(status)
-        subject = 'Concent for {project.name} Project'
+        subject = 'Consent for {project.name} Project'
         message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach.email])
     # project.coaches = coach_list
     project.coaches_status.add(*coach_status)
-    project.status['coach_list'] = 'complete'
+    project.steps['coach_list']['status'] = 'complete'
     project.save()
     return Response({"message":"Consent sent successfully",'details':''},status=200)
 
@@ -1865,30 +1881,30 @@ def complete_cass_step(request):
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    project.status['step'] = 'complete'
+    project.steps[step]['status'] = 'complete'
     project.save()
-    return Response({'message': "Project Is Live."},status=200)
+    return Response({'message': "Marked as completed."},status=200)
 
 @api_view(['POST'])
 def mark_as_incomplete(request):
     stepList = ["coach_list", "coach_consent", "coach_list_to_hr",
-                "interviews", "empanel",  "coach_approval", "chemistry_session", "coach_selected"]
+                "interviews", "add_learners",  "chemistry_session", "coach_selected", "final_coaches"]
     try:
         step=request.data.get("step")
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     flag=False
-    statuses=project.status
+    steps=project.steps
     for item in stepList:
         print(item==step)
         print(flag)
         if step==item:
             flag=True
         if flag:
-            statuses[item]='pending'
-    print(statuses)
-    project.status=statuses
+            steps[item]['status']='incomplete'
+    # print(statuses)
+    project.steps=steps
     project.save()
     return Response({'message': "Marked as Incomplete."},status=200)
 
