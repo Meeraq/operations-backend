@@ -1628,11 +1628,12 @@ def complete_coach_list_to_hr(request):
     project.steps['coach_list_to_hr']['status'] = 'complete'
     project.steps['coach_consent']['status'] = 'complete'
     if not project.empanelment:
-        for status in project.coaches_status:
-            if status['hr']['status'] == 'select':
-                status['learner'] = 'sent'
+        for coach_status in project.coaches_status.all():
+            if coach_status.status["hr"]["status"] == 'select':
+                coach_status.status['learner']['status'] = 'sent'
+                coach_status.save()
     project.save()
-    return Response({'message': "",'details':{}},status=200)
+    return Response({'message': "Step marked as complete.",'details':{}},status=200)
 
 @api_view(['POST'])
 def complete_empanelment(request):
