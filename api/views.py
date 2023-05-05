@@ -361,26 +361,28 @@ def create_project_cass(request):
         )
     organisation.save()
     # print(organisation.name, organisation.image_url, "details of org")
-    print(organisation)
     project= Project(
         name=request.data['project_name'],
         organisation=organisation,
         currency=request.data['currency'],
         project_type= 'CAAS',
         interview_allowed= request.data['interview_allowed'],
-        chemistry_allowed= request.data['chemistry_allowed'],
+        # chemistry_allowed= request.data['chemistry_allowed'],
+        specific_coach= request.data['specific_coach'],
+        empanelment= request.data['empanelment'],
         end_date=datetime.now()+timedelta(days=365),
-        status=dict(
-            project_structure='pending',
-            coach_list='pending',
-            coach_consent='pending',
-            coach_list_to_hr='pending',
-            interviews='pending',
-            empanel='pending',
-            coach_approval='pending',
-            chemistry_session='pending',
-            coach_selected='pending',
-            project_live='pending'
+        steps=dict(
+            project_structure={'status' : 'pending'},
+            coach_list={'status' : 'pending'},
+            coach_consent={'status' : 'pending'},
+            coach_list_to_hr={'status' : 'pending'},
+            interviews={'status' : 'pending'},
+            add_learners={'status' : 'pending'},
+            coach_approval={'status' : 'pending'},
+            chemistry_session={'status' : 'pending'},
+            coach_selected={'status' : 'pending'},
+            final_coaches={'status' : 'pending'},
+            project_live= 'pending'
     )
     )
     hr_emails=[]
