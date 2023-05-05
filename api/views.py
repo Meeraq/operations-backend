@@ -1786,20 +1786,25 @@ def accept_coach_caas_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     for coach in project.coaches_status.all():
         if coach.coach_id==request.data.get('coach_id'):
-            print(coach.id)
-            print(coach.status)
-            if coach.status not in ["HR Selected","HR Rejected"]:
-                coach.status['hr']=request.data.get('status').split(" ")[1].lower()
-                coach.save()
-                print("->")
-                print(coach.status)
+            if coach.status['consent']['status'] == 'select' and coach.status['hr']['status'] == 'sent':
+                coach.status['hr']['status'] = request.data['status']
+                coach.save() 
             else:
-                return Response({"error": "Status Already Updated"}, status=400)
+                return Response({"error": "Failed to update status."}, status=400)
+            # print(coach.id)
+            # print(coach.status)
+            # if coach.status not in ["HR Selected","HR Rejected"]:
+            #     coach.status['hr']=request.data.get('status').split(" ")[1].lower()
+            #     coach.save()
+            #     print("->")
+            #     print(coach.status)
+            # else:
+            #     return Response({"error": "Status Already Updated"}, status=400)
     project.save()
     message = ""
-    if(request.data.get('status') == "HR Selected"):
-        message = "Coach approved."
-    elif(request.data.get('status') == "HR Rejected"):
+    if(request.data.get('status') == "select"):
+        message = "Coach selected."
+    elif(request.data.get('status') == "reject"):
         message = "Coach rejected."
     return Response({"message": message},status=200)
 
