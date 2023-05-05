@@ -93,6 +93,9 @@ urlpatterns =[
     path('approve-contract/',views.approve_contract),
     path('get-chemistry-session-data/<int:project_id>/',views.get_chemistry_session_data),
     path('mark_as_incomplete/',views.mark_as_incomplete),
+    path('send_project_strure_to_hr/',views.send_project_strure_to_hr),
+    path('send_reject_reason/',views.send_reject_reason),
+    path('project_structure_agree_by_hr/',views.project_structure_agree_by_hr)
 ]
 
 

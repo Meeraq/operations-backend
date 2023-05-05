@@ -370,7 +370,7 @@ def create_project_cass(request):
         interview_allowed= request.data['interview_allowed'],
         chemistry_allowed= request.data['chemistry_allowed'],
         end_date=datetime.now()+timedelta(days=365),
-        status=dict(
+        steps=dict(
             project_structure='pending',
             coach_list='pending',
             coach_consent='pending',
@@ -1891,3 +1891,37 @@ def mark_as_incomplete(request):
     project.status=statuses
     project.save()
     return Response({'message': "Marked as Incomplete."},status=200)
+
+@api_view(['POST'])
+def send_project_strure_to_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['project_structure']['status']='send'
+    project.save()
+    return Response({'message': "Sent to HR."},status=200)
+
+@api_view(['POST'])
+def send_reject_reason(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['project_structure']['status']='pending'
+    rejection=dict(reason=request.data.get('reason',''),project_structure=request.data.get('project_struture',''))
+    if 'details' not in project.steps['project_structure']:
+        project.steps['project_structure']['details']=[]
+    project.steps['project_structure']['details'].append(rejection)
+    project.save()
+    return Response({'message': "Rejected."},status=200)
+
+@api_view(['POST'])
+def project_structure_agree_by_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['project_structure']['status']='complete'
+    project.save()
+    return Response({'message': "Agreed."},status=200)
