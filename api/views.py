@@ -1902,7 +1902,8 @@ def mark_as_incomplete(request):
         if step==item:
             flag=True
         if flag:
-            steps[item]['status']='incomplete'
+            if(steps[item]['status']) == 'complete':
+                steps[item]['status']='incomplete'
     # print(statuses)
     project.steps=steps
     project.save()
