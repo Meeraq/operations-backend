@@ -1625,7 +1625,12 @@ def complete_coach_list_to_hr(request):
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    project.status['coach_list_to_hr'] = 'complete'
+    project.steps['coach_list_to_hr']['status'] = 'complete'
+    project.steps['coach_consent']['status'] = 'complete'
+    if not project.empanelment:
+        for status in project.coaches_status:
+            if status['hr']['status'] == 'select':
+                status['learner'] = 'sent'
     project.save()
     return Response({'message': "",'details':{}},status=200)
 
@@ -1947,3 +1952,19 @@ def project_structure_agree_by_hr(request):
     project.steps['project_structure']['status']='complete'
     project.save()
     return Response({'message': "Agreed."},status=200)
+
+@api_view(['POST'])
+def request_more_profiles_by_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    if request.data['step'] == 'coach_list_to_hr':
+        if 'request_details' in project.steps['coach_consent']:
+            project.steps['coach_consent']['request_details'].append({'message': request.data['message']})
+        else:
+            project.steps['coach_consent']['request_details'] = [{'message': request.data['message']}]
+    project.steps['coach_consent']['status'] = 'incomplete'
+    project.save()
+    return Response({'message': 'Request sent successfully'})
+        
