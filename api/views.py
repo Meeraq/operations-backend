@@ -382,7 +382,6 @@ def create_project_cass(request):
             chemistry_session={'status' : 'pending'},
             coach_selected={'status' : 'pending'},
             final_coaches={'status' : 'pending'},
-            finalized_coaches={'status' : 'pending'},
             project_live= 'pending'
     )
     )
@@ -1938,7 +1937,7 @@ def send_reject_reason(request):
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     project.steps['project_structure']['status']='pending'
-    rejection=dict(reason=request.data.get('reason',''),project_structure=request.data.get('project_struture',''))
+    rejection=dict(reason=request.data.get('reject_reason',''),project_structure=request.data.get('project_structure',[]))
     if 'details' not in project.steps['project_structure']:
         project.steps['project_structure']['details']=[]
     project.steps['project_structure']['details'].append(rejection)
@@ -1994,6 +1993,6 @@ def mark_finalized_list_complete(request):
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    project.steps['finalized_coaches']['status']='complete'
+    project.steps['final_coaches']['status']='complete'
     project.save()
     return Response({'message': "Step marked as Complete","details":''},status=200)
