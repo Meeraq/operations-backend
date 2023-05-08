@@ -382,6 +382,7 @@ def create_project_cass(request):
             chemistry_session={'status' : 'pending'},
             coach_selected={'status' : 'pending'},
             final_coaches={'status' : 'pending'},
+            finalized_coaches={'status' : 'pending'},
             project_live= 'pending'
     )
     )
@@ -1986,3 +1987,13 @@ def edit_learner(request):
     learner.phone = request.data['phone']
     learner.save()
     return Response({'message': "Learner details updated.","details":''},status=200)   
+
+@api_view(['POST'])
+def mark_finalized_list_complete(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['finalized_coaches']['status']='complete'
+    project.save()
+    return Response({'message': "Step marked as Complete","details":''},status=200)
