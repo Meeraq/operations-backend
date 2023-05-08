@@ -1641,7 +1641,7 @@ def complete_empanelment(request):
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    project.status['empanel'] = 'complete'
+    project.steps['add_learners']['status']= 'complete'
     project.save()
     return Response({'message': "Empanelement completed.",'details':''},status=200)
 
@@ -1968,4 +1968,21 @@ def request_more_profiles_by_hr(request):
     project.steps['coach_consent']['status'] = 'incomplete'
     project.save()
     return Response({'message': 'Request sent successfully'})
-        
+
+
+
+@api_view(['POST'])
+def edit_learner(request):
+    try:
+        learner = Learner.objects.get(id=request.data.get('learner_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Learner does not exist"}, status=400)
+    user = learner.user.user
+    user.username = request.data['email']
+    user.email = request.data['email']
+    user.save()
+    learner.email = request.data['email']
+    learner.name=request.data['name']
+    learner.phone = request.data['phone']
+    learner.save()
+    return Response({'message': "Learner details updated.","details":''},status=200)   

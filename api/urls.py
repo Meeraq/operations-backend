@@ -96,7 +96,8 @@ urlpatterns =[
     path('send_project_strure_to_hr/',views.send_project_strure_to_hr),
     path('send_reject_reason/',views.send_reject_reason),
     path('project_structure_agree_by_hr/',views.project_structure_agree_by_hr),
-    path('request_more_profiles_by_hr/',views.request_more_profiles_by_hr)
+    path('request_more_profiles_by_hr/',views.request_more_profiles_by_hr),
+		path('edit_learner/',views.edit_learner)
 ]
 
 
