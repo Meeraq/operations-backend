@@ -1597,12 +1597,15 @@ def receive_coach_consent(request):
     for coach_status in project.coaches_status.all():
         try:
             if coach_status.coach.id==request.data.get('coach_id',''):
-                coach_status.status[request.data.get('status','').split(" ")[0].lower()]=request.data.get('status','').split(" ")[1].lower()
-                if request.data.get('status','').split(" ")[0].lower()=='contract':
-                    coach_status.status['consent'] = "approved"
+                # coach_status.status[request.data.get('status','').split(" ")[0].lower()]=request.data.get('status','').split(" ")[1].lower()
+                # if request.data.get('status','').split(" ")[0].lower()=='contract':
+                #     coach_status.status['consent'] = "approved"
+                # coach_status.save()
+                coach_status.status['consent']['status'] = request.data['status']
                 coach_status.save()
                 # else:
                 #     return Response({"message": "Consent already sent"}, status=400)
+        
         except Exception as e:
             print(e)
             return Response({"message": "Coach not Found"}, status=400)
@@ -1996,3 +1999,20 @@ def mark_finalized_list_complete(request):
     project.steps['final_coaches']['status']='complete'
     project.save()
     return Response({'message': "Step marked as Complete","details":''},status=200)
+
+    
+@api_view(['POST'])
+def send_list_to_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    # project.status['coach_list_to_hr'] = 'pending'
+
+    for coach_id in request.data['coach_list']:
+        coach_status = project.coaches_status.get(coach__id = coach_id)
+        print(coach_status.status)
+        coach_status.status['hr']['status'] = 'sent'
+        coach_status.save()
+    project.save()
+    return Response({'message': "Sent Successfully",'details':{}},status=200)
