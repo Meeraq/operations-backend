@@ -1655,7 +1655,7 @@ def complete_interview(request):
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    project.status['interviews']['status'] = 'complete'
+    project.steps['interviews']['status'] = 'complete'
     project.save()
     return Response({'message': "Interviews completed."},status=200)
 
@@ -1687,7 +1687,7 @@ def complete_chemistry_sessions(request):
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    project.status['chemistry_session']['status'] = 'complete'
+    project.steps['chemistry_session']['status'] = 'complete'
     project.save()
     return Response({'message': "Chemistry sessions completed."},status=200)
 
