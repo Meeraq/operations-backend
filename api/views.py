@@ -1843,14 +1843,14 @@ def accept_coach_caas_learner(request):
     cnt=len(project.coaches_status.filter(learner_id__contains=request.data.get('learner_id')))
     if cnt==0:
         for coach in project.coaches_status.filter(coach__id=request.data.get('coach_id')):
-            coach.status['learner']=request.data.get('status').split(" ")[1].lower()
-            if request.data.get('status')=='Learner Selected':
+            coach.status['learner']['status']=request.data.get('status')
+            if request.data.get('status')=='select':
                 coach.learner_id.append(request.data.get('learner_id'))
             coach.save()
     else:
         return Response({"error": "Coach Already Selected"},status=400)
     message =""
-    if(request.data.get('status')=='Learner Selected'):
+    if(request.data.get('status')=='select'):
         message = "Coach selected succesfully."
     else:
         message = "Coach rejected."
