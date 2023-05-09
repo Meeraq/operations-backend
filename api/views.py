@@ -2016,3 +2016,20 @@ def send_list_to_hr(request):
         coach_status.save()
     project.save()
     return Response({'message': "Sent Successfully",'details':{}},status=200)
+
+@api_view(['POST'])
+def finalized_coach_from_coach_consent(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+
+    for coach_id in request.data['coach_list']:
+        coach_status = project.coaches_status.get(coach__id = coach_id)
+        coach_status.status['hr']['status'] = 'select'
+        coach_status.save()
+
+    project.steps['coach_consent']['status']='complete'
+    project.save()
+
+    return Response({'message': "Sent Successfully",'details':{}},status=200)

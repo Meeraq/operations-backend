@@ -100,6 +100,7 @@ urlpatterns =[
     path('request_more_profiles_by_hr/',views.request_more_profiles_by_hr),
 		path('edit_learner/',views.edit_learner),
     path('mark-finalized-list-complete/',views.mark_finalized_list_complete),
+    path('finalized-coach-from-coach-consent/',views.finalized_coach_from_coach_consent)  
 ]
 
 
