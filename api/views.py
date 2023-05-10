@@ -371,6 +371,9 @@ def create_project_cass(request):
         specific_coach= request.data['specific_coach'],
         empanelment= request.data['empanelment'],
         end_date=datetime.now()+timedelta(days=365),
+        tentative_start_date=request.data['tentative_start_date'],
+        mode=request.data['mode'],
+        location=request.data['location'],
         steps=dict(
             project_structure={'status' : 'pending'},
             coach_list={'status' : 'pending'},
