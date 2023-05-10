@@ -1762,24 +1762,31 @@ def create_session_request_caas(request):
             time_arr.append(avil_id.id) 
         else:
             return Response({"message": str(availibility_serilizer.errors),}, status=401)
-    session = {
-           "project": request.data['project_id'],
-           "availibility":time_arr,
-           "coach":request.data['coach_id'],
-           "session_type": request.data['session_type']
-		      }
-    if session['session_type']=='interview':
-        session['hr'] = request.data['hr_id']
-    elif session['session_type']=='chemistry_session':
-        session['learner'] = request.data['learner_id']
-    session_serilizer = SessionRequestCaasSerializer(data = session)
-    print(session_serilizer.is_valid())
-    print(session_serilizer.errors)
-    if session_serilizer.is_valid():
-        session_serilizer.save()
-        return Response({"message": "Session sequested successfully."}, status=201)
-    else:
-        return Response({"message": str(session_serilizer.errors),}, status=401)
+    
+    try:
+        session= SessionRequestCaas.objects.get(project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'])
+        session.availibility.set(time_arr)
+        session.save()
+        return Response({"message": "Session updated successfully."}, status=201)
+    except SessionRequestCaas.DoesNotExist:
+        session = {
+            "project": request.data['project_id'],
+            "availibility":time_arr,
+            "coach":request.data['coach_id'],
+            "session_type": request.data['session_type']
+                }
+        if session['session_type']=='interview':
+            session['hr'] = request.data['hr_id']
+        elif session['session_type']=='chemistry_session':
+            session['learner'] = request.data['learner_id']
+        session_serilizer = SessionRequestCaasSerializer(data = session)
+        print(session_serilizer.is_valid())
+        print(session_serilizer.errors)
+        if session_serilizer.is_valid():
+            session_serilizer.save()
+            return Response({"message": "Session sequested successfully."}, status=201)
+        else:
+            return Response({"message": str(session_serilizer.errors),}, status=401)
 
 @api_view(['GET'])
 def get_session_requests_of_coach(request,coach_id):
