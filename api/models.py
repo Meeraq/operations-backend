@@ -151,6 +151,9 @@ class Project(models.Model):
     empanelment = models.BooleanField(blank=True,default=False)
     interview_allowed = models.BooleanField(blank=True,default=False)
     chemistry_allowed = models.BooleanField(blank=True,default=False)
+    tentative_start_date = models.DateField(auto_now_add=True)
+    mode = models.CharField(max_length=100)
+    location = models.CharField(max_length=100)
 
 
 class OTP(models.Model):
