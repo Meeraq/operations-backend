@@ -1639,6 +1639,22 @@ def complete_coach_list_to_hr(request):
     return Response({'message': "Step marked as complete.",'details':{}},status=200)
 
 @api_view(['POST'])
+def complete_interviews_step(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['interviews']['status'] = 'complete'
+    project.steps['coach_consent']['status'] = 'complete'
+    if not project.empanelment:
+        for coach_status in project.coaches_status.all():
+            if coach_status.status["hr"]["status"] == 'select':
+                coach_status.status['learner']['status'] = 'sent'
+                coach_status.save()
+    project.save()
+    return Response({'message': "Step marked as complete.",'details':{}},status=200)
+
+@api_view(['POST'])
 def complete_empanelment(request):
     try:
         project = Project.objects.get(id=request.data.get('project_id',''))
@@ -1764,7 +1780,10 @@ def create_session_request_caas(request):
             return Response({"message": str(availibility_serilizer.errors),}, status=401)
     
     try:
-        session= SessionRequestCaas.objects.get(project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'])
+        if request.data['session_type'] == 'chemistry_session':
+            session= SessionRequestCaas.objects.get(learner__id=request.data['learner_id'],project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'])
+        else:
+            session= SessionRequestCaas.objects.get(project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'])   
         session.availibility.set(time_arr)
         session.save()
         return Response({"message": "Session updated successfully."}, status=201)
@@ -1970,7 +1989,7 @@ def request_more_profiles_by_hr(request):
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    if request.data['step'] == 'coach_list_to_hr':
+    if request.data['step'] == 'coach_list_to_hr' or request.data['step'] == 'interviews':
         if 'request_details' in project.steps['coach_consent']:
             project.steps['coach_consent']['request_details'].append({'message': request.data['message']})
         else:
