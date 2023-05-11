@@ -375,7 +375,7 @@ def create_project_cass(request):
         end_date=datetime.now()+timedelta(days=365),
         tentative_start_date=request.data['tentative_start_date'],
         mode=request.data['mode'],
-        location=request.data['location'],
+        location=request.data.get('location',None),
         steps=dict(
             project_structure={'status' : 'pending'},
             coach_list={'status' : 'pending'},
