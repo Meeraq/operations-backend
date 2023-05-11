@@ -28,6 +28,8 @@ from django.utils import timezone
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
 import json
+import string
+import random
 
 
 # Create your views here.
@@ -493,8 +495,7 @@ def create_learners(learners_data):
 
                 else:
                 # If learner does not exist, create the user object with an unusable password
-                    import string
-                    import random
+
                     temp_password=''.join(random.choices(string.ascii_uppercase +string.ascii_lowercase+
                                             string.digits, k=8))
                     user = User.objects.create_user(
@@ -1196,19 +1197,21 @@ def add_coach(request):
     years_of_coaching_experience = request.data.get('years_of_coaching_experience'),
     years_of_corporate_experience = request.data.get('years_of_corporate_experience'),
     username = request.data.get('email') # keeping username and email same
-    password = request.data.get('password')
+    # password = request.data.get('password')
     profile_pic=request.data.get('profile_pic',None)
     # return Response({'error': 'A coach user with this email already exists.'}, status=400)
 
 
     # Check if required data is provided
-    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level, education, years_of_corporate_experience, years_of_coaching_experience,  username, password]):
+    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level, education, years_of_corporate_experience, years_of_coaching_experience,  username]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
         # Create the Django User
         with transaction.atomic():
-            user = User.objects.create_user(username=username, password=password,email=email)
+            temp_password=''.join(random.choices(string.ascii_uppercase +string.ascii_lowercase+
+                                            string.digits, k=8))
+            user = User.objects.create_user(username=username, password=temp_password,email=email)
 
             # Create the Coach Profile linked to the User
             coach_profile = Profile.objects.create(user=user, type='coach')
@@ -1227,7 +1230,7 @@ def add_coach(request):
 
             # Send email notification to the coach
             subject = 'Welcome to our coaching platform'
-            message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {password}\n\n Click on the link to login or reset the password http://localhost:3003/'
+            message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {temp_password}\n\n Click on the link to login or reset the password http://localhost:3003/'
             send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
 
             # # Send email notification to the admin
@@ -1467,8 +1470,7 @@ def add_hr(request):
         if User.objects.filter(email=request.data.get('email')).exists():
             raise ValueError('User with given email already exists')
         # Create the Django User
-        import string
-        import random
+
         temp_password=''.join(random.choices(string.ascii_uppercase +string.ascii_lowercase+
                                             string.digits, k=8))
         user = User.objects.create_user(username=request.data.get('email'),password=temp_password,email=request.data.get('email'))
