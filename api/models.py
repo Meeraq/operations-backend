@@ -81,6 +81,9 @@ class Coach(models.Model):
     years_of_corporate_experience = models.CharField(max_length=20,blank=True)
     years_of_coaching_experience = models.CharField(max_length=20,blank=True)
     is_approved = models.BooleanField(blank=True,default=False)
+    location = models.CharField(max_length=120,blank=True)
+    ctt_nctt = models.CharField(max_length=20,blank=True)
+    language = models.CharField(max_length=120,blank=True)
     def __str__(self):
         return self.first_name
 
