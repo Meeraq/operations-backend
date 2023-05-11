@@ -1739,6 +1739,14 @@ def get_session_requests_of_learner(request,learner_id):
     serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
     return Response(serializer.data,status=200)
 
+@api_view(['GET'])
+def get_upcoming_booked_session_of_coach(request,coach_id):
+    current_time = int(timezone.now().timestamp() * 1000)
+  # convert current time to milliseconds
+    sessions=SessionRequestCaas.objects.filter(coach__id = coach_id,is_booked = True, confirmed_availability__start_time__gt=current_time).all()
+    serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
+
 @api_view(['POST'])
 def book_session_caas(request):
     print(request.data)

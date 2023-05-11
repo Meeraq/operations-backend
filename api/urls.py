@@ -101,7 +101,8 @@ urlpatterns =[
     path('request_more_profiles_by_hr/',views.request_more_profiles_by_hr),
 		path('edit_learner/',views.edit_learner),
     path('mark-finalized-list-complete/',views.mark_finalized_list_complete),
-    path('finalized-coach-from-coach-consent/',views.finalized_coach_from_coach_consent)  
+    path('finalized-coach-from-coach-consent/',views.finalized_coach_from_coach_consent),
+    path('upcoming-booked-session/coach/<int:coach_id>/',views.get_upcoming_booked_session_of_coach)
 ]
 
 
