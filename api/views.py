@@ -1729,7 +1729,14 @@ def get_chemistry_session_data(request,project_id):
 @api_view(['GET'])
 def get_session_requests_of_hr(request,hr_id):
     sessions=SessionRequestCaas.objects.filter(hr__id = hr_id).all()
-    serializer=SessionRequestCaasSerializer(sessions,many=True)
+    serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
+
+
+@api_view(['GET'])
+def get_session_requests_of_learner(request,learner_id):
+    sessions=SessionRequestCaas.objects.filter(learner__id = learner_id).all()
+    serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
     return Response(serializer.data,status=200)
 
 @api_view(['POST'])

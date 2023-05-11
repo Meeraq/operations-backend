@@ -89,7 +89,7 @@ urlpatterns =[
 		path('complete-coach-approval/',views.complete_coach_approval),
 		path('complete-chemistry-sessions/',views.complete_chemistry_sessions),
     path('complete-caas-step/',views.complete_cass_step),
-    path('session-requests-caas/all/hr/<int:hr_id>/',views.get_session_requests_of_hr),
+    path('session-requests-caas/all/learner/<int:learner_id>/',views.get_session_requests_of_learner),
     path('projects/learners/add/',views.add_learner_to_project),
     path('send_contract/',views.send_contract),
     path('approve-contract/',views.approve_contract),
