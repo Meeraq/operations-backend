@@ -75,15 +75,17 @@ class Coach(models.Model):
     completed_sessions = models.IntegerField(blank=True,default=0)
     profile_pic = models.ImageField(upload_to='post_images',blank=True)
     # level=models.CharField(max_length=50)
-    education=models.CharField(max_length=50, blank=True)
+    education=models.CharField(max_length=200, blank=True)
     corporate_experience =  models.TextField(blank=True)
     coaching_experience = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20,blank=True)
     years_of_coaching_experience = models.CharField(max_length=20,blank=True)
     is_approved = models.BooleanField(blank=True,default=False)
-    location = models.CharField(max_length=120,blank=True)
-    ctt_nctt = models.CharField(max_length=20,blank=True)
-    language = models.CharField(max_length=120,blank=True)
+    location = models.JSONField(default=[])
+    ctt_nctt = models.BooleanField(blank=True,default=False)
+    language = models.JSONField(default=[])
+    fees_range = models.CharField(max_length=120, blank=True)
+    job_roles = models.JSONField(default=[])
     def __str__(self):
         return self.first_name
 

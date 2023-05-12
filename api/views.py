@@ -1194,12 +1194,20 @@ def add_coach(request):
     education = request.data.get('education') 
     rating = "5"
     area_of_expertise = json.loads(request.data['area_of_expertise'])
-    years_of_coaching_experience = request.data.get('years_of_coaching_experience'),
-    years_of_corporate_experience = request.data.get('years_of_corporate_experience'),
+    location = json.loads(request.data['location'])
+    language= json.loads(request.data['language']) 
+    fees_range=request.data['fees_range']
+    job_roles= json.loads(request.data['job_roles']) 
+    ctt_nctt= json.loads(request.data['ctt_nctt'])
+    years_of_coaching_experience = request.data.get('years_of_coaching_experience')
+    years_of_corporate_experience = request.data.get('years_of_corporate_experience')
     username = request.data.get('email') # keeping username and email same
     # password = request.data.get('password')
     profile_pic=request.data.get('profile_pic',None)
+
     # return Response({'error': 'A coach user with this email already exists.'}, status=400)
+
+    print('ctt not ctt', json.loads(  request.data['ctt_nctt']),type(json.loads(request.data['ctt_nctt'])))
 
 
     # Check if required data is provided
@@ -1217,7 +1225,9 @@ def add_coach(request):
             coach_profile = Profile.objects.create(user=user, type='coach')
 
             # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, education=education, rating=rating, area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience[0], years_of_coaching_experience=years_of_coaching_experience[0],profile_pic=profile_pic  )
+            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, education=education, rating=rating, 
+                                              area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience, ctt_nctt=ctt_nctt, 
+                                              years_of_coaching_experience=years_of_coaching_experience,profile_pic=profile_pic, language=language, fees_range=fees_range, job_roles=job_roles, location=location )
 
 			# approve coach
             coach = Coach.objects.get(id=coach_user.id)
@@ -1246,8 +1256,8 @@ def add_coach(request):
     
     except Exception as e:
         # Return error response if any other exception occurs
+        print(e)
         return Response({'error': 'An error occurred while creating the coach user.'}, status=500)
-
 
 
 @api_view(['GET'])
