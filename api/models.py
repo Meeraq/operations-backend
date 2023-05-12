@@ -84,7 +84,7 @@ class Coach(models.Model):
     location = models.JSONField(default=[])
     ctt_nctt = models.BooleanField(blank=True,default=False)
     language = models.JSONField(default=[])
-    fees_range = models.CharField(max_length=120, blank=True)
+    min_fees = models.CharField(max_length=120, blank=True)
     job_roles = models.JSONField(default=[])
     def __str__(self):
         return self.first_name

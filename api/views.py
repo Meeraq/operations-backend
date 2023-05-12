@@ -1196,7 +1196,7 @@ def add_coach(request):
     area_of_expertise = json.loads(request.data['area_of_expertise'])
     location = json.loads(request.data['location'])
     language= json.loads(request.data['language']) 
-    fees_range=request.data['fees_range']
+    min_fees=request.data['min_fees']
     job_roles= json.loads(request.data['job_roles']) 
     ctt_nctt= json.loads(request.data['ctt_nctt'])
     years_of_coaching_experience = request.data.get('years_of_coaching_experience')
@@ -1227,7 +1227,7 @@ def add_coach(request):
             # Create the Coach User using the Profile
             coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, education=education, rating=rating, 
                                               area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience, ctt_nctt=ctt_nctt, 
-                                              years_of_coaching_experience=years_of_coaching_experience,profile_pic=profile_pic, language=language, fees_range=fees_range, job_roles=job_roles, location=location )
+                                              years_of_coaching_experience=years_of_coaching_experience,profile_pic=profile_pic, language=language, min_fees=min_fees, job_roles=job_roles, location=location )
 
 			# approve coach
             coach = Coach.objects.get(id=coach_user.id)
