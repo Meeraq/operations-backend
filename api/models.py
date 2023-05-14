@@ -15,25 +15,17 @@ from django.dispatch import receiver
 from django.core.mail import send_mail
 
 
+import environ
+env = environ.Env()
 
 @receiver(reset_password_token_created)
 def password_reset_token_created(sender, instance, reset_password_token, *args, **kwargs):
     print(reset_password_token.key)
     email_plaintext_message = "{}?token={}".format(reverse('password_reset:reset-password-request'), reset_password_token.key)
     subject = 'Meeraq - Forgot Password'
-    message = f'Dear {reset_password_token.user.first_name},\n\nYour reset password link is http://localhost:3000/reset-password/{reset_password_token.key}'
+    message = f'Dear {reset_password_token.user.first_name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
     send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email])			
-
-    # send_mail(
-    #     # title:
-    #     "Password Reset for {title}".format(title="Some website title"),
-    #     # message:
-    #     email_plaintext_message,
-    #     # from:
-    #     "noreply@somehost.local",
-    #     # to:
-    #     [reset_password_token.user.email]
-    # )		
+	
 
 
 class Profile(models.Model):
@@ -61,6 +53,7 @@ class Pmo(models.Model):
 
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    coach_id = models.CharField(max_length=20, blank=True)
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
@@ -74,18 +67,24 @@ class Coach(models.Model):
     area_of_expertise = models.JSONField(default=list)
     completed_sessions = models.IntegerField(blank=True,default=0)
     profile_pic = models.ImageField(upload_to='post_images',blank=True)
-    # level=models.CharField(max_length=50)
     education=models.CharField(max_length=200, blank=True)
     corporate_experience =  models.TextField(blank=True)
     coaching_experience = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20,blank=True)
     years_of_coaching_experience = models.CharField(max_length=20,blank=True)
     is_approved = models.BooleanField(blank=True,default=False)
-    location = models.JSONField(default=[])
+    location = models.JSONField(default=list)
     ctt_nctt = models.BooleanField(blank=True,default=False)
-    language = models.JSONField(default=[])
+    language = models.JSONField(default=list)
     min_fees = models.CharField(max_length=120, blank=True)
-    job_roles = models.JSONField(default=[])
+    job_roles = models.JSONField(default=list)
+    coaching_hours = models.CharField(max_length=50, blank=True)
+    created_at = models.DateField(auto_now_add=True)
+    edited_at = models.DateField(auto_now=True)
+    linkedin_profile_link = models.CharField(max_length=500, blank=True)
+    companies_worked_in = models.CharField(max_length=200)
+    other_certification = models.CharField(max_length=200)
+    active_inactive = models.BooleanField(blank=True, default=False)
     def __str__(self):
         return self.first_name
 
@@ -126,7 +125,7 @@ class CoachInvites(models.Model):
 class CoachStatus(models.Model):
     coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
     status = models.JSONField(default=dict,blank=True)
-    learner_id = models.JSONField(default=[],blank=True)
+    learner_id = models.JSONField(default=list,blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     consent_expiry_date = models.DateField(blank=True,null=True)
   
@@ -203,7 +202,7 @@ class SessionRequestCaas(models.Model):
     is_booked = models.BooleanField(blank=True,default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     session_type = models.CharField(max_length=50,default='')
-    reschedule_request = models.JSONField(default=[],blank=True)
+    reschedule_request = models.JSONField(default=list,blank=True)
 
 class SessionCaas(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)

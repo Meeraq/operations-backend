@@ -1182,6 +1182,7 @@ def get_completed_projects_of_hr(request,hr_id):
 @api_view(['POST'])
 def add_coach(request):
     # Get data from request
+    coach_id = request.data.get('coach_id')
     first_name = request.data.get('first_name')
     last_name = request.data.get('last_name')
     email = request.data.get('email')
@@ -1193,10 +1194,17 @@ def add_coach(request):
     level = request.data.get('level')
     education = request.data.get('education') 
     rating = "5"
+    min_fees=request.data['min_fees']
+    coaching_hours = request.data.get('coaching_hours')
+    # created_at = request.data('created_at')
+    # edited_at = request.data('edited_at')
+    linkedin_profile_link = request.data['linkedin_profile_link']
+    companies_worked_in = json.loads(request.data['companies_worked_in'])
+    other_certification = json.loads(request.data['other_certification'])
+    active_inactive =json.loads(request.data['active_inactive'])
     area_of_expertise = json.loads(request.data['area_of_expertise'])
     location = json.loads(request.data['location'])
     language= json.loads(request.data['language']) 
-    min_fees=request.data['min_fees']
     job_roles= json.loads(request.data['job_roles']) 
     ctt_nctt= json.loads(request.data['ctt_nctt'])
     years_of_coaching_experience = request.data.get('years_of_coaching_experience')
@@ -1207,11 +1215,11 @@ def add_coach(request):
 
     # return Response({'error': 'A coach user with this email already exists.'}, status=400)
 
-    print('ctt not ctt', json.loads(  request.data['ctt_nctt']),type(json.loads(request.data['ctt_nctt'])))
+    # print('ctt not ctt', json.loads(  request.data['ctt_nctt']),type(json.loads(request.data['ctt_nctt'])))
 
 
     # Check if required data is provided
-    if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level, education, years_of_corporate_experience, years_of_coaching_experience,  username]):
+    if not all([coach_id, first_name, last_name, email, age, gender, domain, room_id, phone, level, years_of_corporate_experience, years_of_coaching_experience,  username]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
@@ -1225,9 +1233,10 @@ def add_coach(request):
             coach_profile = Profile.objects.create(user=user, type='coach')
 
             # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, education=education, rating=rating, 
+            coach_user = Coach.objects.create(user=coach_profile, coach_id=coach_id, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, education=education, rating=rating, 
                                               area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience, ctt_nctt=ctt_nctt, 
-                                              years_of_coaching_experience=years_of_coaching_experience,profile_pic=profile_pic, language=language, min_fees=min_fees, job_roles=job_roles, location=location )
+                                              years_of_coaching_experience=years_of_coaching_experience,profile_pic=profile_pic, language=language, min_fees=min_fees, job_roles=job_roles, location=location, coaching_hours=coaching_hours,
+                                                linkedin_profile_link=linkedin_profile_link, companies_worked_in=companies_worked_in, other_certification=other_certification, active_inactive=active_inactive )
 
 			# approve coach
             coach = Coach.objects.get(id=coach_user.id)
@@ -1251,7 +1260,8 @@ def add_coach(request):
             # Return success response
         return Response({'message': 'Coach added successfully.'}, status=201)
 
-    except IntegrityError:
+    except IntegrityError as e:
+        print(e)
         return Response({'error': 'A coach user with this email already exists.'}, status=400)
     
     except Exception as e:
