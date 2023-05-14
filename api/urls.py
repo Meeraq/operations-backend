@@ -102,7 +102,8 @@ urlpatterns =[
 		path('edit_learner/',views.edit_learner),
     path('mark-finalized-list-complete/',views.mark_finalized_list_complete),
     path('finalized-coach-from-coach-consent/',views.finalized_coach_from_coach_consent),
-    path('upcoming-booked-session/coach/<int:coach_id>/',views.get_upcoming_booked_session_of_coach)
+    path('upcoming-booked-session/coach/<int:coach_id>/',views.get_upcoming_booked_session_of_coach),
+		path('coach-field-values/',views.get_coach_field_values)
 ]
 
 

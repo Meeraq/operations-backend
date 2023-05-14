@@ -82,8 +82,8 @@ class Coach(models.Model):
     created_at = models.DateField(auto_now_add=True)
     edited_at = models.DateField(auto_now=True)
     linkedin_profile_link = models.CharField(max_length=500, blank=True)
-    companies_worked_in = models.CharField(max_length=200)
-    other_certification = models.CharField(max_length=200)
+    companies_worked_in = models.JSONField(default=list)
+    other_certification = models.JSONField(default=list)
     active_inactive = models.BooleanField(blank=True, default=False)
     def __str__(self):
         return self.first_name

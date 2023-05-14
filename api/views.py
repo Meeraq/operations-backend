@@ -1179,6 +1179,10 @@ def get_completed_projects_of_hr(request,hr_id):
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data, status=200)
 
+
+def coach_exists(coach_id):
+    return Coach.objects.filter(coach_id=coach_id).exists()
+
 @api_view(['POST'])
 def add_coach(request):
     # Get data from request
@@ -1212,6 +1216,9 @@ def add_coach(request):
     username = request.data.get('email') # keeping username and email same
     # password = request.data.get('password')
     profile_pic=request.data.get('profile_pic',None)
+    corporate_experience =request.data.get('corporate_experience','')
+    coaching_experience =request.data.get('coaching_experience','')
+
 
     # return Response({'error': 'A coach user with this email already exists.'}, status=400)
 
@@ -1224,6 +1231,9 @@ def add_coach(request):
 
     try:
         # Create the Django User
+        if coach_exists(coach_id):
+            return Response({'error': 'Coach with this ID already exists.'}, status=400)
+
         with transaction.atomic():
             temp_password=''.join(random.choices(string.ascii_uppercase +string.ascii_lowercase+
                                             string.digits, k=8))
@@ -1236,7 +1246,7 @@ def add_coach(request):
             coach_user = Coach.objects.create(user=coach_profile, coach_id=coach_id, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, education=education, rating=rating, 
                                               area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience, ctt_nctt=ctt_nctt, 
                                               years_of_coaching_experience=years_of_coaching_experience,profile_pic=profile_pic, language=language, min_fees=min_fees, job_roles=job_roles, location=location, coaching_hours=coaching_hours,
-                                                linkedin_profile_link=linkedin_profile_link, companies_worked_in=companies_worked_in, other_certification=other_certification, active_inactive=active_inactive )
+                                                linkedin_profile_link=linkedin_profile_link, companies_worked_in=companies_worked_in, other_certification=other_certification, active_inactive=active_inactive ,corporate_experience= corporate_experience, coaching_experience=coaching_experience)
 
 			# approve coach
             coach = Coach.objects.get(id=coach_user.id)
@@ -2099,3 +2109,29 @@ def finalized_coach_from_coach_consent(request):
     project.save()
 
     return Response({'message': "Sent Successfully",'details':{}},status=200)
+
+
+@api_view(['GET'])
+def get_coach_field_values(request):
+    job_roles = set()
+    languages = set()
+    educations = set()
+    locations = set()
+    companies_worked_in = set()
+    other_certifications=set() 
+    domains = set()
+    for coach in Coach.objects.all():
+        # 1st coach
+        for role in coach.job_roles:
+            job_roles.add(role)
+        for language in coach.language:
+            languages.add(language)
+        for location in coach.location:
+            locations.add(location)
+        for company in coach.companies_worked_in:
+            companies_worked_in.add(company)
+        for certificate in coach.other_certification:
+            other_certifications.add(certificate)
+        domains.add(coach.domain)
+        educations.add(coach.education)
+    return Response({'job_roles':list(job_roles), 'languages': list(languages), 'educations': list(educations), 'locations': list(locations), 'companies_worked_in': list(companies_worked_in),'other_certifications': list(other_certifications),'domains': list(domains)}, status=200)
