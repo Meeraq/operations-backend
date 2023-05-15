@@ -2135,3 +2135,74 @@ def get_coach_field_values(request):
         domains.add(coach.domain)
         educations.add(coach.education)
     return Response({'job_roles':list(job_roles), 'languages': list(languages), 'educations': list(educations), 'locations': list(locations), 'companies_worked_in': list(companies_worked_in),'other_certifications': list(other_certifications),'domains': list(domains)}, status=200)
+
+
+@api_view(['POST'])
+def add_mulitple_coaches(request):
+    # Get data from request
+    coaches = request.data.get('coaches')
+
+    # Check if coaches data is provided
+    if not coaches or not isinstance(coaches, list):
+        return Response({'error': 'Coaches data must be provided as a list.'}, status=400)
+
+    try:
+        with transaction.atomic():
+            for coach_data in coaches:
+                # Extract coach details from the coach_data dictionary
+                coach_id = coach_data.get('coach_id')
+                first_name = coach_data.get('first_name')
+                last_name = coach_data.get('last_name')
+                age = coach_data.get('age','')
+                gender = coach_data.get('gender')
+                level = coach_data.get('level')
+                min_fees = coach_data.get('min_fees','')
+                active_inactive = coach_data.get('active_inactive')
+                corporate_yoe = coach_data.get('corporate_yoe','')
+                coaching_yoe = coach_data.get('coaching_yoe','')
+                domain = coach_data.get('functional_domain','')
+                email = coach_data.get('email')
+                phone = coach_data.get('mobile')
+                if(coach_data.get('ctt_nctt') == 'Yes'):
+                    ctt_nctt = True
+                else:
+                    ctt_nctt = False
+                if(coach_data.get('active_inactive') == 'Yes'):
+                    active_inactive = True
+                else: 
+                    active_inactive = False
+                    
+                # Perform validation on required fields
+                if not all([coach_id, first_name, last_name, gender, level, email, phone]):
+                    return Response({'error': 'All required fields must be provided for each coach.'}, status=400)
+
+                # Create the Django User
+                if coach_exists(coach_id):
+                    return Response({'error': f'Coach with ID {coach_id} already exists.'}, status=400)
+
+                temp_password = ''.join(random.choices(string.ascii_uppercase + string.ascii_lowercase + string.digits, k=8))
+                user = User.objects.create_user(username=email, password=temp_password, email=email)
+
+                # Create the Coach Profile linked to the User
+                coach_profile = Profile.objects.create(user=user, type='coach')
+
+                # Create the Coach User using the Profile
+                coach_user = Coach.objects.create(user=coach_profile, coach_id=coach_id, first_name=first_name,
+                                                  last_name=last_name, age=age, gender=gender, level=level,
+                                                  min_fees=min_fees, ctt_nctt=ctt_nctt, active_inactive=active_inactive,
+                                                  years_of_corporate_experience=corporate_yoe, years_of_coaching_experience=coaching_yoe,
+                                                  domain=domain, email=email, phone=phone)
+
+                # Approve coach
+                coach = Coach.objects.get(id=coach_user.id)
+                coach.is_approved = True
+                coach.save()
+            return Response({'message': 'Coaches added successfully.'}, status=201)
+    except IntegrityError as e:
+        print(e)
+        return Response({'error': 'A coach user with this email already exists.'}, status=400)
+    
+    except Exception as e:
+        # Return error response if any other exception occurs
+        print(e)
+        return Response({'error': 'An error occurred while creating the coach user.'}, status=500)
