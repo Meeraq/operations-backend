@@ -2168,6 +2168,7 @@ def add_mulitple_coaches(request):
                 language = coach_data.get('language',[])
                 area_of_expertise = coach_data.get('industries',[])
                 location= coach_data.get('location',[])
+                linkedin_profile_link=coach_data.get('linkedin_profile','')
 
                 if(coach_data.get('ctt_nctt') == 'Yes'):
                     ctt_nctt = True
@@ -2197,7 +2198,7 @@ def add_mulitple_coaches(request):
                                                   last_name=last_name, age=age, gender=gender, level=level,
                                                   min_fees=min_fees, ctt_nctt=ctt_nctt, active_inactive=active_inactive,
                                                   years_of_corporate_experience=corporate_yoe, years_of_coaching_experience=coaching_yoe,
-                                                  domain=domain, email=email, phone=phone,job_roles=job_roles,companies_worked_in=companies_worked_in,language=language,area_of_expertise=area_of_expertise,location=location)
+                                                  domain=domain, email=email, phone=phone,job_roles=job_roles,companies_worked_in=companies_worked_in,language=language,area_of_expertise=area_of_expertise,location=location,linkedin_profile_link=linkedin_profile_link)
 
                 # Approve coach
                 coach = Coach.objects.get(id=coach_user.id)
