@@ -1193,7 +1193,7 @@ def add_coach(request):
     age = request.data.get('age') 
     gender = request.data.get('gender')
     domain = request.data.get('domain')
-    room_id = request.data.get('room_id')
+    # room_id = request.data.get('room_id')
     phone = request.data.get('phone')
     level = request.data.get('level')
     education = request.data.get('education') 
@@ -1226,7 +1226,7 @@ def add_coach(request):
 
 
     # Check if required data is provided
-    if not all([coach_id, first_name, last_name, email, age, gender, domain, room_id, phone, level, years_of_corporate_experience, years_of_coaching_experience,  username]):
+    if not all([coach_id, first_name, last_name, email, gender,  phone, level,  username]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
@@ -1243,7 +1243,7 @@ def add_coach(request):
             coach_profile = Profile.objects.create(user=user, type='coach')
 
             # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(user=coach_profile, coach_id=coach_id, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, education=education, rating=rating, 
+            coach_user = Coach.objects.create(user=coach_profile, coach_id=coach_id, first_name= first_name, last_name=last_name, email=email, phone=phone, level=level, education=education, rating=rating, 
                                               area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience, ctt_nctt=ctt_nctt, 
                                               years_of_coaching_experience=years_of_coaching_experience,profile_pic=profile_pic, language=language, min_fees=min_fees, job_roles=job_roles, location=location, coaching_hours=coaching_hours,
                                                 linkedin_profile_link=linkedin_profile_link, companies_worked_in=companies_worked_in, other_certification=other_certification, active_inactive=active_inactive ,corporate_experience= corporate_experience, coaching_experience=coaching_experience)
