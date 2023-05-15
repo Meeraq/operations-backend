@@ -89,75 +89,75 @@ class Coach(models.Model):
         return self.first_name
 
 
-class Learner(models.Model):
-    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
-    name= models.CharField(max_length=100)
-    email=models.EmailField()
-    phone= models.CharField(max_length=25)
-    area_of_expertise=models.CharField(max_length=100,blank=True)
-    years_of_experience=models.IntegerField(default=0, blank=True)
+# class Learner(models.Model):
+#     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+#     name= models.CharField(max_length=100)
+#     email=models.EmailField()
+#     phone= models.CharField(max_length=25)
+#     area_of_expertise=models.CharField(max_length=100,blank=True)
+#     years_of_experience=models.IntegerField(default=0, blank=True)
 
-    def __str__(self):
-        return self.name
+#     def __str__(self):
+#         return self.name
 
 
-class Organisation(models.Model):
-    name= models.CharField(max_length=100)
-    image_url = models.ImageField(upload_to='post_images',blank=True)
+# class Organisation(models.Model):
+#     name= models.CharField(max_length=100)
+#     image_url = models.ImageField(upload_to='post_images',blank=True)
 
-class HR(models.Model):
-    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
-    first_name = models.CharField(max_length=50)
-    last_name = models.CharField(max_length=50)
-    email = models.EmailField()
-    phone = models.CharField( max_length=25)
-    organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
+# class HR(models.Model):
+#     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+#     first_name = models.CharField(max_length=50)
+#     last_name = models.CharField(max_length=50)
+#     email = models.EmailField()
+#     phone = models.CharField( max_length=25)
+#     organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     
-    def __str__(self):
-        return self.first_name
+#     def __str__(self):
+#         return self.first_name
 
-class CoachInvites(models.Model):
-    name= models.CharField(max_length=100)
-    email = models.EmailField()
-    created_at = models.DateTimeField(auto_now_add=True)
+# class CoachInvites(models.Model):
+#     name= models.CharField(max_length=100)
+#     email = models.EmailField()
+#     created_at = models.DateTimeField(auto_now_add=True)
 
 
-class CoachStatus(models.Model):
-    coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
-    status = models.JSONField(default=dict,blank=True)
-    learner_id = models.JSONField(default=list,blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    consent_expiry_date = models.DateField(blank=True,null=True)
+# class CoachStatus(models.Model):
+#     coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
+#     status = models.JSONField(default=dict,blank=True)
+#     learner_id = models.JSONField(default=list,blank=True)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     consent_expiry_date = models.DateField(blank=True,null=True)
   
-class Project(models.Model):
-    project_type_choice = [
-        ('COD', 'COD'),
-        ('4+2', '4+2'),
-        ('CAAS', 'CAAS')
-    ]
-    name= models.CharField(max_length=100)
-    organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
-    project_type= models.CharField(max_length=50, choices=project_type_choice, default='cod')
-    start_date= models.DateField(auto_now_add=True)
-    end_date= models.DateField(blank=True,null=True)
-    session_duration=models.CharField(max_length=20)
-    hr=models.ManyToManyField(HR,blank=True)
-    coaches=models.ManyToManyField(Coach,blank=True)
-    coaches_status = models.ManyToManyField(CoachStatus,blank=True)
-    learner=models.ManyToManyField(Learner,blank=True)
-    total_sessions=models.IntegerField(default=0, blank=True)
-    cost_per_session=models.IntegerField(default=0, blank=True)
-    currency= models.CharField(max_length=30, default="Rupees")
-    sessions_per_employee=models.IntegerField(default=0, blank=True)
-    steps = models.JSONField(default=dict)
-    project_structure = models.JSONField(default=list,blank=True)
-    specific_coach = models.BooleanField(blank=True,default=False)
-    empanelment = models.BooleanField(blank=True,default=False)
-    interview_allowed = models.BooleanField(blank=True,default=False)
-    chemistry_allowed = models.BooleanField(blank=True,default=False)
-    tentative_start_date = models.DateField(blank=True,default=None)
-    mode = models.CharField(max_length=100)
-    location = models.CharField(max_length=100,blank=True,default=None)
+# class Project(models.Model):
+#     project_type_choice = [
+#         ('COD', 'COD'),
+#         ('4+2', '4+2'),
+#         ('CAAS', 'CAAS')
+#     ]
+#     name= models.CharField(max_length=100)
+#     organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
+#     project_type= models.CharField(max_length=50, choices=project_type_choice, default='cod')
+#     start_date= models.DateField(auto_now_add=True)
+#     end_date= models.DateField(blank=True,null=True)
+#     session_duration=models.CharField(max_length=20)
+#     hr=models.ManyToManyField(HR,blank=True)
+#     coaches=models.ManyToManyField(Coach,blank=True)
+#     coaches_status = models.ManyToManyField(CoachStatus,blank=True)
+#     learner=models.ManyToManyField(Learner,blank=True)
+#     total_sessions=models.IntegerField(default=0, blank=True)
+#     cost_per_session=models.IntegerField(default=0, blank=True)
+#     currency= models.CharField(max_length=30, default="Rupees")
+#     sessions_per_employee=models.IntegerField(default=0, blank=True)
+#     steps = models.JSONField(default=dict)
+#     project_structure = models.JSONField(default=list,blank=True)
+#     specific_coach = models.BooleanField(blank=True,default=False)
+#     empanelment = models.BooleanField(blank=True,default=False)
+#     interview_allowed = models.BooleanField(blank=True,default=False)
+#     chemistry_allowed = models.BooleanField(blank=True,default=False)
+#     tentative_start_date = models.DateField(blank=True,default=None)
+#     mode = models.CharField(max_length=100)
+#     location = models.CharField(max_length=100,blank=True,default=None)
 
 
 class OTP(models.Model):
@@ -165,51 +165,51 @@ class OTP(models.Model):
     otp = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
 
-class OTP_HR(models.Model):
-    hr = models.ForeignKey(HR, on_delete=models.CASCADE)
-    otp = models.CharField(max_length=6)
-    created_at = models.DateTimeField(auto_now_add=True)
+# class OTP_HR(models.Model):
+#     hr = models.ForeignKey(HR, on_delete=models.CASCADE)
+#     otp = models.CharField(max_length=6)
+#     created_at = models.DateTimeField(auto_now_add=True)
 
-class Availibility(models.Model):
-    start_time=models.CharField(max_length=30)
-    end_time=models.CharField(max_length=30)
-
-
-class SessionRequest(models.Model):
-    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE)
-    availibility=models.ManyToManyField(Availibility)
-    is_booked = models.BooleanField(blank=True,default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
+# class Availibility(models.Model):
+#     start_time=models.CharField(max_length=30)
+#     end_time=models.CharField(max_length=30)
 
 
-class Session(models.Model):
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-    confirmed_availability = models.ForeignKey(Availibility, on_delete=models.CASCADE)
-    session_request = models.ForeignKey(SessionRequest, on_delete=models.CASCADE)
-    status = models.CharField(max_length=20,default='pending')
-    created_at = models.DateTimeField(auto_now_add=True)
-    coach_joined = models.BooleanField(blank=True,default=False)
-    learner_joined = models.BooleanField(blank=True,default=False)
+# class SessionRequest(models.Model):
+#     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+#     project = models.ForeignKey(Project, on_delete=models.CASCADE)
+#     availibility=models.ManyToManyField(Availibility)
+#     is_booked = models.BooleanField(blank=True,default=False)
+#     created_at = models.DateTimeField(auto_now_add=True)
 
-class SessionRequestCaas(models.Model):
-    hr = models.ForeignKey(HR, on_delete=models.CASCADE,blank=True,null=True,default=None)
-    learner = models.ForeignKey(Learner, on_delete=models.CASCADE,blank=True,null=True,default=None)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE,default=None)
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE,blank=True,null=True,default=None)
-    availibility=models.ManyToManyField(Availibility,related_name="requested_availability")
-    confirmed_availability = models.ForeignKey(Availibility,related_name="confirmed_availability", on_delete=models.CASCADE,blank=True,null=True,default=None)
-    is_booked = models.BooleanField(blank=True,default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    session_type = models.CharField(max_length=50,default='')
-    reschedule_request = models.JSONField(default=list,blank=True)
 
-class SessionCaas(models.Model):
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-    confirmed_availability = models.ForeignKey(Availibility, on_delete=models.CASCADE)
-    session_request = models.ForeignKey(SessionRequestCaas, on_delete=models.CASCADE)
-    status = models.CharField(max_length=20,default='pending')
-    created_at = models.DateTimeField(auto_now_add=True)
-    coach_joined = models.BooleanField(blank=True,default=False)
-    learner_joined = models.BooleanField(blank=True,default=False)
-    hr_joined = models.BooleanField(blank=True,default=False)
+# class Session(models.Model):
+#     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+#     confirmed_availability = models.ForeignKey(Availibility, on_delete=models.CASCADE)
+#     session_request = models.ForeignKey(SessionRequest, on_delete=models.CASCADE)
+#     status = models.CharField(max_length=20,default='pending')
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     coach_joined = models.BooleanField(blank=True,default=False)
+#     learner_joined = models.BooleanField(blank=True,default=False)
+
+# class SessionRequestCaas(models.Model):
+#     hr = models.ForeignKey(HR, on_delete=models.CASCADE,blank=True,null=True,default=None)
+#     learner = models.ForeignKey(Learner, on_delete=models.CASCADE,blank=True,null=True,default=None)
+#     project = models.ForeignKey(Project, on_delete=models.CASCADE,default=None)
+#     coach = models.ForeignKey(Coach, on_delete=models.CASCADE,blank=True,null=True,default=None)
+#     availibility=models.ManyToManyField(Availibility,related_name="requested_availability")
+#     confirmed_availability = models.ForeignKey(Availibility,related_name="confirmed_availability", on_delete=models.CASCADE,blank=True,null=True,default=None)
+#     is_booked = models.BooleanField(blank=True,default=False)
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     session_type = models.CharField(max_length=50,default='')
+#     reschedule_request = models.JSONField(default=list,blank=True)
+
+# class SessionCaas(models.Model):
+#     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+#     confirmed_availability = models.ForeignKey(Availibility, on_delete=models.CASCADE)
+#     session_request = models.ForeignKey(SessionRequestCaas, on_delete=models.CASCADE)
+#     status = models.CharField(max_length=20,default='pending')
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     coach_joined = models.BooleanField(blank=True,default=False)
+#     learner_joined = models.BooleanField(blank=True,default=False)
+#     hr_joined = models.BooleanField(blank=True,default=False)

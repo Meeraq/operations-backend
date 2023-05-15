@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Pmo,Coach,Profile,Learner,Project,SessionRequest,Availibility,Session,CoachInvites,HR,Organisation,SessionRequestCaas
+from .models import Pmo,Coach,Profile
 from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
@@ -19,106 +19,106 @@ class CoachDepthOneSerializer(serializers.ModelSerializer):
         fields = '__all__'
         depth=1
 
-class HrDepthOneSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = HR
-        fields = '__all__'
-        depth=1
+# class HrDepthOneSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = HR
+#         fields = '__all__'
+#         depth=1
 
-class LearnerDepthOneSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Learner
-        fields = '__all__'
-        depth=1
+# class LearnerDepthOneSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Learner
+#         fields = '__all__'
+#         depth=1
 
 class CoachSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coach
         fields = '__all__'
 
-class LearnerSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Learner
-        fields = '__all__'
+# class LearnerSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Learner
+#         fields = '__all__'
         
-class ProjectSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Project
-        fields = '__all__'
+# class ProjectSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Project
+#         fields = '__all__'
         
-class ProjectDepthTwoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Project
-        fields = '__all__'
-        depth = 2
+# class ProjectDepthTwoSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Project
+#         fields = '__all__'
+#         depth = 2
       
-class AvailibilitySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Availibility
-        fields = '__all__'
+# class AvailibilitySerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Availibility
+#         fields = '__all__'
       
-class SessionRequestSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SessionRequest
-        fields = '__all__'
+# class SessionRequestSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = SessionRequest
+#         fields = '__all__'
       
 
-class SessionRequestDepthOneSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SessionRequest
-        fields = '__all__'
-        depth = 1
+# class SessionRequestDepthOneSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = SessionRequest
+#         fields = '__all__'
+#         depth = 1
 
 
-class SessionRequestDepthTwoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SessionRequest
-        fields = '__all__'
-        depth = 2
+# class SessionRequestDepthTwoSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = SessionRequest
+#         fields = '__all__'
+#         depth = 2
 
 
-class SessionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Session
-        fields = '__all__'
+# class SessionSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Session
+#         fields = '__all__'
 
 
-class SessionsDepthTwoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Session
-        fields = '__all__'
-        depth = 2
+# class SessionsDepthTwoSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Session
+#         fields = '__all__'
+#         depth = 2
 
 
-class CoachInvitesSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CoachInvites
-        fields = '__all__'
+# class CoachInvitesSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = CoachInvites
+#         fields = '__all__'
 
 
-class HrSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = HR
-        fields = '__all__'
+# class HrSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = HR
+#         fields = '__all__'
 
-class OrganisationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Organisation
-        fields = '__all__'
+# class OrganisationSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Organisation
+#         fields = '__all__'
 
-class SessionRequestCaasSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SessionRequestCaas
-        fields = '__all__'
+# class SessionRequestCaasSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = SessionRequestCaas
+#         fields = '__all__'
         
-class SessionRequestCaasDepthOneSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SessionRequestCaas
-        fields = '__all__'
-        depth=1
+# class SessionRequestCaasDepthOneSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = SessionRequestCaas
+#         fields = '__all__'
+#         depth=1
         
-class SessionRequestCaasDepthTwoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SessionRequestCaas
-        fields = '__all__'
-        depth = 2
+# class SessionRequestCaasDepthTwoSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = SessionRequestCaas
+#         fields = '__all__'
+#         depth = 2
