@@ -2147,8 +2147,8 @@ def add_mulitple_coaches(request):
         return Response({'error': 'Coaches data must be provided as a list.'}, status=400)
 
     try:
-        with transaction.atomic():
-            for coach_data in coaches:
+        for coach_data in coaches:
+            with transaction.atomic():
                 # Extract coach details from the coach_data dictionary
                 coach_id = coach_data.get('coach_id')
                 first_name = coach_data.get('first_name')
@@ -2163,6 +2163,12 @@ def add_mulitple_coaches(request):
                 domain = coach_data.get('functional_domain','')
                 email = coach_data.get('email')
                 phone = coach_data.get('mobile')
+                job_roles = coach_data.get('job_roles',[])
+                companies_worked_in = coach_data.get('companies_worked_in',[])
+                language = coach_data.get('language',[])
+                area_of_expertise = coach_data.get('industries',[])
+                location= coach_data.get('location',[])
+
                 if(coach_data.get('ctt_nctt') == 'Yes'):
                     ctt_nctt = True
                 else:
@@ -2191,13 +2197,13 @@ def add_mulitple_coaches(request):
                                                   last_name=last_name, age=age, gender=gender, level=level,
                                                   min_fees=min_fees, ctt_nctt=ctt_nctt, active_inactive=active_inactive,
                                                   years_of_corporate_experience=corporate_yoe, years_of_coaching_experience=coaching_yoe,
-                                                  domain=domain, email=email, phone=phone)
+                                                  domain=domain, email=email, phone=phone,job_roles=job_roles,companies_worked_in=companies_worked_in,language=language,area_of_expertise=area_of_expertise,location=location)
 
                 # Approve coach
                 coach = Coach.objects.get(id=coach_user.id)
                 coach.is_approved = True
                 coach.save()
-            return Response({'message': 'Coaches added successfully.'}, status=201)
+        return Response({'message': 'Coaches added successfully.'}, status=201)
     except IntegrityError as e:
         print(e)
         return Response({'error': 'A coach user with this email already exists.'}, status=400)
