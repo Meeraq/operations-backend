@@ -1226,7 +1226,7 @@ def add_coach(request):
 
 
     # Check if required data is provided
-    if not all([coach_id, first_name, last_name, email, age, gender, domain, phone, level, years_of_corporate_experience, years_of_coaching_experience,  username]):
+    if not all([coach_id, first_name, last_name, email, gender,  phone, level,  username]):
         return Response({'error': 'All required fields must be provided.'}, status=400)
 
     try:
