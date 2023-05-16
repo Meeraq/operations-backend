@@ -4,6 +4,7 @@ from django.shortcuts import render, get_object_or_404
 from django.db import transaction,IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
+from django.core.exceptions import ObjectDoesNotExist
 from operationsBackend import settings
 from .serializers import CoachSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer
 from django.utils.crypto import get_random_string
@@ -1278,6 +1279,20 @@ def add_coach(request):
         print(e)
         return Response({'error': 'An error occurred while creating the coach user.'}, status=500)
 
+
+@api_view(['POST'])
+def delete_coach(request):  
+    coach_id = request.data.get('coach_id',None)
+    if coach_id:
+        try:
+            coach = Coach.objects.get(id=coach_id)
+            user = coach.user.user
+            user.delete()
+            return Response({"message": "Coach deleted."},status=200)
+        except ObjectDoesNotExist:
+            return Response( {'message': "Failed to delete coach profile"} ,status=400)
+    else: 
+        return Response( {'message': "Failed to delete coach profile"} ,status=400)
 
 # @api_view(['GET'])
 # def get_hr(request):

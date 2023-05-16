@@ -104,7 +104,8 @@ urlpatterns =[
     # path('finalized-coach-from-coach-consent/',views.finalized_coach_from_coach_consent),
     # path('upcoming-booked-session/coach/<int:coach_id>/',views.get_upcoming_booked_session_of_coach),
 		path('coach-field-values/',views.get_coach_field_values),
-    path('add-multiple-coaches/',views.add_mulitple_coaches)
+    path('add-multiple-coaches/',views.add_mulitple_coaches),
+    path('coach/delete/',views.delete_coach)
 ]
 
 
