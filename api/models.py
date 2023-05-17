@@ -23,7 +23,8 @@ def password_reset_token_created(sender, instance, reset_password_token, *args, 
     print(reset_password_token.key)
     email_plaintext_message = "{}?token={}".format(reverse('password_reset:reset-password-request'), reset_password_token.key)
     subject = 'Meeraq - Forgot Password'
-    message = f'Dear {reset_password_token.user.first_name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+    name="User"
+    message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
     send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email])			
 	
 
@@ -77,6 +78,7 @@ class Coach(models.Model):
     ctt_nctt = models.BooleanField(blank=True,default=False)
     language = models.JSONField(default=list,blank=True)
     min_fees = models.CharField(max_length=120, blank=True)
+    fee_remark = models.TextField(blank=True)
     job_roles = models.JSONField(default=list,blank=True)
     coaching_hours = models.CharField(max_length=50, blank=True)
     created_at = models.DateField(auto_now_add=True)

@@ -1199,6 +1199,7 @@ def add_coach(request):
     education = request.data.get('education') 
     rating = "5"
     min_fees=request.data['min_fees']
+    fee_remark=request.data.get('fee_remark','')
     coaching_hours = request.data.get('coaching_hours')
     # created_at = request.data('created_at')
     # edited_at = request.data('edited_at')
@@ -1245,7 +1246,7 @@ def add_coach(request):
             # Create the Coach User using the Profile
             coach_user = Coach.objects.create(user=coach_profile, coach_id=coach_id, first_name= first_name, last_name=last_name, email=email, phone=phone, level=level, education=education, rating=rating, 
                                               area_of_expertise=area_of_expertise, age=age, gender=gender, domain=domain, years_of_corporate_experience=years_of_corporate_experience, ctt_nctt=ctt_nctt, 
-                                              years_of_coaching_experience=years_of_coaching_experience,profile_pic=profile_pic, language=language, min_fees=min_fees, job_roles=job_roles, location=location, coaching_hours=coaching_hours,
+                                              years_of_coaching_experience=years_of_coaching_experience,profile_pic=profile_pic, language=language, min_fees=min_fees,fee_remark=fee_remark, job_roles=job_roles, location=location, coaching_hours=coaching_hours,
                                                 linkedin_profile_link=linkedin_profile_link, companies_worked_in=companies_worked_in, other_certification=other_certification, active_inactive=active_inactive ,corporate_experience= corporate_experience, coaching_experience=coaching_experience)
 
 			# approve coach
@@ -1448,14 +1449,15 @@ def generate_otp(request):
 
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars='0123456789')
-        created_otp = OTP.objects.create(user=user, otp=otp)
-    
+        created_otp = OTP.objects.create(user=user, otp=otp)        
+        user_data = get_user_data(user)
+        name = user_data.get('name') or user_data.get('first_name') or "User"
         # Send OTP on email to learner
-        subject = f'Meeraq Login Otp'
-        message = f'Dear {user.username} \n\n Your OTP for login on meeraq portal is {created_otp.otp}'
+        subject = f'Meeraq Login OTP'
+        message = f'Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}'
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
 
-        return Response({'message':f'OTP has been sent to {user.username}!','details':{'success': True,'otp':created_otp.otp}})
+        return Response({'message':f'OTP has been sent to {user.username}!'})
     
 
     except User.DoesNotExist:
@@ -2205,6 +2207,7 @@ def add_mulitple_coaches(request):
                 location= coach_data.get('location',[])
                 linkedin_profile_link=coach_data.get('linkedin_profile','')
                 coaching_hours=coach_data.get('coaching_hours','')
+                fee_remark=coach_data.get('fee_remark','')
 
                 if(coach_data.get('ctt_nctt') == 'Yes'):
                     ctt_nctt = True
@@ -2232,7 +2235,7 @@ def add_mulitple_coaches(request):
                 # Create the Coach User using the Profile
                 coach_user = Coach.objects.create(user=coach_profile, coach_id=coach_id, first_name=first_name,
                                                   last_name=last_name, age=age, gender=gender, level=level,
-                                                  min_fees=min_fees, ctt_nctt=ctt_nctt, active_inactive=active_inactive,
+                                                  min_fees=min_fees,fee_remark=fee_remark, ctt_nctt=ctt_nctt, active_inactive=active_inactive,
                                                   years_of_corporate_experience=corporate_yoe, years_of_coaching_experience=coaching_yoe,
                                                   domain=domain, email=email, phone=phone,job_roles=job_roles,companies_worked_in=companies_worked_in,language=language,area_of_expertise=area_of_expertise,location=location,linkedin_profile_link=linkedin_profile_link,coaching_hours=coaching_hours)
 
