@@ -172,9 +172,9 @@ class OTP(models.Model):
 #     otp = models.CharField(max_length=6)
 #     created_at = models.DateTimeField(auto_now_add=True)
 
-# class Availibility(models.Model):
-#     start_time=models.CharField(max_length=30)
-#     end_time=models.CharField(max_length=30)
+class Availibility(models.Model):
+    start_time=models.CharField(max_length=30)
+    end_time=models.CharField(max_length=30)
 
 
 # class SessionRequest(models.Model):
@@ -194,17 +194,17 @@ class OTP(models.Model):
 #     coach_joined = models.BooleanField(blank=True,default=False)
 #     learner_joined = models.BooleanField(blank=True,default=False)
 
-# class SessionRequestCaas(models.Model):
-#     hr = models.ForeignKey(HR, on_delete=models.CASCADE,blank=True,null=True,default=None)
-#     learner = models.ForeignKey(Learner, on_delete=models.CASCADE,blank=True,null=True,default=None)
-#     project = models.ForeignKey(Project, on_delete=models.CASCADE,default=None)
-#     coach = models.ForeignKey(Coach, on_delete=models.CASCADE,blank=True,null=True,default=None)
-#     availibility=models.ManyToManyField(Availibility,related_name="requested_availability")
-#     confirmed_availability = models.ForeignKey(Availibility,related_name="confirmed_availability", on_delete=models.CASCADE,blank=True,null=True,default=None)
-#     is_booked = models.BooleanField(blank=True,default=False)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     session_type = models.CharField(max_length=50,default='')
-#     reschedule_request = models.JSONField(default=list,blank=True)
+class SessionRequestCaas(models.Model):
+    hr = models.ForeignKey(HR, on_delete=models.CASCADE,blank=True,null=True,default=None)
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE,blank=True,null=True,default=None)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE,default=None)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE,blank=True,null=True,default=None)
+    availibility=models.ManyToManyField(Availibility,related_name="requested_availability")
+    confirmed_availability = models.ForeignKey(Availibility,related_name="confirmed_availability", on_delete=models.CASCADE,blank=True,null=True,default=None)
+    is_booked = models.BooleanField(blank=True,default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    session_type = models.CharField(max_length=50,default='')
+    reschedule_request = models.JSONField(default=list,blank=True)
 
 # class SessionCaas(models.Model):
 #     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)

@@ -6,7 +6,7 @@ from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from django.core.exceptions import ObjectDoesNotExist
 from operationsBackend import settings
-from .serializers import CoachSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer,LearnerDepthOneSerializer,HrDepthOneSerializer
+from .serializers import CoachSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer,LearnerDepthOneSerializer,HrDepthOneSerializer,SessionRequestCaasDepthOneSerializer,SessionRequestCaasDepthTwoSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -20,7 +20,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework.permissions import IsAuthenticated,AllowAny
-from .models import Profile, Pmo, Coach, OTP,Project,HR,Organisation
+from .models import Profile, Pmo, Coach, OTP,Project,HR,Organisation,SessionRequestCaas,Availibility,Learner
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate,login,logout
 from django.core.mail import send_mail
@@ -473,62 +473,62 @@ def create_project_cass(request):
 #     return Response({'message': "Project created!"}, status=200)
 
 
-# def create_learners(learners_data):
-#     try:
-#         with transaction.atomic():
-#             if not learners_data:
-#                 raise ValueError('Learners data is required')
-#             learners = []
-#             for learner_data in learners_data:
-#                 # Check if username field is provided
-#                 if 'email' not in learner_data:
-#                     raise ValueError('Username field is required')
+def create_learners(learners_data):
+    try:
+        with transaction.atomic():
+            if not learners_data:
+                raise ValueError('Learners data is required')
+            learners = []
+            for learner_data in learners_data:
+                # Check if username field is provided
+                if 'email' not in learner_data:
+                    raise ValueError('Username field is required')
 
-#                 # Check if user already exists
-#                 user = User.objects.filter(username=learner_data['email']).first()
-#                 if user:
-#                     # If user exists, check if learner already exists
-#                     learner_profile = Profile.objects.filter(user=user, type='learner').first()
-#                     if learner_profile:
-#                         learners.append(learner_profile.learner)
-#                         continue
+                # Check if user already exists
+                user = User.objects.filter(username=learner_data['email']).first()
+                if user:
+                    # If user exists, check if learner already exists
+                    learner_profile = Profile.objects.filter(user=user, type='learner').first()
+                    if learner_profile:
+                        learners.append(learner_profile.learner)
+                        continue
 
-#                 else:
-#                 # If learner does not exist, create the user object with an unusable password
+                else:
+                # If learner does not exist, create the user object with an unusable password
 
-#                     temp_password=''.join(random.choices(string.ascii_uppercase +string.ascii_lowercase+
-#                                             string.digits, k=8))
-#                     user = User.objects.create_user(
-#                     username=learner_data['email'],
-#                     password=temp_password,
-#                     email=learner_data.get('email', learner_data['email'])
-#                     )
-#                     # user.set_unusable_password()
-#                     user.save()
+                    temp_password=''.join(random.choices(string.ascii_uppercase +string.ascii_lowercase+
+                                            string.digits, k=8))
+                    user = User.objects.create_user(
+                    username=learner_data['email'],
+                    password=temp_password,
+                    email=learner_data.get('email', learner_data['email'])
+                    )
+                    # user.set_unusable_password()
+                    user.save()
 
-#                 # Create the learner profile
-#                     learner_profile = Profile.objects.create(user=user, type='learner')
+                # Create the learner profile
+                    learner_profile = Profile.objects.create(user=user, type='learner')
 
-#                 # Create the learner object
-#                     subject = 'Welcome to Meeraq'
-#                     message = f'Dear {learner_data.get("name")},\n\nYour Account has been created with Meeraq your username is {learner_data["email"]} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
-#                     send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [learner_data['email']])
-#                     learner = Learner.objects.create(user=learner_profile, name=learner_data.get('name'), email=learner_data['email'], phone=learner_data.get('phone'))
-#                     learners.append(learner)
+                # Create the learner object
+                    subject = 'Welcome to Meeraq'
+                    message = f'Dear {learner_data.get("name")},\n\nYour Account has been created with Meeraq your username is {learner_data["email"]} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
+                    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [learner_data['email']])
+                    learner = Learner.objects.create(user=learner_profile, name=learner_data.get('name'), email=learner_data['email'], phone=learner_data.get('phone'))
+                    learners.append(learner)
 
-#             # Return response with learners created or already existing
-#             serializer = LearnerSerializer(learners, many=True)
-#             return learners
+            # Return response with learners created or already existing
+            serializer = LearnerSerializer(learners, many=True)
+            return learners
 
 
-#     except ValueError as e:
-#         # Handle missing or invalid request data
-#         raise ValueError(str(e))
+    except ValueError as e:
+        # Handle missing or invalid request data
+        raise ValueError(str(e))
 
-#     except Exception as e:
-#         # Handle any other exceptions
-#         # transaction.set_rollback(True) # Rollback the transaction
-#         raise Exception(str(e))
+    except Exception as e:
+        # Handle any other exceptions
+        # transaction.set_rollback(True) # Rollback the transaction
+        raise Exception(str(e))
 
 # Create learner user
 # @api_view(['POST'])
@@ -609,11 +609,11 @@ def get_ongoing_projects(request):
 #     return Response(serializer.data)
 
 
-# @api_view(['GET'])
-# def get_projects_of_learner(request,learner_id):
-#     projects = Project.objects.filter(learner__id = learner_id)
-#     serializer = ProjectDepthTwoSerializer(projects, many=True)
-#     return Response(serializer.data)
+@api_view(['GET'])
+def get_projects_of_learner(request,learner_id):
+    projects = Project.objects.filter(learner__id = learner_id)
+    serializer = ProjectDepthTwoSerializer(projects, many=True)
+    return Response(serializer.data)
 
 # @api_view(['POST'])
 # def create_session_request(request):
@@ -878,11 +878,11 @@ def get_ongoing_projects(request):
 #     return Response({ 'hr': hr_data},status=200) 
 
 
-# @api_view(['GET'])
-# def get_ongoing_projects_of_hr(request,hr_id):
-#     projects = Project.objects.filter(hr__id = hr_id,steps__project_live="pending")
-#     serializer = ProjectDepthTwoSerializer(projects, many=True)
-#     return Response(serializer.data, status=200)
+@api_view(['GET'])
+def get_ongoing_projects_of_hr(request,hr_id):
+    projects = Project.objects.filter(hr__id = hr_id,steps__project_live="pending")
+    serializer = ProjectDepthTwoSerializer(projects, many=True)
+    return Response(serializer.data, status=200)
 
 
 # @api_view(['GET'])
@@ -1101,20 +1101,20 @@ def get_hr(request):
 #     return Response(serializer.data)
 
 
-# @api_view(['GET'])
-# def get_projects_and_sessions_by_coach(request,coach_id):
-#     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
-#     sessions = Session.objects.filter(session_request__project__in=projects,coach__id=coach_id)
-#     session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
-#     sessions_dict = {}
-#     for session in session_serializer.data:
-#         project_id = session['session_request']['project']['id']
-#         if project_id in sessions_dict:
-#             sessions_dict[project_id].append(session)
-#         else:
-#             sessions_dict[project_id] = [session]
-#     project_serializer = ProjectDepthTwoSerializer(projects,many=True)
-#     return Response({'projects': project_serializer.data, 'session_per_project':sessions_dict})
+@api_view(['GET'])
+def get_projects_and_sessions_by_coach(request,coach_id):
+    projects = Project.objects.filter(coaches_status__coach__id=coach_id)
+    sessions = Session.objects.filter(session_request__project__in=projects,coach__id=coach_id)
+    session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
+    sessions_dict = {}
+    for session in session_serializer.data:
+        project_id = session['session_request']['project']['id']
+        if project_id in sessions_dict:
+            sessions_dict[project_id].append(session)
+        else:
+            sessions_dict[project_id] = [session]
+    project_serializer = ProjectDepthTwoSerializer(projects,many=True)
+    return Response({'projects': project_serializer.data, 'session_per_project':sessions_dict})
 
 # @api_view(['POST'])
 # def otp_generation_hr(request):
@@ -1641,28 +1641,28 @@ def get_project_details(request,project_id):
 # "project_id": 1
 # "coach_id": 1
 # "status": Consent Approved/Consent Rejected
-# @api_view(['POST'])
-# def receive_coach_consent(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     for coach_status in project.coaches_status.all():
-#         try:
-#             if coach_status.coach.id==request.data.get('coach_id',''):
-#                 # coach_status.status[request.data.get('status','').split(" ")[0].lower()]=request.data.get('status','').split(" ")[1].lower()
-#                 # if request.data.get('status','').split(" ")[0].lower()=='contract':
-#                 #     coach_status.status['consent'] = "approved"
-#                 # coach_status.save()
-#                 coach_status.status['consent']['status'] = request.data['status']
-#                 coach_status.save()
-#                 # else:
-#                 #     return Response({"message": "Consent already sent"}, status=400)
+@api_view(['POST'])
+def receive_coach_consent(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    for coach_status in project.coaches_status.all():
+        try:
+            if coach_status.coach.id==request.data.get('coach_id',''):
+                # coach_status.status[request.data.get('status','').split(" ")[0].lower()]=request.data.get('status','').split(" ")[1].lower()
+                # if request.data.get('status','').split(" ")[0].lower()=='contract':
+                #     coach_status.status['consent'] = "approved"
+                # coach_status.save()
+                coach_status.status['consent']['status'] = request.data['status']
+                coach_status.save()
+                # else:
+                #     return Response({"message": "Consent already sent"}, status=400)
         
-#         except Exception as e:
-#             print(e)
-#             return Response({"message": "Coach not Found"}, status=400)
-#     return Response({"message": request.data.get('status','')},status=200)
+        except Exception as e:
+            print(e)
+            return Response({"message": "Coach not Found"}, status=400)
+    return Response({"message": request.data.get('status','')},status=200)
 
 # @api_view(['POST'])
 # def complete_coach_consent(request):
@@ -1675,47 +1675,47 @@ def get_project_details(request,project_id):
 #     return Response({'message': "Coach list sent to HR","details":""},status=200)
 
 
-# @api_view(['POST'])
-# def complete_coach_list_to_hr(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.steps['coach_list_to_hr']['status'] = 'complete'
-#     project.steps['coach_consent']['status'] = 'complete'
-#     if not project.empanelment:
-#         for coach_status in project.coaches_status.all():
-#             if coach_status.status["hr"]["status"] == 'select':
-#                 coach_status.status['learner']['status'] = 'sent'
-#                 coach_status.save()
-#     project.save()
-#     return Response({'message': "Step marked as complete.",'details':{}},status=200)
+@api_view(['POST'])
+def complete_coach_list_to_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['coach_list_to_hr']['status'] = 'complete'
+    project.steps['coach_consent']['status'] = 'complete'
+    if not project.empanelment:
+        for coach_status in project.coaches_status.all():
+            if coach_status.status["hr"]["status"] == 'select':
+                coach_status.status['learner']['status'] = 'sent'
+                coach_status.save()
+    project.save()
+    return Response({'message': "Step marked as complete.",'details':{}},status=200)
 
-# @api_view(['POST'])
-# def complete_interviews_step(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.steps['interviews']['status'] = 'complete'
-#     project.steps['coach_consent']['status'] = 'complete'
-#     if not project.empanelment:
-#         for coach_status in project.coaches_status.all():
-#             if coach_status.status["hr"]["status"] == 'select':
-#                 coach_status.status['learner']['status'] = 'sent'
-#                 coach_status.save()
-#     project.save()
-#     return Response({'message': "Step marked as complete.",'details':{}},status=200)
+@api_view(['POST'])
+def complete_interviews_step(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['interviews']['status'] = 'complete'
+    project.steps['coach_consent']['status'] = 'complete'
+    if not project.empanelment:
+        for coach_status in project.coaches_status.all():
+            if coach_status.status["hr"]["status"] == 'select':
+                coach_status.status['learner']['status'] = 'sent'
+                coach_status.save()
+    project.save()
+    return Response({'message': "Step marked as complete.",'details':{}},status=200)
 
-# @api_view(['POST'])
-# def complete_empanelment(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.steps['add_learners']['status']= 'complete'
-#     project.save()
-#     return Response({'message': "Empanelement completed.",'details':''},status=200)
+@api_view(['POST'])
+def complete_empanelment(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['add_learners']['status']= 'complete'
+    project.save()
+    return Response({'message': "Empanelement completed.",'details':''},status=200)
 
 
 # @api_view(['POST'])
@@ -1763,202 +1763,202 @@ def complete_project_structure(request):
 #     return Response({'message': "Chemistry sessions completed."},status=200)
 
 
-# @api_view(['GET'])
-# def get_interview_data(request,project_id):
-#     sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='interview').all()
-#     serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
-#     return Response(serializer.data,status=200)
+@api_view(['GET'])
+def get_interview_data(request,project_id):
+    sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='interview').all()
+    serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
 
 
-# @api_view(['GET'])
-# def get_chemistry_session_data(request,project_id):
-#     sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='chemistry_session').all()
-#     serializer=SessionRequestCaasDepthTwoSerializer(sessions,many=True)
-#     return Response(serializer.data,status=200)
+@api_view(['GET'])
+def get_chemistry_session_data(request,project_id):
+    sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='chemistry_session').all()
+    serializer=SessionRequestCaasDepthTwoSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
 
 
-# @api_view(['GET'])
-# def get_session_requests_of_hr(request,hr_id):
-#     sessions=SessionRequestCaas.objects.filter(hr__id = hr_id).all()
-#     serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
-#     return Response(serializer.data,status=200)
+@api_view(['GET'])
+def get_session_requests_of_hr(request,hr_id):
+    sessions=SessionRequestCaas.objects.filter(hr__id = hr_id).all()
+    serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
 
 
-# @api_view(['GET'])
-# def get_session_requests_of_learner(request,learner_id):
-#     sessions=SessionRequestCaas.objects.filter(learner__id = learner_id).all()
-#     serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
-#     return Response(serializer.data,status=200)
+@api_view(['GET'])
+def get_session_requests_of_learner(request,learner_id):
+    sessions=SessionRequestCaas.objects.filter(learner__id = learner_id).all()
+    serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
 
 
-# @api_view(['GET'])
-# def get_upcoming_booked_session_of_coach(request,coach_id):
-#     current_time = int(timezone.now().timestamp() * 1000)
-#   # convert current time to milliseconds
-#     sessions=SessionRequestCaas.objects.filter(coach__id = coach_id,is_booked = True, confirmed_availability__start_time__gt=current_time).all()
-#     serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
-#     return Response(serializer.data,status=200)
+@api_view(['GET'])
+def get_upcoming_booked_session_of_coach(request,coach_id):
+    current_time = int(timezone.now().timestamp() * 1000)
+  # convert current time to milliseconds
+    sessions=SessionRequestCaas.objects.filter(coach__id = coach_id,is_booked = True, confirmed_availability__start_time__gt=current_time).all()
+    serializer=SessionRequestCaasDepthOneSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
 
 
-# @api_view(['POST'])
-# def book_session_caas(request):
-#     print(request.data)
-#     session_request = SessionRequestCaas.objects.get(id=request.data.get('session_request'))
-#     session_request.confirmed_availability = Availibility.objects.get(id=request.data.get('confirmed_availability'))
-#     session_request.is_booked = True
-#     session_request.save()
-#     # if serializer.is_valid():
-#     #     session = serializer.save()
-#     #     # Mark the session request as booked
-#     #     session_request = session.session_request
-#     #     session_request.is_booked = True
-#     #     session_request.save()
+@api_view(['POST'])
+def book_session_caas(request):
+    print(request.data)
+    session_request = SessionRequestCaas.objects.get(id=request.data.get('session_request'))
+    session_request.confirmed_availability = Availibility.objects.get(id=request.data.get('confirmed_availability'))
+    session_request.is_booked = True
+    session_request.save()
+    # if serializer.is_valid():
+    #     session = serializer.save()
+    #     # Mark the session request as booked
+    #     session_request = session.session_request
+    #     session_request.is_booked = True
+    #     session_request.save()
 
-#     #     coach=session.coach
-#     #     coach_email=coach.email
-#     #     hr=session.session_request.hr
-#     #     he_email= hr.email
-#     # else:
-#     #     print(serializer.errors)
-#     #     return Response(serializer.errors,status=400)
+    #     coach=session.coach
+    #     coach_email=coach.email
+    #     hr=session.session_request.hr
+    #     he_email= hr.email
+    # else:
+    #     print(serializer.errors)
+    #     return Response(serializer.errors,status=400)
 
-#     # Send email notification to the coach
-#     subject = 'Hello coach your session is booked.'
-#     message = f'Dear {session_request.coach.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-#     send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.coach.email])
+    # Send email notification to the coach
+    subject = 'Hello coach your session is booked.'
+    message = f'Dear {session_request.coach.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.coach.email])
     
 
-#     # # Send email notification to the learner
-#     if session_request.session_type=='interview':
-#         subject = 'Hello hr your session is booked.'
-#         message = f'Dear {session_request.hr.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-#         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.hr.email])
-#     if session_request.session_type=='chemistry_session':
-#         subject = 'Hello learner your session is booked.'
-#         message = f'Dear {session_request.learner.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-#         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.learner.email])
+    # # Send email notification to the learner
+    if session_request.session_type=='interview':
+        subject = 'Hello hr your session is booked.'
+        message = f'Dear {session_request.hr.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.hr.email])
+    if session_request.session_type=='chemistry_session':
+        subject = 'Hello learner your session is booked.'
+        message = f'Dear {session_request.learner.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.learner.email])
 
-#     return Response({"message":"Session booked successfully!"}, status=201)
-#     return Response(serializer.errors, status=400)
+    return Response({"message":"Session booked successfully!"}, status=201)
+    return Response(serializer.errors, status=400)
 
 
-# @api_view(['POST'])
-# def create_session_request_caas(request):
-#     time_arr = []
-#     for time in request.data['availibility']:
-#         availibility_serilizer = AvailibilitySerializer(data = time)
-#         if availibility_serilizer.is_valid():
-#             avil_id = availibility_serilizer.save()
-#             time_arr.append(avil_id.id) 
-#         else:
-#             return Response({"message": str(availibility_serilizer.errors),}, status=401)
+@api_view(['POST'])
+def create_session_request_caas(request):
+    time_arr = []
+    for time in request.data['availibility']:
+        availibility_serilizer = AvailibilitySerializer(data = time)
+        if availibility_serilizer.is_valid():
+            avil_id = availibility_serilizer.save()
+            time_arr.append(avil_id.id) 
+        else:
+            return Response({"message": str(availibility_serilizer.errors),}, status=401)
     
-#     try:
-#         if request.data['session_type'] == 'chemistry_session':
-#             session= SessionRequestCaas.objects.get(learner__id=request.data['learner_id'],project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'])
-#         else:
-#             session= SessionRequestCaas.objects.get(project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'])   
-#         session.availibility.set(time_arr)
-#         session.save()
-#         return Response({"message": "Session updated successfully."}, status=201)
-#     except SessionRequestCaas.DoesNotExist:
-#         session = {
-#             "project": request.data['project_id'],
-#             "availibility":time_arr,
-#             "coach":request.data['coach_id'],
-#             "session_type": request.data['session_type']
-#                 }
-#         if session['session_type']=='interview':
-#             session['hr'] = request.data['hr_id']
-#         elif session['session_type']=='chemistry_session':
-#             session['learner'] = request.data['learner_id']
-#         session_serilizer = SessionRequestCaasSerializer(data = session)
-#         print(session_serilizer.is_valid())
-#         print(session_serilizer.errors)
-#         if session_serilizer.is_valid():
-#             session_serilizer.save()
-#             return Response({"message": "Session sequested successfully."}, status=201)
-#         else:
-#             return Response({"message": str(session_serilizer.errors),}, status=401)
+    try:
+        if request.data['session_type'] == 'chemistry_session':
+            session= SessionRequestCaas.objects.get(learner__id=request.data['learner_id'],project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'])
+        else:
+            session= SessionRequestCaas.objects.get(project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'])   
+        session.availibility.set(time_arr)
+        session.save()
+        return Response({"message": "Session updated successfully."}, status=201)
+    except SessionRequestCaas.DoesNotExist:
+        session = {
+            "project": request.data['project_id'],
+            "availibility":time_arr,
+            "coach":request.data['coach_id'],
+            "session_type": request.data['session_type']
+                }
+        if session['session_type']=='interview':
+            session['hr'] = request.data['hr_id']
+        elif session['session_type']=='chemistry_session':
+            session['learner'] = request.data['learner_id']
+        session_serilizer = SessionRequestCaasSerializer(data = session)
+        print(session_serilizer.is_valid())
+        print(session_serilizer.errors)
+        if session_serilizer.is_valid():
+            session_serilizer.save()
+            return Response({"message": "Session sequested successfully."}, status=201)
+        else:
+            return Response({"message": str(session_serilizer.errors),}, status=401)
 
 
-# @api_view(['GET'])
-# def get_session_requests_of_coach(request,coach_id):
-#     sessions=SessionRequestCaas.objects.filter(coach__id = coach_id).all()
-#     serializer=SessionRequestCaasDepthTwoSerializer(sessions,many=True)
-#     return Response(serializer.data,status=200)
+@api_view(['GET'])
+def get_session_requests_of_coach(request,coach_id):
+    sessions=SessionRequestCaas.objects.filter(coach__id = coach_id).all()
+    serializer=SessionRequestCaasDepthTwoSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
 
 
-# @api_view(['POST'])
-# def accept_coach_caas_hr(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     for coach in project.coaches_status.all():
-#         if coach.coach_id==request.data.get('coach_id'):
-#             if coach.status['consent']['status'] == 'select' and coach.status['hr']['status'] == 'sent':
-#                 coach.status['hr']['status'] = request.data['status']
-#                 coach.save() 
-#             else:
-#                 return Response({"error": "Failed to update status."}, status=400)
-#             # print(coach.id)
-#             # print(coach.status)
-#             # if coach.status not in ["HR Selected","HR Rejected"]:
-#             #     coach.status['hr']=request.data.get('status').split(" ")[1].lower()
-#             #     coach.save()
-#             #     print("->")
-#             #     print(coach.status)
-#             # else:
-#             #     return Response({"error": "Status Already Updated"}, status=400)
-#     project.save()
-#     message = ""
-#     if(request.data.get('status') == "select"):
-#         message = "Coach selected."
-#     elif(request.data.get('status') == "reject"):
-#         message = "Coach rejected."
-#     return Response({"message": message},status=200)
+@api_view(['POST'])
+def accept_coach_caas_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    for coach in project.coaches_status.all():
+        if coach.coach_id==request.data.get('coach_id'):
+            if coach.status['consent']['status'] == 'select' and coach.status['hr']['status'] == 'sent':
+                coach.status['hr']['status'] = request.data['status']
+                coach.save() 
+            else:
+                return Response({"error": "Failed to update status."}, status=400)
+            # print(coach.id)
+            # print(coach.status)
+            # if coach.status not in ["HR Selected","HR Rejected"]:
+            #     coach.status['hr']=request.data.get('status').split(" ")[1].lower()
+            #     coach.save()
+            #     print("->")
+            #     print(coach.status)
+            # else:
+            #     return Response({"error": "Status Already Updated"}, status=400)
+    project.save()
+    message = ""
+    if(request.data.get('status') == "select"):
+        message = "Coach selected."
+    elif(request.data.get('status') == "reject"):
+        message = "Coach rejected."
+    return Response({"message": message},status=200)
 
 
-# @api_view(['POST'])
-# def add_learner_to_project(request):
-#     print(request.data)
-#     try:
-#         project = Project.objects.get(id=request.data['project_id'])
-#     except Project.DoesNotExist:
-#         return Response({'error': 'Project does not exist.'}, status=404)
-#     try:
-#         learners = create_learners(request.data['learners'])
-#         for learner in learners:
-#             project.learner.add(learner)    
-#     except Exception as e:
-#         # Handle any exceptions from create_learners
-#         return Response({'error': str(e)}, status=500)
-#     return Response({'message':'Learners added succesfully','details':''},status=201)
+@api_view(['POST'])
+def add_learner_to_project(request):
+    print(request.data)
+    try:
+        project = Project.objects.get(id=request.data['project_id'])
+    except Project.DoesNotExist:
+        return Response({'error': 'Project does not exist.'}, status=404)
+    try:
+        learners = create_learners(request.data['learners'])
+        for learner in learners:
+            project.learner.add(learner)    
+    except Exception as e:
+        # Handle any exceptions from create_learners
+        return Response({'error': str(e)}, status=500)
+    return Response({'message':'Learners added succesfully','details':''},status=201)
 
 
 
-# @api_view(['POST'])
-# def accept_coach_caas_learner(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     cnt=len(project.coaches_status.filter(learner_id__contains=request.data.get('learner_id')))
-#     if cnt==0:
-#         for coach in project.coaches_status.filter(coach__id=request.data.get('coach_id')):
-#             coach.status['learner']['status']=request.data.get('status')
-#             if request.data.get('status')=='select':
-#                 coach.learner_id.append(request.data.get('learner_id'))
-#             coach.save()
-#     else:
-#         return Response({"error": "Coach Already Selected"},status=400)
-#     message =""
-#     if(request.data.get('status')=='select'):
-#         message = "Coach selected succesfully."
-#     else:
-#         message = "Coach rejected."
-#     return Response({"message": message},status=200)
+@api_view(['POST'])
+def accept_coach_caas_learner(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    cnt=len(project.coaches_status.filter(learner_id__contains=request.data.get('learner_id')))
+    if cnt==0:
+        for coach in project.coaches_status.filter(coach__id=request.data.get('coach_id')):
+            coach.status['learner']['status']=request.data.get('status')
+            if request.data.get('status')=='select':
+                coach.learner_id.append(request.data.get('learner_id'))
+            coach.save()
+    else:
+        return Response({"error": "Coach Already Selected"},status=400)
+    message =""
+    if(request.data.get('status')=='select'):
+        message = "Coach selected succesfully."
+    else:
+        message = "Coach rejected."
+    return Response({"message": message},status=200)
 
 
 # @api_view(['POST'])
@@ -2067,84 +2067,84 @@ def project_structure_agree_by_hr(request):
     return Response({'message': "Agreed."},status=200)
 
 
-# @api_view(['POST'])
-# def request_more_profiles_by_hr(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     if request.data['step'] == 'coach_list_to_hr' or request.data['step'] == 'interviews':
-#         if 'request_details' in project.steps['coach_consent']:
-#             project.steps['coach_consent']['request_details'].append({'message': request.data['message']})
-#         else:
-#             project.steps['coach_consent']['request_details'] = [{'message': request.data['message']}]
-#     project.steps['coach_consent']['status'] = 'incomplete'
-#     project.save()
-#     return Response({'message': 'Request sent successfully'})
+@api_view(['POST'])
+def request_more_profiles_by_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    if request.data['step'] == 'coach_list_to_hr' or request.data['step'] == 'interviews':
+        if 'request_details' in project.steps['coach_consent']:
+            project.steps['coach_consent']['request_details'].append({'message': request.data['message']})
+        else:
+            project.steps['coach_consent']['request_details'] = [{'message': request.data['message']}]
+    project.steps['coach_consent']['status'] = 'incomplete'
+    project.save()
+    return Response({'message': 'Request sent successfully'})
 
 
 
-# @api_view(['POST'])
-# def edit_learner(request):
-#     try:
-#         learner = Learner.objects.get(id=request.data.get('learner_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Learner does not exist"}, status=400)
-#     user = learner.user.user
-#     user.username = request.data['email']
-#     user.email = request.data['email']
-#     user.save()
-#     learner.email = request.data['email']
-#     learner.name=request.data['name']
-#     learner.phone = request.data['phone']
-#     learner.save()
-#     return Response({'message': "Learner details updated.","details":''},status=200)   
+@api_view(['POST'])
+def edit_learner(request):
+    try:
+        learner = Learner.objects.get(id=request.data.get('learner_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Learner does not exist"}, status=400)
+    user = learner.user.user
+    user.username = request.data['email']
+    user.email = request.data['email']
+    user.save()
+    learner.email = request.data['email']
+    learner.name=request.data['name']
+    learner.phone = request.data['phone']
+    learner.save()
+    return Response({'message': "Learner details updated.","details":''},status=200)   
 
 
-# @api_view(['POST'])
-# def mark_finalized_list_complete(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.steps['final_coaches']['status']='complete'
-#     project.save()
-#     return Response({'message': "Step marked as Complete","details":''},status=200)
+@api_view(['POST'])
+def mark_finalized_list_complete(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['final_coaches']['status']='complete'
+    project.save()
+    return Response({'message': "Step marked as Complete","details":''},status=200)
 
     
-# @api_view(['POST'])
-# def send_list_to_hr(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     # project.status['coach_list_to_hr'] = 'pending'
+@api_view(['POST'])
+def send_list_to_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    # project.status['coach_list_to_hr'] = 'pending'
 
-#     for coach_id in request.data['coach_list']:
-#         coach_status = project.coaches_status.get(coach__id = coach_id)
-#         print(coach_status.status)
-#         coach_status.status['hr']['status'] = 'sent'
-#         coach_status.save()
-#     project.save()
-#     return Response({'message': "Sent Successfully",'details':{}},status=200)
+    for coach_id in request.data['coach_list']:
+        coach_status = project.coaches_status.get(coach__id = coach_id)
+        print(coach_status.status)
+        coach_status.status['hr']['status'] = 'sent'
+        coach_status.save()
+    project.save()
+    return Response({'message': "Sent Successfully",'details':{}},status=200)
 
 
-# @api_view(['POST'])
-# def finalized_coach_from_coach_consent(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
+@api_view(['POST'])
+def finalized_coach_from_coach_consent(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
 
-#     for coach_id in request.data['coach_list']:
-#         coach_status = project.coaches_status.get(coach__id = coach_id)
-#         coach_status.status['hr']['status'] = 'select'
-#         coach_status.save()
+    for coach_id in request.data['coach_list']:
+        coach_status = project.coaches_status.get(coach__id = coach_id)
+        coach_status.status['hr']['status'] = 'select'
+        coach_status.save()
 
-#     project.steps['coach_consent']['status']='complete'
-#     project.save()
+    project.steps['coach_consent']['status']='complete'
+    project.save()
 
-#     return Response({'message': "Sent Successfully",'details':{}},status=200)
+    return Response({'message': "Sent Successfully",'details':{}},status=200)
 
 
 
