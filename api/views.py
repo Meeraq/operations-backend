@@ -6,7 +6,7 @@ from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from django.core.exceptions import ObjectDoesNotExist
 from operationsBackend import settings
-from .serializers import CoachSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer
+from .serializers import CoachSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer,LearnerDepthOneSerializer,HrDepthOneSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -1427,10 +1427,10 @@ def get_user_data(user):
         serializer = CoachDepthOneSerializer(user.profile.coach)
     elif user.profile.type == 'pmo':
         serializer = PmoDepthOneSerializer(user.profile.pmo)
-    # elif user.profile.type == 'learner':
-    #     serializer = LearnerDepthOneSerializer(user.profile.learner)
-    # elif user.profile.type == 'hr':
-    #     serializer = HrDepthOneSerializer(user.profile.hr)
+    elif user.profile.type == 'learner':
+        serializer = LearnerDepthOneSerializer(user.profile.learner)
+    elif user.profile.type == 'hr':
+        serializer = HrDepthOneSerializer(user.profile.hr)
     else:
         return None
     return serializer.data

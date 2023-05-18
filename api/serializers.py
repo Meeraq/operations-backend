@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Pmo,Coach,Profile,Project,HR,Organisation
+from .models import Pmo,Coach,Profile,Project,HR,Organisation,Learner
 from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
@@ -19,17 +19,17 @@ class CoachDepthOneSerializer(serializers.ModelSerializer):
         fields = '__all__'
         depth=1
 
-# class HrDepthOneSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = HR
-#         fields = '__all__'
-#         depth=1
+class HrDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HR
+        fields = '__all__'
+        depth=1
 
-# class LearnerDepthOneSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Learner
-#         fields = '__all__'
-#         depth=1
+class LearnerDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Learner
+        fields = '__all__'
+        depth=1
 
 class CoachSerializer(serializers.ModelSerializer):
     class Meta:
