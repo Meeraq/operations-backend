@@ -6,7 +6,7 @@ from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from django.core.exceptions import ObjectDoesNotExist
 from operationsBackend import settings
-from .serializers import CoachSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer
+from .serializers import CoachSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -20,7 +20,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework.permissions import IsAuthenticated,AllowAny
-from .models import Profile, Pmo, Coach, OTP
+from .models import Profile, Pmo, Coach, OTP,Project,HR,Organisation
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate,login,logout
 from django.core.mail import send_mail
@@ -354,62 +354,62 @@ def get_management_token(request):
 #     updateLastLogin(learner.email)
 #     return Response({ 'learner': learner_data},status=200)
 
-# @api_view(['POST'])
-# def create_project_cass(request):
-#     organisation = Organisation.objects.filter(id=request.data['organisation_name']).first()
-#     if not organisation:
-#         organisation= Organisation(
-#             name=request.data['organisation_name'], image_url=request.data['image_url']
-#         )
-#     organisation.save()
-#     # print(organisation.name, organisation.image_url, "details of org")
-#     project= Project(
-#         name=request.data['project_name'],
-#         organisation=organisation,
-#         currency=request.data['currency'],
-#         project_type= 'CAAS',
-#         interview_allowed= request.data['interview_allowed'],
-#         # chemistry_allowed= request.data['chemistry_allowed'],
-#         specific_coach= request.data['specific_coach'],
-#         empanelment= request.data['empanelment'],
-#         end_date=datetime.now()+timedelta(days=365),
-#         tentative_start_date=request.data['tentative_start_date'],
-#         mode=request.data['mode'],
-#         location=request.data.get('location',None),
-#         steps=dict(
-#             project_structure={'status' : 'pending'},
-#             coach_list={'status' : 'pending'},
-#             coach_consent={'status' : 'pending'},
-#             coach_list_to_hr={'status' : 'pending'},
-#             interviews={'status' : 'pending'},
-#             add_learners={'status' : 'pending'},
-#             coach_approval={'status' : 'pending'},
-#             chemistry_session={'status' : 'pending'},
-#             coach_selected={'status' : 'pending'},
-#             final_coaches={'status' : 'pending'},
-#             project_live= 'pending'
-#     )
-#     )
-#     hr_emails=[]
-#     project.save()
-#     project_name= project.name
-#     print(request.data["hr"], "HR ID")
-#     for hr in request.data["hr"]:
-#         single_hr = HR.objects.get(id=hr)
-#         # print(single_hr)
-#         project.hr.add(single_hr)
-#         # Send email notification to the HR
-#         subject = f'Hey HR! You have been assigned to a project {project_name}'
-#         message = f'Dear {single_hr.first_name},\n\n You can use your email to log-in via OTP.'
-#         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [single_hr.email])
+@api_view(['POST'])
+def create_project_cass(request):
+    organisation = Organisation.objects.filter(id=request.data['organisation_name']).first()
+    if not organisation:
+        organisation= Organisation(
+            name=request.data['organisation_name'], image_url=request.data['image_url']
+        )
+    organisation.save()
+    # print(organisation.name, organisation.image_url, "details of org")
+    project= Project(
+        name=request.data['project_name'],
+        organisation=organisation,
+        currency=request.data['currency'],
+        project_type= 'CAAS',
+        interview_allowed= request.data['interview_allowed'],
+        # chemistry_allowed= request.data['chemistry_allowed'],
+        specific_coach= request.data['specific_coach'],
+        empanelment= request.data['empanelment'],
+        end_date=datetime.now()+timedelta(days=365),
+        tentative_start_date=request.data['tentative_start_date'],
+        mode=request.data['mode'],
+        location=request.data.get('location',None),
+        steps=dict(
+            project_structure={'status' : 'pending'},
+            coach_list={'status' : 'pending'},
+            coach_consent={'status' : 'pending'},
+            coach_list_to_hr={'status' : 'pending'},
+            interviews={'status' : 'pending'},
+            add_learners={'status' : 'pending'},
+            coach_approval={'status' : 'pending'},
+            chemistry_session={'status' : 'pending'},
+            coach_selected={'status' : 'pending'},
+            final_coaches={'status' : 'pending'},
+            project_live= 'pending'
+    )
+    )
+    hr_emails=[]
+    project.save()
+    project_name= project.name
+    print(request.data["hr"], "HR ID")
+    for hr in request.data["hr"]:
+        single_hr = HR.objects.get(id=hr)
+        # print(single_hr)
+        project.hr.add(single_hr)
+        # Send email notification to the HR
+        subject = f'Hey HR! You have been assigned to a project {project_name}'
+        message = f'Dear {single_hr.first_name},\n\n You can use your email to log-in via OTP.'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [single_hr.email])
 
 
-#     # hrs= create_hr(request.data['hr'])
-#     # for hr in hrs:
-#     #     project.hr.add(hr)
+    # hrs= create_hr(request.data['hr'])
+    # for hr in hrs:
+    #     project.hr.add(hr)
 
 
-#     return Response({'message': "Project created succesfully"}, status=200)
+    return Response({'message': "Project created succesfully"}, status=200)
 
 
 # @api_view(['POST'])
@@ -596,11 +596,11 @@ def get_management_token(request):
 #     return Response(serializer.data)
 
 
-# @api_view(['GET'])
-# def get_ongoing_projects(request):
-#     projects = Project.objects.filter(steps__project_live='pending')
-#     serializer = ProjectDepthTwoSerializer(projects, many=True)
-#     return Response(serializer.data)
+@api_view(['GET'])
+def get_ongoing_projects(request):
+    projects = Project.objects.filter(steps__project_live='pending')
+    serializer = ProjectDepthTwoSerializer(projects, many=True)
+    return Response(serializer.data)
 
 # @api_view(['GET'])
 # def get_completed_projects(request):
@@ -956,21 +956,21 @@ def get_management_token(request):
 
 
 
-# @api_view(['GET'])
-# def get_hr(request):
-#     try:
-#         # Get all the Coach objects
-#         hr = HR.objects.all()
+@api_view(['GET'])
+def get_hr(request):
+    try:
+        # Get all the Coach objects
+        hr = HR.objects.all()
 
-#         # Serialize the Coach objects
-#         serializer = HrSerializer(hr, many=True)
+        # Serialize the Coach objects
+        serializer = HrSerializer(hr, many=True)
 
-#         # Return the serialized Coach objects as the response
-#         return Response(serializer.data, status=200)
+        # Return the serialized Coach objects as the response
+        return Response(serializer.data, status=200)
 
-#     except Exception as e:
-#         # Return error response if any exception occurs
-#         return Response({'error': str(e)}, status=500)
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({'error': str(e)}, status=500)
 
 
 # def create_hr(hrs_data):
@@ -1494,56 +1494,56 @@ def validate_otp(request):
     # updateLastLogin(learner.email)
     # return Response({ 'learner': learner_data},status=200)
 
-# @api_view(['GET'])
-# def get_organisation(request):
-#     orgs=Organisation.objects.all()
-#     serializer = OrganisationSerializer(orgs, many=True)
-#     return Response(serializer.data, status=200)
+@api_view(['GET'])
+def get_organisation(request):
+    orgs=Organisation.objects.all()
+    serializer = OrganisationSerializer(orgs, many=True)
+    return Response(serializer.data, status=200)
 
 
 
-# @api_view(['POST'])
-# def add_organisation(request):
-#     print(request.data.get('image_url',''))
-#     org = Organisation.objects.create(name=request.data.get('name',''), image_url=request.data.get('image_url',''))
-#     orgs=Organisation.objects.all()
-#     serializer = OrganisationSerializer(orgs, many=True)
-#     return Response({'message': "Organisation added successfully." ,'details':serializer.data}, status=200)
+@api_view(['POST'])
+def add_organisation(request):
+    print(request.data.get('image_url',''))
+    org = Organisation.objects.create(name=request.data.get('name',''), image_url=request.data.get('image_url',''))
+    orgs=Organisation.objects.all()
+    serializer = OrganisationSerializer(orgs, many=True)
+    return Response({'message': "Organisation added successfully." ,'details':serializer.data}, status=200)
 
 
-# @api_view(['POST'])
-# def add_hr(request):
-#     try:
-#         # Check if user with given email already exists
-#         if User.objects.filter(email=request.data.get('email')).exists():
-#             raise ValueError('User with given email already exists')
-#         # Create the Django User
+@api_view(['POST'])
+def add_hr(request):
+    try:
+        # Check if user with given email already exists
+        if User.objects.filter(email=request.data.get('email')).exists():
+            raise ValueError('User with given email already exists')
+        # Create the Django User
 
-#         temp_password=''.join(random.choices(string.ascii_uppercase +string.ascii_lowercase+
-#                                             string.digits, k=8))
-#         user = User.objects.create_user(username=request.data.get('email'),password=temp_password,email=request.data.get('email'))
-#         user.save()
-#         # Create the PMO Profile linked to the User
-#         hr_profile = Profile.objects.create(user=user, type='hr')
-#         # Get organization
-#         organisation = Organisation.objects.filter(id=request.data.get('organisation')).first()
-#         # Create the PMO User using the Profile    
-#         hr = HR.objects.create(
-#             user=hr_profile,
-#             first_name = request.data.get('first_name'),
-#             last_name = request.data.get('last_name'),
-#             email=request.data.get('email'),
-#             phone = request.data.get('phone'),
-#             organisation= organisation
-#             )
-#         subject = 'Welcome to Meeraq'
-#         message = f'Dear {request.data.get("first_name")},\n\nYour Account has been created with Meeraq your username is {request.data.get("email")} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
-#         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [request.data.get('email')])
-#         hrs=HR.objects.all()
-#         serializer = HrSerializer(hrs, many=True)
-#         return Response({'message':'HR added successfully','details':serializer.data}, status=200)
-#     except Exception as e:
-#         return Response({'error': str(e)}, status=400)
+        temp_password=''.join(random.choices(string.ascii_uppercase +string.ascii_lowercase+
+                                            string.digits, k=8))
+        user = User.objects.create_user(username=request.data.get('email'),password=temp_password,email=request.data.get('email'))
+        user.save()
+        # Create the PMO Profile linked to the User
+        hr_profile = Profile.objects.create(user=user, type='hr')
+        # Get organization
+        organisation = Organisation.objects.filter(id=request.data.get('organisation')).first()
+        # Create the PMO User using the Profile    
+        hr = HR.objects.create(
+            user=hr_profile,
+            first_name = request.data.get('first_name'),
+            last_name = request.data.get('last_name'),
+            email=request.data.get('email'),
+            phone = request.data.get('phone'),
+            organisation= organisation
+            )
+        subject = 'Welcome to Meeraq'
+        message = f'Dear {request.data.get("first_name")},\n\nYour Account has been created with Meeraq your username is {request.data.get("email")} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [request.data.get('email')])
+        hrs=HR.objects.all()
+        serializer = HrSerializer(hrs, many=True)
+        return Response({'message':'HR added successfully','details':serializer.data}, status=200)
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
 
 # Filter API for Coaches
 # Expected input "filters": [{"key":"area_of_expertise","value":"test"},...]
@@ -1559,53 +1559,53 @@ def validate_otp(request):
 #     serializer = CoachSerializer(coaches, many=True)
 #     return Response(serializer.data, status=200)
 
-# @api_view(['POST'])
-# def add_project_struture(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.project_structure=request.data.get('project_structure',[])
-#     # project.status['project_structure'] = 'complete'
-#     project.save()
-#     return Response({'message': "Structure added","details":''},status=200)
+@api_view(['POST'])
+def add_project_struture(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.project_structure=request.data.get('project_structure',[])
+    # project.status['project_structure'] = 'complete'
+    project.save()
+    return Response({'message': "Structure added","details":''},status=200)
 
 
-# @api_view(['POST'])
-# def send_consent(request):
-#     # Get all the Coach objects
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     coaches = Coach.objects.filter(id__in=request.data.get('coach_list',[])).all()
-#     coach_status = []
-#     for coach in coaches:
-#         status = CoachStatus.objects.create(coach=coach,status=dict(
-# 					consent={
-#           	'status': "sent", 
-#           	'response_date': None,
-#        		 },
-# 						hr= {
-#           	'status': None, 
-#           	'session_id': None,
-#           	'response_date': None,
-#         		},
-#             learner={
-#           	'status': None,
-#           	'session_id': None,
-#           	'response_date': None,
-#         }), consent_expiry_date = request.data['consent_expiry_date'])
-#         status.save()
-#         coach_status.append(status)
-#         subject = 'Consent for {project.name} Project'
-#         message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
-#         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach.email])
-#     # project.coaches = coach_list
-#     project.coaches_status.add(*coach_status)
-#     project.steps['coach_list']['status'] = 'complete'
-#     project.save()
-#     return Response({"message":"Consent sent successfully",'details':''},status=200)
+@api_view(['POST'])
+def send_consent(request):
+    # Get all the Coach objects
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    coaches = Coach.objects.filter(id__in=request.data.get('coach_list',[])).all()
+    coach_status = []
+    for coach in coaches:
+        status = CoachStatus.objects.create(coach=coach,status=dict(
+					consent={
+          	'status': "sent", 
+          	'response_date': None,
+       		 },
+						hr= {
+          	'status': None, 
+          	'session_id': None,
+          	'response_date': None,
+        		},
+            learner={
+          	'status': None,
+          	'session_id': None,
+          	'response_date': None,
+        }), consent_expiry_date = request.data['consent_expiry_date'])
+        status.save()
+        coach_status.append(status)
+        subject = 'Consent for {project.name} Project'
+        message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach.email])
+    # project.coaches = coach_list
+    project.coaches_status.add(*coach_status)
+    project.steps['coach_list']['status'] = 'complete'
+    project.save()
+    return Response({"message":"Consent sent successfully",'details':''},status=200)
 
 # @api_view(['POST'])
 # def select_coaches(request):
@@ -1626,15 +1626,15 @@ def validate_otp(request):
 #     return Response({"message":"Coaches selected successfully"},status=200)
 
 
-# @api_view(['GET'])
-# @permission_classes([AllowAny])
-# def get_project_details(request,project_id):
-# 		try:
-# 				project = Project.objects.get(id=project_id)
-# 				serializer = ProjectDepthTwoSerializer(project)
-# 				return Response(serializer.data)
-# 		except Project.DoesNotExist: 
-# 				return Response({"message": "Project does not exist"}, status=400)
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_project_details(request,project_id):
+		try:
+				project = Project.objects.get(id=project_id)
+				serializer = ProjectDepthTwoSerializer(project)
+				return Response(serializer.data)
+		except Project.DoesNotExist: 
+				return Response({"message": "Project does not exist"}, status=400)
                 
 # Filter API for Coaches
 # Expected input 
@@ -1730,15 +1730,15 @@ def validate_otp(request):
 
 
 
-# @api_view(['POST'])
-# def complete_project_structure(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.status['project_structure'] = 'complete'
-#     project.save()
-#     return Response({'message': "Project structure approved."},status=200)
+@api_view(['POST'])
+def complete_project_structure(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['project_structure'] = 'complete'
+    project.save()
+    return Response({'message': "Project structure approved."},status=200)
 
 
 # @api_view(['POST'])
@@ -1993,78 +1993,78 @@ def validate_otp(request):
 
 
 
-# @api_view(['POST'])
-# def complete_cass_step(request):
-#     try:
-#         step=request.data.get("step")
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.steps[step]['status'] = 'complete'
-#     project.save()
-#     return Response({'message': "Marked as completed."},status=200)
+@api_view(['POST'])
+def complete_cass_step(request):
+    try:
+        step=request.data.get("step")
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps[step]['status'] = 'complete'
+    project.save()
+    return Response({'message': "Marked as completed."},status=200)
 
 
-# @api_view(['POST'])
-# def mark_as_incomplete(request):
-#     stepList = ["coach_list", "coach_consent", "coach_list_to_hr",
-#                 "interviews", "add_learners",  "chemistry_session", "coach_selected", "final_coaches"]
-#     try:
-#         step=request.data.get("step")
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     flag=False
-#     steps=project.steps
-#     for item in stepList:
-#         print(item==step)
-#         print(flag)
-#         if step==item:
-#             flag=True
-#         if flag:
-#             if(steps[item]['status']) == 'complete':
-#                 steps[item]['status']='incomplete'
-#     # print(statuses)
-#     project.steps=steps
-#     project.save()
-#     return Response({'message': "Marked as Incomplete."},status=200)
+@api_view(['POST'])
+def mark_as_incomplete(request):
+    stepList = ["coach_list", "coach_consent", "coach_list_to_hr",
+                "interviews", "add_learners",  "chemistry_session", "coach_selected", "final_coaches"]
+    try:
+        step=request.data.get("step")
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    flag=False
+    steps=project.steps
+    for item in stepList:
+        print(item==step)
+        print(flag)
+        if step==item:
+            flag=True
+        if flag:
+            if(steps[item]['status']) == 'complete':
+                steps[item]['status']='incomplete'
+    # print(statuses)
+    project.steps=steps
+    project.save()
+    return Response({'message': "Marked as Incomplete."},status=200)
 
 
-# @api_view(['POST'])
-# def send_project_strure_to_hr(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.steps['project_structure']['status']='send'
-#     project.save()
-#     return Response({'message': "Sent to HR."},status=200)
+@api_view(['POST'])
+def send_project_strure_to_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['project_structure']['status']='send'
+    project.save()
+    return Response({'message': "Sent to HR."},status=200)
 
 
-# @api_view(['POST'])
-# def send_reject_reason(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.steps['project_structure']['status']='pending'
-#     rejection=dict(reason=request.data.get('reject_reason',''),project_structure=request.data.get('project_structure',[]))
-#     if 'details' not in project.steps['project_structure']:
-#         project.steps['project_structure']['details']=[]
-#     project.steps['project_structure']['details'].append(rejection)
-#     project.save()
-#     return Response({'message': "Rejected."},status=200)
+@api_view(['POST'])
+def send_reject_reason(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['project_structure']['status']='pending'
+    rejection=dict(reason=request.data.get('reject_reason',''),project_structure=request.data.get('project_structure',[]))
+    if 'details' not in project.steps['project_structure']:
+        project.steps['project_structure']['details']=[]
+    project.steps['project_structure']['details'].append(rejection)
+    project.save()
+    return Response({'message': "Rejected."},status=200)
 
 
-# @api_view(['POST'])
-# def project_structure_agree_by_hr(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.steps['project_structure']['status']='complete'
-#     project.save()
-#     return Response({'message': "Agreed."},status=200)
+@api_view(['POST'])
+def project_structure_agree_by_hr(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.steps['project_structure']['status']='complete'
+    project.save()
+    return Response({'message': "Agreed."},status=200)
 
 
 # @api_view(['POST'])

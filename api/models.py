@@ -91,32 +91,32 @@ class Coach(models.Model):
         return self.first_name
 
 
-# class Learner(models.Model):
-#     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
-#     name= models.CharField(max_length=100)
-#     email=models.EmailField()
-#     phone= models.CharField(max_length=25)
-#     area_of_expertise=models.CharField(max_length=100,blank=True)
-#     years_of_experience=models.IntegerField(default=0, blank=True)
+class Learner(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name= models.CharField(max_length=100)
+    email=models.EmailField()
+    phone= models.CharField(max_length=25)
+    area_of_expertise=models.CharField(max_length=100,blank=True)
+    years_of_experience=models.IntegerField(default=0, blank=True)
 
-#     def __str__(self):
-#         return self.name
+    def __str__(self):
+        return self.name
 
 
-# class Organisation(models.Model):
-#     name= models.CharField(max_length=100)
-#     image_url = models.ImageField(upload_to='post_images',blank=True)
+class Organisation(models.Model):
+    name= models.CharField(max_length=100)
+    image_url = models.ImageField(upload_to='post_images',blank=True)
 
-# class HR(models.Model):
-#     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
-#     first_name = models.CharField(max_length=50)
-#     last_name = models.CharField(max_length=50)
-#     email = models.EmailField()
-#     phone = models.CharField( max_length=25)
-#     organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
+class HR(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+    email = models.EmailField()
+    phone = models.CharField( max_length=25)
+    organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     
-#     def __str__(self):
-#         return self.first_name
+    def __str__(self):
+        return self.first_name
 
 # class CoachInvites(models.Model):
 #     name= models.CharField(max_length=100)
@@ -124,42 +124,42 @@ class Coach(models.Model):
 #     created_at = models.DateTimeField(auto_now_add=True)
 
 
-# class CoachStatus(models.Model):
-#     coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
-#     status = models.JSONField(default=dict,blank=True)
-#     learner_id = models.JSONField(default=list,blank=True)
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     consent_expiry_date = models.DateField(blank=True,null=True)
+class CoachStatus(models.Model):
+    coach = models.ForeignKey(Coach,on_delete=models.CASCADE)
+    status = models.JSONField(default=dict,blank=True)
+    learner_id = models.JSONField(default=list,blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    consent_expiry_date = models.DateField(blank=True,null=True)
   
-# class Project(models.Model):
-#     project_type_choice = [
-#         ('COD', 'COD'),
-#         ('4+2', '4+2'),
-#         ('CAAS', 'CAAS')
-#     ]
-#     name= models.CharField(max_length=100)
-#     organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
-#     project_type= models.CharField(max_length=50, choices=project_type_choice, default='cod')
-#     start_date= models.DateField(auto_now_add=True)
-#     end_date= models.DateField(blank=True,null=True)
-#     session_duration=models.CharField(max_length=20)
-#     hr=models.ManyToManyField(HR,blank=True)
-#     coaches=models.ManyToManyField(Coach,blank=True)
-#     coaches_status = models.ManyToManyField(CoachStatus,blank=True)
-#     learner=models.ManyToManyField(Learner,blank=True)
-#     total_sessions=models.IntegerField(default=0, blank=True)
-#     cost_per_session=models.IntegerField(default=0, blank=True)
-#     currency= models.CharField(max_length=30, default="Rupees")
-#     sessions_per_employee=models.IntegerField(default=0, blank=True)
-#     steps = models.JSONField(default=dict)
-#     project_structure = models.JSONField(default=list,blank=True)
-#     specific_coach = models.BooleanField(blank=True,default=False)
-#     empanelment = models.BooleanField(blank=True,default=False)
-#     interview_allowed = models.BooleanField(blank=True,default=False)
-#     chemistry_allowed = models.BooleanField(blank=True,default=False)
-#     tentative_start_date = models.DateField(blank=True,default=None)
-#     mode = models.CharField(max_length=100)
-#     location = models.CharField(max_length=100,blank=True,default=None)
+class Project(models.Model):
+    project_type_choice = [
+        ('COD', 'COD'),
+        ('4+2', '4+2'),
+        ('CAAS', 'CAAS')
+    ]
+    name= models.CharField(max_length=100)
+    organisation=models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
+    project_type= models.CharField(max_length=50, choices=project_type_choice, default='cod')
+    start_date= models.DateField(auto_now_add=True)
+    end_date= models.DateField(blank=True,null=True)
+    session_duration=models.CharField(max_length=20)
+    hr=models.ManyToManyField(HR,blank=True)
+    coaches=models.ManyToManyField(Coach,blank=True)
+    coaches_status = models.ManyToManyField(CoachStatus,blank=True)
+    learner=models.ManyToManyField(Learner,blank=True)
+    total_sessions=models.IntegerField(default=0, blank=True)
+    cost_per_session=models.IntegerField(default=0, blank=True)
+    currency= models.CharField(max_length=30, default="Rupees")
+    sessions_per_employee=models.IntegerField(default=0, blank=True)
+    steps = models.JSONField(default=dict)
+    project_structure = models.JSONField(default=list,blank=True)
+    specific_coach = models.BooleanField(blank=True,default=False)
+    empanelment = models.BooleanField(blank=True,default=False)
+    interview_allowed = models.BooleanField(blank=True,default=False)
+    chemistry_allowed = models.BooleanField(blank=True,default=False)
+    tentative_start_date = models.DateField(blank=True,default=None)
+    mode = models.CharField(max_length=100)
+    location = models.CharField(max_length=100,blank=True,default=None)
 
 
 class OTP(models.Model):
