@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Pmo,Coach,Profile,Project,HR,Organisation,Learner,SessionRequestCaas
+from .models import Pmo,Coach,Profile,Project,HR,Organisation,Learner,SessionRequestCaas,Availibility
 from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
@@ -36,10 +36,10 @@ class CoachSerializer(serializers.ModelSerializer):
         model = Coach
         fields = '__all__'
 
-# class LearnerSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Learner
-#         fields = '__all__'
+class LearnerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Learner
+        fields = '__all__'
         
 # class ProjectSerializer(serializers.ModelSerializer):
 #     class Meta:
@@ -52,10 +52,10 @@ class ProjectDepthTwoSerializer(serializers.ModelSerializer):
         fields = '__all__'
         depth = 2
       
-# class AvailibilitySerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Availibility
-#         fields = '__all__'
+class AvailibilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Availibility
+        fields = '__all__'
       
 # class SessionRequestSerializer(serializers.ModelSerializer):
 #     class Meta:
@@ -106,10 +106,10 @@ class OrganisationSerializer(serializers.ModelSerializer):
         model = Organisation
         fields = '__all__'
 
-# class SessionRequestCaasSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = SessionRequestCaas
-#         fields = '__all__'
+class SessionRequestCaasSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SessionRequestCaas
+        fields = '__all__'
         
 class SessionRequestCaasDepthOneSerializer(serializers.ModelSerializer):
     class Meta:

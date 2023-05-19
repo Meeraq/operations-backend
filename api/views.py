@@ -6,7 +6,7 @@ from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from django.core.exceptions import ObjectDoesNotExist
 from operationsBackend import settings
-from .serializers import CoachSerializer,UserSerializer,PmoDepthOneSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer,LearnerDepthOneSerializer,HrDepthOneSerializer,SessionRequestCaasDepthOneSerializer,SessionRequestCaasDepthTwoSerializer
+from .serializers import CoachSerializer,UserSerializer,LearnerSerializer,PmoDepthOneSerializer,SessionRequestCaasSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer,LearnerDepthOneSerializer,HrDepthOneSerializer,SessionRequestCaasDepthOneSerializer,SessionRequestCaasDepthTwoSerializer,AvailibilitySerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -1104,17 +1104,17 @@ def get_hr(request):
 @api_view(['GET'])
 def get_projects_and_sessions_by_coach(request,coach_id):
     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
-    sessions = Session.objects.filter(session_request__project__in=projects,coach__id=coach_id)
-    session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
-    sessions_dict = {}
-    for session in session_serializer.data:
-        project_id = session['session_request']['project']['id']
-        if project_id in sessions_dict:
-            sessions_dict[project_id].append(session)
-        else:
-            sessions_dict[project_id] = [session]
+    # sessions = Session.objects.filter(session_request__project__in=projects,coach__id=coach_id)
+    # session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
+    # sessions_dict = {}
+    # for session in session_serializer.data:
+    #     project_id = session['session_request']['project']['id']
+    #     if project_id in sessions_dict:
+    #         sessions_dict[project_id].append(session)
+    #     else:
+    #         sessions_dict[project_id] = [session]
     project_serializer = ProjectDepthTwoSerializer(projects,many=True)
-    return Response({'projects': project_serializer.data, 'session_per_project':sessions_dict})
+    return Response({'projects': project_serializer.data})
 
 # @api_view(['POST'])
 # def otp_generation_hr(request):
@@ -1664,15 +1664,15 @@ def receive_coach_consent(request):
             return Response({"message": "Coach not Found"}, status=400)
     return Response({"message": request.data.get('status','')},status=200)
 
-# @api_view(['POST'])
-# def complete_coach_consent(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.status['coach_consent'] = 'complete'
-#     project.save()
-#     return Response({'message': "Coach list sent to HR","details":""},status=200)
+@api_view(['POST'])
+def complete_coach_consent(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.status['coach_consent'] = 'complete'
+    project.save()
+    return Response({'message': "Coach list sent to HR","details":""},status=200)
 
 
 @api_view(['POST'])
