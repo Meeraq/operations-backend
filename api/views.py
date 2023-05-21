@@ -2157,6 +2157,7 @@ def get_coach_field_values(request):
     companies_worked_in = set()
     other_certifications=set() 
     domains = set()
+    industries = set()
     for coach in Coach.objects.all():
         # 1st coach
         for role in coach.job_roles:
@@ -2169,9 +2170,11 @@ def get_coach_field_values(request):
             companies_worked_in.add(company)
         for certificate in coach.other_certification:
             other_certifications.add(certificate)
+        for industry in coach.area_of_expertise:
+            industries.add(industry)
         domains.add(coach.domain)
         educations.add(coach.education)
-    return Response({'job_roles':list(job_roles), 'languages': list(languages), 'educations': list(educations), 'locations': list(locations), 'companies_worked_in': list(companies_worked_in),'other_certifications': list(other_certifications),'domains': list(domains)}, status=200)
+    return Response({'job_roles':list(job_roles), 'languages': list(languages), 'educations': list(educations), 'locations': list(locations), 'companies_worked_in': list(companies_worked_in),'other_certifications': list(other_certifications),'domains': list(domains),'industries':list(industries)}, status=200)
 
 
 @api_view(['POST'])
