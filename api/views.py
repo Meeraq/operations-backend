@@ -2036,7 +2036,7 @@ def send_project_strure_to_hr(request):
         project = Project.objects.get(id=request.data.get('project_id',''))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    project.steps['project_structure']['status']='send'
+    project.steps['project_structure']['status']='complete'
     project.save()
     return Response({'message': "Sent to HR."},status=200)
 
