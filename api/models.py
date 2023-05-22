@@ -215,3 +215,14 @@ class SessionRequestCaas(models.Model):
 #     coach_joined = models.BooleanField(blank=True,default=False)
 #     learner_joined = models.BooleanField(blank=True,default=False)
 #     hr_joined = models.BooleanField(blank=True,default=False)
+
+
+class Notification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    path = models.CharField(max_length=255,blank=True,default="")
+    message = models.TextField(blank=True)
+    read_status = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Notification for {self.user.username}"

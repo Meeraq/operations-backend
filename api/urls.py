@@ -105,7 +105,10 @@ urlpatterns =[
     path('upcoming-booked-session/coach/<int:coach_id>/',views.get_upcoming_booked_session_of_coach),
 		path('coach-field-values/',views.get_coach_field_values),
     path('add-multiple-coaches/',views.add_mulitple_coaches),
-    path('coach/delete/',views.delete_coach)
+    path('coach/delete/',views.delete_coach),
+    path('notifications/all/<int:user_id>/', views.get_notifications),
+    path('notifications/mark-as-read/', views.mark_notifications_as_read),
+		path('notifications/unread-count/<int:user_id>/',views.unread_notification_count)
 ]
 
 

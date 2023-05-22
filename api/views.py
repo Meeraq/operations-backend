@@ -6,7 +6,7 @@ from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from django.core.exceptions import ObjectDoesNotExist
 from operationsBackend import settings
-from .serializers import CoachSerializer,UserSerializer,LearnerSerializer,PmoDepthOneSerializer,SessionRequestCaasSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer,LearnerDepthOneSerializer,HrDepthOneSerializer,SessionRequestCaasDepthOneSerializer,SessionRequestCaasDepthTwoSerializer,AvailibilitySerializer
+from .serializers import CoachSerializer,UserSerializer,LearnerSerializer,PmoDepthOneSerializer,SessionRequestCaasSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer,LearnerDepthOneSerializer,HrDepthOneSerializer,SessionRequestCaasDepthOneSerializer,SessionRequestCaasDepthTwoSerializer,AvailibilitySerializer,NotificationSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -20,7 +20,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework.permissions import IsAuthenticated,AllowAny
-from .models import Profile, Pmo, Coach, OTP,Project,HR,Organisation,SessionRequestCaas,Availibility,Learner,CoachStatus
+from .models import Profile, Pmo, Coach, OTP,Project,HR,Organisation,SessionRequestCaas,Availibility,Learner,CoachStatus,Notification
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate,login,logout
 from django.core.mail import send_mail
@@ -37,6 +37,18 @@ import random
 import environ
 
 env = environ.Env()
+
+def create_notification(user, path, message):
+    notification = Notification.objects.create(
+        user=user,
+        path=path,
+        message=message
+    )
+    return notification
+
+def format_timestamp(timestamp):
+    dt = datetime.fromtimestamp(timestamp / 1000)  # Convert milliseconds to seconds
+    return dt.strftime('%d-%m-%Y %I:%M %p')
 
 # Create pmo user
 @api_view(['POST'])
@@ -1656,8 +1668,17 @@ def receive_coach_consent(request):
                 # coach_status.save()
                 coach_status.status['consent']['status'] = request.data['status']
                 coach_status.save()
-                # else:
-                #     return Response({"message": "Consent already sent"}, status=400)
+                try:
+                    if request.data['status'] == 'select':
+                        pmo_user = User.objects.filter(profile__type="pmo").first()
+                        if pmo_user:
+                            path = f"/projects/caas/progress/{project.id}"
+                            coach_name = coach_status.coach.first_name + " " + coach_status.coach.last_name
+                            message = f"{coach_name.title() } has accepted your consent request for Project - {project.name}"
+                            create_notification(pmo_user,path,message)
+                except Exception as e:
+                    print(f"Error occurred while creating notification: {str(e)}")
+                    continue
         
         except Exception as e:
             print(e)
@@ -1837,6 +1858,24 @@ def book_session_caas(request):
         subject = 'Hello learner your session is booked.'
         message = f'Dear {session_request.learner.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.learner.email])
+    try:
+        pmo_user = User.objects.filter(profile__type="pmo").first()
+        project = session_request.project
+        coach =  session_request.coach
+        if pmo_user:
+            path = f"/projects/caas/progress/{project.id}"
+            coach_name = coach.first_name + " " + coach.last_name
+            if session_request.session_type=='interview':
+                message = f"{coach_name.title()} has booked the interview session for Project - {project.name}.The booked slot is "
+            if session_request.session_type == 'chemistry_session':
+                message = f"{coach_name.title()} has booked the chemistry session for Project - {project.name}.The booked slot is "
+            start_time = format_timestamp(int(session_request.confirmed_availability.start_time))
+            end_time = format_timestamp(int(session_request.confirmed_availability.end_time))
+            slot_message = f"{start_time} - {end_time}"
+            message += slot_message 
+            create_notification(pmo_user,path,message)
+    except Exception as e:
+        print(f"Error occurred while creating notification: {str(e)}") 
 
     return Response({"message":"Session booked successfully!"}, status=201)
     return Response(serializer.errors, status=400)
@@ -1873,10 +1912,29 @@ def create_session_request_caas(request):
         elif session['session_type']=='chemistry_session':
             session['learner'] = request.data['learner_id']
         session_serilizer = SessionRequestCaasSerializer(data = session)
-        print(session_serilizer.is_valid())
-        print(session_serilizer.errors)
         if session_serilizer.is_valid():
             session_serilizer.save()
+            try:
+                pmo_user = User.objects.filter(profile__type="pmo").first()
+                project = Project.objects.get(id=request.data['project_id'])
+                coach =  Coach.objects.get(id=request.data['coach_id'])
+                if pmo_user:
+                    path = f"/projects/caas/progress/{project.id}"
+                    coach_name = coach.first_name + " " + coach.last_name
+                    if session['session_type']=='interview':
+                        message = f"HR has requested interview session to {coach_name.title()} for Project - {project.name}. The requested slots are "
+                    elif session['session_type']=='chemistry_session':
+                        message = f"Coachee has requested chemistry session to {coach_name.title()} for Project - {project.name}. The requested slots are "
+                    for i, slot in enumerate(request.data['availibility']):
+                        start_time = format_timestamp(slot['start_time'])
+                        end_time = format_timestamp(slot['end_time'])
+                        slot_message = f"Slot {i+1}: {start_time} - {end_time}"
+                        if i==0:
+                             slot_message += " and"
+                        message += " " + slot_message 
+                    create_notification(pmo_user,path,message)
+            except Exception as e:
+                print(f"Error occurred while creating notification: {str(e)}")    
             return Response({"message": "Session sequested successfully."}, status=201)
         else:
             return Response({"message": str(session_serilizer.errors),}, status=401)
@@ -1914,6 +1972,16 @@ def accept_coach_caas_hr(request):
     project.save()
     message = ""
     if(request.data.get('status') == "select"):
+        try:
+            pmo_user = User.objects.filter(profile__type="pmo").first()
+            coach = Coach.objects.get(id = request.data['coach_id'])
+            if pmo_user:
+                path = f"/projects/caas/progress/{project.id}"
+                coach_name = coach.first_name + " " + coach.last_name
+                message = f"HR has selected {coach_name.title()} for the Project - {project.name}"
+                create_notification(pmo_user,path,message)
+        except Exception as e:
+            print(f"Error occurred while creating notification: {str(e)}")
         message = "Coach selected."
     elif(request.data.get('status') == "reject"):
         message = "Coach rejected."
@@ -1922,7 +1990,6 @@ def accept_coach_caas_hr(request):
 
 @api_view(['POST'])
 def add_learner_to_project(request):
-    print(request.data)
     try:
         project = Project.objects.get(id=request.data['project_id'])
     except Project.DoesNotExist:
@@ -1934,6 +2001,14 @@ def add_learner_to_project(request):
     except Exception as e:
         # Handle any exceptions from create_learners
         return Response({'error': str(e)}, status=500)
+    try:
+        pmo_user = User.objects.filter(profile__type="pmo").first()
+        if pmo_user:
+            path = f"/projects/caas/progress/{project.id}"
+            message = f"HR has added Coachees to the Project - {project.name}"
+            create_notification(pmo_user,path,message)
+    except Exception as e:
+        print(f"Error occurred while creating notification: {str(e)}")
     return Response({'message':'Learners added succesfully','details':''},status=201)
 
 
@@ -1955,6 +2030,16 @@ def accept_coach_caas_learner(request):
         return Response({"error": "Coach Already Selected"},status=400)
     message =""
     if(request.data.get('status')=='select'):
+        try:
+            pmo_user = User.objects.filter(profile__type="pmo").first()
+            coach = Coach.objects.get(id = request.data['coach_id'])
+            if pmo_user:
+                path = f"/projects/caas/progress/{project.id}"
+                coach_name = coach.first_name + " " + coach.last_name
+                message = f"Learner has selected {coach_name.title()} for the Project - {project.name}"
+                create_notification(pmo_user,path,message)
+        except Exception as e:
+            print(f"Error occurred while creating notification: {str(e)}")
         message = "Coach selected succesfully."
     else:
         message = "Coach rejected."
@@ -2080,6 +2165,14 @@ def request_more_profiles_by_hr(request):
             project.steps['coach_consent']['request_details'] = [{'message': request.data['message']}]
     project.steps['coach_consent']['status'] = 'incomplete'
     project.save()
+    try:
+        pmo_user = User.objects.filter(profile__type="pmo").first()
+        if pmo_user:
+            path = f"/projects/caas/progress/{project.id}"
+            message = f"HR has requested for more coach profiles for Project - {project.name}"
+            create_notification(pmo_user,path,message)
+    except Exception as e:
+        print(f"Error occurred while creating notification: {str(e)}")
     return Response({'message': 'Request sent successfully'})
 
 
@@ -2255,3 +2348,21 @@ def add_mulitple_coaches(request):
         # Return error response if any other exception occurs
         print(e)
         return Response({'error': 'An error occurred while creating the coach user.'}, status=500)
+
+@api_view(['GET'])
+def get_notifications(request, user_id):
+    notifications = Notification.objects.filter(user__id=user_id).order_by('-created_at')
+    serializer = NotificationSerializer(notifications, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['PUT'])
+def mark_notifications_as_read(request):
+    notifications = Notification.objects.filter(read_status=False,user__id = request.data['user_id'])
+    notifications.update(read_status=True)
+    return Response("Notifications marked as read.")
+
+@api_view(['GET'])
+def unread_notification_count(request, user_id):
+    count = Notification.objects.filter(user__id=user_id, read_status=False).count()
+    return Response({'count': count})
