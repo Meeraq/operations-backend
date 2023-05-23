@@ -411,9 +411,9 @@ def create_project_cass(request):
         # print(single_hr)
         project.hr.add(single_hr)
         # Send email notification to the HR
-        subject = f'Hey HR! You have been assigned to a project {project_name}'
-        message = f'Dear {single_hr.first_name},\n\n You can use your email to log-in via OTP.'
-        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [single_hr.email])
+        # subject = f'Hey HR! You have been assigned to a project {project_name}'
+        # message = f'Dear {single_hr.first_name},\n\n You can use your email to log-in via OTP.'
+        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [single_hr.email])
 
 
     # hrs= create_hr(request.data['hr'])
@@ -522,9 +522,9 @@ def create_learners(learners_data):
                     learner_profile = Profile.objects.create(user=user, type='learner')
 
                 # Create the learner object
-                    subject = 'Welcome to Meeraq'
-                    message = f'Dear {learner_data.get("name")},\n\nYour Account has been created with Meeraq your username is {learner_data["email"]} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
-                    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [learner_data['email']])
+                    # subject = 'Welcome to Meeraq'
+                    # message = f'Dear {learner_data.get("name")},\n\nYour Account has been created with Meeraq your username is {learner_data["email"]} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
+                    # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [learner_data['email']])
                     learner = Learner.objects.create(user=learner_profile, name=learner_data.get('name'), email=learner_data['email'], phone=learner_data.get('phone'))
                     learners.append(learner)
 
@@ -1548,9 +1548,9 @@ def add_hr(request):
             phone = request.data.get('phone'),
             organisation= organisation
             )
-        subject = 'Welcome to Meeraq'
-        message = f'Dear {request.data.get("first_name")},\n\nYour Account has been created with Meeraq your username is {request.data.get("email")} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
-        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [request.data.get('email')])
+        # subject = 'Welcome to Meeraq'
+        # message = f'Dear {request.data.get("first_name")},\n\nYour Account has been created with Meeraq your username is {request.data.get("email")} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
+        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [request.data.get('email')])
         hrs=HR.objects.all()
         serializer = HrSerializer(hrs, many=True)
         return Response({'message':'HR added successfully','details':serializer.data}, status=200)
@@ -1610,9 +1610,9 @@ def send_consent(request):
         }), consent_expiry_date = request.data['consent_expiry_date'])
         status.save()
         coach_status.append(status)
-        subject = 'Consent for {project.name} Project'
-        message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
-        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach.email])
+        # subject = 'Consent for {project.name} Project'
+        # message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
+        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach.email])
     # project.coaches = coach_list
     project.coaches_status.add(*coach_status)
     project.steps['coach_list']['status'] = 'complete'
@@ -1844,20 +1844,20 @@ def book_session_caas(request):
     #     return Response(serializer.errors,status=400)
 
     # Send email notification to the coach
-    subject = 'Hello coach your session is booked.'
-    message = f'Dear {session_request.coach.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.coach.email])
+    # subject = 'Hello coach your session is booked.'
+    # message = f'Dear {session_request.coach.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
+    # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.coach.email])
     
 
     # # Send email notification to the learner
     if session_request.session_type=='interview':
         subject = 'Hello hr your session is booked.'
         message = f'Dear {session_request.hr.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.hr.email])
+        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.hr.email])
     if session_request.session_type=='chemistry_session':
         subject = 'Hello learner your session is booked.'
         message = f'Dear {session_request.learner.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.learner.email])
+        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.learner.email])
     try:
         pmo_user = User.objects.filter(profile__type="pmo").first()
         project = session_request.project
