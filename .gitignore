@@ -13,7 +13,7 @@ api/__pycache__/
 venv/
 
 # Ignore the Django migrations directory
-**/migrations/
+# **/migrations/
 
 # Ignore the SQLite database file
 db.sqlite3
