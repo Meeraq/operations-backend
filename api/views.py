@@ -2366,3 +2366,13 @@ def mark_notifications_as_read(request):
 def unread_notification_count(request, user_id):
     count = Notification.objects.filter(user__id=user_id, read_status=False).count()
     return Response({'count': count})
+
+@api_view(['POST'])
+def mark_project_as_sold(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.updated_to_sold = True
+    project.save()
+    return Response({"message": "Project marked as sold"}, status=200)
