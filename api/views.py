@@ -2414,5 +2414,6 @@ def mark_project_as_sold(request):
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     project.updated_to_sold = True
+    project.steps['project_structure']['status'] = 'complete'
     project.save()
     return Response({"message": "Project marked as sold"}, status=200)
