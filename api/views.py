@@ -387,6 +387,8 @@ def create_project_cass(request):
         end_date=datetime.now()+timedelta(days=365),
         tentative_start_date=request.data['tentative_start_date'],
         mode=request.data['mode'],
+        sold= request.data['sold'],
+        # updated_to_sold= request.data['updated_to_sold'],
         location=request.data.get('location',None),
         steps=dict(
             project_structure={'status' : 'pending'},
