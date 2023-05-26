@@ -1673,6 +1673,8 @@ def receive_coach_consent(request):
                 #     coach_status.status['consent'] = "approved"
                 # coach_status.save()
                 coach_status.status['consent']['status'] = request.data['status']
+                if project.sold or project.update_to_sold:
+                    coach_status.status['project_structure']['status'] = request.data['status'] 
                 coach_status.save()
                 try:
                     if request.data['status'] == 'select':
