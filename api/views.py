@@ -1600,6 +1600,10 @@ def send_consent(request):
           	'status': "sent", 
           	'response_date': None,
        		 },
+             project_structure={
+          	'status': "sent", 
+          	'response_date': None,
+       		 },
 						hr= {
           	'status': None, 
           	'session_id': None,
