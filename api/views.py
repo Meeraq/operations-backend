@@ -2073,6 +2073,13 @@ def add_learner_to_project(request):
         learners = create_learners(request.data['learners'])
         for learner in learners:
             project.learner.add(learner)    
+            try:
+                path = f"/projects/caas/progress/{project.id}"
+                message = f"You have been added to Project - {project.name}"
+                create_notification(learner.user.user,path,message)
+            except Exception as e:
+                print(f"Error occurred while creating notification: {str(e)}")
+                continue
     except Exception as e:
         # Handle any exceptions from create_learners
         return Response({'error': str(e)}, status=500)
