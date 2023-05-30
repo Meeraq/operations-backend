@@ -387,6 +387,8 @@ def create_project_cass(request):
         end_date=datetime.now()+timedelta(days=365),
         tentative_start_date=request.data['tentative_start_date'],
         mode=request.data['mode'],
+        sold= request.data['sold'],
+        # updated_to_sold= request.data['updated_to_sold'],
         location=request.data.get('location',None),
         steps=dict(
             project_structure={'status' : 'pending'},
@@ -1598,6 +1600,10 @@ def send_consent(request):
           	'status': "sent", 
           	'response_date': None,
        		 },
+             project_structure={
+          	'status': "sent", 
+          	'response_date': None,
+       		 },
 						hr= {
           	'status': None, 
           	'session_id': None,
@@ -1667,6 +1673,8 @@ def receive_coach_consent(request):
                 #     coach_status.status['consent'] = "approved"
                 # coach_status.save()
                 coach_status.status['consent']['status'] = request.data['status']
+                if project.sold or project.updated_to_sold:
+                    coach_status.status['project_structure']['status'] = request.data['status'] 
                 coach_status.save()
                 try:
                     if request.data['status'] == 'select':
@@ -1684,6 +1692,38 @@ def receive_coach_consent(request):
             print(e)
             return Response({"message": "Coach not Found"}, status=400)
     return Response({"message": request.data.get('status','')},status=200)
+
+@api_view(['POST'])
+def update_project_structure_consent_by_coach(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    for coach_status in project.coaches_status.all():
+        try:
+            if coach_status.coach.id==request.data.get('coach_id',''):
+                # coach_status.status[request.data.get('status','').split(" ")[0].lower()]=request.data.get('status','').split(" ")[1].lower()
+                # if request.data.get('status','').split(" ")[0].lower()=='contract':
+                #     coach_status.status['consent'] = "approved"
+                # coach_status.save()
+                coach_status.status['project_structure']['status'] = request.data['status']
+                coach_status.save()
+                try:
+                    if request.data['status'] == 'select':
+                        pmo_user = User.objects.filter(profile__type="pmo").first()
+                        if pmo_user:
+                            path = f"/projects/caas/progress/{project.id}"
+                            coach_name = coach_status.coach.first_name + " " + coach_status.coach.last_name
+                            message = f"{coach_name.title() } has agreed to the project structure for Project - {project.name}"
+                            create_notification(pmo_user,path,message)
+                except Exception as e:
+                    print(f"Error occurred while creating notification: {str(e)}")
+                    continue
+        
+        except Exception as e:
+            print(e)
+            return Response({"message": "Coach not Found"}, status=400)
+    return Response({"message": "Status updated."},status=200)
 
 @api_view(['POST'])
 def complete_coach_consent(request):
@@ -2366,3 +2406,14 @@ def mark_notifications_as_read(request):
 def unread_notification_count(request, user_id):
     count = Notification.objects.filter(user__id=user_id, read_status=False).count()
     return Response({'count': count})
+
+@api_view(['POST'])
+def mark_project_as_sold(request):
+    try:
+        project = Project.objects.get(id=request.data.get('project_id',''))
+    except Project.DoesNotExist:
+        return Response({"message": "Project does not exist"}, status=400)
+    project.updated_to_sold = True
+    project.steps['project_structure']['status'] = 'complete'
+    project.save()
+    return Response({"message": "Project marked as sold"}, status=200)

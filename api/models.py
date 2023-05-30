@@ -158,6 +158,8 @@ class Project(models.Model):
     interview_allowed = models.BooleanField(blank=True,default=False)
     chemistry_allowed = models.BooleanField(blank=True,default=False)
     tentative_start_date = models.DateField(blank=True,default=None)
+    sold = models.BooleanField(default=False)
+    updated_to_sold = models.BooleanField(default=False)
     mode = models.CharField(max_length=100)
     location = models.CharField(max_length=100,blank=True,default=None)
 
