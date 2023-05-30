@@ -1923,13 +1923,13 @@ def book_session_caas(request):
             if session_request.session_type=='interview':
                 hr_user= session_request.hr.user.user
                 message = f"{coach_name.title()} has booked the interview session for Project - {project.name}.The booked slot is "
-                message_for_hr = f"{coach_name.title()} has booked the slot ${slot_message} from your interview request. You can join the meeting on scheduled time."
+                message_for_hr = f"{coach_name.title()} has booked the slot {slot_message} from your interview request. You can join the meeting on scheduled time."
                 create_notification(hr_user, path,message_for_hr)
             if session_request.session_type == 'chemistry_session':
                 learner_user= session_request.learner.user.user
                 message = f"{coach_name.title()} has booked the chemistry session for Project - {project.name}.The booked slot is "
-                message_for_learner= f"{coach_name.title()} has booked the slot ${slot_message} from your chemistry session request. You can join the meeting on scheduled time."
-                message_for_hr = f"{coach_name.title()} has booked the slot ${slot_message} as per the request from {session_request.learner.name.title()} for the project - {session_request.project.name}"
+                message_for_learner= f"{coach_name.title()} has booked the slot {slot_message} from your chemistry session request. You can join the meeting on scheduled time."
+                message_for_hr = f"{coach_name.title()} has booked the slot {slot_message} as per the request from {session_request.learner.name.title()} for the project - {session_request.project.name}"
                 create_notification(learner_user, path, message_for_learner)
             message += slot_message 
             create_notification(pmo_user,path,message)
@@ -1986,7 +1986,7 @@ def create_session_request_caas(request):
                         end_time = format_timestamp(slot['end_time'])
                         slot_message += f"Slot {i+1}: {start_time} - {end_time}"
                         if i==0:
-                             slot_message += " and"
+                             slot_message += " and "
                     if session['session_type']=='interview':
                         message = f"HR has requested interview session to {coach_name.title()} for Project - {project.name}. The requested slots are "
                         message_for_coach = f"HR has requested for {slot_message} for Interview for Project - {project.name}. Please book one of the requested slots now"
