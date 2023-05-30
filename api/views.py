@@ -422,7 +422,12 @@ def create_project_cass(request):
     # for hr in hrs:
     #     project.hr.add(hr)
 
-
+    try:
+        path = f"/projects/caas/progress/{project.id}"
+        message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
+        create_notification(project.hr.first().user.user,path,message)
+    except Exception as e:
+        print(f"Error occurred while creating notification: {str(e)}")
     return Response({'message': "Project created succesfully"}, status=200)
 
 
@@ -1623,6 +1628,13 @@ def send_consent(request):
     project.coaches_status.add(*coach_status)
     project.steps['coach_list']['status'] = 'complete'
     project.save()
+    try:
+        path = f"/projects"
+        message = f"Admin has requested your consent to share profile for new project."
+        for coach in coaches:
+            create_notification(coach.user.user,path,message)
+    except Exception as e:
+        print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message":"Consent sent successfully",'details':''},status=200)
 
 # @api_view(['POST'])
@@ -1905,13 +1917,20 @@ def book_session_caas(request):
         if pmo_user:
             path = f"/projects/caas/progress/{project.id}"
             coach_name = coach.first_name + " " + coach.last_name
-            if session_request.session_type=='interview':
-                message = f"{coach_name.title()} has booked the interview session for Project - {project.name}.The booked slot is "
-            if session_request.session_type == 'chemistry_session':
-                message = f"{coach_name.title()} has booked the chemistry session for Project - {project.name}.The booked slot is "
             start_time = format_timestamp(int(session_request.confirmed_availability.start_time))
             end_time = format_timestamp(int(session_request.confirmed_availability.end_time))
             slot_message = f"{start_time} - {end_time}"
+            if session_request.session_type=='interview':
+                hr_user= session_request.hr.user.user
+                message = f"{coach_name.title()} has booked the interview session for Project - {project.name}.The booked slot is "
+                message_for_hr = f"{coach_name.title()} has booked the slot ${slot_message} from your interview request. You can join the meeting on scheduled time."
+                create_notification(hr_user, path,message_for_hr)
+            if session_request.session_type == 'chemistry_session':
+                learner_user= session_request.learner.user.user
+                message = f"{coach_name.title()} has booked the chemistry session for Project - {project.name}.The booked slot is "
+                message_for_learner= f"{coach_name.title()} has booked the slot ${slot_message} from your chemistry session request. You can join the meeting on scheduled time."
+                message_for_hr = f"{coach_name.title()} has booked the slot ${slot_message} as per the request from {session_request.learner.name.title()} for the project - {session_request.project.name}"
+                create_notification(learner_user, path, message_for_learner)
             message += slot_message 
             create_notification(pmo_user,path,message)
     except Exception as e:
@@ -1953,7 +1972,7 @@ def create_session_request_caas(request):
             session['learner'] = request.data['learner_id']
         session_serilizer = SessionRequestCaasSerializer(data = session)
         if session_serilizer.is_valid():
-            session_serilizer.save()
+            session_created = session_serilizer.save()
             try:
                 pmo_user = User.objects.filter(profile__type="pmo").first()
                 project = Project.objects.get(id=request.data['project_id'])
@@ -1961,18 +1980,25 @@ def create_session_request_caas(request):
                 if pmo_user:
                     path = f"/projects/caas/progress/{project.id}"
                     coach_name = coach.first_name + " " + coach.last_name
-                    if session['session_type']=='interview':
-                        message = f"HR has requested interview session to {coach_name.title()} for Project - {project.name}. The requested slots are "
-                    elif session['session_type']=='chemistry_session':
-                        message = f"Coachee has requested chemistry session to {coach_name.title()} for Project - {project.name}. The requested slots are "
+                    slot_message = ""
                     for i, slot in enumerate(request.data['availibility']):
                         start_time = format_timestamp(slot['start_time'])
                         end_time = format_timestamp(slot['end_time'])
-                        slot_message = f"Slot {i+1}: {start_time} - {end_time}"
+                        slot_message += f"Slot {i+1}: {start_time} - {end_time}"
                         if i==0:
                              slot_message += " and"
-                        message += " " + slot_message 
+                    if session['session_type']=='interview':
+                        message = f"HR has requested interview session to {coach_name.title()} for Project - {project.name}. The requested slots are "
+                        message_for_coach = f"HR has requested for {slot_message} for Interview for Project - {project.name}. Please book one of the requested slots now"
+                    elif session['session_type']=='chemistry_session':
+                        hr_user_in_project = session_created.project.hr.first().user.user
+                        message_for_hr =f"{session_created.learner.name.title()} has requested for Chemistry session to the Coach - {coach_name.title()} for {slot_message} for the Project - {project.name}"
+                        message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {project.name}. Please book one of the requested slots now"
+                        create_notification(hr_user_in_project,path,message_for_hr)
+                        message = f"Coachee has requested chemistry session to {coach_name.title()} for Project - {project.name}. The requested slots are "
+                    message += " " + slot_message 
                     create_notification(pmo_user,path,message)
+                    create_notification(coach.user.user,path,message_for_coach)
             except Exception as e:
                 print(f"Error occurred while creating notification: {str(e)}")    
             return Response({"message": "Session sequested successfully."}, status=201)
@@ -2019,11 +2045,20 @@ def accept_coach_caas_hr(request):
                 path = f"/projects/caas/progress/{project.id}"
                 coach_name = coach.first_name + " " + coach.last_name
                 message = f"HR has selected {coach_name.title()} for the Project - {project.name}"
+                message_for_coach = f"Congratulations! You have been selected by HR for the Project - {project.name}"
                 create_notification(pmo_user,path,message)
+                create_notification(coach.user.user,path,message)
         except Exception as e:
             print(f"Error occurred while creating notification: {str(e)}")
         message = "Coach selected."
     elif(request.data.get('status') == "reject"):
+        try:
+            coach = Coach.objects.get(id = request.data['coach_id'])
+            path = f"/projects/caas/progress/{project.id}"
+            message_for_coach = f"Unfortunately, your profile is not selected for the Project - {project.name}"
+            create_notification(coach.user.user,path,message_for_coach)
+        except Exception as e:
+            print(f"Error occurred while creating notification: {str(e)}")
         message = "Coach rejected."
     return Response({"message": message},status=200)
 
@@ -2076,8 +2111,13 @@ def accept_coach_caas_learner(request):
             if pmo_user:
                 path = f"/projects/caas/progress/{project.id}"
                 coach_name = coach.first_name + " " + coach.last_name
-                message = f"Learner has selected {coach_name.title()} for the Project - {project.name}"
+                message = f"Coachee has selected {coach_name.title()} for the Project - {project.name}"
                 create_notification(pmo_user,path,message)
+                learner = Learner.objects.get(id = request.data.get('learner_id'))
+                message_for_hr = f"{learner.name.title()} has selected {coach_name.title()} as their coach for the project - {project.name} "
+                create_notification(learner.user.user,path,message_for_hr)
+                message_for_coach  = f"Congratulations! Coachee has selected you as their coach for the Project - {project.name}"
+                create_notification(coach.user.user,path,message_for_coach)
         except Exception as e:
             print(f"Error occurred while creating notification: {str(e)}")
         message = "Coach selected succesfully."
@@ -2163,6 +2203,12 @@ def send_project_strure_to_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.steps['project_structure']['status']='complete'
     project.save()
+    try:
+        path = f"/projects/caas/progress/{project.id}"
+        message = f"Project structure has been added to the project - {project.name}."
+        create_notification(project.hr.first().user.user,path,message)
+    except Exception as e:
+        print(f"Error occurred while creating notification: {str(e)}")
     return Response({'message': "Sent to HR."},status=200)
 
 
@@ -2259,6 +2305,12 @@ def send_list_to_hr(request):
         coach_status.status['hr']['status'] = 'sent'
         coach_status.save()
     project.save()
+    try:
+        path = f"/projects/caas/progress/{project.id}"
+        message = f"Admin has shared {len(request.data['coach_list'])} coach profile with you for the Project - {project.name}."
+        create_notification(project.hr.first().user.user,path,message)
+    except Exception as e:
+        print(f"Error occurred while creating notification: {str(e)}")    
     return Response({'message': "Sent Successfully",'details':{}},status=200)
 
 
@@ -2416,4 +2468,13 @@ def mark_project_as_sold(request):
     project.updated_to_sold = True
     project.steps['project_structure']['status'] = 'complete'
     project.save()
+    try:
+        path = f"/projects/caas/progress/{project.id}"
+        message = f"Project structure has been added to the project - {project.name}."
+        message_for_coach = f"Admin has added project structure. Please agree to the project structure to go forward with the Project - {project.name}"
+        create_notification(project.hr.first().user.user,path,message)
+        for coach_status in project.coaches_status.all():
+            create_notification(coach_status.coach.user.user,path,message_for_coach)
+    except Exception as e:
+        print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Project marked as sold"}, status=200)
