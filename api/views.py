@@ -1,4 +1,5 @@
 from datetime import date
+import requests
 from os import name
 from django.shortcuts import render, get_object_or_404
 from django.db import transaction,IntegrityError
@@ -2426,10 +2427,33 @@ def add_mulitple_coaches(request):
 
                 # Create the Coach Profile linked to the User
                 coach_profile = Profile.objects.create(user=user, type='coach')
+                
+                # api call 
+                room_id=""
+                management_token= generateManagementToken()
+                try:
+                    response_from_100ms = requests.post(
+                        'https://api.100ms.live/v2/rooms',
+                        headers={
+                            'Authorization': f'Bearer {management_token}',
+                            'Content-Type': 'application/json'
+                        },
+                        json={
+                        'name': email.replace('.', '-').replace('@', ''),
+                        'description': 'This is a sample description for the room',
+                        'region': 'in'
+                        }
+                    )
+                    if response_from_100ms.status_code == 200:
+                        room_id = response_from_100ms.json().get('id')
+                except Exception as e:
+                    print(f'Error while generating meeting link, {str(e)}')
+
 
                 # Create the Coach User using the Profile
                 coach_user = Coach.objects.create(user=coach_profile, coach_id=coach_id, first_name=first_name,
                                                   last_name=last_name, age=age, gender=gender, level=level,
+                                                  room_id=room_id,
                                                   min_fees=min_fees,fee_remark=fee_remark, ctt_nctt=ctt_nctt, active_inactive=active_inactive,
                                                   years_of_corporate_experience=corporate_yoe, years_of_coaching_experience=coaching_yoe,
                                                   domain=domain, email=email, phone=phone,job_roles=job_roles,companies_worked_in=companies_worked_in,language=language,area_of_expertise=area_of_expertise,location=location,linkedin_profile_link=linkedin_profile_link,coaching_hours=coaching_hours)
