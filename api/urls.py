@@ -112,7 +112,8 @@ urlpatterns =[
     path('notifications/all/<int:user_id>/', views.get_notifications),
     path('notifications/mark-as-read/', views.mark_notifications_as_read),
 		path('notifications/unread-count/<int:user_id>/',views.unread_notification_count),
-		path('mark_project_as_sold/',views.mark_project_as_sold)
+		path('mark_project_as_sold/',views.mark_project_as_sold),
+    path('session-requests-of-user-on-date/<str:user_type>/<int:user_id>/<str:date>/', views.get_session_requests_of_user_on_date)
 ]
 
 

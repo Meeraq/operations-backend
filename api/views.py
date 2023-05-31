@@ -2485,3 +2485,20 @@ def mark_project_as_sold(request):
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Project marked as sold"}, status=200)
+
+@api_view(['GET'])
+def get_session_requests_of_user_on_date(request,user_type,user_id,date):
+    date_obj = datetime.strptime(date, '%Y-%m-%d')
+    start_time = date_obj.replace(hour=0, minute=0, second=0)
+    # Set the end time of the given date at 23:59:59
+    end_time = date_obj.replace(hour=23, minute=59, second=59)
+    # Convert the datetime objects to timestamps
+    start_timestamp = int(start_time.timestamp())
+    end_timestamp = int(end_time.timestamp())
+
+    if user_type == 'hr':
+        session_requests = SessionRequestCaas.objects.filter(hr__id = user_id,availibility__start_time__range = (start_timestamp,end_timestamp))
+    elif user_type == "learner":
+        session_requests = SessionRequestCaas.objects.filter(learner__id = user_id,availibility__start_time__range = (start_timestamp,end_timestamp))
+    serializer=SessionRequestCaasDepthOneSerializer(session_requests,many=True)
+    return Response(serializer.data,status=200)
