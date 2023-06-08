@@ -35,6 +35,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -42,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 		'rest_framework',
+    'socket_app',
 		'api',
 		'rest_framework.authtoken',
     'django_rest_passwordreset',
@@ -59,7 +61,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 EMAIL_HOST= env('EMAIL_HOST')
 EMAIL_PORT=env('EMAIL_PORT')
 DEFAULT_FROM_EMAIL=env('DEFAULT_FROM_EMAIL')
@@ -85,7 +87,8 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'operationsBackend.wsgi.application'
+# WSGI_APPLICATION = 'operationsBackend.wsgi.application'
+ASGI_APPLICATION = 'operationsBackend.asgi.application'
 
 
 # Database
