@@ -113,7 +113,9 @@ urlpatterns =[
     path('notifications/mark-as-read/', views.mark_notifications_as_read),
 		path('notifications/unread-count/<int:user_id>/',views.unread_notification_count),
 		path('mark_project_as_sold/',views.mark_project_as_sold),
-    path('session-requests-of-user-on-date/<str:user_type>/<int:user_id>/<str:date>/', views.get_session_requests_of_user_on_date)
+    path('session-requests-of-user-on-date/<str:user_type>/<int:user_id>/<str:date>/', views.get_session_requests_of_user_on_date),
+    path('session/reschedule-request/<str:session_id>/',views.request_reschedule),
+    path('session/reschedule/',views.reschedule_session)
 ]
 
 

@@ -1954,9 +1954,9 @@ def create_session_request_caas(request):
     
     try:
         if request.data['session_type'] == 'chemistry_session':
-            session= SessionRequestCaas.objects.get(learner__id=request.data['learner_id'],project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'])
+            session= SessionRequestCaas.objects.get(learner__id=request.data['learner_id'],project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'], is_archive=False)
         else:
-            session= SessionRequestCaas.objects.get(project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'])   
+            session= SessionRequestCaas.objects.get(project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'],is_archive=False)   
         session.availibility.set(time_arr)
         session.save()
         return Response({"message": "Session updated successfully."}, status=201)
@@ -2526,3 +2526,84 @@ def get_session_requests_of_user_on_date(request,user_type,user_id,date):
         session_requests = SessionRequestCaas.objects.filter(learner__id = user_id,availibility__start_time__range = (start_timestamp,end_timestamp))
     serializer=SessionRequestCaasDepthOneSerializer(session_requests,many=True)
     return Response(serializer.data,status=200)
+
+
+@api_view(['POST'])
+def request_reschedule(request,session_id):
+    session = SessionRequestCaas.objects.get(id=session_id)
+    session.reschedule_request.append({
+        'requested_by': 'coach',
+        'requested_on_timestamp': request.data['requested_on'],
+        'message': request.data['message']
+		})
+    session.save()
+    return Response({'message': "Requested for reschedule"})
+
+@api_view(['POST'])
+def reschedule_session(request):
+    existing_session = SessionRequestCaas.objects.get(id = request.data['existing_session_id'])
+    existing_session.is_archive = True
+    existing_session.save()
+    time_arr = []
+    for time in request.data['availibility']:
+        availibility_serilizer = AvailibilitySerializer(data = time)
+        if availibility_serilizer.is_valid():
+            avil_id = availibility_serilizer.save()
+            time_arr.append(avil_id.id) 
+        else:
+            return Response({"message": str(availibility_serilizer.errors),}, status=401)
+    
+    try:
+        if request.data['session_type'] == 'chemistry_session':
+            session= SessionRequestCaas.objects.get(learner__id=request.data['learner_id'],project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'], is_archive = False)
+        else:
+            session= SessionRequestCaas.objects.get(project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'], is_archive = False)   
+        session.availibility.set(time_arr)
+        session.save()
+        return Response({"message": "Session updated successfully."}, status=201)
+    except SessionRequestCaas.DoesNotExist:
+        session = {
+            "project": request.data['project_id'],
+            "availibility":time_arr,
+            "coach":request.data['coach_id'],
+            "session_type": request.data['session_type']
+                }
+        if session['session_type']=='interview':
+            session['hr'] = request.data['hr_id']
+        elif session['session_type']=='chemistry_session':
+            session['learner'] = request.data['learner_id']
+        session_serilizer = SessionRequestCaasSerializer(data = session)
+        if session_serilizer.is_valid():
+            session_created = session_serilizer.save()
+            try:
+                pmo_user = User.objects.filter(profile__type="pmo").first()
+                project = Project.objects.get(id=request.data['project_id'])
+                coach =  Coach.objects.get(id=request.data['coach_id'])
+                if pmo_user:
+                    path = f"/projects/caas/progress/{project.id}"
+                    coach_name = coach.first_name + " " + coach.last_name
+                    slot_message = ""
+                    for i, slot in enumerate(request.data['availibility']):
+                        start_time = format_timestamp(slot['start_time'])
+                        end_time = format_timestamp(slot['end_time'])
+                        slot_message += f"Slot {i+1}: {start_time} - {end_time}"
+                        if i==0:
+                             slot_message += " and "
+                    if session['session_type']=='interview':
+                        message = f"HR has requested interview session to {coach_name.title()} for Project - {project.name}. The requested slots are "
+                        message_for_coach = f"HR has requested for {slot_message} for Interview for Project - {project.name}. Please book one of the requested slots now"
+                    elif session['session_type']=='chemistry_session':
+                        hr_user_in_project = session_created.project.hr.first().user.user
+                        message_for_hr =f"{session_created.learner.name.title()} has requested for Chemistry session to the Coach - {coach_name.title()} for {slot_message} for the Project - {project.name}"
+                        message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {project.name}. Please book one of the requested slots now"
+                        create_notification(hr_user_in_project,path,message_for_hr)
+                        message = f"Coachee has requested chemistry session to {coach_name.title()} for Project - {project.name}. The requested slots are "
+                    message += " " + slot_message 
+                    create_notification(pmo_user,path,message)
+                    create_notification(coach.user.user,path,message_for_coach)
+            except Exception as e:
+                print(f"Error occurred while creating notification: {str(e)}")    
+            return Response({"message": "Session sequested successfully."}, status=201)
+        else:
+            return Response({"message": str(session_serilizer.errors),}, status=401)
+

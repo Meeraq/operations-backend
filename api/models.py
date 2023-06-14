@@ -206,6 +206,7 @@ class SessionRequestCaas(models.Model):
     is_booked = models.BooleanField(blank=True,default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     session_type = models.CharField(max_length=50,default='')
+    is_archive = models.BooleanField(default=False)
     reschedule_request = models.JSONField(default=list,blank=True)
 
 # class SessionCaas(models.Model):
