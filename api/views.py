@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework.permissions import IsAuthenticated,AllowAny
-from .models import Profile, Pmo, Coach, OTP,Project,HR,Organisation,SessionRequestCaas,Availibility,Learner,CoachStatus,Notification
+from .models import Profile, Pmo, Coach, OTP,Project,HR,Organisation,SessionRequestCaas,Availibility,Learner,CoachStatus,Notification,Engagement
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate,login,logout
 from django.core.mail import send_mail
@@ -2094,6 +2094,39 @@ def add_learner_to_project(request):
         print(f"Error occurred while creating notification: {str(e)}")
     return Response({'message':'Learners added succesfully','details':''},status=201)
 
+def transform_project_structure(sessions):
+    # convert project level project structure to engagement level project structure 
+		# argument
+				# sessions - array of objects where object has price, no. of sessions, session type, session durations 
+		# returns: 
+				# sessions - array of objects where object has - session type, session name (session type + n (numbered)) , session duration, status (pending) 	 
+    session_counts = {}
+    transformed_sessions = []
+    
+    for session in sessions:
+        session_type = session["session_type"]
+        session_duration = session['session_duration']
+        if session_type not in session_counts:
+            session_counts[session_type] = 1
+        
+        for i in range(session["no_of_sessions"]):
+            session_name = f"{session_type} {session_counts[session_type]}"
+            transformed_session = {
+                "session_name": session_name,
+                "session_type": session_type,
+                "session_duration": session_duration,
+                "status": "pending"
+            }
+            transformed_sessions.append(transformed_session)
+            session_counts[session_type] += 1
+    
+    return transformed_sessions
+
+def create_engagement(coach, learner, project):
+    engagemenet_project_structure = transform_project_structure(project.project_structure)
+    engagement = Engagement(coach=coach, learner=learner, project=project,project_structure=engagemenet_project_structure)
+    engagement.save()
+    return engagement
 
 
 @api_view(['POST'])
@@ -2107,6 +2140,8 @@ def accept_coach_caas_learner(request):
         for coach in project.coaches_status.filter(coach__id=request.data.get('coach_id')):
             coach.status['learner']['status']=request.data.get('status')
             if request.data.get('status')=='select':
+                learner = Learner.objects.get(id=request.data.get('learner_id'))
+                create_engagement(coach.coach, learner,project)
                 coach.learner_id.append(request.data.get('learner_id'))
             coach.save()
     else:

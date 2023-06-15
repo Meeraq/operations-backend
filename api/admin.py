@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Pmo,Coach,Profile, Project, CoachStatus,Availibility,SessionRequestCaas,Notification,Organisation,Learner,HR
+from .models import Pmo,Coach,Profile, Project, CoachStatus,Availibility,SessionRequestCaas,Notification,Organisation,Learner,HR,Engagement
 # Register your models here.
 
 admin.site.register(Pmo)
@@ -12,7 +12,7 @@ admin.site.register(Availibility)
 # admin.site.register(Session)
 admin.site.register(HR)
 admin.site.register(Profile)
-# admin.site.register(OTP_HR)
+admin.site.register(Engagement)
 admin.site.register(CoachStatus)
 admin.site.register(SessionRequestCaas)
 admin.site.register(Notification)
