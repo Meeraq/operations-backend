@@ -7,7 +7,7 @@ from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from django.core.exceptions import ObjectDoesNotExist
 from operationsBackend import settings
-from .serializers import CoachSerializer,UserSerializer,LearnerSerializer,PmoDepthOneSerializer,SessionRequestCaasSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer,LearnerDepthOneSerializer,HrDepthOneSerializer,SessionRequestCaasDepthOneSerializer,SessionRequestCaasDepthTwoSerializer,AvailibilitySerializer,NotificationSerializer
+from .serializers import CoachSerializer,UserSerializer,LearnerSerializer,PmoDepthOneSerializer,SessionRequestCaasSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer,LearnerDepthOneSerializer,HrDepthOneSerializer,SessionRequestCaasDepthOneSerializer,SessionRequestCaasDepthTwoSerializer,AvailibilitySerializer,NotificationSerializer,EngagementDepthOneSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -631,7 +631,7 @@ def get_ongoing_projects(request):
 
 @api_view(['GET'])
 def get_projects_of_learner(request,learner_id):
-    projects = Project.objects.filter(learner__id = learner_id)
+    projects = Project.objects.filter(engagement__learner__id = learner_id)
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data)
 
@@ -2073,7 +2073,8 @@ def add_learner_to_project(request):
     try:
         learners = create_learners(request.data['learners'])
         for learner in learners:
-            project.learner.add(learner)    
+            create_engagement(learner,project)
+            # project.learner.add(learner)
             try:
                 path = f"/projects/caas/progress/{project.id}"
                 message = f"You have been added to Project - {project.name}"
@@ -2122,11 +2123,14 @@ def transform_project_structure(sessions):
     
     return transformed_sessions
 
-def create_engagement(coach, learner, project):
-    engagemenet_project_structure = transform_project_structure(project.project_structure)
-    engagement = Engagement(coach=coach, learner=learner, project=project,project_structure=engagemenet_project_structure)
-    engagement.save()
-    return engagement
+def create_engagement(learner, project):
+    existing_engagement = Engagement.objects.filter(learner__id=learner.id, project__id=project.id)
+    if len(existing_engagement) == 0:
+        engagemenet_project_structure = transform_project_structure(project.project_structure)
+        engagement = Engagement(learner=learner, project=project,project_structure=engagemenet_project_structure)
+        engagement.save()
+        return engagement
+    return existing_engagement
 
 
 @api_view(['POST'])
@@ -2141,7 +2145,9 @@ def accept_coach_caas_learner(request):
             coach.status['learner']['status']=request.data.get('status')
             if request.data.get('status')=='select':
                 learner = Learner.objects.get(id=request.data.get('learner_id'))
-                create_engagement(coach.coach, learner,project)
+                engagement = Engagement.objects.get(learner__id = request.data.get('learner_id'),project__id = project.id)
+                engagement.coach = coach.coach
+                engagement.save()
                 coach.learner_id.append(request.data.get('learner_id'))
             coach.save()
     else:
@@ -2642,3 +2648,16 @@ def reschedule_session(request):
         else:
             return Response({"message": str(session_serilizer.errors),}, status=401)
 
+
+@api_view(['GET'])
+def get_engagement_in_projects(request,project_id):
+    engagements = Engagement.objects.filter(project__id = project_id)
+    serializer = EngagementDepthOneSerializer(engagements, many=True)
+    return Response(serializer.data,status=200)
+
+@api_view(['GET'])
+def get_learner_engagement_of_project(request,project_id,learner_id):
+    engagement = Engagement.objects.get(learner__id = learner_id, project__id=project_id)
+    serializer = EngagementDepthOneSerializer(engagement)
+    return Response(serializer.data,status=200)
+    

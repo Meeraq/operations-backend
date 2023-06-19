@@ -236,7 +236,7 @@ class Engagement(models.Model):
         ('active', 'Active'),
         ('completed', 'Completed'),
     )
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, null=True, blank=True)
     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)

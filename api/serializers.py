@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Pmo,Coach,Profile,Project,HR,Organisation,Learner,SessionRequestCaas,Availibility,Notification
+from .models import Pmo,Coach,Profile,Project,HR,Organisation,Learner,SessionRequestCaas,Availibility,Notification,Engagement
 from django.contrib.auth.models import User
 
 class UserSerializer(serializers.ModelSerializer):
@@ -129,3 +129,9 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = "__all__"
         
+
+class EngagementDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model= Engagement
+        fields = "__all__"
+        depth = 1  

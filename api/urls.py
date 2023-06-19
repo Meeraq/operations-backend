@@ -115,7 +115,9 @@ urlpatterns =[
 		path('mark_project_as_sold/',views.mark_project_as_sold),
     path('session-requests-of-user-on-date/<str:user_type>/<int:user_id>/<str:date>/', views.get_session_requests_of_user_on_date),
     path('session/reschedule-request/<str:session_id>/',views.request_reschedule),
-    path('session/reschedule/',views.reschedule_session)
+    path('session/reschedule/',views.reschedule_session),
+    path('projects/engagement/all/<int:project_id>/',views.get_engagement_in_projects),
+    path('engagement/<int:project_id>/<int:learner_id>/',views.get_learner_engagement_of_project)
 ]
 
 
