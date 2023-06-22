@@ -2741,7 +2741,7 @@ def get_session_requests_of_user(request,user_type,user_id):
     if(user_type == 'pmo'):
         session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None)
     if(user_type == 'learner'):
-        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability=None) & Q(learner__id = user_id) & ~Q(session_type='chemistry_sessions'))
+        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability=None) & Q(learner__id = user_id) & ~Q(session_type='chemistry_session'))
     if(user_type == 'coach'):
         session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None,coach__id = user_id)
     if(user_type == 'hr'):
@@ -2757,7 +2757,7 @@ def get_upcoming_sessions_of_user(request,user_type,user_id):
     if(user_type == 'pmo'):
         session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time)
     if(user_type == 'learner'):
-        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability__start_time__gt=current_time) & Q(learner__id = user_id) & ~Q(session_type='chemistry_sessions'))
+        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability__start_time__gt=current_time) & Q(learner__id = user_id) & ~Q(session_type='chemistry_session'))
     if(user_type == 'coach'):
         session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time,coach__id = user_id)
     if(user_type == 'hr'):
