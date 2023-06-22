@@ -31,6 +31,8 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 import json
 import string
 import random
+from django.db.models import Q
+
 
 
 # Create your views here.
@@ -2661,3 +2663,125 @@ def get_learner_engagement_of_project(request,project_id,learner_id):
     serializer = EngagementDepthOneSerializer(engagement)
     return Response(serializer.data,status=200)
     
+@api_view(['GET'])
+def get_learners_engagement(request,learner_id):
+    engagements = Engagement.objects.filter(learner__id = learner_id)
+    serializer = EngagementDepthOneSerializer(engagements, many=True)
+    return Response(serializer.data,status=200)
+
+
+@api_view(['POST'])
+def create_session_request_by_learner(request,learner_id):
+    # print(request.user)
+    # if request.user.profile.type != "learner":
+    #     return Response({"message": "Unauthorized"}, status=401)
+    time_arr = []
+    for time in request.data['availibility']:
+        availibility_serilizer = AvailibilitySerializer(data = time)
+        if availibility_serilizer.is_valid():
+            avil_id = availibility_serilizer.save()
+            time_arr.append(avil_id.id) 
+        else:
+            return Response({"message": str(availibility_serilizer.errors),}, status=401)
+    
+    try:
+        # changing availability - edit request.
+        session= SessionRequestCaas.objects.get(id=request.data.get('session_id',None))
+        if session.is_booked:
+            return Response({"message": "Error creating session."},status=401)
+        session.availibility.set(time_arr)
+        session.save()
+        return Response({"message": "Session updated successfully."}, status=201)
+    except SessionRequestCaas.DoesNotExist:
+        session = {
+            "project": request.data['project_id'],
+            "availibility":time_arr,
+            "coach":request.data['coach_id'],
+            "learner": request.data['learner_id']}
+
+        session_serilizer = SessionRequestCaasSerializer(data = session)
+        if session_serilizer.is_valid():
+            session_created = session_serilizer.save()
+            # try:
+            #     pmo_user = User.objects.filter(profile__type="pmo").first()
+            #     project = Project.objects.get(id=request.data['project_id'])
+            #     coach =  Coach.objects.get(id=request.data['coach_id'])
+            #     if pmo_user:
+            #         path = f"/projects/caas/progress/{project.id}"
+            #         coach_name = coach.first_name + " " + coach.last_name
+            #         slot_message = ""
+            #         for i, slot in enumerate(request.data['availibility']):
+            #             start_time = format_timestamp(slot['start_time'])
+            #             end_time = format_timestamp(slot['end_time'])
+            #             slot_message += f"Slot {i+1}: {start_time} - {end_time}"
+            #             if i==0:
+            #                  slot_message += " and "
+            #         if session['session_type']=='interview':
+            #             message = f"HR has requested interview session to {coach_name.title()} for Project - {project.name}. The requested slots are "
+            #             message_for_coach = f"HR has requested for {slot_message} for Interview for Project - {project.name}. Please book one of the requested slots now"
+            #         elif session['session_type']=='chemistry_session':
+            #             hr_user_in_project = session_created.project.hr.first().user.user
+            #             message_for_hr =f"{session_created.learner.name.title()} has requested for Chemistry session to the Coach - {coach_name.title()} for {slot_message} for the Project - {project.name}"
+            #             message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {project.name}. Please book one of the requested slots now"
+            #             create_notification(hr_user_in_project,path,message_for_hr)
+            #             message = f"Coachee has requested chemistry session to {coach_name.title()} for Project - {project.name}. The requested slots are "
+            #         message += " " + slot_message 
+            #         create_notification(pmo_user,path,message)
+            #         create_notification(coach.user.user,path,message_for_coach)
+            # except Exception as e:
+            #     print(f"Error occurred while creating notification: {str(e)}")    
+            return Response({"message": "Session requested successfully."}, status=201)
+        else:
+            return Response({"message": str(session_serilizer.errors),}, status=401)
+
+
+@api_view(['GET'])
+def get_session_requests_of_user(request,user_type,user_id):
+    session_requests=[]
+    if(user_type == 'pmo'):
+        session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None)
+    if(user_type == 'learner'):
+        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability=None) & Q(learner__id = user_id) & ~Q(session_type='chemistry_sessions'))
+    if(user_type == 'coach'):
+        session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None,coach__id = user_id)
+    if(user_type == 'hr'):
+        session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None,project__hr__id = user_id)
+    serializer=SessionRequestCaasDepthOneSerializer(session_requests,many=True)
+    return Response(serializer.data,status=200)
+
+
+@api_view(['GET'])
+def get_upcoming_sessions_of_user(request,user_type,user_id):
+    current_time = int(timezone.now().timestamp() * 1000)
+    session_requests=[]
+    if(user_type == 'pmo'):
+        session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time)
+    if(user_type == 'learner'):
+        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability__start_time__gt=current_time) & Q(learner__id = user_id) & ~Q(session_type='chemistry_sessions'))
+    if(user_type == 'coach'):
+        session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time,coach__id = user_id)
+    if(user_type == 'hr'):
+        session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time,project__hr__id = user_id)
+    serializer=SessionRequestCaasDepthOneSerializer(session_requests,many=True)
+    return Response(serializer.data,status=200)
+
+@api_view(['POST'])
+def edit_session_availability(request,session_id):
+    time_arr = []
+    for time in request.data['availibility']:
+        availibility_serilizer = AvailibilitySerializer(data = time)
+        if availibility_serilizer.is_valid():
+            avil_id = availibility_serilizer.save()
+            time_arr.append(avil_id.id) 
+        else:
+            return Response({"message": str(availibility_serilizer.errors),}, status=401)
+    try:
+        # changing availability - edit request.
+        session= SessionRequestCaas.objects.get(id=session_id)
+        if session.is_booked:
+            return Response({"message": "Session edit failed."},status=401)
+        session.availibility.set(time_arr)
+        session.save()
+        return Response({"message": "Session updated successfully."}, status=201)
+    except:
+        return Response({"message": "Session edit failed."},status=401)

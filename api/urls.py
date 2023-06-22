@@ -117,7 +117,11 @@ urlpatterns =[
     path('session/reschedule-request/<str:session_id>/',views.request_reschedule),
     path('session/reschedule/',views.reschedule_session),
     path('projects/engagement/all/<int:project_id>/',views.get_engagement_in_projects),
-    path('engagement/<int:project_id>/<int:learner_id>/',views.get_learner_engagement_of_project)
+    path('engagement/<int:project_id>/<int:learner_id>/',views.get_learner_engagement_of_project),
+    path('engagement/learner/<int:learner_id>/',views.get_learners_engagement),
+    path('sessions/create/<int:learner_id>/',views.create_session_request_by_learner),
+    path('sessions/requested/<str:user_type>/<int:user_id>/',views.get_session_requests_of_user),
+    path('sessions/upcoming/<str:user_type>/<int:user_id>/',views.get_upcoming_sessions_of_user),
+		path('sessions/edit/<int:session_id>/',views.edit_session_availability)
 ]
-
 
