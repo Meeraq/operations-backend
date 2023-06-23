@@ -2150,6 +2150,10 @@ def accept_coach_caas_learner(request):
                 engagement = Engagement.objects.get(learner__id = request.data.get('learner_id'),project__id = project.id)
                 engagement.coach = coach.coach
                 engagement.save()
+                sessions = SessionRequestCaas.objects.filter(learner__id = request.data.get('learner_id'),session_type='chemistry_session',project=project).exclude(coach=coach.coach)
+                for session in sessions:
+                    session.is_archive = True
+                    session.save()
                 coach.learner_id.append(request.data.get('learner_id'))
             coach.save()
     else:
@@ -2743,9 +2747,9 @@ def get_session_requests_of_user(request,user_type,user_id):
     if(user_type == 'learner'):
         session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability=None) & Q(learner__id = user_id) & ~Q(session_type='chemistry_session'))
     if(user_type == 'coach'):
-        session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None,coach__id = user_id)
+        session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None,coach__id = user_id,is_archive = False)
     if(user_type == 'hr'):
-        session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None,project__hr__id = user_id)
+        session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None,project__hr__id = user_id,is_archive = False)
     serializer=SessionRequestCaasDepthOneSerializer(session_requests,many=True)
     return Response(serializer.data,status=200)
 
@@ -2759,9 +2763,9 @@ def get_upcoming_sessions_of_user(request,user_type,user_id):
     if(user_type == 'learner'):
         session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability__start_time__gt=current_time) & Q(learner__id = user_id) & ~Q(session_type='chemistry_session'))
     if(user_type == 'coach'):
-        session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time,coach__id = user_id)
+        session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time,coach__id = user_id,is_archive = False)
     if(user_type == 'hr'):
-        session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time,project__hr__id = user_id)
+        session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time,project__hr__id = user_id,is_archive = False)
     serializer=SessionRequestCaasDepthOneSerializer(session_requests,many=True)
     return Response(serializer.data,status=200)
 
