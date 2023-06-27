@@ -235,7 +235,11 @@ class SessionRequestCaas(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     session_type = models.CharField(max_length=50, default="")
     is_archive = models.BooleanField(default=False)
-    reschedule_request = models.JSONField(default=list, blank=True)
+    reschedule_request = models.JSONField(default=list,blank=True)
+    status = models.CharField(max_length=30,default="",blank=True)
+    session_number = models.IntegerField(blank=True,default=None,null=True)
+    session_duration = models.IntegerField(blank=True,default=None,null=True)
+    order=models.IntegerField(blank=True,default=None,null=True) # used for engagement structure
 
 
 # class SessionCaas(models.Model):
