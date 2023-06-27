@@ -122,6 +122,9 @@ urlpatterns =[
     path('sessions/create/<int:learner_id>/',views.create_session_request_by_learner),
     path('sessions/requested/<str:user_type>/<int:user_id>/',views.get_session_requests_of_user),
     path('sessions/upcoming/<str:user_type>/<int:user_id>/',views.get_upcoming_sessions_of_user),
-		path('sessions/edit/<int:session_id>/',views.edit_session_availability)
+		path('sessions/edit/<int:session_id>/',views.edit_session_availability),
+    path('goals/', views.create_goal),
+    path('goals/<int:engagement_id>/', views.get_engagement_goals),
+  
 ]
 

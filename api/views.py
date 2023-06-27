@@ -7,7 +7,7 @@ from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
 from django.core.exceptions import ObjectDoesNotExist
 from operationsBackend import settings
-from .serializers import CoachSerializer,UserSerializer,LearnerSerializer,PmoDepthOneSerializer,SessionRequestCaasSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer,LearnerDepthOneSerializer,HrDepthOneSerializer,SessionRequestCaasDepthOneSerializer,SessionRequestCaasDepthTwoSerializer,AvailibilitySerializer,NotificationSerializer,EngagementDepthOneSerializer
+from .serializers import CoachSerializer,UserSerializer,LearnerSerializer,PmoDepthOneSerializer,SessionRequestCaasSerializer,CoachDepthOneSerializer,ProjectDepthTwoSerializer,HrSerializer,OrganisationSerializer,LearnerDepthOneSerializer,HrDepthOneSerializer,SessionRequestCaasDepthOneSerializer,SessionRequestCaasDepthTwoSerializer,AvailibilitySerializer,NotificationSerializer,EngagementDepthOneSerializer, GoalSerializer
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -21,7 +21,7 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework.permissions import IsAuthenticated,AllowAny
-from .models import Profile, Pmo, Coach, OTP,Project,HR,Organisation,SessionRequestCaas,Availibility,Learner,CoachStatus,Notification,Engagement
+from .models import Profile, Pmo, Coach, OTP,Project,HR,Organisation,SessionRequestCaas,Availibility,Learner,CoachStatus,Notification,Engagement,Goal
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate,login,logout
 from django.core.mail import send_mail
@@ -2789,3 +2789,21 @@ def edit_session_availability(request,session_id):
         return Response({"message": "Session updated successfully."}, status=201)
     except:
         return Response({"message": "Session edit failed."},status=401)
+
+@api_view(['POST'])
+def create_goal(request):
+    serializer = GoalSerializer(data=request.data)
+    
+    if serializer.is_valid():
+        serializer.save()
+        return Response({'message': "Goal created successfully."}, status=201)
+    
+    return Response(serializer.errors, status=400)
+
+
+
+@api_view(['GET'])
+def get_engagement_goals(request,engagement_id):
+    goals = Goal.objects.filter(engagement__id = engagement_id)
+    serializer = GoalSerializer(goals,many=True)
+    return Response(serializer.data, status=200)
