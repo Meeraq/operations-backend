@@ -2158,6 +2158,10 @@ def accept_coach_caas_learner(request):
                 engagement = Engagement.objects.get(learner__id = request.data.get('learner_id'),project__id = project.id)
                 engagement.coach = coach.coach
                 engagement.save()
+                sessions = SessionRequestCaas.objects.filter(learner__id = request.data.get('learner_id'),session_type='chemistry_session',project=project).exclude(coach=coach.coach)
+                for session in sessions:
+                    session.is_archive = True
+                    session.save()
                 coach.learner_id.append(request.data.get('learner_id'))
             coach.save()
     else:
