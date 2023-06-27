@@ -1848,7 +1848,7 @@ def get_interview_data(request,project_id):
 
 @api_view(['GET'])
 def get_chemistry_session_data(request,project_id):
-    sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='chemistry_session').all()
+    sessions=SessionRequestCaas.objects.filter(project__id=project_id,session_type='chemistry').exclude(status="pending")
     serializer=SessionRequestCaasDepthTwoSerializer(sessions,many=True)
     return Response(serializer.data,status=200)
 
@@ -1882,6 +1882,7 @@ def book_session_caas(request):
     session_request = SessionRequestCaas.objects.get(id=request.data.get('session_request'))
     session_request.confirmed_availability = Availibility.objects.get(id=request.data.get('confirmed_availability'))
     session_request.is_booked = True
+    session_request.status = 'booked'
     session_request.save()
     # if serializer.is_valid():
     #     session = serializer.save()
@@ -1909,7 +1910,7 @@ def book_session_caas(request):
         subject = 'Hello hr your session is booked.'
         message = f'Dear {session_request.hr.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.hr.email])
-    if session_request.session_type=='chemistry_session':
+    if session_request.session_type=='chemistry':
         subject = 'Hello learner your session is booked.'
         message = f'Dear {session_request.learner.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.learner.email])
@@ -1928,7 +1929,7 @@ def book_session_caas(request):
                 message = f"{coach_name.title()} has booked the interview session for Project - {project.name}.The booked slot is "
                 message_for_hr = f"{coach_name.title()} has booked the slot {slot_message} from your interview request. You can join the meeting on scheduled time."
                 create_notification(hr_user, path,message_for_hr)
-            if session_request.session_type == 'chemistry_session':
+            if session_request.session_type == 'chemistry':
                 learner_user= session_request.learner.user.user
                 message = f"{coach_name.title()} has booked the chemistry session for Project - {project.name}.The booked slot is "
                 message_for_learner= f"{coach_name.title()} has booked the slot {slot_message} from your chemistry session request. You can join the meeting on scheduled time."
@@ -1943,19 +1944,23 @@ def book_session_caas(request):
     return Response(serializer.errors, status=400)
 
 
-@api_view(['POST'])
-def create_session_request_caas(request):
-    time_arr = []
-    for time in request.data['availibility']:
+def create_time_arr(availability):
+    time_arr =[]
+    for time in availability:
         availibility_serilizer = AvailibilitySerializer(data = time)
         if availibility_serilizer.is_valid():
             avil_id = availibility_serilizer.save()
-            time_arr.append(avil_id.id) 
+            time_arr.append(avil_id.id)
         else:
             return Response({"message": str(availibility_serilizer.errors),}, status=401)
+    return time_arr    
+
+@api_view(['POST'])
+def create_session_request_caas(request):
+    time_arr = create_time_arr(request.data['availibility'])
     
     try:
-        if request.data['session_type'] == 'chemistry_session':
+        if request.data['session_type'] == 'chemistry':
             session= SessionRequestCaas.objects.get(learner__id=request.data['learner_id'],project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'], is_archive=False)
         else:
             session= SessionRequestCaas.objects.get(project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'],is_archive=False)   
@@ -1971,7 +1976,7 @@ def create_session_request_caas(request):
                 }
         if session['session_type']=='interview':
             session['hr'] = request.data['hr_id']
-        elif session['session_type']=='chemistry_session':
+        elif session['session_type']=='chemistry':
             session['learner'] = request.data['learner_id']
         session_serilizer = SessionRequestCaasSerializer(data = session)
         if session_serilizer.is_valid():
@@ -1993,7 +1998,7 @@ def create_session_request_caas(request):
                     if session['session_type']=='interview':
                         message = f"HR has requested interview session to {coach_name.title()} for Project - {project.name}. The requested slots are "
                         message_for_coach = f"HR has requested for {slot_message} for Interview for Project - {project.name}. Please book one of the requested slots now"
-                    elif session['session_type']=='chemistry_session':
+                    elif session['session_type']=='chemistry':
                         hr_user_in_project = session_created.project.hr.first().user.user
                         message_for_hr =f"{session_created.learner.name.title()} has requested for Chemistry session to the Coach - {coach_name.title()} for {slot_message} for the Project - {project.name}"
                         message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {project.name}. Please book one of the requested slots now"
@@ -2113,9 +2118,10 @@ def transform_project_structure(sessions):
             session_counts[session_type] = 1
         
         for i in range(session["no_of_sessions"]):
-            session_name = f"{session_type} {session_counts[session_type]}"
+            session_name = f"{session_type}_{session_counts[session_type]}"
             transformed_session = {
                 "session_name": session_name,
+                "session_number": session_counts[session_type],
                 "session_type": session_type,
                 "session_duration": session_duration,
                 "status": "pending"
@@ -2129,7 +2135,9 @@ def create_engagement(learner, project):
     existing_engagement = Engagement.objects.filter(learner__id=learner.id, project__id=project.id)
     if len(existing_engagement) == 0:
         engagemenet_project_structure = transform_project_structure(project.project_structure)
-        engagement = Engagement(learner=learner, project=project,project_structure=engagemenet_project_structure)
+        for index, session in enumerate(engagemenet_project_structure):
+            session_data = SessionRequestCaas.objects.create(learner=learner,project=project,session_duration=session['session_duration'],session_number=session['session_number'],session_type=session['session_type'],status="pending",order=index+1)
+        engagement = Engagement(learner=learner, project=project)
         engagement.save()
         return engagement
     return existing_engagement
@@ -2587,17 +2595,10 @@ def reschedule_session(request):
     existing_session = SessionRequestCaas.objects.get(id = request.data['existing_session_id'])
     existing_session.is_archive = True
     existing_session.save()
-    time_arr = []
-    for time in request.data['availibility']:
-        availibility_serilizer = AvailibilitySerializer(data = time)
-        if availibility_serilizer.is_valid():
-            avil_id = availibility_serilizer.save()
-            time_arr.append(avil_id.id) 
-        else:
-            return Response({"message": str(availibility_serilizer.errors),}, status=401)
+    time_arr = create_time_arr(request.data['availibility'])
     
     try:
-        if request.data['session_type'] == 'chemistry_session':
+        if request.data['session_type'] == 'chemistry':
             session= SessionRequestCaas.objects.get(learner__id=request.data['learner_id'],project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'], is_archive = False)
         else:
             session= SessionRequestCaas.objects.get(project__id=request.data['project_id'],coach__id=request.data['coach_id'],session_type=request.data['session_type'], is_archive = False)   
@@ -2613,7 +2614,7 @@ def reschedule_session(request):
                 }
         if session['session_type']=='interview':
             session['hr'] = request.data['hr_id']
-        elif session['session_type']=='chemistry_session':
+        elif session['session_type']=='chemistry':
             session['learner'] = request.data['learner_id']
         session_serilizer = SessionRequestCaasSerializer(data = session)
         if session_serilizer.is_valid():
@@ -2635,7 +2636,7 @@ def reschedule_session(request):
                     if session['session_type']=='interview':
                         message = f"HR has requested interview session to {coach_name.title()} for Project - {project.name}. The requested slots are "
                         message_for_coach = f"HR has requested for {slot_message} for Interview for Project - {project.name}. Please book one of the requested slots now"
-                    elif session['session_type']=='chemistry_session':
+                    elif session['session_type']=='chemistry':
                         hr_user_in_project = session_created.project.hr.first().user.user
                         message_for_hr =f"{session_created.learner.name.title()} has requested for Chemistry session to the Coach - {coach_name.title()} for {slot_message} for the Project - {project.name}"
                         message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {project.name}. Please book one of the requested slots now"
@@ -2669,83 +2670,29 @@ def get_learners_engagement(request,learner_id):
     serializer = EngagementDepthOneSerializer(engagements, many=True)
     return Response(serializer.data,status=200)
 
-
 @api_view(['POST'])
-def create_session_request_by_learner(request,learner_id):
+def create_session_request_by_learner(request,session_id):
     # print(request.user)
     # if request.user.profile.type != "learner":
     #     return Response({"message": "Unauthorized"}, status=401)
-    time_arr = []
-    for time in request.data['availibility']:
-        availibility_serilizer = AvailibilitySerializer(data = time)
-        if availibility_serilizer.is_valid():
-            avil_id = availibility_serilizer.save()
-            time_arr.append(avil_id.id) 
-        else:
-            return Response({"message": str(availibility_serilizer.errors),}, status=401)
-    
-    try:
-        # changing availability - edit request.
-        session= SessionRequestCaas.objects.get(id=request.data.get('session_id',None))
-        if session.is_booked:
-            return Response({"message": "Error creating session."},status=401)
-        session.availibility.set(time_arr)
-        session.save()
-        return Response({"message": "Session updated successfully."}, status=201)
-    except SessionRequestCaas.DoesNotExist:
-        session = {
-            "project": request.data['project_id'],
-            "availibility":time_arr,
-            "coach":request.data['coach_id'],
-            "learner": request.data['learner_id']}
-
-        session_serilizer = SessionRequestCaasSerializer(data = session)
-        if session_serilizer.is_valid():
-            session_created = session_serilizer.save()
-            # try:
-            #     pmo_user = User.objects.filter(profile__type="pmo").first()
-            #     project = Project.objects.get(id=request.data['project_id'])
-            #     coach =  Coach.objects.get(id=request.data['coach_id'])
-            #     if pmo_user:
-            #         path = f"/projects/caas/progress/{project.id}"
-            #         coach_name = coach.first_name + " " + coach.last_name
-            #         slot_message = ""
-            #         for i, slot in enumerate(request.data['availibility']):
-            #             start_time = format_timestamp(slot['start_time'])
-            #             end_time = format_timestamp(slot['end_time'])
-            #             slot_message += f"Slot {i+1}: {start_time} - {end_time}"
-            #             if i==0:
-            #                  slot_message += " and "
-            #         if session['session_type']=='interview':
-            #             message = f"HR has requested interview session to {coach_name.title()} for Project - {project.name}. The requested slots are "
-            #             message_for_coach = f"HR has requested for {slot_message} for Interview for Project - {project.name}. Please book one of the requested slots now"
-            #         elif session['session_type']=='chemistry_session':
-            #             hr_user_in_project = session_created.project.hr.first().user.user
-            #             message_for_hr =f"{session_created.learner.name.title()} has requested for Chemistry session to the Coach - {coach_name.title()} for {slot_message} for the Project - {project.name}"
-            #             message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {project.name}. Please book one of the requested slots now"
-            #             create_notification(hr_user_in_project,path,message_for_hr)
-            #             message = f"Coachee has requested chemistry session to {coach_name.title()} for Project - {project.name}. The requested slots are "
-            #         message += " " + slot_message 
-            #         create_notification(pmo_user,path,message)
-            #         create_notification(coach.user.user,path,message_for_coach)
-            # except Exception as e:
-            #     print(f"Error occurred while creating notification: {str(e)}")    
-            return Response({"message": "Session requested successfully."}, status=201)
-        else:
-            return Response({"message": str(session_serilizer.errors),}, status=401)
-
+    time_arr = create_time_arr(request.data['availibility'])
+    session = SessionRequestCaas.objects.get(id=session_id)
+    session.availibility.set(time_arr)
+    session.status = 'requested'
+    session.save()
+    return Response({'message': "Session requested successfully"})
 
 @api_view(['GET'])
 def get_session_requests_of_user(request,user_type,user_id):
     session_requests=[]
     if(user_type == 'pmo'):
-        session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None)
+        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability=None) & ~Q(status = 'pending')  )
     if(user_type == 'learner'):
-        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability=None) & Q(learner__id = user_id) & ~Q(session_type='chemistry_session'))
+        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability=None) & Q(learner__id = user_id) & ~Q(session_type='chemistry') & ~Q(status = 'pending'))
     if(user_type == 'coach'):
-        session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None,coach__id = user_id)
+        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability=None) & Q(coach__id = user_id) & ~Q(status = 'pending'))
     if(user_type == 'hr'):
-        session_requests = SessionRequestCaas.objects.filter(confirmed_availability=None,project__hr__id = user_id)
+        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability=None) & Q(project__hr__id = user_id) & ~Q(status = 'pending'))
     serializer=SessionRequestCaasDepthOneSerializer(session_requests,many=True)
     return Response(serializer.data,status=200)
 
@@ -2755,26 +2702,36 @@ def get_upcoming_sessions_of_user(request,user_type,user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests=[]
     if(user_type == 'pmo'):
-        session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time)
+        session_requests = SessionRequestCaas.objects.filter(is_booked=True,confirmed_availability__start_time__gt=current_time)
     if(user_type == 'learner'):
-        session_requests = SessionRequestCaas.objects.filter(Q(confirmed_availability__start_time__gt=current_time) & Q(learner__id = user_id) & ~Q(session_type='chemistry_session'))
+        session_requests = SessionRequestCaas.objects.filter(Q(is_booked=True) & Q(confirmed_availability__start_time__gt=current_time) & Q(learner__id = user_id) & ~Q(session_type='chemistry') & Q(is_archive=False))
     if(user_type == 'coach'):
-        session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time,coach__id = user_id)
+        session_requests = SessionRequestCaas.objects.filter(is_booked=True,confirmed_availability__start_time__gt=current_time,coach__id = user_id,is_archive=False)
     if(user_type == 'hr'):
-        session_requests = SessionRequestCaas.objects.filter(confirmed_availability__start_time__gt=current_time,project__hr__id = user_id)
+        session_requests = SessionRequestCaas.objects.filter(is_booked=True,confirmed_availability__start_time__gt=current_time,project__hr__id = user_id,is_archive=False)
     serializer=SessionRequestCaasDepthOneSerializer(session_requests,many=True)
     return Response(serializer.data,status=200)
 
+
+@api_view(['GET'])
+def get_past_sessions_of_user(request,user_type,user_id):
+    current_time = int(timezone.now().timestamp() * 1000)
+    session_requests=[]
+    if(user_type == 'pmo'):
+        session_requests = SessionRequestCaas.objects.filter(is_booked=True,confirmed_availability__start_time__lt=current_time)
+    if(user_type == 'learner'):
+        session_requests = SessionRequestCaas.objects.filter(Q(is_booked=True) & Q(confirmed_availability__start_time__lt=current_time) & Q(learner__id = user_id) & ~Q(session_type='chemistry') & Q(is_archive=False))
+    if(user_type == 'coach'):
+        session_requests = SessionRequestCaas.objects.filter(is_booked=True,confirmed_availability__start_time__lt=current_time,coach__id = user_id,is_archive=False)
+    if(user_type == 'hr'):
+        session_requests = SessionRequestCaas.objects.filter(is_booked=True,confirmed_availability__start_time__lt=current_time,project__hr__id = user_id,is_archive=False)
+    serializer=SessionRequestCaasDepthOneSerializer(session_requests,many=True)
+    return Response(serializer.data,status=200)
+
+
 @api_view(['POST'])
 def edit_session_availability(request,session_id):
-    time_arr = []
-    for time in request.data['availibility']:
-        availibility_serilizer = AvailibilitySerializer(data = time)
-        if availibility_serilizer.is_valid():
-            avil_id = availibility_serilizer.save()
-            time_arr.append(avil_id.id) 
-        else:
-            return Response({"message": str(availibility_serilizer.errors),}, status=401)
+    time_arr = create_time_arr(request.data['availibility'])
     try:
         # changing availability - edit request.
         session= SessionRequestCaas.objects.get(id=session_id)
@@ -2785,3 +2742,93 @@ def edit_session_availability(request,session_id):
         return Response({"message": "Session updated successfully."}, status=201)
     except:
         return Response({"message": "Session edit failed."},status=401)
+
+@api_view(['GET'])
+def get_coachee_of_user(request,user_type,user_id):
+    learners_data = []
+    if user_type == 'pmo':
+        learners = Learner.objects.all()
+    elif (user_type == "coach"):
+        learners = Learner.objects.filter(engagement__coach__id = user_id).distinct()
+    elif user_type == 'hr':
+        learners = Learner.objects.filter(engagement__project__hr__id = user_id).distinct()
+    for learner in learners:
+        learner_dict = {
+            'id': learner.id,
+            'name': learner.name,
+            'email': learner.email,
+            'phone': learner.phone,
+            'area_of_expertise': learner.area_of_expertise,
+            'years_of_experience': learner.years_of_experience,
+            'projects': [],
+            'organisation' : set()
+        }
+        if user_type == 'pmo':
+            projects = Project.objects.filter(engagement__learner = learner)
+        elif (user_type == "coach"):
+            projects = Project.objects.filter(Q(engagement__learner = learner) & Q(engagement__coach__id = user_id))
+        elif user_type == 'hr':
+            projects = Project.objects.filter(Q(engagement__learner = learner) & Q(hr__id = user_id))
+        # project_data = []
+        # organisation = set()
+        for project in projects:
+            project_dict = {
+                'name': project.name,
+						}
+            learner_dict['organisation'].add(project.organisation.name)
+            learner_dict['projects'].append(project_dict)
+        learners_data.append(learner_dict)
+    # serializer = LearnerSerializer(learners,many=True)                        
+    return Response(learners_data)
+
+
+@api_view(['GET'])
+def get_learner_data(request,learner_id):
+    learner = Learner.objects.get(id=learner_id)
+    serializer = LearnerSerializer(learner)
+    return Response(serializer.data)
+
+# updating the availability and coach in the first pending chemistry available for learner
+@api_view(['POST'])
+def request_chemistry_session(request,project_id,learner_id):
+    session = SessionRequestCaas.objects.filter(learner__id= learner_id,project__id=project_id,session_type ='chemistry',status="pending")
+    print(session)
+    if len(session) == 0:
+        return Response({ 'error' : 'Max sessions exceeded.'},status=400)
+    else:
+        coach = Coach.objects.get(id=request.data['coach_id'])
+        time_arr = create_time_arr(request.data['availibility'])
+        session_to_update = session[0]
+        session_to_update.availibility.set(time_arr)
+        session_to_update.coach = coach
+        session_to_update.status = 'requested'
+        session_to_update.save()
+    return Response({'message':'Session requested successfully'},status=200)
+
+@api_view(['GET'])
+def get_learner_sessions_in_project(request,project_id,learner_id):
+    sessions = SessionRequestCaas.objects.filter(project__id =project_id,learner__id=learner_id).order_by('order')
+    serializer = SessionRequestCaasDepthOneSerializer(sessions,many=True)
+    return Response(serializer.data,status=200)
+
+@api_view(['POST'])
+def request_session(request,session_id,coach_id):
+    session = SessionRequestCaas.objects.get(id=session_id)
+    coach = Coach.objects.get(id=coach_id)
+    time_arr = create_time_arr(request.data['availibility'])
+    session.availibility.set(time_arr)
+    session.coach = coach
+    session.status = 'requested'
+    session.save()
+    return Response({'message':'Session requested successfully'},status=200)
+
+@api_view(['POST'])
+def reschedule_session_of_coachee(request,session_id):
+    session = SessionRequestCaas.objects.get(id=session_id)
+    session.is_archive = True
+    time_arr = create_time_arr(request.data['availibility'])
+    new_session = SessionRequestCaas.objects.create(learner=session.learner, project = session.project, coach=session.coach, session_type = session.session_type,status='requested',session_number= session.session_number,session_duration=session.session_duration,order = session.order)
+    new_session.availibility.set(time_arr)
+    new_session.save()
+    session.save()
+    return Response({'message':'Session reschedule successfully'},status=200)
