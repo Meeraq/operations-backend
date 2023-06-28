@@ -1,5 +1,21 @@
 from django.contrib import admin
-from .models import Pmo,Coach,Profile, Project, CoachStatus,Availibility,SessionRequestCaas,Notification,Organisation,Learner,HR,Engagement, Goal
+from .models import (
+    Pmo,
+    Coach,
+    Profile,
+    Project,
+    CoachStatus,
+    Availibility,
+    SessionRequestCaas,
+    Notification,
+    Organisation,
+    Learner,
+    HR,
+    Engagement,
+    Goal,
+    Competency,
+)
+
 # Register your models here.
 
 admin.site.register(Pmo)
@@ -17,3 +33,4 @@ admin.site.register(CoachStatus)
 admin.site.register(SessionRequestCaas)
 admin.site.register(Notification)
 admin.site.register(Goal)
+admin.site.register(Competency)

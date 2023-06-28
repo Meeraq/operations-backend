@@ -289,3 +289,8 @@ class Goal(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES) 
     engagement = models.ForeignKey(Engagement, on_delete=models.CASCADE)
     
+class Competency(models.Model):
+    goal = models.ForeignKey(Goal, on_delete=models.CASCADE)
+    name = models.CharField(max_length=50)
+    scoring = models.JSONField(default=list, blank=True)
+    created_at = models.DateField(auto_now_add=True)
