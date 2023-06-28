@@ -29,6 +29,7 @@ from .serializers import (
     CompetencySerializer,
     CompetencyDepthOneSerializer,
 )
+
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -1785,32 +1786,33 @@ def send_consent(request):
     coaches = Coach.objects.filter(id__in=request.data.get("coach_list", [])).all()
     coach_status = []
     for coach in coaches:
-        status = CoachStatus.objects.create(
-            coach=coach,
-            status=dict(
-                consent={
-                    "status": "sent",
-                    "response_date": None,
-                },
-                project_structure={
-                    "status": "sent",
-                    "response_date": None,
-                },
-                hr={
-                    "status": None,
-                    "session_id": None,
-                    "response_date": None,
-                },
-                learner={
-                    "status": None,
-                    "session_id": None,
-                    "response_date": None,
-                },
-            ),
-            consent_expiry_date=request.data["consent_expiry_date"],
-        )
-        status.save()
-        coach_status.append(status)
+        if not CoachStatus.objects.filter(coach=coach, project=project).exists():
+            status = CoachStatus.objects.create(
+                coach=coach,
+                status=dict(
+                    consent={
+                        "status": "sent",
+                        "response_date": None,
+                    },
+                    project_structure={
+                        "status": "sent",
+                        "response_date": None,
+                    },
+                    hr={
+                        "status": None,
+                        "session_id": None,
+                        "response_date": None,
+                    },
+                    learner={
+                        "status": None,
+                        "session_id": None,
+                        "response_date": None,
+                    },
+                ),
+                consent_expiry_date=request.data["consent_expiry_date"],
+            )
+            status.save()
+            coach_status.append(status)
         # subject = 'Consent for {project.name} Project'
         # message = f'Dear {coach.first_name},\n\nPlease provide your consent for above mentioned project by logging into your Dashboard'
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach.email])
@@ -3366,6 +3368,6 @@ def create_competency(request):
 
 @api_view(["GET"])
 def get_engagement_competency(request, engagement_id):
-    goals = Competency.objects.filter(goal__engagement__id=engagement_id)
-    serializer = CompetencyDepthOneSerializer(goals, many=True)
+    competentcy = Competency.objects.filter(goal__engagement__id=engagement_id)
+    serializer = CompetencyDepthOneSerializer(competentcy, many=True)
     return Response(serializer.data, status=200)
