@@ -190,3 +190,7 @@ class CompetencyDepthOneSerializer(serializers.ModelSerializer):
         model = Competency
         fields = "__all__"
         depth = 1
+
+class CompetencySerializer(serializers.Serializer):
+    score = serializers.FloatField()
+    date = serializers.DateField()

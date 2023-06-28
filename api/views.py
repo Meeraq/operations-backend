@@ -3371,3 +3371,22 @@ def get_engagement_competency(request, engagement_id):
     competentcy = Competency.objects.filter(goal__engagement__id=engagement_id)
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
     return Response(serializer.data, status=200)
+
+
+@api_view(["POST"])
+def add_score_to_competency(request, competency_id):
+    try:
+        competency = Competency.objects.get(id=competency_id)
+        scoring_data = {
+            "date": request.data.get("date"),
+            "score": request.data.get("score"),
+        }
+        competency.scoring.append(scoring_data)
+        competency.save()
+        return Response(
+            {"message": "Competency scoring updated successfully."}, status=201
+        )
+    except Competency.DoesNotExist:
+        return Response({"error": "Competency not found."}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
