@@ -13,6 +13,7 @@ from .models import (
     Engagement,
     Goal,
     Competency,
+    ActionItem,
 )
 from django.contrib.auth.models import User
 
@@ -191,6 +192,14 @@ class CompetencyDepthOneSerializer(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
-class CompetencySerializer(serializers.Serializer):
-    score = serializers.FloatField()
-    date = serializers.DateField()
+
+class ActionItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ActionItem
+        fields = ["id", "name", "status", "competency"]
+
+
+class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ActionItem
+        fields = "__all__"

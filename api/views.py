@@ -28,6 +28,8 @@ from .serializers import (
     GetGoalSerializer,
     CompetencySerializer,
     CompetencyDepthOneSerializer,
+    ActionItemSerializer,
+    GetActionItemDepthOneSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -59,6 +61,7 @@ from .models import (
     Engagement,
     Goal,
     Competency,
+    ActionItem,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -3390,3 +3393,34 @@ def add_score_to_competency(request, competency_id):
         return Response({"error": "Competency not found."}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=400)
+
+
+@api_view(["POST"])
+def create_action_item(request):
+    serializer = ActionItemSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"message": "Action created successfully."}, status=201)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(["GET"])
+def get_engagement_action_items(request, engagement_id):
+    action_items = ActionItem.objects.filter(
+        competency__goal__engagement__id=engagement_id
+    )
+    serializer = GetActionItemDepthOneSerializer(action_items, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["POST"])
+def edit_action_item(request, action_item_id):
+    try:
+        action_item = ActionItem.objects.get(id=action_item_id)
+    except ActionItem.DoesNotExist:
+        return Response({"error": "Action item not found."}, status=404)
+    serializer = ActionItemSerializer(instance=action_item, data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"message": "Action item updated successfully."}, status=200)
+    return Response(serializer.errors, status=400)

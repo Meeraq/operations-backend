@@ -181,4 +181,11 @@ urlpatterns = [
         views.add_score_to_competency,
         name="create_score_competency",
     ),
+    path("action-items/", views.create_action_item),
+    path("action-items/<int:engagement_id>/", views.get_engagement_action_items),
+    path(
+        "action-items/edit/<int:action_item_id>/",
+        views.edit_action_item,
+        name="edit_action_item",
+    ),
 ]

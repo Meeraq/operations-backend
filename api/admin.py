@@ -14,6 +14,7 @@ from .models import (
     Engagement,
     Goal,
     Competency,
+    ActionItem,
 )
 
 # Register your models here.
@@ -34,3 +35,4 @@ admin.site.register(SessionRequestCaas)
 admin.site.register(Notification)
 admin.site.register(Goal)
 admin.site.register(Competency)
+admin.site.register(ActionItem)
