@@ -188,4 +188,8 @@ urlpatterns = [
         views.edit_action_item,
         name="edit_action_item",
     ),
+    path(
+        "session/complete/<int:session_id>/",
+        views.mark_session_as_complete,
+    ),
 ]

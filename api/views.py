@@ -2165,7 +2165,6 @@ def book_session_caas(request):
         print(f"Error occurred while creating notification: {str(e)}")
 
     return Response({"message": "Session booked successfully!"}, status=201)
-    return Response(serializer.errors, status=400)
 
 
 def create_time_arr(availability):
@@ -2195,9 +2194,10 @@ def get_slot_message(availability):
             slot_message += ". "
         elif i == (len(availability) - 2):
             slot_message += " and "
-        else: 
+        else:
             slot_message += ", "
     return slot_message
+
 
 @api_view(["POST"])
 def create_session_request_caas(request):
@@ -3115,29 +3115,34 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
-            is_booked=True, confirmed_availability__start_time__gt=current_time
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__gt=current_time),
+            ~Q(status="completed"),
         )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True)
-            & Q(confirmed_availability__start_time__gt=current_time)
-            & Q(learner__id=user_id)
-            & ~Q(session_type="chemistry")
-            & Q(is_archive=False)
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__gt=current_time),
+            Q(learner__id=user_id),
+            ~Q(session_type="chemistry"),
+            Q(is_archive=False),
+            ~Q(status="completed"),
         )
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
-            is_booked=True,
-            confirmed_availability__start_time__gt=current_time,
-            coach__id=user_id,
-            is_archive=False,
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__gt=current_time),
+            Q(coach__id=user_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
         )
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
-            is_booked=True,
-            confirmed_availability__start_time__gt=current_time,
-            project__hr__id=user_id,
-            is_archive=False,
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__gt=current_time),
+            Q(project__hr__id=user_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
         )
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
@@ -3149,29 +3154,34 @@ def get_past_sessions_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
-            is_booked=True, confirmed_availability__start_time__lt=current_time
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__lt=current_time)
+            | Q(status="completed"),
         )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True)
-            & Q(confirmed_availability__start_time__lt=current_time)
-            & Q(learner__id=user_id)
-            & ~Q(session_type="chemistry")
-            & Q(is_archive=False)
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__lt=current_time)
+            | Q(status="completed"),
+            Q(learner__id=user_id),
+            ~Q(session_type="chemistry"),
+            Q(is_archive=False),
         )
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
-            is_booked=True,
-            confirmed_availability__start_time__lt=current_time,
-            coach__id=user_id,
-            is_archive=False,
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__lt=current_time)
+            | Q(status="completed"),
+            Q(coach__id=user_id),
+            Q(is_archive=False),
         )
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
-            is_booked=True,
-            confirmed_availability__start_time__lt=current_time,
-            project__hr__id=user_id,
-            is_archive=False,
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__lt=current_time)
+            | Q(status="completed"),
+            Q(project__hr__id=user_id),
+            Q(is_archive=False),
         )
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
@@ -3433,3 +3443,14 @@ def edit_action_item(request, action_item_id):
         serializer.save()
         return Response({"message": "Action item updated successfully."}, status=200)
     return Response(serializer.errors, status=400)
+
+
+@api_view(["POST"])
+def mark_session_as_complete(request, session_id):
+    try:
+        session = SessionRequestCaas.objects.get(id=session_id)
+    except ActionItem.DoesNotExist:
+        return Response({"error": "Session not found."}, status=404)
+    session.status = "completed"
+    session.save()
+    return Response({"message": "Session marked as complete."}, status=201)
