@@ -2185,6 +2185,20 @@ def create_time_arr(availability):
     return time_arr
 
 
+def get_slot_message(availability):
+    slot_message = ""
+    for i, slot in enumerate(availability):
+        start_time = format_timestamp(slot["start_time"])
+        end_time = format_timestamp(slot["end_time"])
+        slot_message += f"Slot {i+1}: {start_time} - {end_time}"
+        if i == (len(availability) - 1):
+            slot_message += ". "
+        elif i == (len(availability) - 2):
+            slot_message += " and "
+        else: 
+            slot_message += ", "
+    return slot_message
+
 @api_view(["POST"])
 def create_session_request_caas(request):
     time_arr = create_time_arr(request.data["availibility"])
@@ -2228,14 +2242,9 @@ def create_session_request_caas(request):
                 coach = Coach.objects.get(id=request.data["coach_id"])
                 if pmo_user:
                     path = f"/projects/caas/progress/{project.id}"
+                    path_for_coach = f"/coach/sessions"
                     coach_name = coach.first_name + " " + coach.last_name
-                    slot_message = ""
-                    for i, slot in enumerate(request.data["availibility"]):
-                        start_time = format_timestamp(slot["start_time"])
-                        end_time = format_timestamp(slot["end_time"])
-                        slot_message += f"Slot {i+1}: {start_time} - {end_time}"
-                        if i == 0:
-                            slot_message += " and "
+                    slot_message = get_slot_message(request.data["availibility"])
                     if session["session_type"] == "interview":
                         message = f"HR has requested interview session to {coach_name.title()} for Project - {project.name}. The requested slots are "
                         message_for_coach = f"HR has requested for {slot_message} for Interview for Project - {project.name}. Please book one of the requested slots now"
@@ -2249,7 +2258,9 @@ def create_session_request_caas(request):
                         message = f"Coachee has requested chemistry session to {coach_name.title()} for Project - {project.name}. The requested slots are "
                     message += " " + slot_message
                     create_notification(pmo_user, path, message)
-                    create_notification(coach.user.user, path, message_for_coach)
+                    create_notification(
+                        coach.user.user, path_for_coach, message_for_coach
+                    )
             except Exception as e:
                 print(f"Error occurred while creating notification: {str(e)}")
             return Response({"message": "Session sequested successfully."}, status=201)
@@ -3009,13 +3020,7 @@ def reschedule_session(request):
                 if pmo_user:
                     path = f"/projects/caas/progress/{project.id}"
                     coach_name = coach.first_name + " " + coach.last_name
-                    slot_message = ""
-                    for i, slot in enumerate(request.data["availibility"]):
-                        start_time = format_timestamp(slot["start_time"])
-                        end_time = format_timestamp(slot["end_time"])
-                        slot_message += f"Slot {i+1}: {start_time} - {end_time}"
-                        if i == 0:
-                            slot_message += " and "
+                    slot_message = get_slot_message(request.data["availibility"])
                     if session["session_type"] == "interview":
                         message = f"HR has requested interview session to {coach_name.title()} for Project - {project.name}. The requested slots are "
                         message_for_coach = f"HR has requested for {slot_message} for Interview for Project - {project.name}. Please book one of the requested slots now"
@@ -3259,6 +3264,10 @@ def request_chemistry_session(request, project_id, learner_id):
         session_to_update.coach = coach
         session_to_update.status = "requested"
         session_to_update.save()
+        path_for_coach = f"/coach/sessions"
+        slot_message = get_slot_message(request.data["availibility"])
+        message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {session_to_update.project.name}. Please book one of the requested slots now"
+        create_notification(coach.user.user, path_for_coach, message_for_coach)
     return Response({"message": "Session requested successfully"}, status=200)
 
 
