@@ -269,7 +269,6 @@ def update_coach_profile(request, coach_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_coaches(request):
     try:
         # Get all the Coach objects
@@ -459,7 +458,6 @@ def get_management_token(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def create_project_cass(request):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_name"]
@@ -723,7 +721,6 @@ def create_learners(learners_data):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_ongoing_projects(request):
     projects = Project.objects.filter(steps__project_live="pending")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
@@ -738,7 +735,6 @@ def get_ongoing_projects(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_projects_of_learner(request, learner_id):
     projects = Project.objects.filter(engagement__learner__id=learner_id)
     serializer = ProjectDepthTwoSerializer(projects, many=True)
@@ -1002,7 +998,6 @@ def get_projects_of_learner(request, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_ongoing_projects_of_hr(request, hr_id):
     projects = Project.objects.filter(hr__id=hr_id, steps__project_live="pending")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
@@ -1080,7 +1075,6 @@ def get_ongoing_projects_of_hr(request, hr_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_hr(request):
     try:
         # Get all the Coach objects
@@ -1226,7 +1220,6 @@ def get_hr(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_projects_and_sessions_by_coach(request, coach_id):
     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
     # sessions = Session.objects.filter(session_request__project__in=projects,coach__id=coach_id)
@@ -1311,7 +1304,6 @@ def coach_exists(coach_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def add_coach(request):
     # Get data from request
     coach_id = request.data.get("coach_id")
@@ -1456,7 +1448,6 @@ def add_coach(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def delete_coach(request):
     coach_id = request.data.get("coach_id", None)
     if coach_id:
@@ -1695,7 +1686,6 @@ def validate_otp(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_organisation(request):
     orgs = Organisation.objects.all()
     serializer = OrganisationSerializer(orgs, many=True)
@@ -1703,7 +1693,6 @@ def get_organisation(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def add_organisation(request):
     print(request.data.get("image_url", ""))
     org = Organisation.objects.create(
@@ -1718,7 +1707,6 @@ def add_organisation(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def add_hr(request):
     try:
         # Check if user with given email already exists
@@ -1780,7 +1768,6 @@ def add_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def add_project_struture(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -1793,7 +1780,6 @@ def add_project_struture(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def send_consent(request):
     # Get all the Coach objects
     try:
@@ -1867,7 +1853,6 @@ def send_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
 def get_project_details(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
@@ -1883,7 +1868,6 @@ def get_project_details(request, project_id):
 # "coach_id": 1
 # "status": Consent Approved/Consent Rejected
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def receive_coach_consent(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -1925,7 +1909,6 @@ def receive_coach_consent(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def update_project_structure_consent_by_coach(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -1965,7 +1948,6 @@ def update_project_structure_consent_by_coach(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def complete_coach_consent(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -1977,7 +1959,6 @@ def complete_coach_consent(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def complete_coach_list_to_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -1995,7 +1976,6 @@ def complete_coach_list_to_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def complete_interviews_step(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2013,7 +1993,6 @@ def complete_interviews_step(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def complete_empanelment(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2036,7 +2015,6 @@ def complete_empanelment(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def complete_project_structure(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2070,7 +2048,6 @@ def complete_project_structure(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_interview_data(request, project_id):
     sessions = SessionRequestCaas.objects.filter(
         project__id=project_id, session_type="interview"
@@ -2080,7 +2057,6 @@ def get_interview_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_chemistry_session_data(request, project_id):
     sessions = SessionRequestCaas.objects.filter(
         project__id=project_id, session_type="chemistry"
@@ -2090,7 +2066,6 @@ def get_chemistry_session_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_session_requests_of_hr(request, hr_id):
     sessions = SessionRequestCaas.objects.filter(hr__id=hr_id).all()
     serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
@@ -2098,7 +2073,6 @@ def get_session_requests_of_hr(request, hr_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_session_requests_of_learner(request, learner_id):
     sessions = SessionRequestCaas.objects.filter(learner__id=learner_id).all()
     serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
@@ -2106,7 +2080,6 @@ def get_session_requests_of_learner(request, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_upcoming_booked_session_of_coach(request, coach_id):
     current_time = int(timezone.now().timestamp() * 1000)
     # convert current time to milliseconds
@@ -2120,7 +2093,6 @@ def get_upcoming_booked_session_of_coach(request, coach_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def book_session_caas(request):
     print(request.data)
     session_request = SessionRequestCaas.objects.get(
@@ -2227,7 +2199,6 @@ def get_slot_message(availability):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def create_session_request_caas(request):
     time_arr = create_time_arr(request.data["availibility"])
 
@@ -2302,7 +2273,6 @@ def create_session_request_caas(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_session_requests_of_coach(request, coach_id):
     sessions = SessionRequestCaas.objects.filter(coach__id=coach_id).all()
     serializer = SessionRequestCaasDepthTwoSerializer(sessions, many=True)
@@ -2310,7 +2280,6 @@ def get_session_requests_of_coach(request, coach_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def accept_coach_caas_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2364,7 +2333,6 @@ def accept_coach_caas_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def add_learner_to_project(request):
     try:
         project = Project.objects.get(id=request.data["project_id"])
@@ -2453,7 +2421,6 @@ def create_engagement(learner, project):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def accept_coach_caas_learner(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2542,7 +2509,6 @@ def accept_coach_caas_learner(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def complete_cass_step(request):
     try:
         step = request.data.get("step")
@@ -2555,7 +2521,6 @@ def complete_cass_step(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def mark_as_incomplete(request):
     stepList = [
         "coach_list",
@@ -2589,7 +2554,6 @@ def mark_as_incomplete(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def send_project_strure_to_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2607,7 +2571,6 @@ def send_project_strure_to_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def send_reject_reason(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2626,7 +2589,6 @@ def send_reject_reason(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def project_structure_agree_by_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2638,7 +2600,6 @@ def project_structure_agree_by_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def request_more_profiles_by_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2672,7 +2633,6 @@ def request_more_profiles_by_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def edit_learner(request):
     try:
         learner = Learner.objects.get(id=request.data.get("learner_id", ""))
@@ -2690,7 +2650,6 @@ def edit_learner(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def mark_finalized_list_complete(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2702,7 +2661,6 @@ def mark_finalized_list_complete(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def send_list_to_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2726,7 +2684,6 @@ def send_list_to_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def finalized_coach_from_coach_consent(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2745,7 +2702,6 @@ def finalized_coach_from_coach_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_coach_field_values(request):
     job_roles = set()
     languages = set()
@@ -2787,7 +2743,6 @@ def get_coach_field_values(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def add_mulitple_coaches(request):
     # Get data from request
     coaches = request.data.get("coaches")
@@ -2933,7 +2888,6 @@ def add_mulitple_coaches(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_notifications(request, user_id):
     notifications = Notification.objects.filter(user__id=user_id).order_by(
         "-created_at"
@@ -2952,14 +2906,12 @@ def mark_notifications_as_read(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def unread_notification_count(request, user_id):
     count = Notification.objects.filter(user__id=user_id, read_status=False).count()
     return Response({"count": count})
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def mark_project_as_sold(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2981,7 +2933,6 @@ def mark_project_as_sold(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_session_requests_of_user_on_date(request, user_type, user_id, date):
     date_obj = datetime.strptime(date, "%Y-%m-%d")
     start_time = date_obj.replace(hour=0, minute=0, second=0)
@@ -3006,7 +2957,6 @@ def get_session_requests_of_user_on_date(request, user_type, user_id, date):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def request_reschedule(request, session_id):
     session = SessionRequestCaas.objects.get(id=session_id)
     session.reschedule_request.append(
@@ -3021,7 +2971,6 @@ def request_reschedule(request, session_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def reschedule_session(request):
     existing_session = SessionRequestCaas.objects.get(
         id=request.data["existing_session_id"]
@@ -3098,7 +3047,6 @@ def reschedule_session(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_engagement_in_projects(request, project_id):
     engagements = Engagement.objects.filter(project__id=project_id)
     serializer = EngagementDepthOneSerializer(engagements, many=True)
@@ -3106,7 +3054,6 @@ def get_engagement_in_projects(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_learner_engagement_of_project(request, project_id, learner_id):
     engagement = Engagement.objects.get(learner__id=learner_id, project__id=project_id)
     serializer = EngagementDepthOneSerializer(engagement)
@@ -3114,7 +3061,6 @@ def get_learner_engagement_of_project(request, project_id, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_learners_engagement(request, learner_id):
     engagements = Engagement.objects.filter(learner__id=learner_id)
     serializer = EngagementDepthOneSerializer(engagements, many=True)
@@ -3122,7 +3068,6 @@ def get_learners_engagement(request, learner_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def create_session_request_by_learner(request, session_id):
     # print(request.user)
     # if request.user.profile.type != "learner":
@@ -3136,7 +3081,6 @@ def create_session_request_by_learner(request, session_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_session_requests_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
@@ -3165,7 +3109,6 @@ def get_session_requests_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -3205,7 +3148,6 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -3245,7 +3187,6 @@ def get_past_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def edit_session_availability(request, session_id):
     time_arr = create_time_arr(request.data["availibility"])
     try:
@@ -3261,7 +3202,6 @@ def edit_session_availability(request, session_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_coachee_of_user(request, user_type, user_id):
     learners_data = []
     if user_type == "pmo":
@@ -3307,7 +3247,6 @@ def get_coachee_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_learner_data(request, learner_id):
     learner = Learner.objects.get(id=learner_id)
     serializer = LearnerSerializer(learner)
@@ -3316,7 +3255,6 @@ def get_learner_data(request, learner_id):
 
 # updating the availability and coach in the first pending chemistry available for learner
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def request_chemistry_session(request, project_id, learner_id):
     session = SessionRequestCaas.objects.filter(
         learner__id=learner_id,
@@ -3343,7 +3281,6 @@ def request_chemistry_session(request, project_id, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_learner_sessions_in_project(request, project_id, learner_id):
     sessions = SessionRequestCaas.objects.filter(
         project__id=project_id, learner__id=learner_id
@@ -3353,7 +3290,6 @@ def get_learner_sessions_in_project(request, project_id, learner_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def request_session(request, session_id, coach_id):
     session = SessionRequestCaas.objects.get(id=session_id)
     coach = Coach.objects.get(id=coach_id)
@@ -3366,7 +3302,6 @@ def request_session(request, session_id, coach_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def reschedule_session_of_coachee(request, session_id):
     session = SessionRequestCaas.objects.get(id=session_id)
     session.is_archive = True
@@ -3388,7 +3323,6 @@ def reschedule_session_of_coachee(request, session_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def create_goal(request):
     serializer = GoalSerializer(data=request.data)
     goal_name = request.data["name"]
@@ -3404,7 +3338,6 @@ def create_goal(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_engagement_goals(request, engagement_id):
     goals = Goal.objects.filter(engagement__id=engagement_id)
     serializer = GetGoalSerializer(goals, many=True)
@@ -3412,7 +3345,6 @@ def get_engagement_goals(request, engagement_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def edit_goal(request, goal_id):
     try:
         goal = Goal.objects.get(id=goal_id)
@@ -3442,7 +3374,6 @@ def edit_goal(request, goal_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def create_competency(request):
     serializer = CompetencySerializer(data=request.data)
     if serializer.is_valid():
@@ -3457,7 +3388,6 @@ def create_competency(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_engagement_competency(request, engagement_id):
     competentcy = Competency.objects.filter(goal__engagement__id=engagement_id)
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
@@ -3465,7 +3395,6 @@ def get_engagement_competency(request, engagement_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def add_score_to_competency(request, competency_id):
     try:
         competency = Competency.objects.get(id=competency_id)
@@ -3485,7 +3414,6 @@ def add_score_to_competency(request, competency_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def create_action_item(request):
     serializer = ActionItemSerializer(data=request.data)
     if serializer.is_valid():
@@ -3495,7 +3423,6 @@ def create_action_item(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_engagement_action_items(request, engagement_id):
     action_items = ActionItem.objects.filter(
         competency__goal__engagement__id=engagement_id
@@ -3505,7 +3432,6 @@ def get_engagement_action_items(request, engagement_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def edit_action_item(request, action_item_id):
     try:
         action_item = ActionItem.objects.get(id=action_item_id)
@@ -3519,7 +3445,6 @@ def edit_action_item(request, action_item_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
 def mark_session_as_complete(request, session_id):
     try:
         session = SessionRequestCaas.objects.get(id=session_id)
