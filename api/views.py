@@ -2241,7 +2241,7 @@ def create_session_request_caas(request):
                 coach = Coach.objects.get(id=request.data["coach_id"])
                 if pmo_user:
                     path = f"/projects/caas/progress/{project.id}"
-                    path_for_coach = f"/coach/sessions"
+                    path_for_coach = f"/sessions"
                     coach_name = coach.first_name + " " + coach.last_name
                     slot_message = get_slot_message(request.data["availibility"])
                     if session["session_type"] == "interview":
@@ -3271,7 +3271,7 @@ def request_chemistry_session(request, project_id, learner_id):
         session_to_update.coach = coach
         session_to_update.status = "requested"
         session_to_update.save()
-        path_for_coach = f"/coach/sessions"
+        path_for_coach = f"/sessions"
         slot_message = get_slot_message(request.data["availibility"])
         message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {session_to_update.project.name}. Please book one of the requested slots now"
         create_notification(coach.user.user, path_for_coach, message_for_coach)
