@@ -146,7 +146,7 @@ class CoachStatus(models.Model):
     consent_expiry_date = models.DateField(blank=True, null=True)
 
     def __str__(self):
-        return self.name
+        return f"{self.id} {self.coach.first_name} {self.coach.last_name}"
 
 
 class Project(models.Model):
