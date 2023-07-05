@@ -2361,9 +2361,7 @@ def add_learner_to_project(request):
             create_notification(pmo_user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-    return Response(
-        {"message": "Learners added succesfully", "details": ""}, status=201
-    )
+    return Response({"message": "Coachee added succesfully", "details": ""}, status=201)
 
 
 def transform_project_structure(sessions):
