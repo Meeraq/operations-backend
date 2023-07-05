@@ -265,7 +265,7 @@ class SessionRequestCaas(models.Model):
                 f"interview = HR:{self.hr.first_name} - Coach:{self.coach.first_name}"
             )
         else:
-            return f"{self.session_type} = Learner: {self.learner.name} - Coach: {self.coach.first_name}"
+            return f"{self.session_type} = Learner: {self.learner.name}"
 
 
 # class SessionCaas(models.Model):
