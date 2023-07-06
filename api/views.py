@@ -3451,3 +3451,13 @@ def mark_session_as_complete(request, session_id):
     session.status = "completed"
     session.save()
     return Response({"message": "Session marked as complete."}, status=201)
+
+@api_view(['POST'])
+def complete_engagement(request,engagement_id):
+    try:
+        engagement = Engagement.objects.get(id = engagement_id)
+    except Engagement.DoesNotExist:
+        return Response({"error": "Engagement not found."},status = 404)
+    engagement.status = "completed"
+    engagement.save()
+    return Response({"message": "Engagement is completed."},status=201)

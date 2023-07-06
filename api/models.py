@@ -292,9 +292,9 @@ class Notification(models.Model):
 
 class Engagement(models.Model):
     STATUS_CHOICES = (
-        ("pending", "Pending"),
         ("active", "Active"),
         ("completed", "Completed"),
+        ("archived", "Archived"),
     )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE, null=True, blank=True)
     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)

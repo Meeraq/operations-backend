@@ -192,4 +192,8 @@ urlpatterns = [
         "session/complete/<int:session_id>/",
         views.mark_session_as_complete,
     ),
+    path(
+        "engagement/complete/<int:engagement_id>/",
+        views.complete_engagement,
+    ),
 ]
