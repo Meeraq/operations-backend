@@ -3185,6 +3185,22 @@ def get_past_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["POST"])
+def edit_session_status(request, session_id):
+    try:
+        session_request = SessionRequestCaas.objects.get(id=session_id)
+    except SessionRequestCaas.DoesNotExist:
+        return Response({"error": "Session request not found."}, status=404)
+    
+    new_status = request.data.get("status")
+    if not new_status:
+        return Response({"error": "Status field is required."}, status=400)
+    
+    session_request.status = new_status
+    session_request.save()
+    return Response({"message": "Session status updated successfully."}, status=200)
+
+
+@api_view(["POST"])
 def edit_session_availability(request, session_id):
     time_arr = create_time_arr(request.data["availibility"])
     try:
