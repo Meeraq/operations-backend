@@ -2103,6 +2103,8 @@ def book_session_caas(request):
     )
     session_request.is_booked = True
     session_request.status = "booked"
+    for email in request.data.get("invitees", []):
+        session_request.invitees.append(email.strip())
     session_request.save()
     # if serializer.is_valid():
     #     session = serializer.save()
@@ -2241,7 +2243,7 @@ def create_session_request_caas(request):
                 coach = Coach.objects.get(id=request.data["coach_id"])
                 if pmo_user:
                     path = f"/projects/caas/progress/{project.id}"
-                    path_for_coach = f"/coach/sessions"
+                    path_for_coach = f"/sessions"
                     coach_name = coach.first_name + " " + coach.last_name
                     slot_message = get_slot_message(request.data["availibility"])
                     if session["session_type"] == "interview":
@@ -2361,9 +2363,7 @@ def add_learner_to_project(request):
             create_notification(pmo_user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-    return Response(
-        {"message": "Learners added succesfully", "details": ""}, status=201
-    )
+    return Response({"message": "Coachee added succesfully", "details": ""}, status=201)
 
 
 def transform_project_structure(sessions):
@@ -2414,7 +2414,7 @@ def create_engagement(learner, project):
                 status="pending",
                 order=index + 1,
             )
-        engagement = Engagement(learner=learner, project=project)
+        engagement = Engagement(learner=learner, project=project, status="active")
         engagement.save()
         return engagement
     return existing_engagement
@@ -3115,13 +3115,13 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             ~Q(status="completed"),
         )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             Q(learner__id=user_id),
             ~Q(session_type="chemistry"),
             Q(is_archive=False),
@@ -3130,7 +3130,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
             Q(is_archive=False),
             ~Q(status="completed"),
@@ -3138,7 +3138,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             Q(project__hr__id=user_id),
             Q(is_archive=False),
             ~Q(status="completed"),
@@ -3154,13 +3154,13 @@ def get_past_sessions_of_user(request, user_type, user_id):
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=current_time)
+            Q(confirmed_availability__end_time__lt=current_time)
             | Q(status="completed"),
         )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=current_time)
+            Q(confirmed_availability__end_time__lt=current_time)
             | Q(status="completed"),
             Q(learner__id=user_id),
             ~Q(session_type="chemistry"),
@@ -3169,7 +3169,7 @@ def get_past_sessions_of_user(request, user_type, user_id):
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=current_time)
+            Q(confirmed_availability__end_time__lt=current_time)
             | Q(status="completed"),
             Q(coach__id=user_id),
             Q(is_archive=False),
@@ -3177,13 +3177,27 @@ def get_past_sessions_of_user(request, user_type, user_id):
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=current_time)
+            Q(confirmed_availability__end_time__lt=current_time)
             | Q(status="completed"),
             Q(project__hr__id=user_id),
             Q(is_archive=False),
         )
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
+
+
+@api_view(["POST"])
+def edit_session_status(request, session_id):
+    try:
+        session_request = SessionRequestCaas.objects.get(id=session_id)
+    except SessionRequestCaas.DoesNotExist:
+        return Response({"error": "Session request not found."}, status=404)
+    new_status = request.data.get("status")
+    if not new_status:
+        return Response({"error": "Status field is required."}, status=400)
+    session_request.status = new_status
+    session_request.save()
+    return Response({"message": "Session status updated successfully."}, status=200)
 
 
 @api_view(["POST"])
@@ -3273,7 +3287,7 @@ def request_chemistry_session(request, project_id, learner_id):
         session_to_update.coach = coach
         session_to_update.status = "requested"
         session_to_update.save()
-        path_for_coach = f"/coach/sessions"
+        path_for_coach = f"/sessions"
         slot_message = get_slot_message(request.data["availibility"])
         message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {session_to_update.project.name}. Please book one of the requested slots now"
         create_notification(coach.user.user, path_for_coach, message_for_coach)
@@ -3453,3 +3467,107 @@ def mark_session_as_complete(request, session_id):
     session.status = "completed"
     session.save()
     return Response({"message": "Session marked as complete."}, status=201)
+
+
+@api_view(["POST"])
+def complete_engagement(request, engagement_id):
+    try:
+        engagement = Engagement.objects.get(id=engagement_id)
+    except Engagement.DoesNotExist:
+        return Response({"error": "Engagement not found."}, status=404)
+    engagement.status = "completed"
+    engagement.save()
+    return Response({"message": "Engagement is completed."}, status=201)
+
+
+@api_view(["GET"])
+def get_all_competencies(request):
+    competencies = Competency.objects.all()
+    competency_list = []
+
+    for competency in competencies:
+        goal_name = (competency.goal.name if competency.goal else "N/A",)
+        project_name = (
+            competency.goal.engagement.project.name
+            if competency.goal and competency.goal.engagement.project
+            else "N/A"
+        )
+        coachee_name = (
+            competency.goal.engagement.learner.name
+            if competency.goal and competency.goal.engagement.learner
+            else "N/A"
+        )
+        competency_data = {
+            "id": competency.id,
+            "goal_id": goal_name,
+            "name": competency.name,
+            "scoring": competency.scoring,
+            "created_at": competency.created_at.isoformat(),
+            "project_name": project_name,
+            "learner_name": coachee_name,
+        }
+        competency_list.append(competency_data)
+
+    return Response({"competencies": competency_list})
+
+
+@api_view(["GET"])
+def get_current_session(request, user_type, room_id, user_id):
+    five_minutes_in_milliseconds = 300000
+    current_time = int(timezone.now().timestamp() * 1000)
+    five_minutes_plus_current_time = current_time + five_minutes_in_milliseconds
+    if user_type == "coach":
+        sessions = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
+            & Q(confirmed_availability__end_time__gt=current_time),
+            Q(coach__id=user_id),
+            Q(coach__room_id=room_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        )
+    elif user_type == "learner":
+        sessions = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
+            & Q(confirmed_availability__end_time__gt=current_time),
+            Q(learner__id=user_id),
+            Q(coach__room_id=room_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        )
+    elif user_type == "hr":
+        sessions = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
+            & Q(confirmed_availability__end_time__gt=current_time),
+            Q(hr__id=user_id),
+            Q(coach__room_id=room_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        )
+    if len(sessions) == 0:
+        return Response({"error": "You don't have any sessions right now."}, status=404)
+    return Response({"message": "success"}, status=200)
+
+
+@api_view(["POST"])
+def get_current_session_of_stakeholder(request, room_id):
+    five_minutes_in_milliseconds = 300000
+    current_time = int(timezone.now().timestamp() * 1000)
+    five_minutes_plus_current_time = current_time + five_minutes_in_milliseconds
+    sessions = SessionRequestCaas.objects.filter(
+        Q(is_booked=True),
+        Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
+        & Q(confirmed_availability__end_time__gt=current_time),
+        Q(coach__room_id=room_id),
+        Q(session_type="tripartite")
+        | Q(session_type="mid_review")
+        | Q(session_type="end_review"),
+        Q(invitees__contains=request.data["email"]),
+        Q(is_archive=False),
+        ~Q(status="completed"),
+    )
+    if len(sessions) == 0:
+        return Response({"error": "You don't have any sessions right now."}, status=404)
+    return Response({"message": "success"}, status=200)

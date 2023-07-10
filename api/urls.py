@@ -192,4 +192,21 @@ urlpatterns = [
         "session/complete/<int:session_id>/",
         views.mark_session_as_complete,
     ),
+    path("sessions/status/update/<int:session_id>/", views.edit_session_status),
+    path(
+        "engagement/complete/<int:engagement_id>/",
+        views.complete_engagement,
+    ),
+    path(
+        "all/competency/",
+        views.get_all_competencies,
+    ),
+    path(
+        "current-session/<str:user_type>/<str:room_id>/<int:user_id>/",
+        views.get_current_session,
+    ),
+    path(
+        "current-session/stakeholder/<str:room_id>/",
+        views.get_current_session_of_stakeholder,
+    ),
 ]

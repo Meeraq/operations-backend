@@ -97,7 +97,7 @@ class Coach(models.Model):
     active_inactive = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
-        return self.first_name
+        return self.first_name + " " + self.last_name
 
 
 class Learner(models.Model):
@@ -116,6 +116,9 @@ class Organisation(models.Model):
     name = models.CharField(max_length=100)
     image_url = models.ImageField(upload_to="post_images", blank=True)
 
+    def __str__(self):
+        return self.name
+
 
 class HR(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
@@ -126,7 +129,7 @@ class HR(models.Model):
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
 
     def __str__(self):
-        return self.first_name
+        return self.first_name + " " + self.last_name
 
 
 # class CoachInvites(models.Model):
@@ -141,6 +144,9 @@ class CoachStatus(models.Model):
     learner_id = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     consent_expiry_date = models.DateField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.id} {self.coach.first_name} {self.coach.last_name}"
 
 
 class Project(models.Model):
@@ -172,12 +178,22 @@ class Project(models.Model):
     updated_to_sold = models.BooleanField(default=False)
     mode = models.CharField(max_length=100)
     location = models.CharField(max_length=100, blank=True, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
 
 
 class OTP(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     otp = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.user.username
 
 
 # class OTP_HR(models.Model):
@@ -220,6 +236,7 @@ class SessionRequestCaas(models.Model):
     coach = models.ForeignKey(
         Coach, on_delete=models.CASCADE, blank=True, null=True, default=None
     )
+    invitees = models.JSONField(default=list, blank=True)
     availibility = models.ManyToManyField(
         Availibility, related_name="requested_availability"
     )
@@ -243,6 +260,14 @@ class SessionRequestCaas(models.Model):
         blank=True, default=None, null=True
     )  # used for engagement structure
 
+    def __str__(self):
+        if self.session_type == "interview":
+            return (
+                f"interview = HR:{self.hr.first_name} - Coach:{self.coach.first_name}"
+            )
+        else:
+            return f"{self.session_type} = Learner: {self.learner.name}"
+
 
 # class SessionCaas(models.Model):
 #     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
@@ -263,14 +288,14 @@ class Notification(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Notification for {self.user.username}"
+        return self.user.username
 
 
 class Engagement(models.Model):
     STATUS_CHOICES = (
-        ("pending", "Pending"),
         ("active", "Active"),
         ("completed", "Completed"),
+        ("archived", "Archived"),
     )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE, null=True, blank=True)
     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
@@ -279,6 +304,9 @@ class Engagement(models.Model):
     project_structure = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"Project: {self.project.name} - Learner: {self.learner.name}"
+
 
 class Goal(models.Model):
     STATUS_CHOICES = (
@@ -286,15 +314,15 @@ class Goal(models.Model):
         ("archive", "Archive"),
         ("complete", "Complete"),
     )
-    name = models.CharField(max_length=50)
-    description = models.CharField(max_length=500)
+    name = models.TextField()
+    description = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     engagement = models.ForeignKey(Engagement, on_delete=models.CASCADE)
 
 
 class Competency(models.Model):
     goal = models.ForeignKey(Goal, on_delete=models.CASCADE)
-    name = models.CharField(max_length=50)
+    name = models.TextField()
     scoring = models.JSONField(default=list, blank=True)
     created_at = models.DateField(auto_now_add=True)
 
@@ -305,6 +333,6 @@ class ActionItem(models.Model):
         ("partially_done", "Partially done"),
         ("not_done", "Not done"),
     )
-    name = models.CharField(max_length=50)
+    name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
