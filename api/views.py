@@ -3190,11 +3190,9 @@ def edit_session_status(request, session_id):
         session_request = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
         return Response({"error": "Session request not found."}, status=404)
-    
     new_status = request.data.get("status")
     if not new_status:
         return Response({"error": "Status field is required."}, status=400)
-    
     session_request.status = new_status
     session_request.save()
     return Response({"message": "Session status updated successfully."}, status=200)
@@ -3468,12 +3466,36 @@ def mark_session_as_complete(request, session_id):
     session.save()
     return Response({"message": "Session marked as complete."}, status=201)
 
-@api_view(['POST'])
-def complete_engagement(request,engagement_id):
+
+@api_view(["POST"])
+def complete_engagement(request, engagement_id):
     try:
-        engagement = Engagement.objects.get(id = engagement_id)
+        engagement = Engagement.objects.get(id=engagement_id)
     except Engagement.DoesNotExist:
-        return Response({"error": "Engagement not found."},status = 404)
+        return Response({"error": "Engagement not found."}, status=404)
     engagement.status = "completed"
     engagement.save()
-    return Response({"message": "Engagement is completed."},status=201)
+    return Response({"message": "Engagement is completed."}, status=201)
+
+
+@api_view(["GET"])
+def get_all_competencies(request):
+    competencies = Competency.objects.all()
+    competency_list = []
+
+    for competency in competencies:
+        goal_name = competency.goal.name if competency.goal else "N/A",
+        project_name = competency.goal.engagement.project.name if competency.goal and competency.goal.engagement.project else "N/A"
+        coachee_name = competency.goal.engagement.learner.name if competency.goal and competency.goal.engagement.learner else "N/A"
+        competency_data = {
+            "id": competency.id,
+            "goal_id": goal_name,
+            "name": competency.name,
+            "scoring": competency.scoring,
+            "created_at": competency.created_at.isoformat(),
+            "project_name": project_name,
+            "learner_name": coachee_name,
+        }
+        competency_list.append(competency_data)
+
+    return Response({"competencies": competency_list})
