@@ -201,4 +201,12 @@ urlpatterns = [
         "all/competency/",
         views.get_all_competencies,
     ),
+    path(
+        "current-session/<str:user_type>/<str:room_id>/<int:user_id>/",
+        views.get_current_session,
+    ),
+    path(
+        "current-session/stakeholder/<str:room_id>/",
+        views.get_current_session_of_stakeholder,
+    ),
 ]

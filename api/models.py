@@ -236,6 +236,7 @@ class SessionRequestCaas(models.Model):
     coach = models.ForeignKey(
         Coach, on_delete=models.CASCADE, blank=True, null=True, default=None
     )
+    invitees = models.JSONField(default=list, blank=True)
     availibility = models.ManyToManyField(
         Availibility, related_name="requested_availability"
     )
