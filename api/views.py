@@ -3427,6 +3427,13 @@ def add_score_to_competency(request, competency_id):
         return Response({"error": str(e)}, status=400)
 
 
+@api_view(["GET"])
+def get_competency_by_goal(request, goal_id):
+    competentcy = Competency.objects.filter(goal__id=goal_id)
+    serializer = CompetencyDepthOneSerializer(competentcy, many=True)
+    return Response(serializer.data, status=200)
+
+
 @api_view(["POST"])
 def create_action_item(request):
     serializer = ActionItemSerializer(data=request.data)
@@ -3444,6 +3451,12 @@ def get_engagement_action_items(request, engagement_id):
     serializer = GetActionItemDepthOneSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
 
+
+@api_view(["GET"])
+def get_action_items_by_competency(request, competency_id):
+    action_items = ActionItem.objects.filter(competency__id=competency_id)
+    serializer = GetActionItemDepthOneSerializer(action_items, many=True)
+    return Response(serializer.data, status=200)
 
 @api_view(["POST"])
 def edit_action_item(request, action_item_id):

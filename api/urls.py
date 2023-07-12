@@ -209,4 +209,9 @@ urlpatterns = [
         "current-session/stakeholder/<str:room_id>/",
         views.get_current_session_of_stakeholder,
     ),
+    path("competency/goal/<int:goal_id>/", views.get_competency_by_goal),
+    path(
+        "action-items/competency/<int:competency_id>/",
+        views.get_action_items_by_competency,
+    ),
 ]
