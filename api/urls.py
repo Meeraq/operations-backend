@@ -214,4 +214,5 @@ urlpatterns = [
         "action-items/competency/<int:competency_id>/",
         views.get_action_items_by_competency,
     ),
+    path("sessions/direct-schedule/<int:session_id>/", views.schedule_session_directly),
 ]

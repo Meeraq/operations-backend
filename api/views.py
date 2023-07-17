@@ -3458,6 +3458,7 @@ def get_action_items_by_competency(request, competency_id):
     serializer = GetActionItemDepthOneSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
 
+
 @api_view(["POST"])
 def edit_action_item(request, action_item_id):
     try:
@@ -3584,3 +3585,23 @@ def get_current_session_of_stakeholder(request, room_id):
     if len(sessions) == 0:
         return Response({"error": "You don't have any sessions right now."}, status=404)
     return Response({"message": "success"}, status=200)
+
+
+@api_view(["POST"])
+def schedule_session_directly(request, session_id):
+    try:
+        session = SessionRequestCaas.objects.get(id=session_id)
+    except SessionRequestCaas.DoesNotExist:
+        return Response({"error": "Session not found."}, status=404)
+    time_arr = create_time_arr(request.data.get("availability", []))
+    if len(time_arr) == 0:
+        return Response({"error": "Please provide the availability."}, status=404)
+    availability = Availibility.objects.get(id=time_arr[0])
+    session.availibility.add(availability)
+    session.confirmed_availability = availability
+    session.is_booked = True
+    session.status = "booked"
+    for email in request.data.get("invitees", []):
+        session.invitees.append(email.strip())
+    session.save()
+    return Response({"message": "Session booked successfully."})
