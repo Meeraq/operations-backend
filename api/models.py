@@ -179,6 +179,8 @@ class Project(models.Model):
     mode = models.CharField(max_length=100)
     location = models.CharField(max_length=100, blank=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
+    price_per_hour = models.IntegerField(default=0, blank=True)
+    coach_fees_per_hour = models.IntegerField(default=0, blank=True)
 
     class Meta:
         ordering = ["-created_at"]

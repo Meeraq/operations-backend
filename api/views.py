@@ -472,6 +472,8 @@ def create_project_cass(request):
         name=request.data["project_name"],
         organisation=organisation,
         currency=request.data["currency"],
+        price_per_hour=request.data["price_per_hour"],
+        coach_fees_per_hour=request.data["coach_fees_per_hour"],
         project_type="CAAS",
         interview_allowed=request.data["interview_allowed"],
         # chemistry_allowed= request.data['chemistry_allowed'],
