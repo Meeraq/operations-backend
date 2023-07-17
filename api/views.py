@@ -3597,9 +3597,11 @@ def schedule_session_directly(request, session_id):
     if len(time_arr) == 0:
         return Response({"error": "Please provide the availability."}, status=404)
     availability = Availibility.objects.get(id=time_arr[0])
+    coach = Coach.objects.get(id=request.data["coach_id"])
     session.availibility.add(availability)
     session.confirmed_availability = availability
     session.is_booked = True
+    session.coach = coach
     session.status = "booked"
     for email in request.data.get("invitees", []):
         session.invitees.append(email.strip())
