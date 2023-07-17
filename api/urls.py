@@ -175,6 +175,11 @@ urlpatterns = [
     path("goals/<int:engagement_id>/", views.get_engagement_goals),
     path("goals/edit/<int:goal_id>/", views.edit_goal, name="edit_goal"),
     path("competency/", views.create_competency),
+    path(
+        "competency/edit/<int:competency_id>/",
+        views.edit_competency,
+        name="edit_competency",
+    ),
     path("competency/<int:engagement_id>/", views.get_engagement_competency),
     path(
         "competency/score/<int:competency_id>/",

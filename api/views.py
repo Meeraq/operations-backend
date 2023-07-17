@@ -3401,6 +3401,33 @@ def create_competency(request):
     )
 
 
+@api_view(["POST"])
+def edit_competency(request, competency_id):
+    try:
+        competency = Competency.objects.get(id=competency_id)
+    except Competency.DoesNotExist:
+        return Response({"error": "Competency not found."}, status=404)
+
+    serializer = CompetencySerializer(instance=competency, data=request.data)
+    competency_name = request.data["name"]
+    if (
+        not Competency.objects.filter(name=competency_name, goal__id=competency.goal.id)
+        .exclude(id=competency.goal.id)
+        .exists()
+    ):
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Competency updated successfully."}, status=200)
+        return Response(serializer.errors, status=400)
+    else:
+        return Response(
+            {
+                "error": "Another competency with the same name already exists in the goal."
+            },
+            status=400,
+        )
+
+
 @api_view(["GET"])
 def get_engagement_competency(request, engagement_id):
     competentcy = Competency.objects.filter(goal__engagement__id=engagement_id)
