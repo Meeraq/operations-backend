@@ -220,4 +220,5 @@ urlpatterns = [
         views.get_action_items_by_competency,
     ),
     path("sessions/direct-schedule/<int:session_id>/", views.schedule_session_directly),
+    path("learner/delete/<int:engagement_id>/", views.delete_learner_from_project),
 ]

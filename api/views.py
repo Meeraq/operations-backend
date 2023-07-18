@@ -74,7 +74,6 @@ import string
 import random
 from django.db.models import Q
 
-
 # Create your views here.
 
 import environ
@@ -3636,3 +3635,30 @@ def schedule_session_directly(request, session_id):
         session.invitees.append(email.strip())
     session.save()
     return Response({"message": "Session booked successfully."})
+
+
+@api_view(["POST"])
+def delete_learner_from_project(request, engagement_id):
+    try:
+        engagement = Engagement.objects.get(id=engagement_id)
+    except Engagement.DoesNotExist:
+        return Response({"error": "Learner not found in project."}, status=404)
+    try:
+        print("outside the for loop ")
+        # removing the learner id from the project coaches statuses
+        for coach_statuses in engagement.project.coaches_status.all():
+            print("inside for loop")
+            if engagement.learner.id in coach_statuses.learner_id:
+                coach_statuses.learner_id.remove(engagement.learner.id)
+            coach_statuses.save()
+        sessions_to_delete = SessionRequestCaas.objects.filter(
+            learner__id=engagement.learner.id, project__id=engagement.project.id
+        )
+        sessions_to_delete.delete()
+        engagement.delete()
+        return Response({"message": "Learner deleted successfully"})
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to remove learner from the project."}, status=400
+        )
