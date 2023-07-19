@@ -2953,6 +2953,11 @@ def get_session_requests_of_user_on_date(request, user_type, user_id, date):
             learner__id=user_id,
             availibility__start_time__range=(start_timestamp, end_timestamp),
         )
+    elif user_type == "coach":
+        session_requests = SessionRequestCaas.objects.filter(
+            coach__id=user_id,
+            availibility__start_time__range=(start_timestamp, end_timestamp),
+        )
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
 
