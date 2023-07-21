@@ -73,6 +73,10 @@ import json
 import string
 import random
 from django.db.models import Q
+from collections import defaultdict
+from django.db.models import Avg
+
+
 
 # Create your views here.
 
@@ -3667,3 +3671,112 @@ def delete_learner_from_project(request, engagement_id):
         return Response(
             {"error": "Failed to remove learner from the project."}, status=400
         )
+
+
+@api_view(["GET"])
+def get_competency_averages(request, hr_id):
+    # Step 1: Retrieve the data from the Competency model
+    competencies = Competency.objects.filter(goal__engagement__project__hr__id=hr_id)
+    # Step 2 and 3: Calculate the average score for each competency and store in a dictionary
+    competency_averages = defaultdict(lambda: {"total_score": 0, "count": 0})
+    for competency in competencies:
+        competency_name = competency.name
+        scoring_data = competency.scoring
+        if scoring_data:
+            total_score = sum(entry["score"] for entry in scoring_data)
+            count = len(scoring_data)
+            competency_averages[competency_name]["total_score"] += total_score
+            competency_averages[competency_name]["count"] += count
+    # Step 4: Calculate the final average for each competency, considering competencies with the same name
+    final_averages = {}
+    for competency_name, data in competency_averages.items():
+        total_score = data["total_score"]
+        count = data["count"]
+        average_score = total_score / count if count > 0 else 0
+        final_averages[competency_name] = average_score
+    top_5_competencies = dict(
+        sorted(final_averages.items(), key=lambda item: item[1], reverse=True)[:5]
+    )
+    return Response(top_5_competencies, status=200)
+
+
+@api_view(["GET"])
+def get_upcoming_session_count(request, hr_id):
+    current_time = int(timezone.now().timestamp() * 1000)
+    session_requests = []
+    # Get the start and end of the current month
+    current_month = timezone.now().replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    current_month_timestamp = int(current_month.timestamp() * 1000)
+    next_month = current_month.replace(month=current_month.month + 1, day=1)
+    if current_month.month == 12:  # Handle December case
+        next_month = next_month.replace(year=current_month.year + 1)
+    next_month_timestamp = int(next_month.timestamp() * 1000)
+    session_requests = SessionRequestCaas.objects.filter(
+        Q(is_booked=True),
+        Q(confirmed_availability__end_time__gt=current_time),
+        Q(confirmed_availability__end_time__gte=current_month_timestamp),
+        Q(confirmed_availability__end_time__lt=next_month_timestamp),
+        Q(project__hr__id=hr_id),
+        Q(is_archive=False),
+        ~Q(status="completed"),
+    )
+    upcoming_session_count = session_requests.count()
+    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    return Response(
+        {
+            "upcoming_sessions": serializer.data,
+            "upcoming_session_count": upcoming_session_count,
+        },
+        status=200,
+    )
+
+
+@api_view(["GET"])
+def get_requests_count(request, hr_id):
+    session_requests = SessionRequestCaas.objects.filter(
+        Q(confirmed_availability=None) & Q(project__hr__id=hr_id) & ~Q(status="pending")
+    )
+    requests_count = session_requests.count()
+    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    return Response(
+        {
+            "requestes": serializer.data,
+            "requests_count": requests_count,
+        },
+        status=200,
+    )
+
+
+@api_view(["GET"])
+def get_learners_without_sessions(request, hr_id):
+    # Get the learners associated with the given hr_id who don't have any sessions with status = "requested" or "booked".
+    learners = (
+        Learner.objects.filter(engagement__project__hr__id=hr_id)
+        .exclude(sessionrequestcaas__status__in=["requested", "booked"])
+        .distinct()
+    )
+    # Serialize the filtered learner data.
+    learners_count = learners.count()
+    serializer = LearnerSerializer(learners, many=True)
+    return Response(
+        {"learners": serializer.data, "learners_count": learners_count}, status=200
+    )
+
+
+@api_view(["POST"])
+def select_coach_for_coachee(request):
+    try:
+        coach_status = CoachStatus.objects.get(id=request.data["coach_status_id"])
+    except CoachStatus.DoesNotExist:
+        return Response({"error": "Coach not found"}, status=404)
+    try:
+        engagement = Engagement.objects.get(id=request.data["engagement_id"])
+    except Engagement.DoesNotExist:
+        return Response({"error": "Unable to find learner"}, status=404)
+    coach_status.learner_id.append(engagement.learner.id)
+    coach_status.save()
+    engagement.coach = coach_status.coach
+    engagement.save()
+    return Response({"message": "Coach finalized for coachee"}, status=201)

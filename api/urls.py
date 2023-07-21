@@ -221,4 +221,9 @@ urlpatterns = [
     ),
     path("sessions/direct-schedule/<int:session_id>/", views.schedule_session_directly),
     path("learner/delete/<int:engagement_id>/", views.delete_learner_from_project),
+    path("competency/averages/<int:hr_id>/", views.get_competency_averages),
+    path("upcoming-sessions/count/<int:hr_id>/", views.get_upcoming_session_count),
+    path("requests/count/<int:hr_id>/", views.get_requests_count),
+    path("idle-coachee/<int:hr_id>/", views.get_learners_without_sessions),
+    path("engagement/select-coach-for-coachee/", views.select_coach_for_coachee),
 ]
