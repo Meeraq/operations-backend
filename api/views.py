@@ -3921,6 +3921,21 @@ def get_requests_count(request, hr_id):
 
 
 @api_view(["GET"])
+def get_completed_sessions_count(request, hr_id):
+    session_requests = SessionRequestCaas.objects.filter(
+       ~Q(session_type="interview") & Q(project__hr__id=hr_id) & Q(status="completed")
+    )
+    sessions_count = session_requests.count()
+    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    return Response(
+        {
+            "sessions": serializer.data,
+            "sessions_count": sessions_count,
+        },
+        status=200,
+    )
+
+@api_view(["GET"])
 def get_learners_without_sessions(request, hr_id):
     # Get the learners associated with the given hr_id who don't have any sessions with status = "requested" or "booked".
     learners = (
