@@ -595,6 +595,7 @@ def create_project_cass(request):
     project_name = project.name
     print(request.data["hr"], "HR ID")
     for hr in request.data["hr"]:
+        
         single_hr = HR.objects.get(id=hr)
         # print(single_hr)
         project.hr.add(single_hr)
@@ -607,13 +608,22 @@ def create_project_cass(request):
     # for hr in hrs:
     #     project.hr.add(hr)
 
+    # try:
+    #     path = f"/projects/caas/progress/{project.id}"
+    #     message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
+    #     create_notification(project.hr.first().user.user, path, message)
+    # except Exception as e:
+    #     print(f"Error occurred while creating notification: {str(e)}")
+    # return Response({"message": "Project created succesfully"}, status=200)
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
-        create_notification(project.hr.first().user.user, path, message)
+        for hr_member in project.hr.all():
+            create_notification(hr_member.user.user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-    return Response({"message": "Project created succesfully"}, status=200)
+    return Response({"message": "Project created successfully"}, status=200)
+
 
 
 # @api_view(['POST'])
@@ -2353,7 +2363,8 @@ def create_session_request_caas(request):
                         )
                         message_for_hr = f"{session_created.learner.name.title()} has requested for Chemistry session to the Coach - {coach_name.title()} for {slot_message} for the Project - {project.name}"
                         message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {project.name}. Please book one of the requested slots now"
-                        create_notification(hr_user_in_project, path, message_for_hr)
+                        for hr_user in hr_user_in_project:
+                            create_notification(hr_user, path, message_for_hr)
                         message = f"Coachee has requested chemistry session to {coach_name.title()} for Project - {project.name}. The requested slots are "
                     message += " " + slot_message
                     create_notification(pmo_user, path, message)
@@ -2662,10 +2673,13 @@ def send_project_strure_to_hr(request):
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Project structure has been added to the project - {project.name}."
-        create_notification(project.hr.first().user.user, path, message)
+        for hr_user in project.hr.all():
+            create_notification(hr_user.user.user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Sent to HR."}, status=200)
+
+
 
 
 @api_view(["POST"])
@@ -2775,7 +2789,8 @@ def send_list_to_hr(request):
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Admin has shared {len(request.data['coach_list'])} coach profile with you for the Project - {project.name}."
-        create_notification(project.hr.first().user.user, path, message)
+        for hr_user in project.hr.all():
+            create_notification(hr_user.user.user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Sent Successfully", "details": {}}, status=200)
@@ -3022,7 +3037,8 @@ def mark_project_as_sold(request):
         path = f"/projects/caas/progress/{project.id}"
         message = f"Project structure has been added to the project - {project.name}."
         message_for_coach = f"Admin has added project structure. Please agree to the project structure to go forward with the Project - {project.name}"
-        create_notification(project.hr.first().user.user, path, message)
+        for hr_user in project.hr.all():
+            create_notification(hr_user.user.user, path, message)
         for coach_status in project.coaches_status.all():
             create_notification(coach_status.coach.user.user, path, message_for_coach)
     except Exception as e:
@@ -3132,7 +3148,8 @@ def reschedule_session(request):
                         )
                         message_for_hr = f"{session_created.learner.name.title()} has requested for Chemistry session to the Coach - {coach_name.title()} for {slot_message} for the Project - {project.name}"
                         message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {project.name}. Please book one of the requested slots now"
-                        create_notification(hr_user_in_project, path, message_for_hr)
+                        for hr_user in hr_user_in_project:
+                            create_notification(hr_user, path, message_for_hr)
                         message = f"Coachee has requested chemistry session to {coach_name.title()} for Project - {project.name}. The requested slots are "
                     message += " " + slot_message
                     create_notification(pmo_user, path, message)
