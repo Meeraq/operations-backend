@@ -92,6 +92,8 @@ def create_notification(user, path, message):
 def format_timestamp(timestamp):
     dt = datetime.fromtimestamp(timestamp / 1000)  # Convert milliseconds to seconds
     return dt.strftime("%d-%m-%Y %I:%M %p")
+
+
 def generateManagementToken():
     expires = 24 * 3600
     now = datetime.utcnow()
@@ -109,8 +111,8 @@ def generateManagementToken():
         key=env("100MS_APP_SECRET"),
     )
 
+
 def generate_room_id(email):
-    
     management_token = generateManagementToken()
     try:
         payload = {
@@ -137,6 +139,7 @@ def generate_room_id(email):
         print(f"Error while generating meeting link: {str(e)}")
         return None
 
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def create_pmo(request):
@@ -150,20 +153,22 @@ def create_pmo(request):
     room_id = generate_room_id(email)
 
     # Check if required data is provided
-    if not all([name, email, phone, username, password,room_id]):
+    if not all([name, email, phone, username, password, room_id]):
         return Response({"error": "All required fields must be provided."}, status=400)
 
     try:
         with transaction.atomic():
-         
-            user = User.objects.create_user(username=username, password=password, email=email)
-      
-            pmo_profile = Profile.objects.create(user=user, type="pmo")
-          
-            pmo_user = Pmo.objects.create(user=pmo_profile, name=name, email=email, phone=phone,room_id=room_id)
+            user = User.objects.create_user(
+                username=username, password=password, email=email
+            )
 
-            
-                # Return success response without room_id
+            pmo_profile = Profile.objects.create(user=user, type="pmo")
+
+            pmo_user = Pmo.objects.create(
+                user=pmo_profile, name=name, email=email, phone=phone, room_id=room_id
+            )
+
+            # Return success response without room_id
             return Response({"message": "PMO added successfully."}, status=201)
 
     except IntegrityError as ie:
@@ -172,7 +177,7 @@ def create_pmo(request):
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
-    
+
 
 # room_id = ""
 # management_token = generateManagementToken()
@@ -447,7 +452,6 @@ def coach_login(request):
     return Response({"coach": coach_serializer.data}, status=200)
 
 
-
 @api_view(["GET"])
 def get_management_token(request):
     management_token = generateManagementToken()
@@ -556,9 +560,11 @@ def create_project_cass(request):
     project = Project(
         name=request.data["project_name"],
         organisation=organisation,
-        currency=request.data["currency"],
-        price_per_hour=request.data["price_per_hour"],
-        coach_fees_per_hour=request.data["coach_fees_per_hour"],
+        approx_coachee=request.data["approx_coachee"],
+        frequency_of_session=request.data["frequency_of_session"],
+        # currency=request.data["currency"],
+        # price_per_hour=request.data["price_per_hour"],
+        # coach_fees_per_hour=request.data["coach_fees_per_hour"],
         project_type="CAAS",
         interview_allowed=request.data["interview_allowed"],
         # chemistry_allowed= request.data['chemistry_allowed'],
@@ -1403,6 +1409,7 @@ def add_coach(request):
     room_id = request.data.get("room_id")
     phone = request.data.get("phone")
     level = request.data.get("level")
+    currency = request.data.get("currency")
     education = request.data.get("education")
     rating = "5"
     min_fees = request.data["min_fees"]
@@ -1475,6 +1482,7 @@ def add_coach(request):
                 email=email,
                 phone=phone,
                 level=level,
+                currency=currency,
                 education=education,
                 rating=rating,
                 area_of_expertise=area_of_expertise,
@@ -1861,6 +1869,9 @@ def add_project_struture(request):
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     project.project_structure = request.data.get("project_structure", [])
+    project.currency = request.data.get("currency", "")
+    project.price_per_hour = request.data.get("price_per_hour", "")
+    project.coach_fees_per_hour = request.data.get("coach_price_per_hour", "")
     # project.status['project_structure'] = 'complete'
     project.save()
     return Response({"message": "Structure added", "details": ""}, status=200)
@@ -3718,7 +3729,8 @@ def get_current_session_of_stakeholder(request, room_id):
         (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
         Q(session_type="tripartite")
         | Q(session_type="mid_review")
-        | Q(session_type="end_review")  | Q(session_type="stakeholder_without_coach"),
+        | Q(session_type="end_review")
+        | Q(session_type="stakeholder_without_coach"),
         Q(invitees__contains=request.data["email"]),
         Q(is_archive=False),
         ~Q(status="completed"),
@@ -3749,6 +3761,7 @@ def get_current_session_of_stakeholder(request, room_id):
 #     session.save()
 #     return Response({"message": "Session booked successfully."})
 
+
 @api_view(["POST"])
 def schedule_session_directly(request, session_id):
     try:
@@ -3761,18 +3774,18 @@ def schedule_session_directly(request, session_id):
         return Response({"error": "Please provide the availability."}, status=404)
 
     availability = Availibility.objects.get(id=time_arr[0])
-    if request.data["user_type"] == 'pmo':
+    if request.data["user_type"] == "pmo":
         pmo = Pmo.objects.get(id=request.data["user_id"])
-        session.pmo = pmo 
-    
-    if request.data["user_type"] == 'coach':
+        session.pmo = pmo
+
+    if request.data["user_type"] == "coach":
         coach = Coach.objects.get(id=request.data["user_id"])
         session.coach = coach
-    
+
     session.availibility.add(availability)
     session.confirmed_availability = availability
     session.is_booked = True
-    
+
     session.status = "booked"
 
     for email in request.data.get("invitees", []):
@@ -3780,6 +3793,7 @@ def schedule_session_directly(request, session_id):
     session.save()
 
     return Response({"message": "Session booked successfully."})
+
 
 @api_view(["POST"])
 def delete_learner_from_project(request, engagement_id):
@@ -3806,6 +3820,28 @@ def delete_learner_from_project(request, engagement_id):
         return Response(
             {"error": "Failed to remove learner from the project."}, status=400
         )
+
+
+@api_view(["POST"])
+def reset_consent(request):
+    try:
+        coach_status = get_object_or_404(
+            CoachStatus, id=request.data.get("coach_status_id")
+        )
+    except CoachStatus.DoesNotExist:
+        return Response({"error": "Could not find coach consent"}, status=404)
+
+    if request.data.get("type") == "consent":
+        coach_status.status["consent"]["status"] = "sent"
+        coach_status.consent_expiry_date = request.data["consent_expiry_date"]
+        # coach_status.consent_expiry_date = datetime.strptime(
+        #     request.data.get("consent_expiry_date"), "%Y-%m-%d"
+        # ).date()
+
+    coach_status.status["project_structure"]["status"] = "sent"
+    coach_status.save()
+
+    return Response({"message": "Consent reset successfully"})
 
 
 @api_view(["GET"])

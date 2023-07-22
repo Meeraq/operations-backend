@@ -96,6 +96,7 @@ class Coach(models.Model):
     companies_worked_in = models.JSONField(default=list, blank=True)
     other_certification = models.JSONField(default=list, blank=True)
     active_inactive = models.BooleanField(blank=True, default=False)
+    currency = models.CharField(max_length=100, blank=True, default="")
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -166,7 +167,6 @@ class Project(models.Model):
     learner = models.ManyToManyField(Learner, blank=True)
     total_sessions = models.IntegerField(default=0, blank=True)
     cost_per_session = models.IntegerField(default=0, blank=True)
-    currency = models.CharField(max_length=30, default="Rupees")
     sessions_per_employee = models.IntegerField(default=0, blank=True)
     steps = models.JSONField(default=dict)
     project_structure = models.JSONField(default=list, blank=True)
@@ -180,8 +180,11 @@ class Project(models.Model):
     mode = models.CharField(max_length=100)
     location = models.CharField(max_length=100, blank=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
+    currency = models.CharField(max_length=30, default="Rupees")
     price_per_hour = models.IntegerField(default=0, blank=True)
     coach_fees_per_hour = models.IntegerField(default=0, blank=True)
+    approx_coachee = models.TextField(blank=True)
+    frequency_of_session = models.TextField(blank=True)
 
     class Meta:
         ordering = ["-created_at"]

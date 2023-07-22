@@ -227,4 +227,5 @@ urlpatterns = [
     path("idle-coachee/<int:hr_id>/", views.get_learners_without_sessions),
     path("engagement/select-coach-for-coachee/", views.select_coach_for_coachee),
     path("add-past-session/<int:session_id>/<int:coach_id>/", views.add_past_session),
+    path("reset_consent/", views.reset_consent),
 ]
