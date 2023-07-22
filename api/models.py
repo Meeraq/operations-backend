@@ -55,6 +55,7 @@ class Pmo(models.Model):
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
+    room_id = models.CharField(max_length=50, blank=True)
 
     def __str__(self):
         return self.name
@@ -231,6 +232,10 @@ class SessionRequestCaas(models.Model):
     hr = models.ForeignKey(
         HR, on_delete=models.CASCADE, blank=True, null=True, default=None
     )
+    pmo = models.ForeignKey(
+        Pmo, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+
     learner = models.ForeignKey(
         Learner, on_delete=models.CASCADE, blank=True, null=True, default=None
     )

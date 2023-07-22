@@ -92,39 +92,139 @@ def create_notification(user, path, message):
 def format_timestamp(timestamp):
     dt = datetime.fromtimestamp(timestamp / 1000)  # Convert milliseconds to seconds
     return dt.strftime("%d-%m-%Y %I:%M %p")
+def generateManagementToken():
+    expires = 24 * 3600
+    now = datetime.utcnow()
+    exp = now + timedelta(seconds=expires)
+    return jwt.encode(
+        payload={
+            "access_key": env("100MS_APP_ACCESS_KEY"),
+            "type": "management",
+            "version": 2,
+            "jti": str(uuid.uuid4()),
+            "iat": now,
+            "exp": exp,
+            "nbf": now,
+        },
+        key=env("100MS_APP_SECRET"),
+    )
 
+def generate_room_id(email):
+    
+    management_token = generateManagementToken()
+    try:
+        payload = {
+            "name": email.replace(".", "-").replace("@", ""),
+            "description": "This is a sample description for the room",
+            "region": "in",
+        }
 
-# Create pmo user
+        response_from_100ms = requests.post(
+            "https://api.100ms.live/v2/rooms",
+            headers={
+                "Authorization": f"Bearer {management_token}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+
+        if response_from_100ms.status_code == 200:
+            room_id = response_from_100ms.json().get("id")
+            return room_id
+        else:
+            return None
+    except Exception as e:
+        print(f"Error while generating meeting link: {str(e)}")
+        return None
+
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def create_pmo(request):
     # Get data from request
     name = request.data.get("name")
     email = request.data.get("email")
     phone = request.data.get("phone")
-    username = request.data.get("email")  # username and email are same
+    username = email  # username and email are the same
     password = request.data.get("password")
+
+    room_id = generate_room_id(email)
+
     # Check if required data is provided
-    if not all([name, email, phone, username, password]):
+    if not all([name, email, phone, username, password,room_id]):
         return Response({"error": "All required fields must be provided."}, status=400)
 
     try:
         with transaction.atomic():
-            # Create the Django User
-            user = User.objects.create_user(
-                username=username, password=password, email=email
-            )
-            # Create the PMO Profile linked to the User
+         
+            user = User.objects.create_user(username=username, password=password, email=email)
+      
             pmo_profile = Profile.objects.create(user=user, type="pmo")
-            # Create the PMO User using the Profile
-            pmo_user = Pmo.objects.create(
-                user=pmo_profile, name=name, email=email, phone=phone
-            )
-        # Return success response
-        return Response({"message": "PMO added successfully."}, status=201)
+          
+            pmo_user = Pmo.objects.create(user=pmo_profile, name=name, email=email, phone=phone,room_id=room_id)
+
+            
+                # Return success response without room_id
+            return Response({"message": "PMO added successfully."}, status=201)
+
+    except IntegrityError as ie:
+        return Response({"error": "User with this email already exists."}, status=400)
 
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
+    
+
+# room_id = ""
+# management_token = generateManagementToken()
+# try:
+#     response_from_100ms = requests.post(
+#     "https://api.100ms.live/v2/rooms",
+#                         headers={
+#                             "Authorization": f"Bearer {management_token}",
+#                             "Content-Type": "application/json",
+#                         },
+#                         json={
+#                             "name": email.replace(".", "-").replace("@", ""),
+#                             "description": "This is a sample description for the room",
+#                             "region": "in",
+#                         },
+#                     )
+#     if response_from_100ms.status_code == 200:
+#         room_id = response_from_100ms.json().get("id")
+# except Exception as e:
+#     print(f"Error while generating meeting link, {str(e)}")
+
+# # Create pmo user
+# @api_view(["POST"])
+# def create_pmo(request):
+#     # Get data from request
+#     name = request.data.get("name")
+#     email = request.data.get("email")
+#     phone = request.data.get("phone")
+#     username = request.data.get("email")  # username and email are same
+#     password = request.data.get("password")
+#     # Check if required data is provided
+#     if not all([name, email, phone, username, password]):
+#         return Response({"error": "All required fields must be provided."}, status=400)
+
+#     try:
+#         with transaction.atomic():
+#             # Create the Django User
+#             user = User.objects.create_user(
+#                 username=username, password=password, email=email
+#             )
+#             # Create the PMO Profile linked to the User
+#             pmo_profile = Profile.objects.create(user=user, type="pmo")
+#             # Create the PMO User using the Profile
+#             pmo_user = Pmo.objects.create(
+#                 user=pmo_profile, name=name, email=email, phone=phone
+#             )
+#         # Return success response
+#         return Response({"message": "PMO added successfully."}, status=201)
+
+#     except Exception as e:
+#         # Return error response if any exception occurs
+#         return Response({"error": str(e)}, status=500)
 
 
 @api_view(["POST"])
@@ -346,23 +446,6 @@ def coach_login(request):
     updateLastLogin(coach.email)
     return Response({"coach": coach_serializer.data}, status=200)
 
-
-def generateManagementToken():
-    expires = 24 * 3600
-    now = datetime.utcnow()
-    exp = now + timedelta(seconds=expires)
-    return jwt.encode(
-        payload={
-            "access_key": env("100MS_APP_ACCESS_KEY"),
-            "type": "management",
-            "version": 2,
-            "jti": str(uuid.uuid4()),
-            "iat": now,
-            "exp": exp,
-            "nbf": now,
-        },
-        key=env("100MS_APP_SECRET"),
-    )
 
 
 @api_view(["GET"])
@@ -3601,6 +3684,28 @@ def get_current_session(request, user_type, room_id, user_id):
     return Response({"message": "success"}, status=200)
 
 
+# @api_view(["POST"])
+# def get_current_session_of_stakeholder(request, room_id):
+#     five_minutes_in_milliseconds = 300000
+#     current_time = int(timezone.now().timestamp() * 1000)
+#     five_minutes_plus_current_time = current_time + five_minutes_in_milliseconds
+#     sessions = SessionRequestCaas.objects.filter(
+#         Q(is_booked=True),
+#         Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
+#         & Q(confirmed_availability__end_time__gt=current_time),
+#         Q(coach__room_id=room_id),
+#         Q(session_type="tripartite")
+#         | Q(session_type="mid_review")
+#         | Q(session_type="end_review"),
+#         Q(invitees__contains=request.data["email"]),
+#         Q(is_archive=False),
+#         ~Q(status="completed"),
+#     )
+#     if len(sessions) == 0:
+#         return Response({"error": "You don't have any sessions right now."}, status=404)
+#     return Response({"message": "success"}, status=200)
+
+
 @api_view(["POST"])
 def get_current_session_of_stakeholder(request, room_id):
     five_minutes_in_milliseconds = 300000
@@ -3610,10 +3715,10 @@ def get_current_session_of_stakeholder(request, room_id):
         Q(is_booked=True),
         Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
         & Q(confirmed_availability__end_time__gt=current_time),
-        Q(coach__room_id=room_id),
+        (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
         Q(session_type="tripartite")
         | Q(session_type="mid_review")
-        | Q(session_type="end_review"),
+        | Q(session_type="end_review")  | Q(session_type="stakeholder_without_coach"),
         Q(invitees__contains=request.data["email"]),
         Q(is_archive=False),
         ~Q(status="completed"),
@@ -3623,27 +3728,58 @@ def get_current_session_of_stakeholder(request, room_id):
     return Response({"message": "success"}, status=200)
 
 
+# @api_view(["POST"])
+# def schedule_session_directly(request, session_id):
+#     try:
+#         session = SessionRequestCaas.objects.get(id=session_id)
+#     except SessionRequestCaas.DoesNotExist:
+#         return Response({"error": "Session not found."}, status=404)
+#     time_arr = create_time_arr(request.data.get("availability", []))
+#     if len(time_arr) == 0:
+#         return Response({"error": "Please provide the availability."}, status=404)
+#     availability = Availibility.objects.get(id=time_arr[0])
+#     coach = Coach.objects.get(id=request.data["coach_id"])
+#     session.availibility.add(availability)
+#     session.confirmed_availability = availability
+#     session.is_booked = True
+#     session.coach = coach
+#     session.status = "booked"
+#     for email in request.data.get("invitees", []):
+#         session.invitees.append(email.strip())
+#     session.save()
+#     return Response({"message": "Session booked successfully."})
+
 @api_view(["POST"])
 def schedule_session_directly(request, session_id):
     try:
         session = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
         return Response({"error": "Session not found."}, status=404)
+
     time_arr = create_time_arr(request.data.get("availability", []))
     if len(time_arr) == 0:
         return Response({"error": "Please provide the availability."}, status=404)
+
     availability = Availibility.objects.get(id=time_arr[0])
-    coach = Coach.objects.get(id=request.data["coach_id"])
+    if request.data["user_type"] == 'pmo':
+        pmo = Pmo.objects.get(id=request.data["user_id"])
+        session.pmo = pmo 
+    
+    if request.data["user_type"] == 'coach':
+        coach = Coach.objects.get(id=request.data["user_id"])
+        session.coach = coach
+    
     session.availibility.add(availability)
     session.confirmed_availability = availability
     session.is_booked = True
-    session.coach = coach
+    
     session.status = "booked"
+
     for email in request.data.get("invitees", []):
         session.invitees.append(email.strip())
     session.save()
-    return Response({"message": "Session booked successfully."})
 
+    return Response({"message": "Session booked successfully."})
 
 @api_view(["POST"])
 def delete_learner_from_project(request, engagement_id):
