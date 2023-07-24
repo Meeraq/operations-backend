@@ -98,7 +98,7 @@ DATABASES = {
         "USER": env("DATABASE_USER"),
         "PASSWORD": env("DATABASE_PASS"),
         "HOST": env("DATABASE_HOST"),
-        "PORT": "3306",
+        "PORT": env("DATABASE_PORT"),
         "OPTIONS": {"init_command": "SET sql_mode='STRICT_TRANS_TABLES'"},
     }
 }
@@ -162,3 +162,23 @@ CORS_ALLOWED_ORIGINS = [f"{env('APP_URL')}"]
 
 CORS_EXPOSE_HEADERS = ["Content-Type", "X-CSRFToken"]
 CORS_ALLOW_CREDENTIALS = True
+
+# Configure Django Storage Backend for Amazon S3
+AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME")
+# AWS_DEFAULT_ACL = (
+#     "public-read"  # Set the default access control list for the uploaded files
+# )
+# Set the region where your S3 bucket is located
+AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME")  # Change this to the appropriate region
+
+#  Set the S3 endpoint URL (optional, but useful if using a non-AWS S3-compatible service)
+#  AWS_S3_ENDPOINT_URL = "https://your-s3-endpoint-url.com"
+
+#  Use Amazon S3 for static and media files storage
+DEFAULT_FILE_STORAGE = env("DEFAULT_FILE_STORAGE")
+AWS_S3_SIGNATURE_VERSION = "s3v4"
+AWS_S3_FILE_OVERWRITE = False
+AWS_DEFAULT_ACL = None
+AWS_S3_VERIFY = True
