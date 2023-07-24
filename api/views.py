@@ -73,6 +73,8 @@ import json
 import string
 import random
 from django.db.models import Q
+from collections import defaultdict
+from django.db.models import Avg
 
 
 # Create your views here.
@@ -92,37 +94,142 @@ def format_timestamp(timestamp):
     return dt.strftime("%d-%m-%Y %I:%M %p")
 
 
-# Create pmo user
+def generateManagementToken():
+    expires = 24 * 3600
+    now = datetime.utcnow()
+    exp = now + timedelta(seconds=expires)
+    return jwt.encode(
+        payload={
+            "access_key": env("100MS_APP_ACCESS_KEY"),
+            "type": "management",
+            "version": 2,
+            "jti": str(uuid.uuid4()),
+            "iat": now,
+            "exp": exp,
+            "nbf": now,
+        },
+        key=env("100MS_APP_SECRET"),
+    )
+
+
+def generate_room_id(email):
+    management_token = generateManagementToken()
+    try:
+        payload = {
+            "name": email.replace(".", "-").replace("@", ""),
+            "description": "This is a sample description for the room",
+            "region": "in",
+        }
+
+        response_from_100ms = requests.post(
+            "https://api.100ms.live/v2/rooms",
+            headers={
+                "Authorization": f"Bearer {management_token}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
+
+        if response_from_100ms.status_code == 200:
+            room_id = response_from_100ms.json().get("id")
+            return room_id
+        else:
+            return None
+    except Exception as e:
+        print(f"Error while generating meeting link: {str(e)}")
+        return None
+
+
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def create_pmo(request):
     # Get data from request
     name = request.data.get("name")
     email = request.data.get("email")
     phone = request.data.get("phone")
-    username = request.data.get("email")  # username and email are same
+    username = email  # username and email are the same
     password = request.data.get("password")
+
+    room_id = generate_room_id(email)
+
     # Check if required data is provided
-    if not all([name, email, phone, username, password]):
+    if not all([name, email, phone, username, password, room_id]):
         return Response({"error": "All required fields must be provided."}, status=400)
 
     try:
         with transaction.atomic():
-            # Create the Django User
             user = User.objects.create_user(
                 username=username, password=password, email=email
             )
-            # Create the PMO Profile linked to the User
+
             pmo_profile = Profile.objects.create(user=user, type="pmo")
-            # Create the PMO User using the Profile
+
             pmo_user = Pmo.objects.create(
-                user=pmo_profile, name=name, email=email, phone=phone
+                user=pmo_profile, name=name, email=email, phone=phone, room_id=room_id
             )
-        # Return success response
-        return Response({"message": "PMO added successfully."}, status=201)
+
+            # Return success response without room_id
+            return Response({"message": "PMO added successfully."}, status=201)
+
+    except IntegrityError as ie:
+        return Response({"error": "User with this email already exists."}, status=400)
 
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
+
+
+# room_id = ""
+# management_token = generateManagementToken()
+# try:
+#     response_from_100ms = requests.post(
+#     "https://api.100ms.live/v2/rooms",
+#                         headers={
+#                             "Authorization": f"Bearer {management_token}",
+#                             "Content-Type": "application/json",
+#                         },
+#                         json={
+#                             "name": email.replace(".", "-").replace("@", ""),
+#                             "description": "This is a sample description for the room",
+#                             "region": "in",
+#                         },
+#                     )
+#     if response_from_100ms.status_code == 200:
+#         room_id = response_from_100ms.json().get("id")
+# except Exception as e:
+#     print(f"Error while generating meeting link, {str(e)}")
+
+# # Create pmo user
+# @api_view(["POST"])
+# def create_pmo(request):
+#     # Get data from request
+#     name = request.data.get("name")
+#     email = request.data.get("email")
+#     phone = request.data.get("phone")
+#     username = request.data.get("email")  # username and email are same
+#     password = request.data.get("password")
+#     # Check if required data is provided
+#     if not all([name, email, phone, username, password]):
+#         return Response({"error": "All required fields must be provided."}, status=400)
+
+#     try:
+#         with transaction.atomic():
+#             # Create the Django User
+#             user = User.objects.create_user(
+#                 username=username, password=password, email=email
+#             )
+#             # Create the PMO Profile linked to the User
+#             pmo_profile = Profile.objects.create(user=user, type="pmo")
+#             # Create the PMO User using the Profile
+#             pmo_user = Pmo.objects.create(
+#                 user=pmo_profile, name=name, email=email, phone=phone
+#             )
+#         # Return success response
+#         return Response({"message": "PMO added successfully."}, status=201)
+
+#     except Exception as e:
+#         # Return error response if any exception occurs
+#         return Response({"error": str(e)}, status=500)
 
 
 @api_view(["POST"])
@@ -345,24 +452,6 @@ def coach_login(request):
     return Response({"coach": coach_serializer.data}, status=200)
 
 
-def generateManagementToken():
-    expires = 24 * 3600
-    now = datetime.utcnow()
-    exp = now + timedelta(seconds=expires)
-    return jwt.encode(
-        payload={
-            "access_key": env("100MS_APP_ACCESS_KEY"),
-            "type": "management",
-            "version": 2,
-            "jti": str(uuid.uuid4()),
-            "iat": now,
-            "exp": exp,
-            "nbf": now,
-        },
-        key=env("100MS_APP_SECRET"),
-    )
-
-
 @api_view(["GET"])
 def get_management_token(request):
     management_token = generateManagementToken()
@@ -471,7 +560,11 @@ def create_project_cass(request):
     project = Project(
         name=request.data["project_name"],
         organisation=organisation,
-        currency=request.data["currency"],
+        approx_coachee=request.data["approx_coachee"],
+        frequency_of_session=request.data["frequency_of_session"],
+        # currency=request.data["currency"],
+        # price_per_hour=request.data["price_per_hour"],
+        # coach_fees_per_hour=request.data["coach_fees_per_hour"],
         project_type="CAAS",
         interview_allowed=request.data["interview_allowed"],
         # chemistry_allowed= request.data['chemistry_allowed'],
@@ -502,6 +595,7 @@ def create_project_cass(request):
     project_name = project.name
     print(request.data["hr"], "HR ID")
     for hr in request.data["hr"]:
+        
         single_hr = HR.objects.get(id=hr)
         # print(single_hr)
         project.hr.add(single_hr)
@@ -514,13 +608,22 @@ def create_project_cass(request):
     # for hr in hrs:
     #     project.hr.add(hr)
 
+    # try:
+    #     path = f"/projects/caas/progress/{project.id}"
+    #     message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
+    #     create_notification(project.hr.first().user.user, path, message)
+    # except Exception as e:
+    #     print(f"Error occurred while creating notification: {str(e)}")
+    # return Response({"message": "Project created succesfully"}, status=200)
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
-        create_notification(project.hr.first().user.user, path, message)
+        for hr_member in project.hr.all():
+            create_notification(hr_member.user.user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-    return Response({"message": "Project created succesfully"}, status=200)
+    return Response({"message": "Project created successfully"}, status=200)
+
 
 
 # @api_view(['POST'])
@@ -1316,6 +1419,7 @@ def add_coach(request):
     room_id = request.data.get("room_id")
     phone = request.data.get("phone")
     level = request.data.get("level")
+    currency = request.data.get("currency")
     education = request.data.get("education")
     rating = "5"
     min_fees = request.data["min_fees"]
@@ -1388,6 +1492,7 @@ def add_coach(request):
                 email=email,
                 phone=phone,
                 level=level,
+                currency=currency,
                 education=education,
                 rating=rating,
                 area_of_expertise=area_of_expertise,
@@ -1774,6 +1879,9 @@ def add_project_struture(request):
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     project.project_structure = request.data.get("project_structure", [])
+    project.currency = request.data.get("currency", "")
+    project.price_per_hour = request.data.get("price_per_hour", "")
+    project.coach_fees_per_hour = request.data.get("coach_price_per_hour", "")
     # project.status['project_structure'] = 'complete'
     project.save()
     return Response({"message": "Structure added", "details": ""}, status=200)
@@ -1881,7 +1989,7 @@ def receive_coach_consent(request):
                 #     coach_status.status['consent'] = "approved"
                 # coach_status.save()
                 coach_status.status["consent"]["status"] = request.data["status"]
-                if project.sold or project.updated_to_sold:
+                if project.steps["project_structure"]["status"] == "complete":
                     coach_status.status["project_structure"]["status"] = request.data[
                         "status"
                     ]
@@ -2255,7 +2363,8 @@ def create_session_request_caas(request):
                         )
                         message_for_hr = f"{session_created.learner.name.title()} has requested for Chemistry session to the Coach - {coach_name.title()} for {slot_message} for the Project - {project.name}"
                         message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {project.name}. Please book one of the requested slots now"
-                        create_notification(hr_user_in_project, path, message_for_hr)
+                        for hr_user in hr_user_in_project:
+                            create_notification(hr_user, path, message_for_hr)
                         message = f"Coachee has requested chemistry session to {coach_name.title()} for Project - {project.name}. The requested slots are "
                     message += " " + slot_message
                     create_notification(pmo_user, path, message)
@@ -2564,10 +2673,13 @@ def send_project_strure_to_hr(request):
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Project structure has been added to the project - {project.name}."
-        create_notification(project.hr.first().user.user, path, message)
+        for hr_user in project.hr.all():
+            create_notification(hr_user.user.user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Sent to HR."}, status=200)
+
+
 
 
 @api_view(["POST"])
@@ -2677,7 +2789,8 @@ def send_list_to_hr(request):
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Admin has shared {len(request.data['coach_list'])} coach profile with you for the Project - {project.name}."
-        create_notification(project.hr.first().user.user, path, message)
+        for hr_user in project.hr.all():
+            create_notification(hr_user.user.user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Sent Successfully", "details": {}}, status=200)
@@ -2924,7 +3037,8 @@ def mark_project_as_sold(request):
         path = f"/projects/caas/progress/{project.id}"
         message = f"Project structure has been added to the project - {project.name}."
         message_for_coach = f"Admin has added project structure. Please agree to the project structure to go forward with the Project - {project.name}"
-        create_notification(project.hr.first().user.user, path, message)
+        for hr_user in project.hr.all():
+            create_notification(hr_user.user.user, path, message)
         for coach_status in project.coaches_status.all():
             create_notification(coach_status.coach.user.user, path, message_for_coach)
     except Exception as e:
@@ -2950,6 +3064,11 @@ def get_session_requests_of_user_on_date(request, user_type, user_id, date):
     elif user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
             learner__id=user_id,
+            availibility__start_time__range=(start_timestamp, end_timestamp),
+        )
+    elif user_type == "coach":
+        session_requests = SessionRequestCaas.objects.filter(
+            coach__id=user_id,
             availibility__start_time__range=(start_timestamp, end_timestamp),
         )
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
@@ -3029,7 +3148,8 @@ def reschedule_session(request):
                         )
                         message_for_hr = f"{session_created.learner.name.title()} has requested for Chemistry session to the Coach - {coach_name.title()} for {slot_message} for the Project - {project.name}"
                         message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {project.name}. Please book one of the requested slots now"
-                        create_notification(hr_user_in_project, path, message_for_hr)
+                        for hr_user in hr_user_in_project:
+                            create_notification(hr_user, path, message_for_hr)
                         message = f"Coachee has requested chemistry session to {coach_name.title()} for Project - {project.name}. The requested slots are "
                     message += " " + slot_message
                     create_notification(pmo_user, path, message)
@@ -3401,6 +3521,33 @@ def create_competency(request):
     )
 
 
+@api_view(["POST"])
+def edit_competency(request, competency_id):
+    try:
+        competency = Competency.objects.get(id=competency_id)
+    except Competency.DoesNotExist:
+        return Response({"error": "Competency not found."}, status=404)
+
+    serializer = CompetencySerializer(instance=competency, data=request.data)
+    competency_name = request.data["name"]
+    if (
+        not Competency.objects.filter(name=competency_name, goal__id=competency.goal.id)
+        .exclude(id=competency.goal.id)
+        .exists()
+    ):
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Competency updated successfully."}, status=200)
+        return Response(serializer.errors, status=400)
+    else:
+        return Response(
+            {
+                "error": "Another competency with the same name already exists in the goal."
+            },
+            status=400,
+        )
+
+
 @api_view(["GET"])
 def get_engagement_competency(request, engagement_id):
     competentcy = Competency.objects.filter(goal__engagement__id=engagement_id)
@@ -3427,6 +3574,13 @@ def add_score_to_competency(request, competency_id):
         return Response({"error": str(e)}, status=400)
 
 
+@api_view(["GET"])
+def get_competency_by_goal(request, goal_id):
+    competentcy = Competency.objects.filter(goal__id=goal_id)
+    serializer = CompetencyDepthOneSerializer(competentcy, many=True)
+    return Response(serializer.data, status=200)
+
+
 @api_view(["POST"])
 def create_action_item(request):
     serializer = ActionItemSerializer(data=request.data)
@@ -3441,6 +3595,13 @@ def get_engagement_action_items(request, engagement_id):
     action_items = ActionItem.objects.filter(
         competency__goal__engagement__id=engagement_id
     )
+    serializer = GetActionItemDepthOneSerializer(action_items, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+def get_action_items_by_competency(request, competency_id):
+    action_items = ActionItem.objects.filter(competency__id=competency_id)
     serializer = GetActionItemDepthOneSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
 
@@ -3551,6 +3712,28 @@ def get_current_session(request, user_type, room_id, user_id):
     return Response({"message": "success"}, status=200)
 
 
+# @api_view(["POST"])
+# def get_current_session_of_stakeholder(request, room_id):
+#     five_minutes_in_milliseconds = 300000
+#     current_time = int(timezone.now().timestamp() * 1000)
+#     five_minutes_plus_current_time = current_time + five_minutes_in_milliseconds
+#     sessions = SessionRequestCaas.objects.filter(
+#         Q(is_booked=True),
+#         Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
+#         & Q(confirmed_availability__end_time__gt=current_time),
+#         Q(coach__room_id=room_id),
+#         Q(session_type="tripartite")
+#         | Q(session_type="mid_review")
+#         | Q(session_type="end_review"),
+#         Q(invitees__contains=request.data["email"]),
+#         Q(is_archive=False),
+#         ~Q(status="completed"),
+#     )
+#     if len(sessions) == 0:
+#         return Response({"error": "You don't have any sessions right now."}, status=404)
+#     return Response({"message": "success"}, status=200)
+
+
 @api_view(["POST"])
 def get_current_session_of_stakeholder(request, room_id):
     five_minutes_in_milliseconds = 300000
@@ -3560,10 +3743,11 @@ def get_current_session_of_stakeholder(request, room_id):
         Q(is_booked=True),
         Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
         & Q(confirmed_availability__end_time__gt=current_time),
-        Q(coach__room_id=room_id),
+        (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
         Q(session_type="tripartite")
         | Q(session_type="mid_review")
-        | Q(session_type="end_review"),
+        | Q(session_type="end_review")
+        | Q(session_type="stakeholder_without_coach"),
         Q(invitees__contains=request.data["email"]),
         Q(is_archive=False),
         ~Q(status="completed"),
@@ -3571,3 +3755,253 @@ def get_current_session_of_stakeholder(request, room_id):
     if len(sessions) == 0:
         return Response({"error": "You don't have any sessions right now."}, status=404)
     return Response({"message": "success"}, status=200)
+
+
+# @api_view(["POST"])
+# def schedule_session_directly(request, session_id):
+#     try:
+#         session = SessionRequestCaas.objects.get(id=session_id)
+#     except SessionRequestCaas.DoesNotExist:
+#         return Response({"error": "Session not found."}, status=404)
+#     time_arr = create_time_arr(request.data.get("availability", []))
+#     if len(time_arr) == 0:
+#         return Response({"error": "Please provide the availability."}, status=404)
+#     availability = Availibility.objects.get(id=time_arr[0])
+#     coach = Coach.objects.get(id=request.data["coach_id"])
+#     session.availibility.add(availability)
+#     session.confirmed_availability = availability
+#     session.is_booked = True
+#     session.coach = coach
+#     session.status = "booked"
+#     for email in request.data.get("invitees", []):
+#         session.invitees.append(email.strip())
+#     session.save()
+#     return Response({"message": "Session booked successfully."})
+
+
+@api_view(["POST"])
+def schedule_session_directly(request, session_id):
+    try:
+        session = SessionRequestCaas.objects.get(id=session_id)
+    except SessionRequestCaas.DoesNotExist:
+        return Response({"error": "Session not found."}, status=404)
+
+    time_arr = create_time_arr(request.data.get("availability", []))
+    if len(time_arr) == 0:
+        return Response({"error": "Please provide the availability."}, status=404)
+
+    availability = Availibility.objects.get(id=time_arr[0])
+    if request.data["user_type"] == "pmo":
+        pmo = Pmo.objects.get(id=request.data["user_id"])
+        session.pmo = pmo
+
+    if request.data["user_type"] == "coach":
+        coach = Coach.objects.get(id=request.data["user_id"])
+        session.coach = coach
+
+    session.availibility.add(availability)
+    session.confirmed_availability = availability
+    session.is_booked = True
+
+    session.status = "booked"
+
+    for email in request.data.get("invitees", []):
+        session.invitees.append(email.strip())
+    session.save()
+
+    return Response({"message": "Session booked successfully."})
+
+
+@api_view(["POST"])
+def delete_learner_from_project(request, engagement_id):
+    try:
+        engagement = Engagement.objects.get(id=engagement_id)
+    except Engagement.DoesNotExist:
+        return Response({"error": "Learner not found in project."}, status=404)
+    try:
+        print("outside the for loop ")
+        # removing the learner id from the project coaches statuses
+        for coach_statuses in engagement.project.coaches_status.all():
+            print("inside for loop")
+            if engagement.learner.id in coach_statuses.learner_id:
+                coach_statuses.learner_id.remove(engagement.learner.id)
+            coach_statuses.save()
+        sessions_to_delete = SessionRequestCaas.objects.filter(
+            learner__id=engagement.learner.id, project__id=engagement.project.id
+        )
+        sessions_to_delete.delete()
+        engagement.delete()
+        return Response({"message": "Learner deleted successfully"})
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to remove learner from the project."}, status=400
+        )
+
+
+@api_view(["POST"])
+def reset_consent(request):
+    try:
+        coach_status = get_object_or_404(
+            CoachStatus, id=request.data.get("coach_status_id")
+        )
+    except CoachStatus.DoesNotExist:
+        return Response({"error": "Could not find coach consent"}, status=404)
+
+    if request.data.get("type") == "consent":
+        coach_status.status["consent"]["status"] = "sent"
+        coach_status.consent_expiry_date = request.data["consent_expiry_date"]
+        # coach_status.consent_expiry_date = datetime.strptime(
+        #     request.data.get("consent_expiry_date"), "%Y-%m-%d"
+        # ).date()
+
+    coach_status.status["project_structure"]["status"] = "sent"
+    coach_status.save()
+
+    return Response({"message": "Consent reset successfully"})
+
+
+@api_view(["GET"])
+def get_competency_averages(request, hr_id):
+    # Step 1: Retrieve the data from the Competency model
+    competencies = Competency.objects.filter(goal__engagement__project__hr__id=hr_id)
+    # Step 2 and 3: Calculate the average score for each competency and store in a dictionary
+    competency_averages = defaultdict(lambda: {"total_score": 0, "count": 0})
+    for competency in competencies:
+        competency_name = competency.name
+        scoring_data = competency.scoring
+        if scoring_data:
+            total_score = sum(entry["score"] for entry in scoring_data)
+            count = len(scoring_data)
+            competency_averages[competency_name]["total_score"] += total_score
+            competency_averages[competency_name]["count"] += count
+    # Step 4: Calculate the final average for each competency, considering competencies with the same name
+    final_averages = {}
+    for competency_name, data in competency_averages.items():
+        total_score = data["total_score"]
+        count = data["count"]
+        average_score = total_score / count if count > 0 else 0
+        final_averages[competency_name] = average_score
+    top_5_competencies = dict(
+        sorted(final_averages.items(), key=lambda item: item[1], reverse=True)[:5]
+    )
+    return Response(top_5_competencies, status=200)
+
+
+@api_view(["GET"])
+def get_upcoming_session_count(request, hr_id):
+    current_time = int(timezone.now().timestamp() * 1000)
+    session_requests = []
+    # Get the start and end of the current month
+    current_month = timezone.now().replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    )
+    current_month_timestamp = int(current_month.timestamp() * 1000)
+    next_month = current_month.replace(month=current_month.month + 1, day=1)
+    if current_month.month == 12:  # Handle December case
+        next_month = next_month.replace(year=current_month.year + 1)
+    next_month_timestamp = int(next_month.timestamp() * 1000)
+    session_requests = SessionRequestCaas.objects.filter(
+        Q(is_booked=True),
+        Q(confirmed_availability__end_time__gt=current_time),
+        Q(confirmed_availability__end_time__gte=current_month_timestamp),
+        Q(confirmed_availability__end_time__lt=next_month_timestamp),
+        Q(project__hr__id=hr_id),
+        Q(is_archive=False),
+        ~Q(status="completed"),
+    )
+    upcoming_session_count = session_requests.count()
+    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    return Response(
+        {
+            "upcoming_sessions": serializer.data,
+            "upcoming_session_count": upcoming_session_count,
+        },
+        status=200,
+    )
+
+
+@api_view(["GET"])
+def get_requests_count(request, hr_id):
+    session_requests = SessionRequestCaas.objects.filter(
+        Q(confirmed_availability=None) & Q(project__hr__id=hr_id) & ~Q(status="pending")
+    )
+    requests_count = session_requests.count()
+    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    return Response(
+        {
+            "requestes": serializer.data,
+            "requests_count": requests_count,
+        },
+        status=200,
+    )
+
+
+@api_view(["GET"])
+def get_completed_sessions_count(request, hr_id):
+    session_requests = SessionRequestCaas.objects.filter(
+       ~Q(session_type="interview") & Q(project__hr__id=hr_id) & Q(status="completed")
+    )
+    sessions_count = session_requests.count()
+    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    return Response(
+        {
+            "sessions": serializer.data,
+            "sessions_count": sessions_count,
+        },
+        status=200,
+    )
+
+@api_view(["GET"])
+def get_learners_without_sessions(request, hr_id):
+    # Get the learners associated with the given hr_id who don't have any sessions with status = "requested" or "booked".
+    learners = (
+        Learner.objects.filter(engagement__project__hr__id=hr_id)
+        .exclude(sessionrequestcaas__status__in=["requested", "booked"])
+        .distinct()
+    )
+    # Serialize the filtered learner data.
+    learners_count = learners.count()
+    serializer = LearnerSerializer(learners, many=True)
+    return Response(
+        {"learners": serializer.data, "learners_count": learners_count}, status=200
+    )
+
+
+@api_view(["POST"])
+def select_coach_for_coachee(request):
+    try:
+        coach_status = CoachStatus.objects.get(id=request.data["coach_status_id"])
+    except CoachStatus.DoesNotExist:
+        return Response({"error": "Coach not found"}, status=404)
+    try:
+        engagement = Engagement.objects.get(id=request.data["engagement_id"])
+    except Engagement.DoesNotExist:
+        return Response({"error": "Unable to find learner"}, status=404)
+    coach_status.learner_id.append(engagement.learner.id)
+    coach_status.save()
+    engagement.coach = coach_status.coach
+    engagement.save()
+    return Response({"message": "Coach finalized for coachee"}, status=201)
+
+
+@api_view(["POST"])
+def add_past_session(request, session_id, coach_id):
+    try:
+        session = SessionRequestCaas.objects.get(id=session_id)
+    except SessionRequestCaas.DoesNotExist:
+        return Response({"error": "Session not found."}, status=404)
+    time_arr = create_time_arr(request.data.get("availability", []))
+    if len(time_arr) == 0:
+        return Response({"error": "Please provide the availability."}, status=404)
+    availability = Availibility.objects.get(id=time_arr[0])
+    coach = Coach.objects.get(id=coach_id)
+    session.availibility.add(availability)
+    session.confirmed_availability = availability
+    session.is_booked = True
+    session.coach = coach
+    session.status = "completed"
+    for email in request.data.get("invitees", []):
+        session.invitees.append(email.strip())
+    session.save()
+    return Response({"message": "Session booked successfully."})

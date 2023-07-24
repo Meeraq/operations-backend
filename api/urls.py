@@ -175,6 +175,11 @@ urlpatterns = [
     path("goals/<int:engagement_id>/", views.get_engagement_goals),
     path("goals/edit/<int:goal_id>/", views.edit_goal, name="edit_goal"),
     path("competency/", views.create_competency),
+    path(
+        "competency/edit/<int:competency_id>/",
+        views.edit_competency,
+        name="edit_competency",
+    ),
     path("competency/<int:engagement_id>/", views.get_engagement_competency),
     path(
         "competency/score/<int:competency_id>/",
@@ -209,4 +214,19 @@ urlpatterns = [
         "current-session/stakeholder/<str:room_id>/",
         views.get_current_session_of_stakeholder,
     ),
+    path("competency/goal/<int:goal_id>/", views.get_competency_by_goal),
+    path(
+        "action-items/competency/<int:competency_id>/",
+        views.get_action_items_by_competency,
+    ),
+    path("sessions/direct-schedule/<int:session_id>/", views.schedule_session_directly),
+    path("learner/delete/<int:engagement_id>/", views.delete_learner_from_project),
+    path("competency/averages/<int:hr_id>/", views.get_competency_averages),
+    path("upcoming-sessions/count/<int:hr_id>/", views.get_upcoming_session_count),
+    path("requests/count/<int:hr_id>/", views.get_requests_count),
+    path("completed-sessions/count/<int:hr_id>/", views.get_completed_sessions_count),
+    path("idle-coachee/<int:hr_id>/", views.get_learners_without_sessions),
+    path("engagement/select-coach-for-coachee/", views.select_coach_for_coachee),
+    path("add-past-session/<int:session_id>/<int:coach_id>/", views.add_past_session),
+    path("reset_consent/", views.reset_consent),
 ]
