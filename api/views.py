@@ -114,6 +114,7 @@ def generateManagementToken():
 
 def generate_room_id(email):
     management_token = generateManagementToken()
+    
     try:
         payload = {
             "name": email.replace(".", "-").replace("@", ""),
@@ -3867,9 +3868,11 @@ def get_competency_averages(request, hr_id):
     competencies = Competency.objects.filter(goal__engagement__project__hr__id=hr_id)
     # Step 2 and 3: Calculate the average score for each competency and store in a dictionary
     competency_averages = defaultdict(lambda: {"total_score": 0, "count": 0})
+  
     for competency in competencies:
         competency_name = competency.name
         scoring_data = competency.scoring
+        
         if scoring_data:
             total_score = sum(entry["score"] for entry in scoring_data)
             count = len(scoring_data)
@@ -3886,6 +3889,48 @@ def get_competency_averages(request, hr_id):
         sorted(final_averages.items(), key=lambda item: item[1], reverse=True)[:5]
     )
     return Response(top_5_competencies, status=200)
+
+# @api_view(["GET"])
+# def get_competency_averages(request, hr_id):
+#     # Step 1: Retrieve the data from the Competency model
+#     competencies = Competency.objects.filter(goal__engagement__project__hr__id=hr_id)
+#     # Step 2 and 3: Calculate the average score for each competency and store in a dictionary
+#     competency_averages = defaultdict(lambda: {"total_score": 0, "count": 0})
+#     competency_learner_counts = defaultdict(set)  # To keep track of learners per competency
+
+#     for competency in competencies:
+#         competency_name = competency.name
+#         scoring_data = competency.scoring
+
+#         if scoring_data:
+#             total_score = sum(entry["score"] for entry in scoring_data)
+#             count = len(scoring_data)
+#             competency_averages[competency_name]["total_score"] += total_score
+#             competency_averages[competency_name]["count"] += count
+#             competency_learner_counts[competency_name].update(entry["learner_id"] for entry in scoring_data)
+
+#     # Step 4: Calculate the final average for each competency, considering competencies with the same name
+#     final_averages = {}
+#     for competency_name, data in competency_averages.items():
+#         total_score = data["total_score"]
+#         count = data["count"]
+#         average_score = total_score / count if count > 0 else 0
+#         final_averages[competency_name] = {
+#             "average_score": average_score,
+#             "total_learners": len(competency_learner_counts[competency_name]),
+#         }
+
+#     top_5_competencies = dict(
+#         sorted(final_averages.items(), key=lambda item: item[1]["average_score"], reverse=True)[:5]
+#     )
+
+#     # Prepare the response with total learners per competency
+#     response_data = {
+#         "top_5_competencies": top_5_competencies,
+#         "competency_learner_counts": dict(competency_learner_counts),
+#     }
+#     print(competency_learner_counts)
+#     return Response(response_data, status=200)
 
 
 @api_view(["GET"])
