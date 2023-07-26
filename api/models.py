@@ -178,7 +178,7 @@ class Project(models.Model):
     sold = models.BooleanField(default=False)
     updated_to_sold = models.BooleanField(default=False)
     mode = models.CharField(max_length=100)
-    location = models.CharField(max_length=100, blank=True, default=None)
+    location = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     currency = models.CharField(max_length=30, default="Rupees")
     price_per_hour = models.IntegerField(default=0, blank=True)
