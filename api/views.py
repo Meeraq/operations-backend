@@ -576,7 +576,7 @@ def create_project_cass(request):
         mode=request.data["mode"],
         sold=request.data["sold"],
         # updated_to_sold= request.data['updated_to_sold'],
-        location=request.data.get("location", None),
+        location=json.loads(request.data["location"]),
         steps=dict(
             project_structure={"status": "pending"},
             coach_list={"status": "pending"},
@@ -596,7 +596,6 @@ def create_project_cass(request):
     project_name = project.name
     print(request.data["hr"], "HR ID")
     for hr in request.data["hr"]:
-        
         single_hr = HR.objects.get(id=hr)
         # print(single_hr)
         project.hr.add(single_hr)
@@ -623,8 +622,10 @@ def create_project_cass(request):
             create_notification(hr_member.user.user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-    return Response({"message": "Project created successfully"}, status=200)
-
+    return Response(
+        {"message": "Project created successfully", "project_id": project.id},
+        status=200,
+    )
 
 
 # @api_view(['POST'])
@@ -1881,8 +1882,8 @@ def add_project_struture(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.project_structure = request.data.get("project_structure", [])
     project.currency = request.data.get("currency", "")
-    project.price_per_hour = request.data.get("price_per_hour", "")
-    project.coach_fees_per_hour = request.data.get("coach_price_per_hour", "")
+    # project.price_per_hour = request.data.get("price", "")
+    # project.coach_fees_per_hour = request.data.get("coach_price", "")
     # project.status['project_structure'] = 'complete'
     project.save()
     return Response({"message": "Structure added", "details": ""}, status=200)
@@ -2679,8 +2680,6 @@ def send_project_strure_to_hr(request):
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Sent to HR."}, status=200)
-
-
 
 
 @api_view(["POST"])
@@ -3985,7 +3984,7 @@ def get_requests_count(request, hr_id):
 @api_view(["GET"])
 def get_completed_sessions_count(request, hr_id):
     session_requests = SessionRequestCaas.objects.filter(
-       ~Q(session_type="interview") & Q(project__hr__id=hr_id) & Q(status="completed")
+        ~Q(session_type="interview") & Q(project__hr__id=hr_id) & Q(status="completed")
     )
     sessions_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
@@ -3996,6 +3995,7 @@ def get_completed_sessions_count(request, hr_id):
         },
         status=200,
     )
+
 
 @api_view(["GET"])
 def get_learners_without_sessions(request, hr_id):
