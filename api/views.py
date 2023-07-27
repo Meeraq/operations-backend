@@ -114,7 +114,7 @@ def generateManagementToken():
 
 def generate_room_id(email):
     management_token = generateManagementToken()
-    
+
     try:
         payload = {
             "name": email.replace(".", "-").replace("@", ""),
@@ -3867,17 +3867,18 @@ def get_competency_averages(request, hr_id):
     competencies = Competency.objects.filter(goal__engagement__project__hr__id=hr_id)
     # Step 2 and 3: Calculate the average score for each competency and store in a dictionary
     competency_averages = defaultdict(lambda: {"total_score": 0, "count": 0})
-  
+
     for competency in competencies:
         competency_name = competency.name
         scoring_data = competency.scoring
-        
-        if scoring_data:
-            total_score = sum(entry["score"] for entry in scoring_data)
-            count = len(scoring_data)
+        if scoring_data and len(scoring_data) > 0:
+            # taking only the latest score
+            total_score = scoring_data[-1]["score"]
+            # sum(entry["score"] for entry in scoring_data)
+            # count = len(scoring_data)
             competency_averages[competency_name]["total_score"] += total_score
-            competency_averages[competency_name]["count"] += count
-    # Step 4: Calculate the final average for each competency, considering competencies with the same name
+            competency_averages[competency_name]["count"] += 1
+    # Step 4: Calculate the final average for each competency, on their latest score
     final_averages = {}
     for competency_name, data in competency_averages.items():
         total_score = data["total_score"]
@@ -3888,6 +3889,7 @@ def get_competency_averages(request, hr_id):
         sorted(final_averages.items(), key=lambda item: item[1], reverse=True)[:5]
     )
     return Response(top_5_competencies, status=200)
+
 
 # @api_view(["GET"])
 # def get_competency_averages(request, hr_id):
