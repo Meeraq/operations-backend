@@ -3165,12 +3165,58 @@ def reschedule_session(request):
                 status=401,
             )
 
-
 @api_view(["GET"])
 def get_engagement_in_projects(request, project_id):
     engagements = Engagement.objects.filter(project__id=project_id)
-    serializer = EngagementDepthOneSerializer(engagements, many=True)
-    return Response(serializer.data, status=200)
+    engagements_data = []
+
+    for engagement in engagements:
+        completed_sessions_count = SessionRequestCaas.objects.filter(
+            status="completed",
+            project__id=engagement.project.id,
+            learner__id=engagement.learner.id,
+        ).count()
+
+        total_sessions_count = SessionRequestCaas.objects.filter(
+            project__id=engagement.project.id,
+            learner__id=engagement.learner.id,
+            is_archive=False,
+        ).count()
+
+        serializer = EngagementDepthOneSerializer(engagement)
+        data = serializer.data
+        data["completed_sessions_count"] = completed_sessions_count
+        data["total_sessions_count"] = total_sessions_count
+        engagements_data.append(data)
+
+    return Response(engagements_data, status=200)
+
+
+@api_view(["GET"])
+def get_engagements_of_hr(request, user_id):
+    engagements = Engagement.objects.filter(project__hr__id=user_id)
+    engagements_data = []
+
+    for engagement in engagements:
+        completed_sessions_count = SessionRequestCaas.objects.filter(
+            status="completed",
+            project__id=engagement.project.id,
+            learner__id=engagement.learner.id,
+        ).count()
+
+        total_sessions_count = SessionRequestCaas.objects.filter(
+            project__id=engagement.project.id,
+            learner__id=engagement.learner.id,
+            is_archive=False,
+        ).count()
+
+        serializer = EngagementDepthOneSerializer(engagement)
+        data = serializer.data
+        data["completed_sessions_count"] = completed_sessions_count
+        data["total_sessions_count"] = total_sessions_count
+        engagements_data.append(data)
+
+    return Response(engagements_data, status=200)
 
 
 @api_view(["GET"])

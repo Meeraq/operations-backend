@@ -140,6 +140,7 @@ urlpatterns = [
     path("session/reschedule-request/<str:session_id>/", views.request_reschedule),
     path("session/reschedule/", views.reschedule_session),
     path("projects/engagement/all/<int:project_id>/", views.get_engagement_in_projects),
+    path("hr/engagement/all/<int:user_id>/", views.get_engagements_of_hr),
     path(
         "engagement/<int:project_id>/<int:learner_id>/",
         views.get_learner_engagement_of_project,
