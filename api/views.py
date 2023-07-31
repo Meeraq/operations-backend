@@ -3165,12 +3165,58 @@ def reschedule_session(request):
                 status=401,
             )
 
-
 @api_view(["GET"])
 def get_engagement_in_projects(request, project_id):
     engagements = Engagement.objects.filter(project__id=project_id)
-    serializer = EngagementDepthOneSerializer(engagements, many=True)
-    return Response(serializer.data, status=200)
+    engagements_data = []
+
+    for engagement in engagements:
+        completed_sessions_count = SessionRequestCaas.objects.filter(
+            status="completed",
+            project__id=engagement.project.id,
+            learner__id=engagement.learner.id,
+        ).count()
+
+        total_sessions_count = SessionRequestCaas.objects.filter(
+            project__id=engagement.project.id,
+            learner__id=engagement.learner.id,
+            is_archive=False,
+        ).count()
+
+        serializer = EngagementDepthOneSerializer(engagement)
+        data = serializer.data
+        data["completed_sessions_count"] = completed_sessions_count
+        data["total_sessions_count"] = total_sessions_count
+        engagements_data.append(data)
+
+    return Response(engagements_data, status=200)
+
+
+@api_view(["GET"])
+def get_engagements_of_hr(request, user_id):
+    engagements = Engagement.objects.filter(project__hr__id=user_id)
+    engagements_data = []
+
+    for engagement in engagements:
+        completed_sessions_count = SessionRequestCaas.objects.filter(
+            status="completed",
+            project__id=engagement.project.id,
+            learner__id=engagement.learner.id,
+        ).count()
+
+        total_sessions_count = SessionRequestCaas.objects.filter(
+            project__id=engagement.project.id,
+            learner__id=engagement.learner.id,
+            is_archive=False,
+        ).count()
+
+        serializer = EngagementDepthOneSerializer(engagement)
+        data = serializer.data
+        data["completed_sessions_count"] = completed_sessions_count
+        data["total_sessions_count"] = total_sessions_count
+        engagements_data.append(data)
+
+    return Response(engagements_data, status=200)
 
 
 @api_view(["GET"])
@@ -3460,16 +3506,21 @@ def reschedule_session_of_coachee(request, session_id):
 def create_goal(request):
     serializer = GoalSerializer(data=request.data)
     goal_name = request.data["name"]
-    if not Goal.objects.filter(
-        name=goal_name, engagement__id=request.data["engagement"]
-    ).exists():
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Goal created successfully."}, status=201)
-        return Response(serializer.errors, status=400)
+    engagement_id = request.data.get("engagement")  
+    
+   
+    if not Goal.objects.filter(name=goal_name, engagement__id=engagement_id).exists():
+        
+      
+        if Goal.objects.filter(engagement__id=engagement_id).count() < 10:
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"message": "Goal created successfully."}, status=201)
+            return Response(serializer.errors, status=400)
+        else:
+            return Response({"error": "The project already has 10 goals. Cannot add more."}, status=400)
     else:
-        return Response({"error": "Goal already exists"}, status=400)
-
+        return Response({"error": "Goal already exists for the project."}, status=400)
 
 @api_view(["GET"])
 def get_engagement_goals(request, engagement_id):
@@ -3509,16 +3560,18 @@ def edit_goal(request, goal_id):
 
 @api_view(["POST"])
 def create_competency(request):
+    
     serializer = CompetencySerializer(data=request.data)
-    if serializer.is_valid():
-        competency = serializer.save()
-        return Response(
-            {"message": "Competency added successfully"},
-            status=201,
-        )
-    return Response(
-        serializer.errors, {"error": "Competency was not added"}, status=400
-    )
+    goal_id = request.data.get("goal")  
+    competency_count = Competency.objects.filter(goal__id=goal_id).count()
+    
+    if competency_count < 10:
+        if serializer.is_valid():
+            competency = serializer.save()
+            return Response({"message": "Competency added successfully"}, status=201)
+        return Response(serializer.errors, status=400)
+    else:
+        return Response({"error": "The goal already has 10 competencies. Cannot add more."}, status=400)
 
 
 @api_view(["POST"])
@@ -3563,6 +3616,12 @@ def add_score_to_competency(request, competency_id):
             "date": request.data.get("date"),
             "score": request.data.get("score"),
         }
+        if len(competency.scoring) >= 20:
+            return Response(
+                {"error": "The maximum number of scores (20) for this competency has been reached."},
+                status=400,
+            )
+
         competency.scoring.append(scoring_data)
         competency.save()
         return Response(
@@ -3581,13 +3640,22 @@ def get_competency_by_goal(request, goal_id):
     return Response(serializer.data, status=200)
 
 
+
+
 @api_view(["POST"])
 def create_action_item(request):
     serializer = ActionItemSerializer(data=request.data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response({"message": "Action created successfully."}, status=201)
-    return Response(serializer.errors, status=400)
+    competency_id = request.data.get("competency")  
+    
+   
+    if ActionItem.objects.filter(competency__id=competency_id).count() < 20:
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Action created successfully."}, status=201)
+        return Response(serializer.errors, status=400)
+    else:
+        return Response({"error": "The competency already has 20 action items. Cannot add more."}, status=400)
+
 
 
 @api_view(["GET"])
