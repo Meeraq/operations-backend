@@ -13,12 +13,29 @@ from django_rest_passwordreset.signals import reset_password_token_created
 from django.urls import reverse
 from django.dispatch import receiver
 from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.core.mail import EmailMessage
+from django.core.mail import EmailMessage, BadHeaderError
 
 
 import environ
 
 env = environ.Env()
+class EmailSendingError(Exception):
+    pass
 
+def send_mail_templates(file_name,user_email,email_subject,content):
+    
+    email_message = render_to_string(file_name,content)
+    
+    email = EmailMessage(email_subject, email_message, settings.DEFAULT_FROM_EMAIL, user_email)
+    email.content_subtype = "html"
+    
+    try:
+        email.send(fail_silently=False)
+    except BadHeaderError as e:      
+        print(f"Error occurred while sending emails: {str(e)}")
+        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
 @receiver(reset_password_token_created)
 def password_reset_token_created(
@@ -31,9 +48,14 @@ def password_reset_token_created(
     subject = "Meeraq - Forgot Password"
     name = "User"
     message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
-    send_mail(
-        subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
-    )
+    link=f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
+    # send_mail(
+    #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
+    # )
+    send_mail_templates("hr_emails/forgot_password.html",[reset_password_token.user.email],"Meeraq Platform | Password Reset",{
+        "name":name,
+        "resetPassword":link
+    })
 
 
 class Profile(models.Model):

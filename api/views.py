@@ -2,6 +2,7 @@ from datetime import date
 import requests
 from os import name
 from django.shortcuts import render, get_object_or_404
+from django.template.loader import render_to_string
 from django.db import transaction, IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
@@ -42,6 +43,7 @@ from django.db.models.functions import Cast
 from rest_framework.exceptions import AuthenticationFailed
 from datetime import datetime, timedelta
 from rest_framework.response import Response
+from django.core.mail import EmailMessage, BadHeaderError
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -82,6 +84,22 @@ from django.db.models import Avg
 import environ
 
 env = environ.Env()
+
+class EmailSendingError(Exception):
+    pass
+
+def send_mail_templates(file_name,user_email,email_subject,content):
+    
+    email_message = render_to_string(file_name,content)
+    
+    email = EmailMessage(email_subject, email_message, settings.DEFAULT_FROM_EMAIL, user_email)
+    email.content_subtype = "html"
+    
+    try:
+        email.send(fail_silently=False)
+    except BadHeaderError as e:      
+        print(f"Error occurred while sending emails: {str(e)}")
+        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
 
 def create_notification(user, path, message):
@@ -1526,7 +1544,9 @@ def add_coach(request):
             coach.save()
 
             full_name = coach_user.first_name + " " + coach_user.last_name
-
+            send_mail_templates("coach_templates/pmo-adds-coach-as-user.html",[coach_user.email],"Meeraq Coaching | New Beginning !",{
+                "name":coach_user.first_name
+            })
             # Send email notification to the coach
             # subject = 'Welcome to our coaching platform'
             # message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {temp_password}\n\n Click on the link to login or reset the password http://localhost:3003/'
@@ -1740,8 +1760,8 @@ def generate_otp(request):
         message = (
             f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
         )
-        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
-
+        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
+        send_mail_templates("hr_emails/login_with_otp.html",[user],subject,{"name": name, "otp":created_otp.otp})
         return Response({"message": f"OTP has been sent to {user.username}!"})
 
     except User.DoesNotExist:
@@ -1938,6 +1958,9 @@ def send_consent(request):
         message = f"Admin has requested your consent to share profile for new project."
         for coach in coaches:
             create_notification(coach.user.user, path, message)
+            send_mail_templates("coach_templates/pmo_ask_for_consent.html",[coach.email],"Meeraq Coaching | New Project!",{
+                "name":coach.first_name
+            })
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Consent sent successfully", "details": ""}, status=200)
@@ -1999,6 +2022,7 @@ def receive_coach_consent(request):
                 try:
                     if request.data["status"] == "select":
                         pmo_user = User.objects.filter(profile__type="pmo").first()
+                        pmo = Pmo.objects.get(email=pmo_user.email)
                         if pmo_user:
                             path = f"/projects/caas/progress/{project.id}"
                             coach_name = (
@@ -2008,6 +2032,14 @@ def receive_coach_consent(request):
                             )
                             message = f"{coach_name.title() } has accepted your consent request for Project - {project.name}"
                             create_notification(pmo_user, path, message)
+                            
+                            send_mail_templates("pmo_emails/coach_agrees-rejects_consent.html",[pmo_user.email],"Meeraq Coaching | Coach agreed to consent cc",{
+                                "projectname":project.name,
+                                "name": pmo.name,
+                                "coachname":coach_status.coach.first_name,
+                                "agreeddisagreed" :request.data["status"]
+                            })
+                            
                 except Exception as e:
                     print(f"Error occurred while creating notification: {str(e)}")
                     continue
@@ -2422,6 +2454,7 @@ def accept_coach_caas_hr(request):
     if request.data.get("status") == "select":
         try:
             pmo_user = User.objects.filter(profile__type="pmo").first()
+            pmo = Pmo.objects.get(email=pmo_user.email)
             coach = Coach.objects.get(id=request.data["coach_id"])
             if pmo_user:
                 path = f"/projects/caas/progress/{project.id}"
@@ -2430,6 +2463,15 @@ def accept_coach_caas_hr(request):
                 message_for_coach = f"Congratulations! You have been selected by HR for the Project - {project.name}"
                 create_notification(pmo_user, path, message)
                 create_notification(coach.user.user, path, message)
+                send_mail_templates("pmo_emails/hr_selects_a_coach.html",[pmo_user.email],"Meeraq Coaching | HR selected a coach",{
+                    "projectname":project.name,
+                    "name":pmo.name,
+                    "coachname":coach_name
+                })
+                send_mail_templates("coach_templates/intro_mail_to_coach.html",[coach.email],"Meeraq Coaching",{
+                    "name":coach.first_name,
+                    "orgName":project.organisation.name,
+                })
         except Exception as e:
             print(f"Error occurred while creating notification: {str(e)}")
         message = "Coach selected."
@@ -2439,6 +2481,7 @@ def accept_coach_caas_hr(request):
             path = f"/projects/caas/progress/{project.id}"
             message_for_coach = f"Unfortunately, your profile is not selected for the Project - {project.name}"
             create_notification(coach.user.user, path, message_for_coach)
+            
         except Exception as e:
             print(f"Error occurred while creating notification: {str(e)}")
         message = "Coach rejected."
@@ -2447,6 +2490,7 @@ def accept_coach_caas_hr(request):
 
 @api_view(["POST"])
 def add_learner_to_project(request):
+    coacheeCounts=int(0)
     try:
         project = Project.objects.get(id=request.data["project_id"])
     except Project.DoesNotExist:
@@ -2456,10 +2500,13 @@ def add_learner_to_project(request):
         for learner in learners:
             create_engagement(learner, project)
             # project.learner.add(learner)
+            
             try:
                 path = f"/projects/caas/progress/{project.id}"
                 message = f"You have been added to Project - {project.name}"
                 create_notification(learner.user.user, path, message)
+                coacheeCounts=coacheeCounts+1
+                send_mail_templates("coachee_emails/add_coachee.html", [learner.email], "Meeraq Coaching | New Journey !", {"name": learner.name, "orgname" : project.organisation.name})
             except Exception as e:
                 print(f"Error occurred while creating notification: {str(e)}")
                 continue
@@ -2468,13 +2515,21 @@ def add_learner_to_project(request):
         return Response({"error": str(e)}, status=500)
     try:
         pmo_user = User.objects.filter(profile__type="pmo").first()
+        pmo = Pmo.objects.get(email=pmo_user.email)
+
         if pmo_user:
             path = f"/projects/caas/progress/{project.id}"
             message = f"HR has added Coachees to the Project - {project.name}"
             create_notification(pmo_user, path, message)
+            send_mail_templates("pmo_emails/hr_adding_coachees.html",[pmo_user.email],"Meeraq Coaching | Coachees added",{
+                "projectName":project.name,
+                "name":pmo.name,
+                "coacheeCount":str(coacheeCounts)
+            })
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Coachee added succesfully", "details": ""}, status=201)
+
 
 
 def transform_project_structure(sessions):
@@ -2789,6 +2844,12 @@ def send_list_to_hr(request):
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Admin has shared {len(request.data['coach_list'])} coach profile with you for the Project - {project.name}."
+        hr_users = project.hr.all()
+        for hr_user in hr_users:
+            hr_email = hr_user.email
+            hr_name = hr_user.first_name  
+            send_mail_templates("hr_emails/pmo_share_coach_list.html",[hr_email],"Welcome to the Meeraq Platform",{"name": hr_name})
+            
         for hr_user in project.hr.all():
             create_notification(hr_user.user.user, path, message)
     except Exception as e:
