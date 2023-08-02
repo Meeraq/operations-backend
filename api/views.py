@@ -1715,9 +1715,17 @@ def logout_view(request):
 @ensure_csrf_cookie
 def session_view(request):
     user = request.user
+    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user.last_login = today
+    user.save()
     user_data = get_user_data(user)
     if user_data:
-        return Response({"isAuthenticated": True, "user": user_data})
+        return Response(
+            {
+                "isAuthenticated": True,
+                "user": {**user_data, "last_login": user.last_login},
+            }
+        )
     else:
         return Response({"error": "Invalid user type"}, status=400)
 
@@ -1795,6 +1803,9 @@ def validate_otp(request):
     # Delete the OTP object after it has been validated
     otp_obj.delete()
     login(request, user)
+    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user.last_login = today
+    user.save()
     user_data = get_user_data(user)
     if user_data:
         return Response(
