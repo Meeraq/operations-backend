@@ -157,6 +157,21 @@ def generate_room_id(email):
     except Exception as e:
         print(f"Error while generating meeting link: {str(e)}")
         return None
+    
+    
+
+SESSION_TYPE_VALUE = {
+  'chemistry': "Chemistry",
+  'tripartite': "Tripartite",
+  'goal_setting': "Goal Setting",
+  'coaching_session': "Coaching Session",
+  'mid_review': "Mid Review",
+  'end_review': "End Review",
+  'closure_session': "Closure Session",
+  'stakeholder_without_coach': "Tripartite Without Coach",
+  'interview': "Interview",
+}
+
 
 
 @api_view(["POST"])
@@ -382,13 +397,19 @@ def update_coach_profile(request, coach_id):
         coach = Coach.objects.get(id=coach_id)
     except Coach.DoesNotExist:
         return Response(status=404)
-
+    pmo_user = User.objects.filter(profile__type="pmo").first()
+    pmo=Pmo.objects.get(email=pmo_user.email)
+    
     serializer = CoachSerializer(
         coach, data=request.data, partial=True
     )  # partial argument added here
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
+        send_mail_templates("pmo_emails/coach_update_profile.html",[pmo.email],"Meeraq Coaching | Coach updated profile", {
+            "name":pmo.name,
+            "coachName":coach.first_name
+        })
         return Response(depth_serializer.data, status=200)
 
     return Response(serializer.errors, status=400)
@@ -2254,11 +2275,17 @@ def book_session_caas(request):
     session_request.confirmed_availability = Availibility.objects.get(
         id=request.data.get("confirmed_availability")
     )
+    if session_request.learner:
+        coachee=session_request.learner
+    #     sessionName = str(session_request.session_type).replace('_', ' ')
+    #     if( sessionName == "stakeholder without coach"):
+    #         sessionName = "tripartite without coach"
     session_request.is_booked = True
     session_request.status = "booked"
     for email in request.data.get("invitees", []):
         session_request.invitees.append(email.strip())
     session_request.save()
+    
     # if serializer.is_valid():
     #     session = serializer.save()
     #     # Mark the session request as booked
@@ -2292,6 +2319,7 @@ def book_session_caas(request):
         pmo_user = User.objects.filter(profile__type="pmo").first()
         project = session_request.project
         coach = session_request.coach
+        
         if pmo_user:
             path = f"/projects/caas/progress/{project.id}"
             coach_name = coach.first_name + " " + coach.last_name
@@ -2302,22 +2330,33 @@ def book_session_caas(request):
                 int(session_request.confirmed_availability.end_time)
             )
             slot_message = f"{start_time} - {end_time}"
+            session_date = slot_message.split()[0]
+            session_time = f"{slot_message.split()[1]} {slot_message.split()[2]} - {slot_message.split()[5]} {slot_message.split()[6]} IST"
+    
             if session_request.session_type == "interview":
                 hr_user = session_request.hr.user.user
-                message = f"{coach_name.title()} has booked the interview session for Project - {project.name}.The booked slot is "
+                # message = f"{coach_name.title()} has booked the interview session for Project - {project.name}.The booked slot is "
                 message_for_hr = f"{coach_name.title()} has booked the slot {slot_message} from your interview request. You can join the meeting on scheduled time."
                 create_notification(hr_user, path, message_for_hr)
             if session_request.session_type == "chemistry":
                 learner_user = session_request.learner.user.user
-                message = f"{coach_name.title()} has booked the chemistry session for Project - {project.name}.The booked slot is "
                 message_for_learner = f"{coach_name.title()} has booked the slot {slot_message} from your chemistry session request. You can join the meeting on scheduled time."
                 message_for_hr = f"{coach_name.title()} has booked the slot {slot_message} as per the request from {session_request.learner.name.title()} for the project - {session_request.project.name}"
                 create_notification(learner_user, path, message_for_learner)
+            message = f"{coach_name.title()} has booked the {SESSION_TYPE_VALUE[session_request.session_type]} for Project - {project.name}.The booked slot is "
             message += slot_message
             create_notification(pmo_user, path, message)
+            if coachee:
+                send_mail_templates("coachee_emails/session_booked.html",[coachee.email],"Meeraq Coaching | Session Booked",{
+                    "projectName":session_request.project.name,
+                    "name": coachee.name,
+                    "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
+                    "slot_date":session_date,
+                    "solt_time":session_time,
+                    })
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-
+    
     return Response({"message": "Session booked successfully!"}, status=201)
 
 
@@ -3935,7 +3974,12 @@ def schedule_session_directly(request, session_id):
         session = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
         return Response({"error": "Session not found."}, status=404)
-
+    if session.learner: 
+        coachee=session.learner
+    
+        sessionName = str(session.session_type).replace('_', ' ')
+        if( sessionName == "stakeholder without coach"):
+            sessionName = "tripartite without coach"
     time_arr = create_time_arr(request.data.get("availability", []))
     if len(time_arr) == 0:
         return Response({"error": "Please provide the availability."}, status=404)
@@ -3948,9 +3992,20 @@ def schedule_session_directly(request, session_id):
     if request.data["user_type"] == "coach":
         coach = Coach.objects.get(id=request.data["user_id"])
         session.coach = coach
-
+    
     session.availibility.add(availability)
     session.confirmed_availability = availability
+    start_time = format_timestamp(
+                int(session.confirmed_availability.start_time)
+            )
+    end_time = format_timestamp(
+                int(session.confirmed_availability.end_time)
+            )
+    slot_message = f"{start_time} - {end_time}"
+    
+    session_date = slot_message.split()[0]
+    session_time = f"{slot_message.split()[1]} {slot_message.split()[2]} - {slot_message.split()[5]} {slot_message.split()[6]} IST"
+    
     session.is_booked = True
 
     session.status = "booked"
@@ -3958,7 +4013,16 @@ def schedule_session_directly(request, session_id):
     for email in request.data.get("invitees", []):
         session.invitees.append(email.strip())
     session.save()
-
+    if coachee:
+        
+        send_mail_templates("coachee_emails/session_booked.html",[coachee.email],"Meeraq Coaching | Session Booked",{
+            "projectName":session.project.name,
+            "name": coachee.name,
+            "sessionName":SESSION_TYPE_VALUE[session.session_type],
+            "slot_date":session_date,
+            "solt_time":session_time,
+            
+        })
     return Response({"message": "Session booked successfully."})
 
 
