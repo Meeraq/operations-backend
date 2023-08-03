@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}{% endblock %}</title>
+</head>
+<body>	
+  
+    <table style="border-collapse: collapse;border: 0.5px solid lightgray;
+    ">
+        <tbody>
+          <tr style="">
+            <td valign="top" style="width:609.75pt;padding:0.75pt;">
+              <p style="display: block;aspect-ratio:3.80/1;text-align:center;font-family:Brush Script MT,sans-serif;background-color:black;margin:0;line-height:105%; padding: 24px 0 16px 0;">
+                {% comment %} <span style="color:black;size:12pt;line-height:105%;padding:1pt"> {% endcomment %}
+                  {% comment %} <br> {% endcomment %}
+                  <img  src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" style="width:180pt;height:auto"/>
+                  {% comment %} <br>  {% endcomment %}
+                {% comment %} </span> {% endcomment %}
+                <span style="color:black;size:12pt;line-height:105%">
+                  </span>
+              </p>
+            </td>    
+          </tr>
+          <tr style="padding:32px 0;">
+            {% block heading %}{% endblock %}
+            {% block content %}{% endblock %}
+            
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 0 0 24px 12px;">
+            <p style="color:#999999; margin:0;">Thanks & Regards</p>
+            <p style="color:#5E327C; margin-top:1px;">Team Meeraq</p>
+          </td>
+        </tr>
+        <tr style="">
+          <td
+          valign="top"
+          style="
+            width: 609.75pt;
+            background-color:black;
+            color:white;
+          "
+        >
+          <p style="text-align:center;">
+            <a style="color:white;" href="https://caas.meeraq.com/">Click here </a> to login to Meeraq Platform.
+          </p>
+          
+              {% comment %} <br></br>
+              <p style="font-size:11pt;font-family:Calibri,sans-serif;margin:2px 4px;line-height:105%">
+                <span style="color:#999999;font-size:10pt;padding:0;border:1pt none win dowtext;line-height:105%">
+                  Thanks & Regards,&nbsp;&nbsp
+                </span>
+              </p>
+              <p style="font-size:11pt;font-family:Calibri,sans-serif;margin:2px 4px;line-height:105%">
+                <span style="color:#5E327C;font-size:10pt;padding:0;border:1pt none win dowtext;line-height:105%">
+                  Ilham Khan Pathan
+                </span>
+                <span style="color:black;size:12pt;line-height:105%">
+                </span>
+              </p>
+              <p style="font-size:11pt;font-family:Calibri,sans-serif;margin:2px 4px;line-height:105%">
+                <span style="color:#666666;font-size:10pt;padding:0;border:1pt none win dowtext;line-height:105%">
+                  Program management
+                </span>
+                <span style="color:black;size:12pt;line-height:105%">
+                </span>
+              </p>
+              <p style="font-size:11pt;font-family:Calibri,sans-serif;margin:2px 4px;line-height:105%">
+                <span style="color:#999999;font-size:10pt;padding:0;border:1pt none win dowtext;line-height:105%">
+                  +91 9725250897
+                </span>
+                <span style="color:black;size:12pt;line-height:105%">
+                </span>
+              </p>
+              <p style="font-size:11pt;font-family:Calibri,sans-serif;margin:2px 4px;line-height:105%;padding-top:4px;">
+                <span style="color:black;">
+                <img src="https://drive.google.com/file/d/1DyqcbKqLbu90BE1_uyhCy3Fn5LU78EOr/view?usp=sharing" style="width:200pt;height:25pt"/>
+                </span>
+                <span style="color:black;size:12pt;line-height:105%">
+                  </span>
+              </p>
+              <p style="font-size:11pt;font-family:Calibri,sans-serif;margin:0;line-height:105%">
+                <span style="color:black">
+                  <a href="https://www.meeraq.com/" target="_blank" rel="noopener noreferrer" data-auth="NotApplicable" title="https://www.meeraq.com/" data-linkindex="0" >
+                    <span style="color:black;text-decoration:none;padding:0;border:1pt none windowtext;">
+                      <img  src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" style="height:25pt;
+                      padding-bottom: 6px;
+                      width: auto;"/>
+                    </span>
+                  </a>
+                  <a href="https://www.linkedin.com/company/meeraq-hq/" target="_blank" rel="noopener noreferrer" data-auth="NotApplicable" title="https://www.linkedin.com/company/meeraq-hq/" data-linkindex="1" >
+                    <span style="color:black;text-decoration:none;padding:0;border:1pt none windowtext;">
+                      <img  src="data:image/png;base64,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" style="width:28pt;height:38pt;"/>
+                    </span>
+                  </a>
+                  <a href="https://www.instagram.com/meeraq_hq/" target="_blank" rel="noopener noreferrer" data-auth="NotApplicable" title="https://www.instagram.com/meeraq_hq/" data-linkindex="1" >
+                    <span style="color:black;text-decoration:none;padding:0;border:1pt none windowtext;">
+                      <img  src="data:image/png;base64,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" style="width:28pt;height:38pt;"/>
+                    </span>
+                  </a>
+                  <a href="https://www.facebook.com/Meeraq.HQ" target="_blank" rel="noopener noreferrer" data-auth="NotApplicable" title="https://www.facebook.com/Meeraq.HQ/" data-linkindex="1" >
+                    <span style="color:black;text-decoration:none;padding:0;border:1pt none windowtext;">
+                      <img  src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABYCAMAAAByMgEaAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAIfUExURQAAAAAAAAAAgFUAVTMAZkAgYEYXXUAVakseaU0aZkkYYUYjdE4Wb0ogak4ddlIbbU8jak0id1ggeE0fdFMidVEjdFMhb1MhdFEhclMicVMlb1IkclIjcFIjdVEic1Ilc1EkcVEkdVAgdFQkdFUncFQhcVQkdVMkc1EidVEldVUkclQlc1AldVMlclImclEnc1MndFMmdlMnclMmclUjcVQldVEldFMkdFMldFQlc1MldFUndFQlclImclQmdFMmdVInc1QndVEldFMkc1MldFMkdFMjdFQlc1QldVMldFQlc1Imc1Mmc1QmdFImdFMmdlEmdFMkc1QmdFIldFQldFMndVQmdVQmc1QndFMmc1MmdFQmclUkclQmdFQmdVQmc1MldFQkdFUlclUmdFMkdVMmdFQldFMldFMlc1MmdFQmdVMldFQmdFMldFMldFQmdFQmdFMmdVQmc1QmdFQldFMmdFQmdFQndFMldFQlc1QldVQnclQmdVMmdFQmdFQndVUndVMldFQmdFQmdFQmdFQmdFQmdFQndFUndVUndVYpdlcpdlgrd1kteF80fWA2fmE3f2U8gnhVknxYlKWNtqqUuayXvK2YvbCbv7KewLSgwrWhw7mmxr2pyL+tysy+1c7A197V5ODY5uHa5+Xe6unk7fDs8/Lv9fXz9/b0+Pf0+Pr4+/v6/Pz7/Pz7/fz8/P38/f39/f39/v7+/v///27ZQnQAAACJdFJOUwABAgMFCAsMERQVFhcYGhwdHiAhJSwuLi80Nzg7Ozw+Pz9AQEJGRkdMTE5SU1NXW1xfYmVsbW5ydXZ7e32AgIGDg4SHi42RkpKWl5+foKGio6iqq6usrrO9vsHCxMXIycrLzdDS1tfY2tvd3uDh4uPm5+jp7fHx8fLy9PX29/j4+Pn5+vv9/v7+NKmRoQAAAAlwSFlzAAAh1QAAIdUBBJy0nQAAAkZJREFUWEft1lVz20AUhmG7mFLKzAwuM7hNmZmZMSm7DClGTsqoti5z65Sc5Ad2Ir272ZW1in2XCz13e873nRlPPBNHQqFQKJSP5j1GT5wxa+r4IR0Z5KXbnN0VUmJVrAnzHI3da9EVzi9qyy4Hww/T0pQubsq+HtGNZVS8Tg0mEqjTCeI+bs0jFGDgFcK+yjcQMxpwk6jJJoIGHa6SM1tG1F+CVABrMlk/WwlJ9959+5FOp39+5F3renvS2QZ5vz1Pf9e4vjBwbCOe7TgJ4X41ff2ANZK81xgC0nPqngMV+yh4HWEvfXfK1b8qKz8xQV8aujZJ1sIdp1/zlqdiNRXdErbSXaefecxTcbYRHc1BthIHHvFU9aOjucBScg/8e8BTFaejasdOsO0XzoGqV7ZtP2MorKWkirETnLbwlaGwi5JqCjuBquszQ6GEkmouO4Gq6z1DIUFJNZudQNX1kqHgd8D7EVKp10438yaVSj1hKBRTUo1gVyfgz7iTkqqQXZ2AL9IaSppzLKWAA9PpaA6wlAIO9KGjWchSMh8405iOpuA2a8F8YDkVj0OsBfOBXjQ8RrEWjAf2UMhylACMB4aRz9K9nITLdGAzcR9b9Asf/mSqMn8f8hJutCTt5zShANYEsr5aXCZmlFxK1KBrKUGD5HqCRl0uEfVVtoJYgFYlhH1cm0ko2DrTj6xjPUnUp/d+7//5WhcXRNnnILbde+Lk/GbsctS6aIf8vWQVrxzKOC/RzrFJ8fi0cf0LGIRCoVCogYpE/gPSzHoBdhkbnwAAAABJRU5ErkJggg==" style="width:28pt;height:38pt;"/>
+                    </span>
+                  </a>
+                </span>
+              </p>
+              <p style="font-size:11pt;font-family:Calibri,sans-serif;margin:0;line-height:105%">
+                <span>
+                  <span style="font-family:Times New Roman,serif;">&nbsp;
+                  </span>
+                </span>
+              </p>
+              {% endcomment %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+</body>
+</html>
