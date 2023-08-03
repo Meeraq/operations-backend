@@ -3833,7 +3833,7 @@ def get_current_session(request, user_type, room_id, user_id):
             Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
             & Q(confirmed_availability__end_time__gt=current_time),
             Q(learner__id=user_id),
-            Q(coach__room_id=room_id),
+            (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
             ~Q(status="completed"),
         )
@@ -3843,7 +3843,17 @@ def get_current_session(request, user_type, room_id, user_id):
             Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
             & Q(confirmed_availability__end_time__gt=current_time),
             Q(hr__id=user_id),
-            Q(coach__room_id=room_id),
+            (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        )
+    elif user_type == "pmo":
+        sessions = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
+            & Q(confirmed_availability__end_time__gt=current_time),
+            Q(pmo__id=user_id),
+            (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
             ~Q(status="completed"),
         )
