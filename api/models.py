@@ -46,8 +46,24 @@ def password_reset_token_created(
         reverse("password_reset:reset-password-request"), reset_password_token.key
     )
     subject = "Meeraq - Forgot Password"
-    name = "User"
-    message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+    
+    user_type=reset_password_token.user.profile.type
+    if user_type == "pmo":
+        user = Pmo.objects.get(email=reset_password_token.user.email)
+        name=user.name
+    elif user_type == "coach":
+        user = Coach.objects.get(email=reset_password_token.user.email)
+        name=user.first_name
+    elif user_type == "learner":
+        user = Learner.objects.get(email=reset_password_token.user.email)
+        name=user.name
+    elif user_type == "hr":
+        user = HR.objects.get(email=reset_password_token.user.email)
+        name=user.first_name
+    else:
+        name="User"
+
+    # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
     link=f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
     # send_mail(
     #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
