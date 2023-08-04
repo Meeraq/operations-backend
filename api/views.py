@@ -412,7 +412,7 @@ def update_coach_profile(request, coach_id):
             "Meeraq Coaching | Coach updated profile",
             {"name": pmo.name, "coachName": coach.first_name},
         )
-        return Response(depth_serializer.data, status=200)
+        return Response({**depth_serializer.data, "last_login": coach.user.user.last_login}, status=200)
 
     return Response(serializer.errors, status=400)
 
