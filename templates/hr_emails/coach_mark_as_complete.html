@@ -1,42 +1,22 @@
 {% extends "parent_template.html" %} 
 {% block title %}Meeraq Coaching | New Session request{% endblock %} {% block heading %}
-<td
-  valign="top"
-  style="
-    width: 609.75pt;
-     
-    padding: 48px 16px;
-     
-    margin-bottom: 20px;
-  "
->
-  <p
-    style="
-      font-size: 11pt;
-      font-family: Calibri, sans-serif;
-      background-color: white;
-      margin: 0;
-      line-height: 105%;
-    "
-  >
-    <span>
-      <b>
-        <span style="color: #7030a0; font-size: 15pt; line-height: 105%">
-          Dear {{name}},
-        </span>
-      </b>
+<div style="margin-top:20px">
+  <b>
+    <span class="heading-container">
+      Dear <span class="heading-container-span">{{name}}</span>,
     </span>
-  </p>
+  </b>
+</div>
   {% endblock %} {% block content %}
 
-  <p><strong>Session Name:</strong> <span id="sessionName">{{session-name}}</span></p>
-    <p><strong>Date and Time:</strong> <span id="dateTime">{{date}} {{time}}</span></p>
-    <p><strong>Coach Name:</strong> <span id="coachName">{{coach-name}}</span></p>
-    <p><strong>Coachee Name:</strong> <span id="coacheeName">{{coachee-name}}</span></p>
-    <p>The session has been marked as done.</p>
-    <p>Click <a href="https://caas.meeraq.com/">here</a> to login and view the details.</p>
+  <p class="child-para"><strong>Session Name:</strong> <span id="sessionName">{{session-name}}</span></p>
+    <p class="child-para"><strong>Date and Time:</strong> <span id="dateTime">{{date}} {{time}}</span></p>
+    <p class="child-para"><strong>Coach Name:</strong> <span id="coachName">{{coach-name}}</span></p>
+    <p class="child-para"><strong>Coachee Name:</strong> <span id="coacheeName">{{coachee-name}}</span></p>
+    <p class="child-para">The session has been marked as done.</p>
+    <p class="child-para">Click <a href="https://caas.meeraq.com/">here</a> to login and view the details.</p>
 
 
-</td>
+
   {% endblock %}
 
