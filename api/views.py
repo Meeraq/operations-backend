@@ -88,16 +88,18 @@ env = environ.Env()
 class EmailSendingError(Exception):
     pass
 
-def send_mail_templates(file_name,user_email,email_subject,content):
-    
-    email_message = render_to_string(file_name,content)
-    
-    email = EmailMessage(email_subject, email_message, settings.DEFAULT_FROM_EMAIL, user_email)
+
+def send_mail_templates(file_name, user_email, email_subject, content):
+    email_message = render_to_string(file_name, content)
+
+    email = EmailMessage(
+        email_subject, email_message, settings.DEFAULT_FROM_EMAIL, user_email
+    )
     email.content_subtype = "html"
-    
+
     try:
         email.send(fail_silently=False)
-    except BadHeaderError as e:      
+    except BadHeaderError as e:
         print(f"Error occurred while sending emails: {str(e)}")
         raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
@@ -107,10 +109,18 @@ def create_notification(user, path, message):
     return notification
 
 
+#  this returns in dd-mm-yyyy hh:mm a
 def format_timestamp(timestamp):
     dt = datetime.fromtimestamp(timestamp / 1000)  # Convert milliseconds to seconds
     return dt.strftime("%d-%m-%Y %I:%M %p")
 
+def get_date(timestamp):
+    dt = datetime.fromtimestamp(timestamp / 1000)  # Convert milliseconds to seconds
+    return dt.strftime("%d-%m-%Y")
+
+def get_time(timestamp):
+    dt = datetime.fromtimestamp(timestamp / 1000)  # Convert milliseconds to seconds
+    return dt.strftime("%I:%M %p")
 
 def generateManagementToken():
     expires = 24 * 3600
@@ -157,21 +167,19 @@ def generate_room_id(email):
     except Exception as e:
         print(f"Error while generating meeting link: {str(e)}")
         return None
-    
-    
+
 
 SESSION_TYPE_VALUE = {
-  'chemistry': "Chemistry",
-  'tripartite': "Tripartite",
-  'goal_setting': "Goal Setting",
-  'coaching_session': "Coaching Session",
-  'mid_review': "Mid Review",
-  'end_review': "End Review",
-  'closure_session': "Closure Session",
-  'stakeholder_without_coach': "Tripartite Without Coach",
-  'interview': "Interview",
+    "chemistry": "Chemistry",
+    "tripartite": "Tripartite",
+    "goal_setting": "Goal Setting",
+    "coaching_session": "Coaching Session",
+    "mid_review": "Mid Review",
+    "end_review": "End Review",
+    "closure_session": "Closure Session",
+    "stakeholder_without_coach": "Tripartite Without Coach",
+    "interview": "Interview",
 }
-
 
 
 @api_view(["POST"])
@@ -398,19 +406,21 @@ def update_coach_profile(request, coach_id):
     except Coach.DoesNotExist:
         return Response(status=404)
     pmo_user = User.objects.filter(profile__type="pmo").first()
-    pmo=Pmo.objects.get(email=pmo_user.email)
-    
+    pmo = Pmo.objects.get(email=pmo_user.email)
+
     serializer = CoachSerializer(
         coach, data=request.data, partial=True
     )  # partial argument added here
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
-        send_mail_templates("pmo_emails/coach_update_profile.html",[pmo.email],"Meeraq Coaching | Coach updated profile", {
+
+        send_mail_templates("pmo_emails/coach_update_profile.html",[pmo.email],f"Meeraq Coaching | {coach.first_name} {coach.last_name} updated their profile", {
             "name":pmo.name,
             "coachName":coach.first_name
         })
-        return Response(depth_serializer.data, status=200)
+
+        return Response({**depth_serializer.data, "last_login": coach.user.user.last_login}, status=200)
 
     return Response(serializer.errors, status=400)
 
@@ -1565,9 +1575,12 @@ def add_coach(request):
             coach.save()
 
             full_name = coach_user.first_name + " " + coach_user.last_name
-            send_mail_templates("coach_templates/pmo-adds-coach-as-user.html",[coach_user.email],"Meeraq Coaching | New Beginning !",{
-                "name":coach_user.first_name
-            })
+            send_mail_templates(
+                "coach_templates/pmo-adds-coach-as-user.html",
+                [coach_user.email],
+                "Meeraq Coaching | New Beginning !",
+                {"name": coach_user.first_name},
+            )
             # Send email notification to the coach
             # subject = 'Welcome to our coaching platform'
             # message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {temp_password}\n\n Click on the link to login or reset the password http://localhost:3003/'
@@ -1704,16 +1717,14 @@ def login_view(request):
     if user is None:
         raise AuthenticationFailed({"detail": "Invalid credentials."})
 
+    last_login = user.last_login
     login(request, user)
-    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    user.last_login = today
-    user.save()
     user_data = get_user_data(user)
     if user_data:
         return Response(
             {
                 "detail": "Successfully logged in.",
-                "user": {**user_data, "last_login": user.last_login},
+                "user": {**user_data, "last_login": last_login},
             }
         )
     else:
@@ -1736,15 +1747,13 @@ def logout_view(request):
 @ensure_csrf_cookie
 def session_view(request):
     user = request.user
-    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    user.last_login = today
-    user.save()
+    last_login = user.last_login
     user_data = get_user_data(user)
     if user_data:
         return Response(
             {
                 "isAuthenticated": True,
-                "user": {**user_data, "last_login": user.last_login},
+                "user": {**user_data, "last_login": last_login},
             }
         )
     else:
@@ -1790,7 +1799,12 @@ def generate_otp(request):
             f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
         )
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
-        send_mail_templates("hr_emails/login_with_otp.html",[user],subject,{"name": name, "otp":created_otp.otp})
+        send_mail_templates(
+            "hr_emails/login_with_otp.html",
+            [user],
+            subject,
+            {"name": name, "otp": created_otp.otp},
+        )
         return Response({"message": f"OTP has been sent to {user.username}!"})
 
     except User.DoesNotExist:
@@ -1820,19 +1834,16 @@ def validate_otp(request):
 
     user = otp_obj.user
     # token, created = Token.objects.get_or_create(user=learner.user.user)
-
     # Delete the OTP object after it has been validated
     otp_obj.delete()
+    last_login = user.last_login
     login(request, user)
-    today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    user.last_login = today
-    user.save()
     user_data = get_user_data(user)
     if user_data:
         return Response(
             {
                 "detail": "Successfully logged in.",
-                "user": {**user_data, "last_login": user.last_login},
+                "user": {**user_data, "last_login": last_login},
             }
         )
     else:
@@ -1990,9 +2001,12 @@ def send_consent(request):
         message = f"Admin has requested your consent to share profile for new project."
         for coach in coaches:
             create_notification(coach.user.user, path, message)
-            send_mail_templates("coach_templates/pmo_ask_for_consent.html",[coach.email],"Meeraq Coaching | New Project!",{
-                "name":coach.first_name
-            })
+            send_mail_templates(
+                "coach_templates/pmo_ask_for_consent.html",
+                [coach.email],
+                "Meeraq Coaching | New Project!",
+                {"name": coach.first_name},
+            )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Consent sent successfully", "details": ""}, status=200)
@@ -2052,9 +2066,10 @@ def receive_coach_consent(request):
                     ]
                 coach_status.save()
                 try:
+                    pmo_user = User.objects.filter(profile__type="pmo").first()
+                    pmo = Pmo.objects.get(email=pmo_user.email)
                     if request.data["status"] == "select":
-                        pmo_user = User.objects.filter(profile__type="pmo").first()
-                        pmo = Pmo.objects.get(email=pmo_user.email)
+                        
                         if pmo_user:
                             path = f"/projects/caas/progress/{project.id}"
                             coach_name = (
@@ -2065,13 +2080,24 @@ def receive_coach_consent(request):
                             message = f"{coach_name.title() } has accepted your consent request for Project - {project.name}"
                             create_notification(pmo_user, path, message)
                             
-                            send_mail_templates("pmo_emails/coach_agrees-rejects_consent.html",[pmo_user.email],"Meeraq Coaching | Coach agreed to consent cc",{
+                            send_mail_templates("pmo_emails/coach_agrees-rejects_consent.html",[pmo_user.email],f"Meeraq Coaching | Coach {coach_status.coach.first_name} agreed to consent",{
+                                "projectname":project.name,
+                                "name": pmo.name,
+                                "coachname":coach_status.coach.first_name,
+                                "agreeddisagreed" :request.data["status"]
+                            })
+                    if request.data["status"] == "reject":
+                        send_mail_templates("pmo_emails/coach_agrees-rejects_consent.html",[pmo_user.email],f"Meeraq Coaching | Coach {coach_status.coach.first_name} reject to consent",{
                                 "projectname":project.name,
                                 "name": pmo.name,
                                 "coachname":coach_status.coach.first_name,
                                 "agreeddisagreed" :request.data["status"]
                             })
                             
+
+                            
+
+
                 except Exception as e:
                     print(f"Error occurred while creating notification: {str(e)}")
                     continue
@@ -2276,7 +2302,7 @@ def book_session_caas(request):
         id=request.data.get("confirmed_availability")
     )
     if session_request.learner:
-        coachee=session_request.learner
+        coachee = session_request.learner
     #     sessionName = str(session_request.session_type).replace('_', ' ')
     #     if( sessionName == "stakeholder without coach"):
     #         sessionName = "tripartite without coach"
@@ -2285,7 +2311,7 @@ def book_session_caas(request):
     for email in request.data.get("invitees", []):
         session_request.invitees.append(email.strip())
     session_request.save()
-    
+
     # if serializer.is_valid():
     #     session = serializer.save()
     #     # Mark the session request as booked
@@ -2319,7 +2345,9 @@ def book_session_caas(request):
         pmo_user = User.objects.filter(profile__type="pmo").first()
         project = session_request.project
         coach = session_request.coach
+        pmo=Pmo.objects.get(email=pmo_user)
         
+
         if pmo_user:
             path = f"/projects/caas/progress/{project.id}"
             coach_name = coach.first_name + " " + coach.last_name
@@ -2330,9 +2358,14 @@ def book_session_caas(request):
                 int(session_request.confirmed_availability.end_time)
             )
             slot_message = f"{start_time} - {end_time}"
-            session_date = slot_message.split()[0]
-            session_time = f"{slot_message.split()[1]} {slot_message.split()[2]} - {slot_message.split()[5]} {slot_message.split()[6]} IST"
-    
+            
+            session_date = get_date(int(session_request.confirmed_availability.start_time))
+            start_time = get_time(int(session_request.confirmed_availability.start_time))
+            end_time = get_time(int(session_request.confirmed_availability.end_time))
+
+            session_time = f"{start_time} - {end_time} IST"
+            
+
             if session_request.session_type == "interview":
                 hr_user = session_request.hr.user.user
                 # message = f"{coach_name.title()} has booked the interview session for Project - {project.name}.The booked slot is "
@@ -2352,11 +2385,22 @@ def book_session_caas(request):
                     "name": coachee.name,
                     "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
                     "slot_date":session_date,
-                    "solt_time":session_time,
+                    "slot_time":session_time,
                     })
+                send_mail_templates("pmo_emails/session_scheduled.html",[pmo.email],"Meeraq Coaching | Session Booked",{
+                    "projectName":session_request.project.name,
+                    "name":pmo.name,
+                    "coachee_name": coachee.name,
+                    "coach_name":coach_name,
+                    "sessionName":SESSION_TYPE_VALUE[session_request.session_type],
+                    "slot_date":session_date,
+                    "slot_time":session_time,
+                    
+                    })
+
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-    
+
     return Response({"message": "Session booked successfully!"}, status=201)
 
 
@@ -2480,7 +2524,10 @@ def accept_coach_caas_hr(request):
         project = Project.objects.get(id=request.data.get("project_id", ""))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
+    coaches_selected_count = 0
     for coach in project.coaches_status.all():
+        
+        
         if coach.coach_id == request.data.get("coach_id"):
             if (
                 coach.status["consent"]["status"] == "select"
@@ -2499,7 +2546,21 @@ def accept_coach_caas_hr(request):
             #     print(coach.status)
             # else:
             #     return Response({"error": "Status Already Updated"}, status=400)
+        print(coach.status["hr"]["status"])
+        if coach.status["hr"]["status"]=="select":
+            coaches_selected_count += 1
+            
+            
     project.save()
+    
+    print(coaches_selected_count)
+    # for i in range(0,len(project.coaches_status)):
+    #     print(project.coaches_status[i])
+    #     status=project.coaches_status[i].status.hr.status
+    #     if status=="select":
+    #         coach_count=coach_count+1
+        
+    
     message = ""
     if request.data.get("status") == "select":
         try:
@@ -2513,15 +2574,18 @@ def accept_coach_caas_hr(request):
                 message_for_coach = f"Congratulations! You have been selected by HR for the Project - {project.name}"
                 create_notification(pmo_user, path, message)
                 create_notification(coach.user.user, path, message)
-                send_mail_templates("pmo_emails/hr_selects_a_coach.html",[pmo_user.email],"Meeraq Coaching | HR selected a coach",{
+
+                send_mail_templates("pmo_emails/hr_selects_a_coach.html",[pmo_user.email],f"Meeraq Coaching | HR selected {coach_name}",{
                     "projectname":project.name,
                     "name":pmo.name,
+                    "coaches_selected_count":coaches_selected_count,
                     "coachname":coach_name
                 })
-                send_mail_templates("coach_templates/intro_mail_to_coach.html",[coach.email],"Meeraq Coaching",{
+                send_mail_templates("coach_templates/intro_mail_to_coach.html",[coach.email],f"Meeraq Coaching | {project.organisation.name} has selected you",{
                     "name":coach.first_name,
                     "orgName":project.organisation.name,
                 })
+
         except Exception as e:
             print(f"Error occurred while creating notification: {str(e)}")
         message = "Coach selected."
@@ -2531,7 +2595,7 @@ def accept_coach_caas_hr(request):
             path = f"/projects/caas/progress/{project.id}"
             message_for_coach = f"Unfortunately, your profile is not selected for the Project - {project.name}"
             create_notification(coach.user.user, path, message_for_coach)
-            
+
         except Exception as e:
             print(f"Error occurred while creating notification: {str(e)}")
         message = "Coach rejected."
@@ -2540,7 +2604,7 @@ def accept_coach_caas_hr(request):
 
 @api_view(["POST"])
 def add_learner_to_project(request):
-    coacheeCounts=int(0)
+    coacheeCounts = int(0)
     try:
         project = Project.objects.get(id=request.data["project_id"])
     except Project.DoesNotExist:
@@ -2550,13 +2614,14 @@ def add_learner_to_project(request):
         for learner in learners:
             create_engagement(learner, project)
             # project.learner.add(learner)
-            
+
             try:
                 path = f"/projects/caas/progress/{project.id}"
                 message = f"You have been added to Project - {project.name}"
                 create_notification(learner.user.user, path, message)
                 coacheeCounts=coacheeCounts+1
-                send_mail_templates("coachee_emails/add_coachee.html", [learner.email], "Meeraq Coaching | New Journey !", {"name": learner.name, "orgname" : project.organisation.name})
+                send_mail_templates("coachee_emails/add_coachee.html", [learner.email], "Meeraq Coaching | Welcome to Meeraq", {"name": learner.name, "orgname" : project.organisation.name})
+
             except Exception as e:
                 print(f"Error occurred while creating notification: {str(e)}")
                 continue
@@ -2571,15 +2636,19 @@ def add_learner_to_project(request):
             path = f"/projects/caas/progress/{project.id}"
             message = f"HR has added Coachees to the Project - {project.name}"
             create_notification(pmo_user, path, message)
-            send_mail_templates("pmo_emails/hr_adding_coachees.html",[pmo_user.email],"Meeraq Coaching | Coachees added",{
-                "projectName":project.name,
-                "name":pmo.name,
-                "coacheeCount":str(coacheeCounts)
-            })
+            send_mail_templates(
+                "pmo_emails/hr_adding_coachees.html",
+                [pmo_user.email],
+                "Meeraq Coaching | Coachees added",
+                {
+                    "projectName": project.name,
+                    "name": pmo.name,
+                    "coacheeCount": str(coacheeCounts),
+                },
+            )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Coachee added succesfully", "details": ""}, status=201)
-
 
 
 def transform_project_structure(sessions):
@@ -2897,9 +2966,14 @@ def send_list_to_hr(request):
         hr_users = project.hr.all()
         for hr_user in hr_users:
             hr_email = hr_user.email
-            hr_name = hr_user.first_name  
-            send_mail_templates("hr_emails/pmo_share_coach_list.html",[hr_email],"Welcome to the Meeraq Platform",{"name": hr_name})
-            
+            hr_name = hr_user.first_name
+            send_mail_templates(
+                "hr_emails/pmo_share_coach_list.html",
+                [hr_email],
+                "Welcome to the Meeraq Platform",
+                {"name": hr_name},
+            )
+
         for hr_user in project.hr.all():
             create_notification(hr_user.user.user, path, message)
     except Exception as e:
@@ -3276,6 +3350,7 @@ def reschedule_session(request):
                 status=401,
             )
 
+
 @api_view(["GET"])
 def get_engagement_in_projects(request, project_id):
     engagements = Engagement.objects.filter(project__id=project_id)
@@ -3617,21 +3692,22 @@ def reschedule_session_of_coachee(request, session_id):
 def create_goal(request):
     serializer = GoalSerializer(data=request.data)
     goal_name = request.data["name"]
-    engagement_id = request.data.get("engagement")  
-    
-   
+    engagement_id = request.data.get("engagement")
+
     if not Goal.objects.filter(name=goal_name, engagement__id=engagement_id).exists():
-        
-      
         if Goal.objects.filter(engagement__id=engagement_id).count() < 10:
             if serializer.is_valid():
                 serializer.save()
                 return Response({"message": "Goal created successfully."}, status=201)
             return Response(serializer.errors, status=400)
         else:
-            return Response({"error": "The project already has 10 goals. Cannot add more."}, status=400)
+            return Response(
+                {"error": "The project already has 10 goals. Cannot add more."},
+                status=400,
+            )
     else:
         return Response({"error": "Goal already exists for the project."}, status=400)
+
 
 @api_view(["GET"])
 def get_engagement_goals(request, engagement_id):
@@ -3671,18 +3747,20 @@ def edit_goal(request, goal_id):
 
 @api_view(["POST"])
 def create_competency(request):
-    
     serializer = CompetencySerializer(data=request.data)
-    goal_id = request.data.get("goal")  
+    goal_id = request.data.get("goal")
     competency_count = Competency.objects.filter(goal__id=goal_id).count()
-    
+
     if competency_count < 10:
         if serializer.is_valid():
             competency = serializer.save()
             return Response({"message": "Competency added successfully"}, status=201)
         return Response(serializer.errors, status=400)
     else:
-        return Response({"error": "The goal already has 10 competencies. Cannot add more."}, status=400)
+        return Response(
+            {"error": "The goal already has 10 competencies. Cannot add more."},
+            status=400,
+        )
 
 
 @api_view(["POST"])
@@ -3729,7 +3807,9 @@ def add_score_to_competency(request, competency_id):
         }
         if len(competency.scoring) >= 20:
             return Response(
-                {"error": "The maximum number of scores (20) for this competency has been reached."},
+                {
+                    "error": "The maximum number of scores (20) for this competency has been reached."
+                },
                 status=400,
             )
 
@@ -3751,22 +3831,21 @@ def get_competency_by_goal(request, goal_id):
     return Response(serializer.data, status=200)
 
 
-
-
 @api_view(["POST"])
 def create_action_item(request):
     serializer = ActionItemSerializer(data=request.data)
-    competency_id = request.data.get("competency")  
-    
-   
+    competency_id = request.data.get("competency")
+
     if ActionItem.objects.filter(competency__id=competency_id).count() < 20:
         if serializer.is_valid():
             serializer.save()
             return Response({"message": "Action created successfully."}, status=201)
         return Response(serializer.errors, status=400)
     else:
-        return Response({"error": "The competency already has 20 action items. Cannot add more."}, status=400)
-
+        return Response(
+            {"error": "The competency already has 20 action items. Cannot add more."},
+            status=400,
+        )
 
 
 @api_view(["GET"])
@@ -3974,11 +4053,11 @@ def schedule_session_directly(request, session_id):
         session = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
         return Response({"error": "Session not found."}, status=404)
-    if session.learner: 
-        coachee=session.learner
-    
-        sessionName = str(session.session_type).replace('_', ' ')
-        if( sessionName == "stakeholder without coach"):
+    if session.learner:
+        coachee = session.learner
+
+        sessionName = str(session.session_type).replace("_", " ")
+        if sessionName == "stakeholder without coach":
             sessionName = "tripartite without coach"
     time_arr = create_time_arr(request.data.get("availability", []))
     if len(time_arr) == 0:
@@ -3992,20 +4071,19 @@ def schedule_session_directly(request, session_id):
     if request.data["user_type"] == "coach":
         coach = Coach.objects.get(id=request.data["user_id"])
         session.coach = coach
-    
+
     session.availibility.add(availability)
     session.confirmed_availability = availability
-    start_time = format_timestamp(
-                int(session.confirmed_availability.start_time)
-            )
-    end_time = format_timestamp(
-                int(session.confirmed_availability.end_time)
-            )
-    slot_message = f"{start_time} - {end_time}"
+    start_time = format_timestamp(int(session.confirmed_availability.start_time))
+    end_time = format_timestamp(int(session.confirmed_availability.end_time))
+    slot_message = f"{start_time} - {end_time}"    
+    session_date = get_date(int(session.confirmed_availability.start_time))
+    start_time = get_time(int(session.confirmed_availability.start_time))
+    end_time = get_time(int(session.confirmed_availability.end_time))
+
+    session_time = f"{start_time} - {end_time} IST"
     
-    session_date = slot_message.split()[0]
-    session_time = f"{slot_message.split()[1]} {slot_message.split()[2]} - {slot_message.split()[5]} {slot_message.split()[6]} IST"
-    
+
     session.is_booked = True
 
     session.status = "booked"
@@ -4020,8 +4098,7 @@ def schedule_session_directly(request, session_id):
             "name": coachee.name,
             "sessionName":SESSION_TYPE_VALUE[session.session_type],
             "slot_date":session_date,
-            "solt_time":session_time,
-            
+            "slot_time":session_time,           
         })
     return Response({"message": "Session booked successfully."})
 
