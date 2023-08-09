@@ -77,6 +77,7 @@ import random
 from django.db.models import Q
 from collections import defaultdict
 from django.db.models import Avg
+from rest_framework import status
 
 
 # Create your views here.
@@ -1874,6 +1875,20 @@ def add_organisation(request):
         {"message": "Organisation added successfully.", "details": serializer.data},
         status=200,
     )
+@api_view(['PUT'])
+def update_organisation(request, org_id):
+    try:
+        org = Organisation.objects.get(id=org_id)
+    except Organisation.DoesNotExist:
+        return Response({'error': 'Organization not found'}, status=404)
+
+    serializer = OrganisationSerializer(org, data=request.data)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response({'message': 'Organization updated successfully', 'data': serializer.data})
+    
+    return Response(serializer.errors, status=400)
 
 
 @api_view(["POST"])
@@ -1922,6 +1937,56 @@ def add_hr(request):
         return Response({"error": str(e)}, status=400)
 
 
+@api_view(['PUT'])
+def update_hr(request, hr_id):
+    try:
+        hr = HR.objects.get(id=hr_id)
+    except HR.DoesNotExist:
+        return Response({'error': 'HR not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Get the associated user profile
+    user_profile = hr.user
+
+    with transaction.atomic():
+        # Update HR instance
+        serializer = HrSerializer(hr, data=request.data, partial=True)
+        if serializer.is_valid():
+            new_email = request.data.get('email')  # Get the new email from the request
+            existing_user = User.objects.filter(email=new_email).exclude(username=hr.email).first()
+
+            if existing_user:
+                return Response({'error': 'User with this email already exists'}, status=status.HTTP_400_BAD_REQUEST)
+
+            updated_hr = serializer.save()
+
+            # Update or create corresponding User instance
+            user, created = User.objects.update_or_create(
+                username=new_email,
+                defaults={'email': new_email}
+            )
+
+            # Update the 'user' field in the HR instance
+            hr.user.user = user  # Assign the new User instance
+            hr.user.save()  # Save the updated Profile instance
+
+            return Response({'message': 'HR updated successfully', 'data': serializer.data})
+        
+        # Handle serializer errors
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['DELETE'])
+def delete_hr(request, hr_id):
+    try:
+        hr = HR.objects.get(id=hr_id)
+        user_profile = hr.user
+        user = user_profile.user
+        user.delete()
+        hr.delete()
+        return Response({"message": "HR deleted successfully"}, status=status.HTTP_200_OK)
+    except ObjectDoesNotExist:
+        return Response({"message": "Failed to delete HR profile"}, status=status.HTTP_400_BAD_REQUEST)
+    
+
 # Filter API for Coaches
 # Expected input "filters": [{"key":"area_of_expertise","value":"test"},...]
 # @api_view(['POST'])
@@ -1937,6 +2002,7 @@ def add_hr(request):
 #     return Response(serializer.data, status=200)
 
 
+    
 @api_view(["POST"])
 def add_project_struture(request):
     try:
