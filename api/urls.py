@@ -152,7 +152,7 @@ urlpatterns = [
     path("action-items/", views.create_action_item),
     path("action-items/<int:engagement_id>/", views.get_engagement_action_items),
     path(
-        "action-items/edit/<int:action_item_id>/",
+        "action_items/edit/<int:action_item_id>/",
         views.edit_action_item,
         name="edit_action_item",
     ),
@@ -183,7 +183,7 @@ urlpatterns = [
         views.get_action_items_by_competency,
     ),
     path(
-        "action-items/pending/competency/<int:learner_id>/",
+        "action_items/pending/competency/<int:learner_id>/",
         views.get_pending_action_items_by_competency,
     ),
     path("sessions/direct-schedule/<int:session_id>/", views.schedule_session_directly),
@@ -199,8 +199,8 @@ urlpatterns = [
     path('update_organisation/<int:org_id>/', views.update_organisation),
     path("update_hr/<int:hr_id>/", views.update_hr),
     path('delete_hr/<int:hr_id>/', views.delete_hr),  
-    path("learner-completed-sessions/count/<int:learner_id>/",views.get_completed_learner_sessions_count),
-    path("learner-total-goals/count/<int:learner_id>/",views.get_total_goals_for_learner),
-    path("learner-total-competency/count/<int:learner_id>/",views.get_total_competencies_for_learner),
-    path("learner-competency/averages/<int:learner_id>/", views.get_learner_competency_averages),
+    path("learner_completed_sessions/count/<int:learner_id>/",views.get_completed_learner_sessions_count),
+    path("learner_total_goals/count/<int:learner_id>/",views.get_total_goals_for_learner),
+    path("learner_total_competency/count/<int:learner_id>/",views.get_total_competencies_for_learner),
+    path("learner_competencies/<int:learner_id>/", views.get_learner_competency_averages),
 ]
