@@ -77,6 +77,7 @@ import random
 from django.db.models import Q
 from collections import defaultdict
 from django.db.models import Avg
+from rest_framework import status
 
 
 # Create your views here.
@@ -114,13 +115,16 @@ def format_timestamp(timestamp):
     dt = datetime.fromtimestamp(timestamp / 1000)  # Convert milliseconds to seconds
     return dt.strftime("%d-%m-%Y %I:%M %p")
 
+
 def get_date(timestamp):
     dt = datetime.fromtimestamp(timestamp / 1000)  # Convert milliseconds to seconds
     return dt.strftime("%d-%m-%Y")
 
+
 def get_time(timestamp):
     dt = datetime.fromtimestamp(timestamp / 1000)  # Convert milliseconds to seconds
     return dt.strftime("%I:%M %p")
+
 
 def generateManagementToken():
     expires = 24 * 3600
@@ -415,12 +419,17 @@ def update_coach_profile(request, coach_id):
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
 
-        send_mail_templates("pmo_emails/coach_update_profile.html",[pmo.email],f"Meeraq Coaching | {coach.first_name} {coach.last_name} updated their profile", {
-            "name":pmo.name,
-            "coachName":coach.first_name
-        })
+        send_mail_templates(
+            "pmo_emails/coach_update_profile.html",
+            [pmo.email],
+            f"Meeraq Coaching | {coach.first_name} {coach.last_name} updated their profile",
+            {"name": pmo.name, "coachName": coach.first_name},
+        )
 
-        return Response({**depth_serializer.data, "last_login": coach.user.user.last_login}, status=200)
+        return Response(
+            {**depth_serializer.data, "last_login": coach.user.user.last_login},
+            status=200,
+        )
 
     return Response(serializer.errors, status=400)
 
@@ -1876,6 +1885,24 @@ def add_organisation(request):
     )
 
 
+@api_view(["PUT"])
+def update_organisation(request, org_id):
+    try:
+        org = Organisation.objects.get(id=org_id)
+    except Organisation.DoesNotExist:
+        return Response({"error": "Organization not found"}, status=404)
+
+    serializer = OrganisationSerializer(org, data=request.data)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            {"message": "Organization updated successfully", "data": serializer.data}
+        )
+
+    return Response(serializer.errors, status=400)
+
+
 @api_view(["POST"])
 def add_hr(request):
     try:
@@ -1920,6 +1947,62 @@ def add_hr(request):
         )
     except Exception as e:
         return Response({"error": str(e)}, status=400)
+
+
+@api_view(["PUT"])
+def update_hr(request, hr_id):
+    try:
+        hr = HR.objects.get(id=hr_id)
+    except HR.DoesNotExist:
+        return Response({"error": "HR not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Get the associated user profile
+    with transaction.atomic():
+        # Update HR instance
+        serializer = HrSerializer(hr, data=request.data, partial=True)
+        if serializer.is_valid():
+            new_email = request.data.get("email")  # Get the new email from the request
+            existing_user = (
+                User.objects.filter(email=new_email).exclude(username=hr.email).first()
+            )
+
+            if existing_user:
+                return Response(
+                    {"error": "User with this email already exists"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # saving hr 
+            updated_hr = serializer.save()
+            # updating email and username of user object of HR
+            user = updated_hr.user.user
+            user.email = new_email
+            user.username = new_email
+            user.save()
+
+            return Response(
+                {"message": "HR updated successfully", "data": serializer.data}
+            )
+
+        # Handle serializer errors
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["DELETE"])
+def delete_hr(request, hr_id):
+    try:
+        hr = HR.objects.get(id=hr_id)
+        user_profile = hr.user
+        user = user_profile.user
+        user.delete()
+        hr.delete()
+        return Response(
+            {"message": "HR deleted successfully"}, status=status.HTTP_200_OK
+        )
+    except ObjectDoesNotExist:
+        return Response(
+            {"message": "Failed to delete HR profile"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 # Filter API for Coaches
@@ -2069,7 +2152,6 @@ def receive_coach_consent(request):
                     pmo_user = User.objects.filter(profile__type="pmo").first()
                     pmo = Pmo.objects.get(email=pmo_user.email)
                     if request.data["status"] == "select":
-                        
                         if pmo_user:
                             path = f"/projects/caas/progress/{project.id}"
                             coach_name = (
@@ -2079,24 +2161,30 @@ def receive_coach_consent(request):
                             )
                             message = f"{coach_name.title() } has accepted your consent request for Project - {project.name}"
                             create_notification(pmo_user, path, message)
-                            
-                            send_mail_templates("pmo_emails/coach_agrees-rejects_consent.html",[pmo_user.email],f"Meeraq Coaching | Coach {coach_status.coach.first_name} agreed to consent",{
-                                "projectname":project.name,
-                                "name": pmo.name,
-                                "coachname":coach_status.coach.first_name,
-                                "agreeddisagreed" :request.data["status"]
-                            })
+
+                            send_mail_templates(
+                                "pmo_emails/coach_agrees-rejects_consent.html",
+                                [pmo_user.email],
+                                f"Meeraq Coaching | Coach {coach_status.coach.first_name} agreed to consent",
+                                {
+                                    "projectname": project.name,
+                                    "name": pmo.name,
+                                    "coachname": coach_status.coach.first_name,
+                                    "agreeddisagreed": request.data["status"],
+                                },
+                            )
                     if request.data["status"] == "reject":
-                        send_mail_templates("pmo_emails/coach_agrees-rejects_consent.html",[pmo_user.email],f"Meeraq Coaching | Coach {coach_status.coach.first_name} reject to consent",{
-                                "projectname":project.name,
+                        send_mail_templates(
+                            "pmo_emails/coach_agrees-rejects_consent.html",
+                            [pmo_user.email],
+                            f"Meeraq Coaching | Coach {coach_status.coach.first_name} reject to consent",
+                            {
+                                "projectname": project.name,
                                 "name": pmo.name,
-                                "coachname":coach_status.coach.first_name,
-                                "agreeddisagreed" :request.data["status"]
-                            })
-                            
-
-                            
-
+                                "coachname": coach_status.coach.first_name,
+                                "agreeddisagreed": request.data["status"],
+                            },
+                        )
 
                 except Exception as e:
                     print(f"Error occurred while creating notification: {str(e)}")
@@ -2345,8 +2433,7 @@ def book_session_caas(request):
         pmo_user = User.objects.filter(profile__type="pmo").first()
         project = session_request.project
         coach = session_request.coach
-        pmo=Pmo.objects.get(email=pmo_user)
-        
+        pmo = Pmo.objects.get(email=pmo_user)
 
         if pmo_user:
             path = f"/projects/caas/progress/{project.id}"
@@ -2358,13 +2445,16 @@ def book_session_caas(request):
                 int(session_request.confirmed_availability.end_time)
             )
             slot_message = f"{start_time} - {end_time}"
-            
-            session_date = get_date(int(session_request.confirmed_availability.start_time))
-            start_time = get_time(int(session_request.confirmed_availability.start_time))
+
+            session_date = get_date(
+                int(session_request.confirmed_availability.start_time)
+            )
+            start_time = get_time(
+                int(session_request.confirmed_availability.start_time)
+            )
             end_time = get_time(int(session_request.confirmed_availability.end_time))
 
             session_time = f"{start_time} - {end_time} IST"
-            
 
             if session_request.session_type == "interview":
                 hr_user = session_request.hr.user.user
@@ -2380,23 +2470,32 @@ def book_session_caas(request):
             message += slot_message
             create_notification(pmo_user, path, message)
             if coachee:
-                send_mail_templates("coachee_emails/session_booked.html",[coachee.email],"Meeraq Coaching | Session Booked",{
-                    "projectName":session_request.project.name,
-                    "name": coachee.name,
-                    "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
-                    "slot_date":session_date,
-                    "slot_time":session_time,
-                    })
-                send_mail_templates("pmo_emails/session_scheduled.html",[pmo.email],"Meeraq Coaching | Session Booked",{
-                    "projectName":session_request.project.name,
-                    "name":pmo.name,
-                    "coachee_name": coachee.name,
-                    "coach_name":coach_name,
-                    "sessionName":SESSION_TYPE_VALUE[session_request.session_type],
-                    "slot_date":session_date,
-                    "slot_time":session_time,
-                    
-                    })
+                send_mail_templates(
+                    "coachee_emails/session_booked.html",
+                    [coachee.email],
+                    "Meeraq Coaching | Session Booked",
+                    {
+                        "projectName": session_request.project.name,
+                        "name": coachee.name,
+                        "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
+                        "slot_date": session_date,
+                        "slot_time": session_time,
+                    },
+                )
+                send_mail_templates(
+                    "pmo_emails/session_scheduled.html",
+                    [pmo.email],
+                    "Meeraq Coaching | Session Booked",
+                    {
+                        "projectName": session_request.project.name,
+                        "name": pmo.name,
+                        "coachee_name": coachee.name,
+                        "coach_name": coach_name,
+                        "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
+                        "slot_date": session_date,
+                        "slot_time": session_time,
+                    },
+                )
 
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -2526,8 +2625,6 @@ def accept_coach_caas_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     coaches_selected_count = 0
     for coach in project.coaches_status.all():
-        
-        
         if coach.coach_id == request.data.get("coach_id"):
             if (
                 coach.status["consent"]["status"] == "select"
@@ -2547,20 +2644,18 @@ def accept_coach_caas_hr(request):
             # else:
             #     return Response({"error": "Status Already Updated"}, status=400)
         print(coach.status["hr"]["status"])
-        if coach.status["hr"]["status"]=="select":
+        if coach.status["hr"]["status"] == "select":
             coaches_selected_count += 1
-            
-            
+
     project.save()
-    
+
     print(coaches_selected_count)
     # for i in range(0,len(project.coaches_status)):
     #     print(project.coaches_status[i])
     #     status=project.coaches_status[i].status.hr.status
     #     if status=="select":
     #         coach_count=coach_count+1
-        
-    
+
     message = ""
     if request.data.get("status") == "select":
         try:
@@ -2575,16 +2670,26 @@ def accept_coach_caas_hr(request):
                 create_notification(pmo_user, path, message)
                 create_notification(coach.user.user, path, message)
 
-                send_mail_templates("pmo_emails/hr_selects_a_coach.html",[pmo_user.email],f"Meeraq Coaching | HR selected {coach_name}",{
-                    "projectname":project.name,
-                    "name":pmo.name,
-                    "coaches_selected_count":coaches_selected_count,
-                    "coachname":coach_name
-                })
-                send_mail_templates("coach_templates/intro_mail_to_coach.html",[coach.email],f"Meeraq Coaching | {project.organisation.name} has selected you",{
-                    "name":coach.first_name,
-                    "orgName":project.organisation.name,
-                })
+                send_mail_templates(
+                    "pmo_emails/hr_selects_a_coach.html",
+                    [pmo_user.email],
+                    f"Meeraq Coaching | HR selected {coach_name}",
+                    {
+                        "projectname": project.name,
+                        "name": pmo.name,
+                        "coaches_selected_count": coaches_selected_count,
+                        "coachname": coach_name,
+                    },
+                )
+                send_mail_templates(
+                    "coach_templates/intro_mail_to_coach.html",
+                    [coach.email],
+                    f"Meeraq Coaching | {project.organisation.name} has selected you",
+                    {
+                        "name": coach.first_name,
+                        "orgName": project.organisation.name,
+                    },
+                )
 
         except Exception as e:
             print(f"Error occurred while creating notification: {str(e)}")
@@ -2619,8 +2724,13 @@ def add_learner_to_project(request):
                 path = f"/projects/caas/progress/{project.id}"
                 message = f"You have been added to Project - {project.name}"
                 create_notification(learner.user.user, path, message)
-                coacheeCounts=coacheeCounts+1
-                send_mail_templates("coachee_emails/add_coachee.html", [learner.email], "Meeraq Coaching | Welcome to Meeraq", {"name": learner.name, "orgname" : project.organisation.name})
+                coacheeCounts = coacheeCounts + 1
+                send_mail_templates(
+                    "coachee_emails/add_coachee.html",
+                    [learner.email],
+                    "Meeraq Coaching | Welcome to Meeraq",
+                    {"name": learner.name, "orgname": project.organisation.name},
+                )
 
             except Exception as e:
                 print(f"Error occurred while creating notification: {str(e)}")
@@ -4076,13 +4186,12 @@ def schedule_session_directly(request, session_id):
     session.confirmed_availability = availability
     start_time = format_timestamp(int(session.confirmed_availability.start_time))
     end_time = format_timestamp(int(session.confirmed_availability.end_time))
-    slot_message = f"{start_time} - {end_time}"    
+    slot_message = f"{start_time} - {end_time}"
     session_date = get_date(int(session.confirmed_availability.start_time))
     start_time = get_time(int(session.confirmed_availability.start_time))
     end_time = get_time(int(session.confirmed_availability.end_time))
 
     session_time = f"{start_time} - {end_time} IST"
-    
 
     session.is_booked = True
 
@@ -4092,14 +4201,18 @@ def schedule_session_directly(request, session_id):
         session.invitees.append(email.strip())
     session.save()
     if coachee:
-        
-        send_mail_templates("coachee_emails/session_booked.html",[coachee.email],"Meeraq Coaching | Session Booked",{
-            "projectName":session.project.name,
-            "name": coachee.name,
-            "sessionName":SESSION_TYPE_VALUE[session.session_type],
-            "slot_date":session_date,
-            "slot_time":session_time,           
-        })
+        send_mail_templates(
+            "coachee_emails/session_booked.html",
+            [coachee.email],
+            "Meeraq Coaching | Session Booked",
+            {
+                "projectName": session.project.name,
+                "name": coachee.name,
+                "sessionName": SESSION_TYPE_VALUE[session.session_type],
+                "slot_date": session_date,
+                "slot_time": session_time,
+            },
+        )
     return Response({"message": "Session booked successfully."})
 
 
