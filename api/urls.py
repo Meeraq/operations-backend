@@ -230,4 +230,9 @@ urlpatterns = [
     path("engagement/select-coach-for-coachee/", views.select_coach_for_coachee),
     path("add-past-session/<int:session_id>/<int:coach_id>/", views.add_past_session),
     path("reset_consent/", views.reset_consent),
+    path('update_organisation/<int:org_id>/', views.update_organisation),
+    path("update_hr/<int:hr_id>/", views.update_hr),
+    path('delete_hr/<int:hr_id>/', views.delete_hr),  
+
+   
 ]
