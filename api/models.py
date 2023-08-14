@@ -368,3 +368,47 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+
+class Template(models.Model):
+    title = models.CharField(max_length=100)
+    description = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title
+
+    
+class ProjectContract(models.Model):
+    template_id = models.IntegerField(null=True)
+    title = models.CharField(max_length=100,blank=True)
+    content = models.TextField(blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE,blank=True)
+    created_at = models.DateTimeField(auto_now_add=True,blank=True)
+    updated_at = models.DateTimeField(auto_now=True,blank=True)
+
+    def __str__(self):
+        return f"Contract '{self.title}' for Project '{self.project.name}'"
+    
+    
+class CoachContract(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+    
+    project_contract = models.ForeignKey(ProjectContract, on_delete=models.CASCADE,blank=True)
+    name_inputed = models.CharField(max_length=100,blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE,blank=True)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default="pending",blank=True)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    send_date = models.DateField(auto_now_add=True ,blank=True)
+    response_date = models.DateField(blank=True,null=True)
+    created_at = models.DateTimeField(auto_now_add=True ,blank=True)
+    
+
+    def __str__(self):
+        return f"{self.coach.first_name}'s Contract for {self.project.name}"
+    
+    

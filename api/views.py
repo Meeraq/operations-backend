@@ -31,8 +31,12 @@ from .serializers import (
     CompetencyDepthOneSerializer,
     ActionItemSerializer,
     GetActionItemDepthOneSerializer,
-)
+    TemplateSerializer, 
+    ProjectContractSerializer,
+    CoachContractSerializer,
 
+)
+from rest_framework import generics
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -64,7 +68,11 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    Template, 
+    CoachContract,
+    ProjectContract,
 )
+from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
@@ -77,6 +85,7 @@ import random
 from django.db.models import Q
 from collections import defaultdict
 from django.db.models import Avg
+from rest_framework import status
 
 
 # Create your views here.
@@ -4192,3 +4201,245 @@ def add_past_session(request, session_id, coach_id):
         session.invitees.append(email.strip())
     session.save()
     return Response({"message": "Session booked successfully."})
+
+
+
+@api_view(["GET", "POST"])
+def template_list_create_view(request):
+    if request.method == "GET":
+        templates = Template.objects.all()
+        serializer = TemplateSerializer(templates, many=True)
+        return Response(serializer.data)
+
+    elif request.method == "POST":
+        serializer = TemplateSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET", "PUT", "DELETE"])
+def template_retrieve_update_destroy_view(request, pk):
+    try:
+        template = Template.objects.get(pk=pk)
+    except Template.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "GET":
+        serializer = TemplateSerializer(template)
+        return Response(serializer.data)
+
+    elif request.method == "PUT":
+        serializer = TemplateSerializer(template, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    elif request.method == "DELETE":
+        template.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+def create_project_contract(request):
+    serializer = ProjectContractSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"message": "Contract Assigned Successfully."})
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ProjectContractAPIView(APIView):
+    def get(self, request, format=None):
+        contracts = ProjectContract.objects.all()
+        serializer = ProjectContractSerializer(contracts, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class ProjectContractDetailView(APIView):
+    def get(self, request, project_id, format=None):
+        print(project_id)
+        try:
+            project_contract = ProjectContract.objects.get(project=project_id)
+        except ProjectContract.DoesNotExist:
+            return Response({"message": "Project contract not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = ProjectContractSerializer(project_contract)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class CoachContractList(APIView):
+    def get(self, request, format=None):
+        contracts = CoachContract.objects.all()
+        serializer = CoachContractSerializer(contracts, many=True)
+        return Response(serializer.data)
+
+    def post(self, request, format=None):
+        serializer = CoachContractSerializer(data=request.data)
+        if serializer.is_valid():
+            coach = serializer.validated_data['coach']
+            project = serializer.validated_data['project']
+
+           
+            if CoachContract.objects.filter(coach=coach, project=project).exists():
+                return Response({"message": f"Coach {coach.username} already has a contract for {project.name}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer.save()
+            return Response({"message": "Contract created successfully", "data": serializer.data}, status=status.HTTP_201_CREATED)
+        return Response({"message": "Invalid data", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+class CoachContractDetail(APIView):
+    def get_object(self, pk):
+        try:
+            return CoachContract.objects.get(pk=pk)
+        except CoachContract.DoesNotExist:
+            return None
+
+    def get(self, request, pk, format=None):
+        contract = self.get_object(pk)
+        if contract is not None:
+            serializer = CoachContractSerializer(contract)
+            return Response(serializer.data)
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    def put(self, request, pk, format=None):
+        contract = self.get_object(pk)
+        if contract is not None:
+            serializer = CoachContractSerializer(contract, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"message": "Contract updated successfully", "data": serializer.data})
+            return Response({"message": "Invalid data", "errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Contract not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def delete(self, request, pk, format=None):
+        contract = self.get_object(pk)
+        if contract is not None:
+            contract.delete()
+            return Response({"message": "Contract deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+        return Response({"message": "Contract not found"}, status=status.HTTP_404_NOT_FOUND)
+    
+    
+class UpdateCoachContract(APIView):
+    
+    def post(self, request, format=None):
+        coach_id = request.data.get("coach")
+        project_id = request.data.get("project")
+        try:
+            contract = CoachContract.objects.get(coach=coach_id, project=project_id)
+        except CoachContract.DoesNotExist:
+            return Response({"error": "CoachContract not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        
+        coach_name = f"{contract.coach.first_name.strip()} {contract.coach.last_name.strip()}"
+        provided_name_inputed = request.data.get("name_inputed")
+        print(provided_name_inputed)
+        print(coach_name)
+        if provided_name_inputed != coach_name:
+            return Response({"error": "Provided name input does not match coach's name."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = CoachContractSerializer(contract, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Contract Accepted Successfully","data": serializer.data}, status=status.HTTP_200_OK)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+
+
+
+class HandleAssign(APIView):
+    def post(self, request, format=None):
+        project_id = request.data.get("project")
+        existing_contract = ProjectContract.objects.filter(project=project_id).first()
+        
+        if not existing_contract:
+            serializer = ProjectContractSerializer(data=request.data)
+            if serializer.is_valid():
+                contract = serializer.save()
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            contract = existing_contract
+            
+        current_date = timezone.now().date()
+        
+        project_id = request.data.get("project")
+        
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response({"message": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        coaches = project.coaches_status.all()  
+        
+        for coach_status in coaches:
+            hr_status = coach_status.status.get("hr", {}).get("status")
+            
+            if hr_status == "select":
+                coach = coach_status.coach
+                
+                
+                existing_coach_contract = CoachContract.objects.filter(
+                    project=project_id,
+                    coach=coach.id
+                ).exists()
+                
+                if not existing_coach_contract:
+                    contract_data = {
+                        "project_contract": contract.id, 
+                        "project": project_id,
+                        "status": "pending",
+                        "coach": coach.id,
+                    }
+                    contract_serializer = CoachContractSerializer(data=contract_data)
+                    
+                    if contract_serializer.is_valid():
+                        contract_serializer.save()
+                    else:
+                        return Response(contract_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({"message": "Project Contract Saved and Coach contracts assigned successfully."}, status=status.HTTP_201_CREATED)
+
+class ApprovedCoachContract(APIView):
+    def get(self, request, project_id,coach_id, format=None):
+        try:
+            coach_contract=CoachContract.objects.get(project=project_id, coach=coach_id,status="approved")
+        except CoachContract.DoesNotExist:
+            return Response({"error": "Coach contract not found1."}, status=status.HTTP_404_NOT_FOUND)
+        
+        serializer = CoachContractSerializer(coach_contract)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    
+class HandleAssignHrAndPmo(APIView):
+    def post(self, request, format=None):
+        
+        coach_id = request.data.get("coach")
+        project_id = request.data.get("project")
+        
+        try:
+            contract = ProjectContract.objects.get(project=project_id)
+        except CoachContract.DoesNotExist:
+            return Response({"error": "CoachContract not found."}, status=status.HTTP_404_NOT_FOUND)
+            
+        current_date = timezone.now().date()
+               
+        contract_data = {
+                    "project_contract": contract.id, 
+                    "project":project_id,
+                    "status": "pending",
+                    "coach": coach_id,
+                    "response_date":current_date
+                   
+                }
+        
+        contract_serializer = CoachContractSerializer(data=contract_data)
+                
+        if contract_serializer.is_valid():
+            contract_serializer.save()
+        else:
+            return Response(contract_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response({"message": "Coach contracts assigned successfully."}, status=status.HTTP_201_CREATED)
+
+

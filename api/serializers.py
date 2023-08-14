@@ -14,6 +14,9 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    Template,
+    ProjectContract,
+    CoachContract,
 )
 from django.contrib.auth.models import User
 
@@ -203,3 +206,19 @@ class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
         fields = "__all__"
+
+
+class TemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Template
+        fields = "__all__"
+        
+class ProjectContractSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProjectContract
+        fields = '__all__'
+
+class CoachContractSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachContract
+        fields = '__all__'

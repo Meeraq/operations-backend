@@ -1,5 +1,15 @@
 from django.urls import path, include
 from . import views
+from .views import (
+    ProjectContractAPIView,
+    CoachContractList,
+    CoachContractDetail,
+    HandleAssign,
+    ProjectContractDetailView,
+    UpdateCoachContract,
+    HandleAssignHrAndPmo,
+    ApprovedCoachContract
+)
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
@@ -230,4 +240,15 @@ urlpatterns = [
     path("engagement/select-coach-for-coachee/", views.select_coach_for_coachee),
     path("add-past-session/<int:session_id>/<int:coach_id>/", views.add_past_session),
     path("reset_consent/", views.reset_consent),
+    path("templates/", views.template_list_create_view),
+    path("templates/<int:pk>/", views.template_retrieve_update_destroy_view),
+    path("create-project-contract/", views.create_project_contract),
+    path("get-project-contracts/", ProjectContractAPIView.as_view()),
+    path("coach-contracts/", CoachContractList.as_view()),
+    path("coach-contracts/<int:pk>/", CoachContractDetail.as_view()),
+    path("handle-assign/", HandleAssign.as_view()),
+    path("project-contracts/<int:project_id>/", ProjectContractDetailView.as_view()),
+    path("update-contract/", UpdateCoachContract.as_view()),
+    path("coach-contract-pmo-hr/", HandleAssignHrAndPmo.as_view()),
+    path("get-approved-coach-contract/<int:project_id>/<int:coach_id>/", ApprovedCoachContract.as_view()),
 ]

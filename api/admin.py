@@ -15,6 +15,9 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    Template,
+    ProjectContract,
+    CoachContract,
 )
 
 # Register your models here.
@@ -36,3 +39,7 @@ admin.site.register(Notification)
 admin.site.register(Goal)
 admin.site.register(Competency)
 admin.site.register(ActionItem)
+admin.site.register(Template)
+admin.site.register(ProjectContract)
+admin.site.register(CoachContract)
+
