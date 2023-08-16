@@ -87,6 +87,7 @@ import environ
 
 env = environ.Env()
 
+
 class EmailSendingError(Exception):
     pass
 
@@ -1972,7 +1973,7 @@ def update_hr(request, hr_id):
                     {"error": "User with this email already exists"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            # saving hr 
+            # saving hr
             updated_hr = serializer.save()
             # updating email and username of user object of HR
             user = updated_hr.user.user
@@ -4299,7 +4300,7 @@ def get_competency_averages(request, hr_id):
 @api_view(["GET"])
 def get_learner_competency_averages(request, learner_id):
     competencies = Competency.objects.filter(goal__engagement__learner__id=learner_id)
-    serializer = CompetencyDepthOneSerializer(competencies,many=True)
+    serializer = CompetencyDepthOneSerializer(competencies, many=True)
     return Response(serializer.data, status=200)
 
 
@@ -4367,13 +4368,16 @@ def get_completed_sessions_count(request, hr_id):
         status=200,
     )
 
+
 @api_view(["GET"])
 def get_completed_learner_sessions_count(request, learner_id):
     learner_session_requests = SessionRequestCaas.objects.filter(
-       Q(project__learner__id=learner_id) & Q(status="completed")
+        Q(learner__id=learner_id) & Q(status="completed")
     )
     sessions_count = learner_session_requests.count()
-    serializer = SessionRequestCaasDepthOneSerializer(learner_session_requests, many=True)
+    serializer = SessionRequestCaasDepthOneSerializer(
+        learner_session_requests, many=True
+    )
     return Response(
         {
             "sessions": serializer.data,
@@ -4382,33 +4386,38 @@ def get_completed_learner_sessions_count(request, learner_id):
         status=200,
     )
 
+
 @api_view(["GET"])
 def get_total_goals_for_learner(request, learner_id):
     try:
         total_goals = Goal.objects.filter(engagement__learner_id=learner_id).count()
         return Response(
-            {'total_goals': total_goals},
-              status=200,
-              )
+            {"total_goals": total_goals},
+            status=200,
+        )
     except Exception as e:
         return Response(
-            {'error': str(e)},
-              status=400,
-              )
-    
+            {"error": str(e)},
+            status=400,
+        )
+
+
 @api_view(["GET"])
 def get_total_competencies_for_learner(request, learner_id):
     try:
-        total_competencies = Competency.objects.filter(goal__engagement__learner_id=learner_id).count()
+        total_competencies = Competency.objects.filter(
+            goal__engagement__learner_id=learner_id
+        ).count()
         return Response(
-            {'total_competency': total_competencies},
-              status=200,
-              )
+            {"total_competency": total_competencies},
+            status=200,
+        )
     except Exception as e:
         return Response(
-            {'error': str(e)},
-              status=400,
-              )
+            {"error": str(e)},
+            status=400,
+        )
+
 
 @api_view(["GET"])
 def get_learners_without_sessions(request, hr_id):
@@ -4464,8 +4473,11 @@ def add_past_session(request, session_id, coach_id):
     session.save()
     return Response({"message": "Session booked successfully."})
 
+
 @api_view(["GET"])
 def get_pending_action_items_by_competency(request, learner_id):
-    action_items = ActionItem.objects.filter(competency__goal__engagement__learner_id=learner_id, status="not_done")
+    action_items = ActionItem.objects.filter(
+        competency__goal__engagement__learner_id=learner_id, status="not_done"
+    )
     serializer = PendingActionItemSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
