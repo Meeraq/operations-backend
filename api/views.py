@@ -31,6 +31,7 @@ from .serializers import (
     CompetencyDepthOneSerializer,
     ActionItemSerializer,
     GetActionItemDepthOneSerializer,
+    PendingActionItemSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -4314,47 +4315,11 @@ def get_competency_averages(request, hr_id):
     return Response(top_5_competencies, status=200)
 
 
-# @api_view(["GET"])
-# def get_competency_averages(request, hr_id):
-#     # Step 1: Retrieve the data from the Competency model
-#     competencies = Competency.objects.filter(goal__engagement__project__hr__id=hr_id)
-#     # Step 2 and 3: Calculate the average score for each competency and store in a dictionary
-#     competency_averages = defaultdict(lambda: {"total_score": 0, "count": 0})
-#     competency_learner_counts = defaultdict(set)  # To keep track of learners per competency
-
-#     for competency in competencies:
-#         competency_name = competency.name
-#         scoring_data = competency.scoring
-
-#         if scoring_data:
-#             total_score = sum(entry["score"] for entry in scoring_data)
-#             count = len(scoring_data)
-#             competency_averages[competency_name]["total_score"] += total_score
-#             competency_averages[competency_name]["count"] += count
-#             competency_learner_counts[competency_name].update(entry["learner_id"] for entry in scoring_data)
-
-#     # Step 4: Calculate the final average for each competency, considering competencies with the same name
-#     final_averages = {}
-#     for competency_name, data in competency_averages.items():
-#         total_score = data["total_score"]
-#         count = data["count"]
-#         average_score = total_score / count if count > 0 else 0
-#         final_averages[competency_name] = {
-#             "average_score": average_score,
-#             "total_learners": len(competency_learner_counts[competency_name]),
-#         }
-
-#     top_5_competencies = dict(
-#         sorted(final_averages.items(), key=lambda item: item[1]["average_score"], reverse=True)[:5]
-#     )
-
-#     # Prepare the response with total learners per competency
-#     response_data = {
-#         "top_5_competencies": top_5_competencies,
-#         "competency_learner_counts": dict(competency_learner_counts),
-#     }
-#     print(competency_learner_counts)
-#     return Response(response_data, status=200)
+@api_view(["GET"])
+def get_learner_competency_averages(request, learner_id):
+    competencies = Competency.objects.filter(goal__engagement__learner__id=learner_id)
+    serializer = CompetencyDepthOneSerializer(competencies, many=True)
+    return Response(serializer.data, status=200)
 
 
 @api_view(["GET"])
@@ -4423,6 +4388,56 @@ def get_completed_sessions_count(request, hr_id):
 
 
 @api_view(["GET"])
+def get_completed_learner_sessions_count(request, learner_id):
+    learner_session_requests = SessionRequestCaas.objects.filter(
+        Q(learner__id=learner_id) & Q(status="completed")
+    )
+    sessions_count = learner_session_requests.count()
+    serializer = SessionRequestCaasDepthOneSerializer(
+        learner_session_requests, many=True
+    )
+    return Response(
+        {
+            "sessions": serializer.data,
+            "sessions_count": sessions_count,
+        },
+        status=200,
+    )
+
+
+@api_view(["GET"])
+def get_total_goals_for_learner(request, learner_id):
+    try:
+        total_goals = Goal.objects.filter(engagement__learner_id=learner_id).count()
+        return Response(
+            {"total_goals": total_goals},
+            status=200,
+        )
+    except Exception as e:
+        return Response(
+            {"error": str(e)},
+            status=400,
+        )
+
+
+@api_view(["GET"])
+def get_total_competencies_for_learner(request, learner_id):
+    try:
+        total_competencies = Competency.objects.filter(
+            goal__engagement__learner_id=learner_id
+        ).count()
+        return Response(
+            {"total_competency": total_competencies},
+            status=200,
+        )
+    except Exception as e:
+        return Response(
+            {"error": str(e)},
+            status=400,
+        )
+
+
+@api_view(["GET"])
 def get_learners_without_sessions(request, hr_id):
     # Get the learners associated with the given hr_id who don't have any sessions with status = "requested" or "booked".
     learners = (
@@ -4475,3 +4490,12 @@ def add_past_session(request, session_id, coach_id):
         session.invitees.append(email.strip())
     session.save()
     return Response({"message": "Session booked successfully."})
+
+
+@api_view(["GET"])
+def get_pending_action_items_by_competency(request, learner_id):
+    action_items = ActionItem.objects.filter(
+        competency__goal__engagement__learner_id=learner_id, status="not_done"
+    )
+    serializer = PendingActionItemSerializer(action_items, many=True)
+    return Response(serializer.data, status=200)
