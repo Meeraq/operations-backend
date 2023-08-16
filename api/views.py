@@ -86,15 +86,20 @@ import environ
 
 env = environ.Env()
 
+
 class EmailSendingError(Exception):
     pass
 
 
-def send_mail_templates(file_name, user_email, email_subject, content):
+def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
     email_message = render_to_string(file_name, content)
 
     email = EmailMessage(
-        email_subject, email_message, settings.DEFAULT_FROM_EMAIL, user_email
+        f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
+        email_message,
+        settings.DEFAULT_FROM_EMAIL,
+        user_email,
+        bcc_emails,
     )
     email.content_subtype = "html"
 
@@ -419,12 +424,13 @@ def update_coach_profile(request, coach_id):
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
 
-        send_mail_templates(
-            "pmo_emails/coach_update_profile.html",
-            [pmo.email],
-            f"Meeraq Coaching | {coach.first_name} {coach.last_name} updated their profile",
-            {"name": pmo.name, "coachName": coach.first_name},
-        )
+        # send_mail_templates(
+        #     "pmo_emails/coach_update_profile.html",
+        #     [pmo.email],
+        #     f"Meeraq Coaching | {coach.first_name} {coach.last_name} updated their profile",
+        #     {"name": pmo.name, "coachName": coach.first_name},
+        # 		[] # no bcc emails
+        # )
 
         return Response(
             {**depth_serializer.data, "last_login": coach.user.user.last_login},
@@ -1589,6 +1595,7 @@ def add_coach(request):
                 [coach_user.email],
                 "Meeraq Coaching | New Beginning !",
                 {"name": coach_user.first_name},
+                [env("BCC_EMAIL")],  # no bcc emails
             )
             # Send email notification to the coach
             # subject = 'Welcome to our coaching platform'
@@ -1813,6 +1820,7 @@ def generate_otp(request):
             [user],
             subject,
             {"name": name, "otp": created_otp.otp},
+            [],  # no bcc
         )
         return Response({"message": f"OTP has been sent to {user.username}!"})
 
@@ -1971,7 +1979,7 @@ def update_hr(request, hr_id):
                     {"error": "User with this email already exists"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            # saving hr 
+            # saving hr
             updated_hr = serializer.save()
             # updating email and username of user object of HR
             user = updated_hr.user.user
@@ -2089,6 +2097,7 @@ def send_consent(request):
                 [coach.email],
                 "Meeraq Coaching | New Project!",
                 {"name": coach.first_name},
+                [] # no bcc 
             )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -2172,6 +2181,7 @@ def receive_coach_consent(request):
                                     "coachname": coach_status.coach.first_name,
                                     "agreeddisagreed": request.data["status"],
                                 },
+                                [] # no bcc
                             )
                     if request.data["status"] == "reject":
                         send_mail_templates(
@@ -2184,6 +2194,7 @@ def receive_coach_consent(request):
                                 "coachname": coach_status.coach.first_name,
                                 "agreeddisagreed": request.data["status"],
                             },
+                            [] # no bcc
                         )
 
                 except Exception as e:
@@ -2481,6 +2492,7 @@ def book_session_caas(request):
                         "slot_date": session_date,
                         "slot_time": session_time,
                     },
+                    [] # no bcc
                 )
                 send_mail_templates(
                     "pmo_emails/session_scheduled.html",
@@ -2495,6 +2507,7 @@ def book_session_caas(request):
                         "slot_date": session_date,
                         "slot_time": session_time,
                     },
+                    [] # no bcc
                 )
 
     except Exception as e:
@@ -2680,6 +2693,7 @@ def accept_coach_caas_hr(request):
                         "coaches_selected_count": coaches_selected_count,
                         "coachname": coach_name,
                     },
+                    [] # no bcc
                 )
                 send_mail_templates(
                     "coach_templates/intro_mail_to_coach.html",
@@ -2689,6 +2703,7 @@ def accept_coach_caas_hr(request):
                         "name": coach.first_name,
                         "orgName": project.organisation.name,
                     },
+                    [env("BCC_EMAIL")],
                 )
 
         except Exception as e:
@@ -2730,6 +2745,7 @@ def add_learner_to_project(request):
                     [learner.email],
                     "Meeraq Coaching | Welcome to Meeraq",
                     {"name": learner.name, "orgname": project.organisation.name},
+                    [env("BCC_EMAIL")],
                 )
 
             except Exception as e:
@@ -2755,6 +2771,7 @@ def add_learner_to_project(request):
                     "name": pmo.name,
                     "coacheeCount": str(coacheeCounts),
                 },
+                [] # no bcc
             )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -3082,6 +3099,7 @@ def send_list_to_hr(request):
                 [hr_email],
                 "Welcome to the Meeraq Platform",
                 {"name": hr_name},
+                [env("BCC_EMAIL")],  # bcc
             )
 
         for hr_user in project.hr.all():
@@ -4212,6 +4230,7 @@ def schedule_session_directly(request, session_id):
                 "slot_date": session_date,
                 "slot_time": session_time,
             },
+            [] # no bcc
         )
     return Response({"message": "Session booked successfully."})
 
