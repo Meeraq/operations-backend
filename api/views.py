@@ -31,6 +31,7 @@ from .serializers import (
     CompetencyDepthOneSerializer,
     ActionItemSerializer,
     GetActionItemDepthOneSerializer,
+    PendingActionItemSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -86,15 +87,20 @@ import environ
 
 env = environ.Env()
 
+
 class EmailSendingError(Exception):
     pass
 
 
-def send_mail_templates(file_name, user_email, email_subject, content):
+def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
     email_message = render_to_string(file_name, content)
 
     email = EmailMessage(
-        email_subject, email_message, settings.DEFAULT_FROM_EMAIL, user_email
+        f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
+        email_message,
+        settings.DEFAULT_FROM_EMAIL,
+        user_email,
+        bcc_emails,
     )
     email.content_subtype = "html"
 
@@ -419,12 +425,13 @@ def update_coach_profile(request, coach_id):
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
 
-        send_mail_templates(
-            "pmo_emails/coach_update_profile.html",
-            [pmo.email],
-            f"Meeraq Coaching | {coach.first_name} {coach.last_name} updated their profile",
-            {"name": pmo.name, "coachName": coach.first_name},
-        )
+        # send_mail_templates(
+        #     "pmo_emails/coach_update_profile.html",
+        #     [pmo.email],
+        #     f"Meeraq Coaching | {coach.first_name} {coach.last_name} updated their profile",
+        #     {"name": pmo.name, "coachName": coach.first_name},
+        # 		[] # no bcc emails
+        # )
 
         return Response(
             {**depth_serializer.data, "last_login": coach.user.user.last_login},
@@ -1589,6 +1596,7 @@ def add_coach(request):
                 [coach_user.email],
                 "Meeraq Coaching | New Beginning !",
                 {"name": coach_user.first_name},
+                [env("BCC_EMAIL")],  # no bcc emails
             )
             # Send email notification to the coach
             # subject = 'Welcome to our coaching platform'
@@ -1813,6 +1821,7 @@ def generate_otp(request):
             [user],
             subject,
             {"name": name, "otp": created_otp.otp},
+            [],  # no bcc
         )
         return Response({"message": f"OTP has been sent to {user.username}!"})
 
@@ -1971,7 +1980,7 @@ def update_hr(request, hr_id):
                     {"error": "User with this email already exists"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            # saving hr 
+            # saving hr
             updated_hr = serializer.save()
             # updating email and username of user object of HR
             user = updated_hr.user.user
@@ -2089,6 +2098,7 @@ def send_consent(request):
                 [coach.email],
                 "Meeraq Coaching | New Project!",
                 {"name": coach.first_name},
+                [] # no bcc 
             )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -2172,6 +2182,7 @@ def receive_coach_consent(request):
                                     "coachname": coach_status.coach.first_name,
                                     "agreeddisagreed": request.data["status"],
                                 },
+                                [] # no bcc
                             )
                     if request.data["status"] == "reject":
                         send_mail_templates(
@@ -2184,6 +2195,7 @@ def receive_coach_consent(request):
                                 "coachname": coach_status.coach.first_name,
                                 "agreeddisagreed": request.data["status"],
                             },
+                            [] # no bcc
                         )
 
                 except Exception as e:
@@ -2481,6 +2493,7 @@ def book_session_caas(request):
                         "slot_date": session_date,
                         "slot_time": session_time,
                     },
+                    [] # no bcc
                 )
                 send_mail_templates(
                     "pmo_emails/session_scheduled.html",
@@ -2495,6 +2508,7 @@ def book_session_caas(request):
                         "slot_date": session_date,
                         "slot_time": session_time,
                     },
+                    [] # no bcc
                 )
 
     except Exception as e:
@@ -2680,6 +2694,7 @@ def accept_coach_caas_hr(request):
                         "coaches_selected_count": coaches_selected_count,
                         "coachname": coach_name,
                     },
+                    [] # no bcc
                 )
                 send_mail_templates(
                     "coach_templates/intro_mail_to_coach.html",
@@ -2689,6 +2704,7 @@ def accept_coach_caas_hr(request):
                         "name": coach.first_name,
                         "orgName": project.organisation.name,
                     },
+                    [env("BCC_EMAIL")],
                 )
 
         except Exception as e:
@@ -2730,6 +2746,7 @@ def add_learner_to_project(request):
                     [learner.email],
                     "Meeraq Coaching | Welcome to Meeraq",
                     {"name": learner.name, "orgname": project.organisation.name},
+                    [env("BCC_EMAIL")],
                 )
 
             except Exception as e:
@@ -2755,6 +2772,7 @@ def add_learner_to_project(request):
                     "name": pmo.name,
                     "coacheeCount": str(coacheeCounts),
                 },
+                [] # no bcc
             )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -3082,6 +3100,7 @@ def send_list_to_hr(request):
                 [hr_email],
                 "Welcome to the Meeraq Platform",
                 {"name": hr_name},
+                [env("BCC_EMAIL")],  # bcc
             )
 
         for hr_user in project.hr.all():
@@ -4212,6 +4231,7 @@ def schedule_session_directly(request, session_id):
                 "slot_date": session_date,
                 "slot_time": session_time,
             },
+            [] # no bcc
         )
     return Response({"message": "Session booked successfully."})
 
@@ -4295,47 +4315,11 @@ def get_competency_averages(request, hr_id):
     return Response(top_5_competencies, status=200)
 
 
-# @api_view(["GET"])
-# def get_competency_averages(request, hr_id):
-#     # Step 1: Retrieve the data from the Competency model
-#     competencies = Competency.objects.filter(goal__engagement__project__hr__id=hr_id)
-#     # Step 2 and 3: Calculate the average score for each competency and store in a dictionary
-#     competency_averages = defaultdict(lambda: {"total_score": 0, "count": 0})
-#     competency_learner_counts = defaultdict(set)  # To keep track of learners per competency
-
-#     for competency in competencies:
-#         competency_name = competency.name
-#         scoring_data = competency.scoring
-
-#         if scoring_data:
-#             total_score = sum(entry["score"] for entry in scoring_data)
-#             count = len(scoring_data)
-#             competency_averages[competency_name]["total_score"] += total_score
-#             competency_averages[competency_name]["count"] += count
-#             competency_learner_counts[competency_name].update(entry["learner_id"] for entry in scoring_data)
-
-#     # Step 4: Calculate the final average for each competency, considering competencies with the same name
-#     final_averages = {}
-#     for competency_name, data in competency_averages.items():
-#         total_score = data["total_score"]
-#         count = data["count"]
-#         average_score = total_score / count if count > 0 else 0
-#         final_averages[competency_name] = {
-#             "average_score": average_score,
-#             "total_learners": len(competency_learner_counts[competency_name]),
-#         }
-
-#     top_5_competencies = dict(
-#         sorted(final_averages.items(), key=lambda item: item[1]["average_score"], reverse=True)[:5]
-#     )
-
-#     # Prepare the response with total learners per competency
-#     response_data = {
-#         "top_5_competencies": top_5_competencies,
-#         "competency_learner_counts": dict(competency_learner_counts),
-#     }
-#     print(competency_learner_counts)
-#     return Response(response_data, status=200)
+@api_view(["GET"])
+def get_learner_competency_averages(request, learner_id):
+    competencies = Competency.objects.filter(goal__engagement__learner__id=learner_id)
+    serializer = CompetencyDepthOneSerializer(competencies, many=True)
+    return Response(serializer.data, status=200)
 
 
 @api_view(["GET"])
@@ -4404,6 +4388,56 @@ def get_completed_sessions_count(request, hr_id):
 
 
 @api_view(["GET"])
+def get_completed_learner_sessions_count(request, learner_id):
+    learner_session_requests = SessionRequestCaas.objects.filter(
+        Q(learner__id=learner_id) & Q(status="completed")
+    )
+    sessions_count = learner_session_requests.count()
+    serializer = SessionRequestCaasDepthOneSerializer(
+        learner_session_requests, many=True
+    )
+    return Response(
+        {
+            "sessions": serializer.data,
+            "sessions_count": sessions_count,
+        },
+        status=200,
+    )
+
+
+@api_view(["GET"])
+def get_total_goals_for_learner(request, learner_id):
+    try:
+        total_goals = Goal.objects.filter(engagement__learner_id=learner_id).count()
+        return Response(
+            {"total_goals": total_goals},
+            status=200,
+        )
+    except Exception as e:
+        return Response(
+            {"error": str(e)},
+            status=400,
+        )
+
+
+@api_view(["GET"])
+def get_total_competencies_for_learner(request, learner_id):
+    try:
+        total_competencies = Competency.objects.filter(
+            goal__engagement__learner_id=learner_id
+        ).count()
+        return Response(
+            {"total_competency": total_competencies},
+            status=200,
+        )
+    except Exception as e:
+        return Response(
+            {"error": str(e)},
+            status=400,
+        )
+
+
+@api_view(["GET"])
 def get_learners_without_sessions(request, hr_id):
     # Get the learners associated with the given hr_id who don't have any sessions with status = "requested" or "booked".
     learners = (
@@ -4456,3 +4490,12 @@ def add_past_session(request, session_id, coach_id):
         session.invitees.append(email.strip())
     session.save()
     return Response({"message": "Session booked successfully."})
+
+
+@api_view(["GET"])
+def get_pending_action_items_by_competency(request, learner_id):
+    action_items = ActionItem.objects.filter(
+        competency__goal__engagement__learner_id=learner_id, status="not_done"
+    )
+    serializer = PendingActionItemSerializer(action_items, many=True)
+    return Response(serializer.data, status=200)
