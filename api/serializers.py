@@ -202,6 +202,13 @@ class ActionItemSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "status", "competency"]
 
 
+class PendingActionItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ActionItem
+        fields = "__all__"
+        depth = 2
+
+
 class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
@@ -212,13 +219,15 @@ class TemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template
         fields = "__all__"
-        
+
+
 class ProjectContractSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectContract
-        fields = '__all__'
+        fields = "__all__"
+
 
 class CoachContractSerializer(serializers.ModelSerializer):
     class Meta:
         model = CoachContract
-        fields = '__all__'
+        fields = "__all__"
