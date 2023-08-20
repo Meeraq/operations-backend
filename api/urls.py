@@ -4,11 +4,11 @@ from .views import (
     ProjectContractAPIView,
     CoachContractList,
     CoachContractDetail,
-    HandleAssign,
+    AssignCoachContractAndProjectContract,
     ProjectContractDetailView,
     UpdateCoachContract,
-    HandleAssignHrAndPmo,
     ApprovedCoachContract,
+    SendContractReminder,
 )
 
 urlpatterns = [
@@ -229,10 +229,10 @@ urlpatterns = [
     path("get-project-contracts/", ProjectContractAPIView.as_view()),
     path("coach-contracts/", CoachContractList.as_view()),
     path("coach-contracts/<int:pk>/", CoachContractDetail.as_view()),
-    path("handle-assign/", HandleAssign.as_view()),
+    path("handle-assign/", AssignCoachContractAndProjectContract.as_view()),
     path("project-contracts/<int:project_id>/", ProjectContractDetailView.as_view()),
     path("update-contract/", UpdateCoachContract.as_view()),
-    path("coach-contract-pmo-hr/", HandleAssignHrAndPmo.as_view()),
+    path("send-contract-reminder/", SendContractReminder.as_view()),
     path(
         "get-approved-coach-contract/<int:project_id>/<int:coach_id>/",
         ApprovedCoachContract.as_view(),
