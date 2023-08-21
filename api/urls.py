@@ -203,4 +203,5 @@ urlpatterns = [
     path("learner_total_goals/count/<int:learner_id>/",views.get_total_goals_for_learner),
     path("learner_total_competency/count/<int:learner_id>/",views.get_total_competencies_for_learner),
     path("learner_competencies/<int:learner_id>/", views.get_learner_competency_averages),
+    path("hr/<int:hr_id>/competencies/", views.get_all_competencies_of_hr),
 ]
