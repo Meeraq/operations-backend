@@ -412,7 +412,7 @@ class ProjectContract(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE,blank=True)
     created_at = models.DateTimeField(auto_now_add=True,blank=True)
     updated_at = models.DateTimeField(auto_now=True,blank=True)
-
+    reminder_timestamp = models.CharField(max_length=30,blank=True)
     def __str__(self):
         return f"Contract '{self.title}' for Project '{self.project.name}'"
     

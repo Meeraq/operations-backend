@@ -4790,26 +4790,35 @@ class ApprovedCoachContract(APIView):
 class SendContractReminder(APIView):
     def post(self, request, format=None):
         try:
-            coach_data = request.data  
+            coachs_data = request.data['pending_coaches']  
             
-            if not coach_data:
+            timestamp=request.data['timestamp']
+            
+            project_id = request.data['project_id']
+            
+            
+            if not coachs_data:
                 raise ValueError("No pending coaches available")
 
-            for coach in coach_data:
-                coach_email = coach['email']
-                coach_first_name = coach.get('first_name', '')
+            for coach_data in coachs_data:
+                coach = Coach.objects.get(id=coach_data['id'])
+                
                 
                 send_mail_templates(
                     "coach_templates/contract_reminder.html",
-                    [coach_email],
+                    [coach.email],
                     "Meeraq Coaching | Coach Contract Reminder",
-                    {"name": coach_first_name},
+                    {"name": coach.first_name},
                     [],  # no bcc emails
                 )
-            
-            # notification_message = "This is a reminder to accept the Coach contract."
-            # create_notification(coach['user']['user'], '/projects', notification_message)
+                
+            notification_message = "This is a reminder to accept the Coach contract."
+            create_notification(coach.user.user, '/projects', notification_message)
 
+            
+            project_contract = ProjectContract.objects.get(project=project_id)
+            project_contract.reminder_timestamp = timestamp
+            project_contract.save()
 
             return Response(
                 {"message": "Emails and notifications sent successfully"},
