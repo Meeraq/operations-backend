@@ -79,7 +79,7 @@ from django.db.models import Q
 from collections import defaultdict
 from django.db.models import Avg
 from rest_framework import status
-
+from rest_framework.views import APIView
 
 # Create your views here.
 
@@ -4472,11 +4472,14 @@ def select_coach_for_coachee(request):
 
 @api_view(["POST"])
 def add_past_session(request, session_id, coach_id):
+    print(request.data)
     try:
         session = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
         return Response({"error": "Session not found."}, status=404)
+    print([session])
     time_arr = create_time_arr(request.data.get("availability", []))
+    print(time_arr)
     if len(time_arr) == 0:
         return Response({"error": "Please provide the availability."}, status=404)
     availability = Availibility.objects.get(id=time_arr[0])
@@ -4499,3 +4502,20 @@ def get_pending_action_items_by_competency(request, learner_id):
     )
     serializer = PendingActionItemSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
+
+
+class UpdateInviteesView(APIView):
+    def put(self, request, session_request_id):
+        try:
+            session_request = SessionRequestCaas.objects.get(pk=session_request_id)
+        except SessionRequestCaas.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            invitee_emails = request.data.get('inviteeEmails', [])
+            print(invitee_emails)
+            session_request.invitees = invitee_emails
+            session_request.save()
+            return Response({'message':" Invitees Updated Sucessfully"},status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(data={'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
