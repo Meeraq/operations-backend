@@ -123,12 +123,16 @@ def format_timestamp(timestamp):
 
 
 def get_date(timestamp):
-    dt = datetime.fromtimestamp(timestamp / 1000)  # Convert milliseconds to seconds
+    dt = datetime.fromtimestamp(timestamp / 1000) + timedelta(
+        hours=5, minutes=30
+    )  # Convert milliseconds to seconds
     return dt.strftime("%d-%m-%Y")
 
 
 def get_time(timestamp):
-    dt = datetime.fromtimestamp(timestamp / 1000)  # Convert milliseconds to seconds
+    dt = datetime.fromtimestamp(timestamp / 1000) + timedelta(
+        hours=5, minutes=30
+    )  # Convert milliseconds to seconds
     return dt.strftime("%I:%M %p")
 
 
@@ -2098,7 +2102,7 @@ def send_consent(request):
                 [coach.email],
                 "Meeraq Coaching | New Project!",
                 {"name": coach.first_name},
-                [] # no bcc 
+                [],  # no bcc
             )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -2182,7 +2186,7 @@ def receive_coach_consent(request):
                                     "coachname": coach_status.coach.first_name,
                                     "agreeddisagreed": request.data["status"],
                                 },
-                                [] # no bcc
+                                [],  # no bcc
                             )
                     if request.data["status"] == "reject":
                         send_mail_templates(
@@ -2195,7 +2199,7 @@ def receive_coach_consent(request):
                                 "coachname": coach_status.coach.first_name,
                                 "agreeddisagreed": request.data["status"],
                             },
-                            [] # no bcc
+                            [],  # no bcc
                         )
 
                 except Exception as e:
@@ -2493,7 +2497,7 @@ def book_session_caas(request):
                         "slot_date": session_date,
                         "slot_time": session_time,
                     },
-                    [] # no bcc
+                    [],  # no bcc
                 )
                 send_mail_templates(
                     "pmo_emails/session_scheduled.html",
@@ -2508,7 +2512,7 @@ def book_session_caas(request):
                         "slot_date": session_date,
                         "slot_time": session_time,
                     },
-                    [] # no bcc
+                    [],  # no bcc
                 )
 
     except Exception as e:
@@ -2694,7 +2698,7 @@ def accept_coach_caas_hr(request):
                         "coaches_selected_count": coaches_selected_count,
                         "coachname": coach_name,
                     },
-                    [] # no bcc
+                    [],  # no bcc
                 )
                 send_mail_templates(
                     "coach_templates/intro_mail_to_coach.html",
@@ -2772,7 +2776,7 @@ def add_learner_to_project(request):
                     "name": pmo.name,
                     "coacheeCount": str(coacheeCounts),
                 },
-                [] # no bcc
+                [],  # no bcc
             )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -4231,7 +4235,7 @@ def schedule_session_directly(request, session_id):
                 "slot_date": session_date,
                 "slot_time": session_time,
             },
-            [] # no bcc
+            [],  # no bcc
         )
     return Response({"message": "Session booked successfully."})
 
