@@ -179,6 +179,12 @@ def generate_room_id(email):
         return None
 
 
+def get_trimmed_emails(emails):
+    res = []
+    for email in emails:
+        res.append(email.strip())
+    return res
+
 SESSION_TYPE_VALUE = {
     "chemistry": "Chemistry",
     "tripartite": "Tripartite",
@@ -2098,7 +2104,7 @@ def send_consent(request):
                 [coach.email],
                 "Meeraq Coaching | New Project!",
                 {"name": coach.first_name},
-                [] # no bcc 
+                [],  # no bcc
             )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -2182,7 +2188,7 @@ def receive_coach_consent(request):
                                     "coachname": coach_status.coach.first_name,
                                     "agreeddisagreed": request.data["status"],
                                 },
-                                [] # no bcc
+                                [],  # no bcc
                             )
                     if request.data["status"] == "reject":
                         send_mail_templates(
@@ -2195,7 +2201,7 @@ def receive_coach_consent(request):
                                 "coachname": coach_status.coach.first_name,
                                 "agreeddisagreed": request.data["status"],
                             },
-                            [] # no bcc
+                            [],  # no bcc
                         )
 
                 except Exception as e:
@@ -2408,8 +2414,7 @@ def book_session_caas(request):
     #         sessionName = "tripartite without coach"
     session_request.is_booked = True
     session_request.status = "booked"
-    for email in request.data.get("invitees", []):
-        session_request.invitees.append(email.strip())
+    session_request.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session_request.save()
 
     # if serializer.is_valid():
@@ -2493,7 +2498,7 @@ def book_session_caas(request):
                         "slot_date": session_date,
                         "slot_time": session_time,
                     },
-                    [] # no bcc
+                    [],  # no bcc
                 )
                 send_mail_templates(
                     "pmo_emails/session_scheduled.html",
@@ -2508,7 +2513,7 @@ def book_session_caas(request):
                         "slot_date": session_date,
                         "slot_time": session_time,
                     },
-                    [] # no bcc
+                    [],  # no bcc
                 )
 
     except Exception as e:
@@ -2694,7 +2699,7 @@ def accept_coach_caas_hr(request):
                         "coaches_selected_count": coaches_selected_count,
                         "coachname": coach_name,
                     },
-                    [] # no bcc
+                    [],  # no bcc
                 )
                 send_mail_templates(
                     "coach_templates/intro_mail_to_coach.html",
@@ -2772,7 +2777,7 @@ def add_learner_to_project(request):
                     "name": pmo.name,
                     "coacheeCount": str(coacheeCounts),
                 },
-                [] # no bcc
+                [],  # no bcc
             )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -4154,28 +4159,6 @@ def get_current_session_of_stakeholder(request, room_id):
     return Response({"message": "success"}, status=200)
 
 
-# @api_view(["POST"])
-# def schedule_session_directly(request, session_id):
-#     try:
-#         session = SessionRequestCaas.objects.get(id=session_id)
-#     except SessionRequestCaas.DoesNotExist:
-#         return Response({"error": "Session not found."}, status=404)
-#     time_arr = create_time_arr(request.data.get("availability", []))
-#     if len(time_arr) == 0:
-#         return Response({"error": "Please provide the availability."}, status=404)
-#     availability = Availibility.objects.get(id=time_arr[0])
-#     coach = Coach.objects.get(id=request.data["coach_id"])
-#     session.availibility.add(availability)
-#     session.confirmed_availability = availability
-#     session.is_booked = True
-#     session.coach = coach
-#     session.status = "booked"
-#     for email in request.data.get("invitees", []):
-#         session.invitees.append(email.strip())
-#     session.save()
-#     return Response({"message": "Session booked successfully."})
-
-
 @api_view(["POST"])
 def schedule_session_directly(request, session_id):
     try:
@@ -4215,9 +4198,7 @@ def schedule_session_directly(request, session_id):
     session.is_booked = True
 
     session.status = "booked"
-
-    for email in request.data.get("invitees", []):
-        session.invitees.append(email.strip())
+    session.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session.save()
     if coachee:
         send_mail_templates(
@@ -4231,7 +4212,7 @@ def schedule_session_directly(request, session_id):
                 "slot_date": session_date,
                 "slot_time": session_time,
             },
-            [] # no bcc
+            [],  # no bcc
         )
     return Response({"message": "Session booked successfully."})
 
@@ -4472,14 +4453,13 @@ def select_coach_for_coachee(request):
 
 @api_view(["POST"])
 def add_past_session(request, session_id):
-    
     try:
         session = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
         return Response({"error": "Session not found."}, status=404)
-    
+
     time_arr = create_time_arr(request.data.get("availability", []))
-    
+
     if len(time_arr) == 0:
         return Response({"error": "Please provide the availability."}, status=404)
     availability = Availibility.objects.get(id=time_arr[0])
@@ -4494,10 +4474,9 @@ def add_past_session(request, session_id):
                 session.coach = coach
             except Coach.DoesNotExist:
                 return Response({"error": "Coach not found."}, status=404)
-    
+
     session.status = "completed"
-    for email in request.data.get("invitees", []):
-        session.invitees.append(email.strip())
+    session.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session.save()
     return Response({"message": "Session booked successfully."})
 
@@ -4519,10 +4498,14 @@ class UpdateInviteesView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
         try:
-            invitee_emails = request.data.get('inviteeEmails', [])
+            invitee_emails = request.data.get("inviteeEmails", [])
             print(invitee_emails)
-            session_request.invitees = invitee_emails
+            session_request.invitees = get_trimmed_emails(invitee_emails)
             session_request.save()
-            return Response({'message':" Invitees Updated Sucessfully"},status=status.HTTP_200_OK)
+            return Response(
+                {"message": " Invitees Updated Sucessfully"}, status=status.HTTP_200_OK
+            )
         except Exception as e:
-            return Response(data={'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                data={"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
