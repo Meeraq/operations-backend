@@ -4471,23 +4471,30 @@ def select_coach_for_coachee(request):
 
 
 @api_view(["POST"])
-def add_past_session(request, session_id, coach_id):
-    print(request.data)
+def add_past_session(request, session_id):
+    
     try:
         session = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
         return Response({"error": "Session not found."}, status=404)
-    print([session])
+    
     time_arr = create_time_arr(request.data.get("availability", []))
-    print(time_arr)
+    
     if len(time_arr) == 0:
         return Response({"error": "Please provide the availability."}, status=404)
     availability = Availibility.objects.get(id=time_arr[0])
-    coach = Coach.objects.get(id=coach_id)
     session.availibility.add(availability)
     session.confirmed_availability = availability
     session.is_booked = True
-    session.coach = coach
+    if session.session_type != "stakeholder_without_coach":
+        coach_id = request.data.get("coach_id")
+        if coach_id:
+            try:
+                coach = Coach.objects.get(id=coach_id)
+                session.coach = coach
+            except Coach.DoesNotExist:
+                return Response({"error": "Coach not found."}, status=404)
+    
     session.status = "completed"
     for email in request.data.get("invitees", []):
         session.invitees.append(email.strip())
