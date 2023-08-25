@@ -189,6 +189,7 @@ def get_trimmed_emails(emails):
         res.append(email.strip())
     return res
 
+
 SESSION_TYPE_VALUE = {
     "chemistry": "Chemistry",
     "tripartite": "Tripartite",
@@ -2385,6 +2386,7 @@ def get_session_requests_of_hr(request, hr_id):
 @api_view(["GET"])
 def get_session_requests_of_learner(request, learner_id):
     sessions = SessionRequestCaas.objects.filter(learner__id=learner_id).all()
+    print(sessions, "session")
     serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
@@ -4492,6 +4494,37 @@ def get_pending_action_items_by_competency(request, learner_id):
     )
     serializer = PendingActionItemSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+def get_all_competencies_of_hr(request, hr_id):
+    competencies = Competency.objects.filter(goal__engagement__project__hr=hr_id)
+    competency_list = []
+
+    for competency in competencies:
+        goal_name = (competency.goal.name if competency.goal else "N/A",)
+        project_name = (
+            competency.goal.engagement.project.name
+            if competency.goal and competency.goal.engagement.project
+            else "N/A"
+        )
+        coachee_name = (
+            competency.goal.engagement.learner.name
+            if competency.goal and competency.goal.engagement.learner
+            else "N/A"
+        )
+        competency_data = {
+            "id": competency.id,
+            "goal_id": goal_name,
+            "name": competency.name,
+            "scoring": competency.scoring,
+            "created_at": competency.created_at.isoformat(),
+            "project_name": project_name,
+            "learner_name": coachee_name,
+        }
+        competency_list.append(competency_data)
+
+    return Response({"competencies": competency_list})
 
 
 class UpdateInviteesView(APIView):

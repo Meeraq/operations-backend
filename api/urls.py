@@ -197,12 +197,23 @@ urlpatterns = [
     path("engagement/select-coach-for-coachee/", views.select_coach_for_coachee),
     path("add-past-session/<int:session_id>/", views.add_past_session),
     path("reset_consent/", views.reset_consent),
-    path('update_organisation/<int:org_id>/', views.update_organisation),
+    path("update_organisation/<int:org_id>/", views.update_organisation),
     path("update_hr/<int:hr_id>/", views.update_hr),
-    path('delete_hr/<int:hr_id>/', views.delete_hr),  
-    path("learner_completed_sessions/count/<int:learner_id>/",views.get_completed_learner_sessions_count),
-    path("learner_total_goals/count/<int:learner_id>/",views.get_total_goals_for_learner),
-    path("learner_total_competency/count/<int:learner_id>/",views.get_total_competencies_for_learner),
-    path("learner_competencies/<int:learner_id>/", views.get_learner_competency_averages),
-    path('update-invitee/<int:session_request_id>/', UpdateInviteesView.as_view()),
+    path("delete_hr/<int:hr_id>/", views.delete_hr),
+    path(
+        "learner_completed_sessions/count/<int:learner_id>/",
+        views.get_completed_learner_sessions_count,
+    ),
+    path(
+        "learner_total_goals/count/<int:learner_id>/", views.get_total_goals_for_learner
+    ),
+    path(
+        "learner_total_competency/count/<int:learner_id>/",
+        views.get_total_competencies_for_learner,
+    ),
+    path(
+        "learner_competencies/<int:learner_id>/", views.get_learner_competency_averages
+    ),
+    path("update-invitee/<int:session_request_id>/", UpdateInviteesView.as_view()),
+    path("hr/<int:hr_id>/competencies/", views.get_all_competencies_of_hr),
 ]
