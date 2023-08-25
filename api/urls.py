@@ -9,6 +9,7 @@ from .views import (
     UpdateCoachContract,
     ApprovedCoachContract,
     SendContractReminder,
+    CoachWithApprovedContractsInProject,
 )
 
 urlpatterns = [
@@ -236,5 +237,9 @@ urlpatterns = [
     path(
         "get-approved-coach-contract/<int:project_id>/<int:coach_id>/",
         ApprovedCoachContract.as_view(),
+    ),
+    path(
+        "coaches-with-approved-contracts-in-project/<int:project_id>/",
+        CoachWithApprovedContractsInProject.as_view(),
     ),
 ]

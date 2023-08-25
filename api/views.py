@@ -4589,7 +4589,7 @@ class ProjectContractDetailView(APIView):
             project_contract = ProjectContract.objects.get(project=project_id)
         except ProjectContract.DoesNotExist:
             return Response(
-                {"message": "Project contract not found."},
+                {"error": "Project contract not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -4785,8 +4785,26 @@ class ApprovedCoachContract(APIView):
         serializer = CoachContractSerializer(coach_contract)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-
-
+class CoachWithApprovedContractsInProject(APIView):
+    def get(self, request, project_id, format=None):
+        try:
+            coach_contracts = CoachContract.objects.filter(
+                project=project_id, status="approved"
+            )
+            
+            coach_ids = [contract.coach.id for contract in coach_contracts]
+            
+            coaches = Coach.objects.filter(id__in=coach_ids)
+            
+            serializer = CoachSerializer(coaches, many=True)  
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        except CoachContract.DoesNotExist:
+            return Response(
+                {"error": "Coach contracts not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+    
 class SendContractReminder(APIView):
     def post(self, request, format=None):
         try:
