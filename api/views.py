@@ -16,6 +16,7 @@ from .serializers import (
     SessionRequestCaasSerializer,
     CoachDepthOneSerializer,
     ProjectDepthTwoSerializer,
+    SessionsDepthTwoSerializer,
     HrSerializer,
     OrganisationSerializer,
     LearnerDepthOneSerializer,
@@ -1414,6 +1415,71 @@ def get_projects_and_sessions_by_coach(request, coach_id):
     #         sessions_dict[project_id] = [session]
     project_serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response({"projects": project_serializer.data})
+
+
+
+
+
+# @api_view(["GET"])
+# def coach_session_list(request, coach_id):
+#     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
+#     project_serializer = ProjectDepthTwoSerializer(projects, many=True)
+
+#     # Fetch sessions related to the coach
+#     sessions = SessionRequestCaas.objects.filter(coach_id=coach_id)
+#     session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
+
+#     # Group sessions by project ID
+#     sessions_dict = {}
+#     for session in session_serializer.data:
+#         project_id = session['project']['id']
+#         if project_id in sessions_dict:
+#             sessions_dict[project_id].append(session)
+#         else:
+#             sessions_dict[project_id] = [session]
+
+#     # Add the session data to the projects
+#     for project_data in project_serializer.data:
+#         project_id = project_data['id']
+#         if project_id in sessions_dict:
+#             project_data['sessions'] = sessions_dict[project_id]
+#         else:
+#             project_data['sessions'] = []
+
+#     return Response({"projects": project_serializer.data})
+
+
+
+
+
+@api_view(["GET"])
+def coach_session_list(request, coach_id):
+    projects = Project.objects.filter(coaches_status__coach__id=coach_id)
+    project_serializer = ProjectDepthTwoSerializer(projects, many=True)
+
+    # Fetch sessions related to the coach
+    sessions = SessionRequestCaas.objects.filter(coach_id=coach_id)
+    session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
+
+    # Group sessions by project ID
+    sessions_dict = {}
+    for session in session_serializer.data:
+        project_id = session['project']
+        if project_id in sessions_dict:
+            sessions_dict[project_id].append(session)
+        else:
+            sessions_dict[project_id] = [session]
+
+    # Add the session data to the projects
+    for project_data in project_serializer.data:
+        project_id = project_data['id']
+        if project_id in sessions_dict:
+            project_data['sessions'] = sessions_dict[project_id]
+        else:
+            project_data['sessions'] = []
+
+    return Response({"projects": project_serializer.data})
+
 
 
 # @api_view(['POST'])
@@ -4546,3 +4612,43 @@ class UpdateInviteesView(APIView):
             return Response(
                 data={"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+# @api_view(["GET"])
+# def coach_session_list(request, coach_id):
+#     try:
+#         coach = Coach.objects.get(id=coach_id)
+#     except Coach.DoesNotExist:
+#         return Response({"error": "Coach not found"}, status=status.HTTP_404_NOT_FOUND)
+
+#     sessions = SessionRequestCaas.objects.filter(coach=coach)
+#     serializer = SessionRequestCaasSerializer(sessions, many=True)
+
+#     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# @api_view(["GET"])
+# def coach_session_list(request, coach_id):
+#     try:
+#         coach = Coach.objects.get(id=coach_id)
+#     except Coach.DoesNotExist:
+#         return Response({"error": "Coach not found"}, status=status.HTTP_404_NOT_FOUND)
+
+#     sessions = SessionRequestCaas.objects.filter(coach=coach)
+#     serializer_data = []
+
+#     for session in sessions:
+#         print("4575", session)
+#         session_data = {
+#             "session_id": session.id,
+#             "session_status": session.status,
+#             "project_id": session.project.id,
+#             "project_name": session.project.name,
+#             "organisation_name": session.project.organisation.name,
+#             # Include other relevant project details here
+#         }
+#         serializer_data.append(session_data)
+
+#     return Response(serializer_data, status=status.HTTP_200_OK)
+
+
