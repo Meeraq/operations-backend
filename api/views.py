@@ -4314,23 +4314,21 @@ def get_upcoming_session_count(request, hr_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     # Get the start and end of the current month
-    current_month = timezone.now().replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
-    )
-    current_month_timestamp = int(current_month.timestamp() * 1000)
-    next_month = current_month.replace(month=current_month.month + 1, day=1)
-    if current_month.month == 12:  # Handle December case
-        next_month = next_month.replace(year=current_month.year + 1)
-    next_month_timestamp = int(next_month.timestamp() * 1000)
+    # current_month = timezone.now().replace(
+    #     day=1, hour=0, minute=0, second=0, microsecond=0
+    # )
+    # current_month_timestamp = int(current_month.timestamp() * 1000)
+    # next_month = current_month.replace(month=current_month.month + 1, day=1)
+    # if current_month.month == 12:  # Handle December case
+    #     next_month = next_month.replace(year=current_month.year + 1)
+    # next_month_timestamp = int(next_month.timestamp() * 1000)
     session_requests = SessionRequestCaas.objects.filter(
-        Q(is_booked=True),
-        Q(confirmed_availability__end_time__gt=current_time),
-        Q(confirmed_availability__end_time__gte=current_month_timestamp),
-        Q(confirmed_availability__end_time__lt=next_month_timestamp),
-        Q(project__hr__id=hr_id),
-        Q(is_archive=False),
-        ~Q(status="completed"),
-    )
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__gt=current_time),
+            Q(project__hr__id=hr_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        )
     upcoming_session_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(
@@ -4361,7 +4359,7 @@ def get_requests_count(request, hr_id):
 @api_view(["GET"])
 def get_completed_sessions_count(request, hr_id):
     session_requests = SessionRequestCaas.objects.filter(
-        ~Q(session_type="interview") & Q(project__hr__id=hr_id) & Q(status="completed")
+       Q(project__hr__id=hr_id) & Q(status="completed")
     )
     sessions_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
