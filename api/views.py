@@ -79,7 +79,7 @@ from django.db.models import Q
 from collections import defaultdict
 from django.db.models import Avg
 from rest_framework import status
-
+from rest_framework.views import APIView
 
 # Create your views here.
 
@@ -181,6 +181,13 @@ def generate_room_id(email):
     except Exception as e:
         print(f"Error while generating meeting link: {str(e)}")
         return None
+
+
+def get_trimmed_emails(emails):
+    res = []
+    for email in emails:
+        res.append(email.strip())
+    return res
 
 
 SESSION_TYPE_VALUE = {
@@ -2379,6 +2386,7 @@ def get_session_requests_of_hr(request, hr_id):
 @api_view(["GET"])
 def get_session_requests_of_learner(request, learner_id):
     sessions = SessionRequestCaas.objects.filter(learner__id=learner_id).all()
+    print(sessions, "session")
     serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
@@ -2412,8 +2420,7 @@ def book_session_caas(request):
     #         sessionName = "tripartite without coach"
     session_request.is_booked = True
     session_request.status = "booked"
-    for email in request.data.get("invitees", []):
-        session_request.invitees.append(email.strip())
+    session_request.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session_request.save()
 
     # if serializer.is_valid():
@@ -4158,28 +4165,6 @@ def get_current_session_of_stakeholder(request, room_id):
     return Response({"message": "success"}, status=200)
 
 
-# @api_view(["POST"])
-# def schedule_session_directly(request, session_id):
-#     try:
-#         session = SessionRequestCaas.objects.get(id=session_id)
-#     except SessionRequestCaas.DoesNotExist:
-#         return Response({"error": "Session not found."}, status=404)
-#     time_arr = create_time_arr(request.data.get("availability", []))
-#     if len(time_arr) == 0:
-#         return Response({"error": "Please provide the availability."}, status=404)
-#     availability = Availibility.objects.get(id=time_arr[0])
-#     coach = Coach.objects.get(id=request.data["coach_id"])
-#     session.availibility.add(availability)
-#     session.confirmed_availability = availability
-#     session.is_booked = True
-#     session.coach = coach
-#     session.status = "booked"
-#     for email in request.data.get("invitees", []):
-#         session.invitees.append(email.strip())
-#     session.save()
-#     return Response({"message": "Session booked successfully."})
-
-
 @api_view(["POST"])
 def schedule_session_directly(request, session_id):
     try:
@@ -4219,9 +4204,7 @@ def schedule_session_directly(request, session_id):
     session.is_booked = True
 
     session.status = "booked"
-
-    for email in request.data.get("invitees", []):
-        session.invitees.append(email.strip())
+    session.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session.save()
     if coachee:
         send_mail_templates(
@@ -4331,23 +4314,21 @@ def get_upcoming_session_count(request, hr_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     # Get the start and end of the current month
-    current_month = timezone.now().replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
-    )
-    current_month_timestamp = int(current_month.timestamp() * 1000)
-    next_month = current_month.replace(month=current_month.month + 1, day=1)
-    if current_month.month == 12:  # Handle December case
-        next_month = next_month.replace(year=current_month.year + 1)
-    next_month_timestamp = int(next_month.timestamp() * 1000)
+    # current_month = timezone.now().replace(
+    #     day=1, hour=0, minute=0, second=0, microsecond=0
+    # )
+    # current_month_timestamp = int(current_month.timestamp() * 1000)
+    # next_month = current_month.replace(month=current_month.month + 1, day=1)
+    # if current_month.month == 12:  # Handle December case
+    #     next_month = next_month.replace(year=current_month.year + 1)
+    # next_month_timestamp = int(next_month.timestamp() * 1000)
     session_requests = SessionRequestCaas.objects.filter(
-        Q(is_booked=True),
-        Q(confirmed_availability__end_time__gt=current_time),
-        Q(confirmed_availability__end_time__gte=current_month_timestamp),
-        Q(confirmed_availability__end_time__lt=next_month_timestamp),
-        Q(project__hr__id=hr_id),
-        Q(is_archive=False),
-        ~Q(status="completed"),
-    )
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__gt=current_time),
+            Q(project__hr__id=hr_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        )
     upcoming_session_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(
@@ -4378,7 +4359,7 @@ def get_requests_count(request, hr_id):
 @api_view(["GET"])
 def get_completed_sessions_count(request, hr_id):
     session_requests = SessionRequestCaas.objects.filter(
-        ~Q(session_type="interview") & Q(project__hr__id=hr_id) & Q(status="completed")
+       Q(project__hr__id=hr_id) & Q(status="completed")
     )
     sessions_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
@@ -4475,23 +4456,31 @@ def select_coach_for_coachee(request):
 
 
 @api_view(["POST"])
-def add_past_session(request, session_id, coach_id):
+def add_past_session(request, session_id):
     try:
         session = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
         return Response({"error": "Session not found."}, status=404)
+
     time_arr = create_time_arr(request.data.get("availability", []))
+
     if len(time_arr) == 0:
         return Response({"error": "Please provide the availability."}, status=404)
     availability = Availibility.objects.get(id=time_arr[0])
-    coach = Coach.objects.get(id=coach_id)
     session.availibility.add(availability)
     session.confirmed_availability = availability
     session.is_booked = True
-    session.coach = coach
+    if session.session_type != "stakeholder_without_coach":
+        coach_id = request.data.get("coach_id")
+        if coach_id:
+            try:
+                coach = Coach.objects.get(id=coach_id)
+                session.coach = coach
+            except Coach.DoesNotExist:
+                return Response({"error": "Coach not found."}, status=404)
+
     session.status = "completed"
-    for email in request.data.get("invitees", []):
-        session.invitees.append(email.strip())
+    session.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session.save()
     return Response({"message": "Session booked successfully."})
 
@@ -4503,3 +4492,55 @@ def get_pending_action_items_by_competency(request, learner_id):
     )
     serializer = PendingActionItemSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+def get_all_competencies_of_hr(request, hr_id):
+    competencies = Competency.objects.filter(goal__engagement__project__hr=hr_id)
+    competency_list = []
+
+    for competency in competencies:
+        goal_name = (competency.goal.name if competency.goal else "N/A",)
+        project_name = (
+            competency.goal.engagement.project.name
+            if competency.goal and competency.goal.engagement.project
+            else "N/A"
+        )
+        coachee_name = (
+            competency.goal.engagement.learner.name
+            if competency.goal and competency.goal.engagement.learner
+            else "N/A"
+        )
+        competency_data = {
+            "id": competency.id,
+            "goal_id": goal_name,
+            "name": competency.name,
+            "scoring": competency.scoring,
+            "created_at": competency.created_at.isoformat(),
+            "project_name": project_name,
+            "learner_name": coachee_name,
+        }
+        competency_list.append(competency_data)
+
+    return Response({"competencies": competency_list})
+
+
+class UpdateInviteesView(APIView):
+    def put(self, request, session_request_id):
+        try:
+            session_request = SessionRequestCaas.objects.get(pk=session_request_id)
+        except SessionRequestCaas.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            invitee_emails = request.data.get("inviteeEmails", [])
+            print(invitee_emails)
+            session_request.invitees = get_trimmed_emails(invitee_emails)
+            session_request.save()
+            return Response(
+                {"message": " Invitees Updated Sucessfully"}, status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            return Response(
+                data={"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
