@@ -4381,12 +4381,12 @@ def get_upcoming_session_count(request, hr_id):
     #     next_month = next_month.replace(year=current_month.year + 1)
     # next_month_timestamp = int(next_month.timestamp() * 1000)
     session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__gt=current_time),
-            Q(project__hr__id=hr_id),
-            Q(is_archive=False),
-            ~Q(status="completed"),
-        )
+        Q(is_booked=True),
+        Q(confirmed_availability__end_time__gt=current_time),
+        Q(project__hr__id=hr_id),
+        Q(is_archive=False),
+        ~Q(status="completed"),
+    )
     upcoming_session_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(
@@ -4417,7 +4417,7 @@ def get_requests_count(request, hr_id):
 @api_view(["GET"])
 def get_completed_sessions_count(request, hr_id):
     session_requests = SessionRequestCaas.objects.filter(
-       Q(project__hr__id=hr_id) & Q(status="completed")
+        Q(project__hr__id=hr_id) & Q(status="completed")
     )
     sessions_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
@@ -4642,36 +4642,88 @@ class UpdateInviteesView(APIView):
 #     return Response(serializer_data, status=status.HTTP_200_OK)
 
 
+# @api_view(["DELETE"])
+# def remove_coach_from_project(request, project_id):
+#     try:
+#         project = Project.objects.get(id=project_id)
+#         # session = SessionRequestCaas.objects.get(id=session_id)
+#         # print(session, "session")
+#         coach_id = request.data["coachIdToDelete"]
+#         coach = Coach.objects.get(id=coach_id)
+#     except Project.DoesNotExist:
+#         return Response(
+#             {"message": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+#         )
+#     except Coach.DoesNotExist:
+#         return Response(
+#             {"message": "Coach not found"}, status=status.HTTP_404_NOT_FOUND
+#         )
+
+#     # Iterate through coaches_status instances and remove the coach if fFound
+#     for coach_status in project.coaches_status.all():
+#         if coach_status.coach.id == coach_id:
+#             project.coaches_status.remove(coach_status)  # Remove the coach status
+#             project.save()  # Save the project after removing the coach
+#             return Response(
+#                 {"message": "Coach removed from project successfully"},
+#                 status=status.HTTP_204_NO_CONTENT,
+#             )
+
+#     # If the coach is not associated with the project
+#     return Response(
+#         {"message": "Coach is not associated with the project"},
+#         status=status.HTTP_400_BAD_REQUEST,
+#     )
+
 
 @api_view(["DELETE"])
 def remove_coach_from_project(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
-        coach_id = request.data["coachIdToDelete"]
+        coach_id = request.data.get("coachIdToDelete")
         coach = Coach.objects.get(id=coach_id)
+
+        print(project, "project")
+        print(coach_id, "coach_id")
+        print(coach, "coach")
     except Project.DoesNotExist:
         return Response(
-            {"message": "Project not found"},
-            status=status.HTTP_404_NOT_FOUND
+            {"message": "Project not found"}, status=status.HTTP_404_NOT_FOUND
         )
     except Coach.DoesNotExist:
         return Response(
-            {"message": "Coach not found"},
-            status=status.HTTP_404_NOT_FOUND
+            {"message": "Coach not found"}, status=status.HTTP_404_NOT_FOUND
         )
-    
-    # Iterate through coaches_status instances and remove the coach if fFound
+
+    # Get all sessions booked by the coach in the project
+    coach_sessions = SessionRequestCaas.objects.filter(
+        project=project, coach=coach, is_booked=True
+    )
+    print(coach_sessions, "coach_sessions")
+
+    # Iterate through coach_sessions and remove them
+    for session in coach_sessions:
+        print(session, "sessionnnn")
+        session.is_booked = False
+        session.coach = None
+        session.save()
+
+    # Remove the coach from the project and coach status
     for coach_status in project.coaches_status.all():
+        print(coach_status, "coach_status")
         if coach_status.coach.id == coach_id:
-            project.coaches_status.remove(coach_status)  # Remove the coach status
-            project.save()  # Save the project after removing the coach
+            project.coaches_status.remove(coach_status)
+            project.coaches.remove(coach)
+            project.save()
+
             return Response(
-                {"message": "Coach removed from project successfully"},
-                status=status.HTTP_204_NO_CONTENT
+                {
+                    "message": "Coach and their sessions removed from project successfully"
+                },
+                status=status.HTTP_204_NO_CONTENT,
             )
-    
-    # If the coach is not associated with the project
+
     return Response(
         {"message": "Coach is not associated with the project"},
-        status=status.HTTP_400_BAD_REQUEST
+        status=status.HTTP_400_BAD_REQUEST,
     )
