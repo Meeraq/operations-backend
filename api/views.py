@@ -4642,39 +4642,6 @@ class UpdateInviteesView(APIView):
 #     return Response(serializer_data, status=status.HTTP_200_OK)
 
 
-# @api_view(["DELETE"])
-# def remove_coach_from_project(request, project_id):
-#     try:
-#         project = Project.objects.get(id=project_id)
-#         # session = SessionRequestCaas.objects.get(id=session_id)
-#         # print(session, "session")
-#         coach_id = request.data["coachIdToDelete"]
-#         coach = Coach.objects.get(id=coach_id)
-#     except Project.DoesNotExist:
-#         return Response(
-#             {"message": "Project not found"}, status=status.HTTP_404_NOT_FOUND
-#         )
-#     except Coach.DoesNotExist:
-#         return Response(
-#             {"message": "Coach not found"}, status=status.HTTP_404_NOT_FOUND
-#         )
-
-#     # Iterate through coaches_status instances and remove the coach if fFound
-#     for coach_status in project.coaches_status.all():
-#         if coach_status.coach.id == coach_id:
-#             project.coaches_status.remove(coach_status)  # Remove the coach status
-#             project.save()  # Save the project after removing the coach
-#             return Response(
-#                 {"message": "Coach removed from project successfully"},
-#                 status=status.HTTP_204_NO_CONTENT,
-#             )
-
-#     # If the coach is not associated with the project
-#     return Response(
-#         {"message": "Coach is not associated with the project"},
-#         status=status.HTTP_400_BAD_REQUEST,
-#     )
-
 
 
 @api_view(["DELETE"])
@@ -4699,21 +4666,22 @@ def remove_coach_from_project(request, project_id):
     # Check if the coach is assigned to any learners in any engagements within the project
     engagements_with_coach = Engagement.objects.filter(project=project, coach=coach)
 
-    # Remove the coach from any engagements if present
-    for engagement in engagements_with_coach:
-        engagement.coach = None
-        engagement.save()
-
     # Find all sessions booked by the coach in the project
     coach_sessions = SessionRequestCaas.objects.filter(
         project=project, coach=coach, is_booked=True
     )
 
-    # Iterate through coach_sessions and remove them
+    # Iterate through coach_sessions and set session status to "pending"
     for session in coach_sessions:
         session.is_booked = False
         session.coach = None
+        session.status = "pending"  # Set the session status to "pending"
         session.save()
+
+    # Remove the coach from any engagements if present
+    for engagement in engagements_with_coach:
+        engagement.coach = None
+        engagement.save()
 
     # Remove the coach from the project
     for coach_status in project.coaches_status.all():
@@ -4725,7 +4693,7 @@ def remove_coach_from_project(request, project_id):
 
             return Response(
                 {
-                    "message": "Coach removed from the project and disassociated from any learner engagements and booked sessions successfully"
+                    "message": "Coach removed from the project and disassociated from any learner engagements. Booked sessions set to 'pending' status successfully."
                 },
                 status=status.HTTP_204_NO_CONTENT,
             )
