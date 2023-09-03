@@ -4676,6 +4676,7 @@ class UpdateInviteesView(APIView):
 #     )
 
 
+
 @api_view(["DELETE"])
 def remove_coach_from_project(request, project_id):
     try:
@@ -4695,20 +4696,26 @@ def remove_coach_from_project(request, project_id):
             {"message": "Coach not found"}, status=status.HTTP_404_NOT_FOUND
         )
 
-    # Get all sessions booked by the coach in the project
+    # Check if the coach is assigned to any learners in any engagements within the project
+    engagements_with_coach = Engagement.objects.filter(project=project, coach=coach)
+
+    # Remove the coach from any engagements if present
+    for engagement in engagements_with_coach:
+        engagement.coach = None
+        engagement.save()
+
+    # Find all sessions booked by the coach in the project
     coach_sessions = SessionRequestCaas.objects.filter(
         project=project, coach=coach, is_booked=True
     )
-    print(coach_sessions, "coach_sessions")
 
     # Iterate through coach_sessions and remove them
     for session in coach_sessions:
-        print(session, "sessionnnn")
         session.is_booked = False
         session.coach = None
         session.save()
 
-    # Remove the coach from the project and coach status
+    # Remove the coach from the project
     for coach_status in project.coaches_status.all():
         print(coach_status, "coach_status")
         if coach_status.coach.id == coach_id:
@@ -4718,7 +4725,7 @@ def remove_coach_from_project(request, project_id):
 
             return Response(
                 {
-                    "message": "Coach and their sessions removed from project successfully"
+                    "message": "Coach removed from the project and disassociated from any learner engagements and booked sessions successfully"
                 },
                 status=status.HTTP_204_NO_CONTENT,
             )
