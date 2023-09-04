@@ -4683,6 +4683,14 @@ def remove_coach_from_project(request, project_id):
         engagement.coach = None
         engagement.save()
 
+    # Find all sessions requested of the coach in the project
+    requested_sessions = SessionRequestCaas.objects.filter(project=project, coach=coach)
+
+    # Iterate through requested_sessions and set session status to "pending" and remove them
+    for session in requested_sessions:
+        session.status = "pending"  # Set the session status to "pending"
+        session.delete()
+
     # Remove the coach from the project
     for coach_status in project.coaches_status.all():
         print(coach_status, "coach_status")
@@ -4692,13 +4700,11 @@ def remove_coach_from_project(request, project_id):
             project.save()
 
             return Response(
-                {
-                    "message": "Coach removed from the project and disassociated from any learner engagements. Booked sessions set to 'pending' status successfully."
-                },
-                status=status.HTTP_204_NO_CONTENT,
+                {"message": "Coach has been removed from the project."},
+                status=201,
             )
 
     return Response(
         {"message": "Coach is not associated with the project"},
-        status=status.HTTP_400_BAD_REQUEST,
+        status=400,
     )
