@@ -4644,16 +4644,13 @@ class UpdateInviteesView(APIView):
 
 
 
+
 @api_view(["DELETE"])
 def remove_coach_from_project(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
         coach_id = request.data.get("coachIdToDelete")
         coach = Coach.objects.get(id=coach_id)
-
-        print(project, "project")
-        print(coach_id, "coach_id")
-        print(coach, "coach")
     except Project.DoesNotExist:
         return Response(
             {"message": "Project not found"}, status=status.HTTP_404_NOT_FOUND
@@ -4663,35 +4660,30 @@ def remove_coach_from_project(request, project_id):
             {"message": "Coach not found"}, status=status.HTTP_404_NOT_FOUND
         )
 
-    # Check if the coach is assigned to any learners in any engagements within the project
     engagements_with_coach = Engagement.objects.filter(project=project, coach=coach)
 
-    # Find all sessions booked by the coach in the project
     coach_sessions = SessionRequestCaas.objects.filter(
         project=project, coach=coach, is_booked=True
     )
 
-    # Iterate through coach_sessions and set session status to "pending"
     for session in coach_sessions:
         session.is_booked = False
         session.coach = None
-        session.status = "pending"  # Set the session status to "pending"
+        session.status = "pending"  
         session.save()
 
-    # Remove the coach from any engagements if present
     for engagement in engagements_with_coach:
         engagement.coach = None
         engagement.save()
 
-    # Find all sessions requested of the coach in the project
-    requested_sessions = SessionRequestCaas.objects.filter(project=project, coach=coach)
+    requested_sessions = SessionRequestCaas.objects.filter(
+        project=project, coach=coach, status="requested"
+    )
 
-    # Iterate through requested_sessions and set session status to "pending" and remove them
     for session in requested_sessions:
-        session.status = "pending"  # Set the session status to "pending"
-        session.delete()
+        session.status = "pending"  
+        session.save()
 
-    # Remove the coach from the project
     for coach_status in project.coaches_status.all():
         print(coach_status, "coach_status")
         if coach_status.coach.id == coach_id:
