@@ -1,5 +1,6 @@
 from datetime import date
 import requests
+from django.http import JsonResponse
 from os import name
 from django.shortcuts import render, get_object_or_404
 from django.template.loader import render_to_string
@@ -32,6 +33,7 @@ from .serializers import (
     ActionItemSerializer,
     GetActionItemDepthOneSerializer,
     PendingActionItemSerializer,
+    UserTokenSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -65,6 +67,7 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    UserToken,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -80,6 +83,12 @@ from collections import defaultdict
 from django.db.models import Avg
 from rest_framework import status
 from rest_framework.views import APIView
+from urllib.parse import urlencode
+from django.http import HttpResponseRedirect
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from oauth2client import client
+import os
 
 # Create your views here.
 
@@ -110,6 +119,183 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
         print(f"Error occurred while sending emails: {str(e)}")
         raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
+def convert_to_24hr_format(time_str):
+    
+    time_obj = datetime.strptime(time_str, "%I:%M %p")
+    time_24hr = time_obj.strftime("%H:%M")
+    return time_24hr
+
+def refresh_google_access_token(user_token):
+    if not user_token:
+        return None
+
+    refresh_token = user_token.refresh_token
+    access_token_expiry = user_token.access_token_expiry
+    auth_code = user_token.authorization_code
+    if not refresh_token:
+        return None
+
+    access_token_expiry = int(access_token_expiry)
+
+    expiration_timestamp = user_token.created_at + timezone.timedelta(
+        seconds=access_token_expiry
+    )
+
+    if expiration_timestamp <= timezone.now():
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            "refresh_token": refresh_token,
+            "client_id": settings.GOOGLE_OAUTH2_CLIENT_ID,
+            "client_secret": settings.GOOGLE_OAUTH2_CLIENT_SECRET,
+            "grant_type": "refresh_token",
+        }
+
+        response = requests.post(token_url, data=token_data)
+        token_json = response.json()
+        
+
+        if "access_token" in token_json:
+            user_token.access_token = token_json["access_token"]
+            user_token.access_token_expiry = token_json.get("expires_in")
+            user_token.updated_at = timezone.now()
+            user_token.save()
+
+            return user_token.access_token
+
+    return user_token.access_token
+
+
+def refresh_microsoft_access_token(user_token):
+    if not user_token:
+        return None
+
+    refresh_token = user_token.refresh_token
+    access_token_expiry = user_token.access_token_expiry
+    auth_code = user_token.authorization_code
+    if not refresh_token:
+        return None
+
+    access_token_expiry = int(access_token_expiry)
+
+    expiration_timestamp = user_token.created_at + timezone.timedelta(
+        seconds=access_token_expiry
+    )
+
+    if expiration_timestamp <= timezone.now():
+        token_url = "https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/token"
+
+        token_data = {
+            "client_id": settings.MICROSOFT_CLIENT_ID,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+            "client_secret": settings.MICROSOFT_CLIENT_SECRET,
+        }
+
+        response = requests.post(token_url, data=token_data)
+        token_json = response.json()
+
+        if "access_token" in token_json:
+            user_token.access_token = token_json["access_token"]
+            user_token.access_token_expiry = token_json.get("expires_in")
+            user_token.updated_at = timezone.now()
+            user_token.save()
+
+            return user_token.access_token
+
+    return user_token.access_token
+
+
+def create_google_calendar_event(access_token, event_details):
+    try:
+       
+        formatted_date =datetime.strptime(event_details.get('startDate'), "%d-%m-%Y").strftime("%Y-%m-%d")
+        
+        start_time=convert_to_24hr_format(event_details.get('startTime'))
+        
+        end_time=convert_to_24hr_format(event_details.get('endTime'))
+        
+        event_data = {
+            'summary': event_details.get('title'),
+            'description': event_details.get('description'),
+            'start': {
+                'dateTime': f"{formatted_date}T{start_time}:00",
+                'timeZone': 'IST',  
+            },
+            'end': {
+                'dateTime': f"{formatted_date}T{end_time}:00",
+                'timeZone': 'IST', 
+            },
+        }
+        
+        user_token = UserToken.objects.get(access_token=access_token)
+        new_access_token = refresh_google_access_token(user_token)
+        if not new_access_token:
+            new_access_token = access_token
+        
+        # Make a POST request to the Google Calendar API
+        response = requests.post(
+            'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+            json=event_data,
+            headers={
+                'Authorization': f'Bearer {new_access_token}',
+                'Content-Type': 'application/json',
+            }
+        )
+      
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            
+            return {'message': 'Event created successfully', 'event_data': response_data}
+        else:
+            return {'error': 'Failed to create event', 'status_code': response.status_code}
+
+    except Exception as e:
+        return {'error': 'An error occurred', 'details': str(e)}
+
+def create_microsoft_calendar_event(access_token, event_details):
+    # Define the endpoint URL for creating an event in the user's calendar
+    event_create_url = "https://graph.microsoft.com/v1.0/me/events"
+
+    formatted_date= datetime.strptime(event_details['startDate'], "%d-%m-%Y").strftime("%Y-%m-%d")
+    # Define the event start and end times
+    start_datetime = (
+        f"{formatted_date}T{convert_to_24hr_format(event_details['startTime'])}:00"
+    )
+    end_datetime = (
+        f"{formatted_date}T{convert_to_24hr_format(event_details['endTime'])}:00"
+    )
+
+    # Create the event payload
+    event_payload = {
+        "subject": event_details["title"],
+        "body": {"contentType": "HTML", "content": event_details["description"]},
+        "start": {"dateTime": start_datetime, "timeZone": "IST"},
+        "end": {"dateTime": end_datetime, "timeZone": "IST"},
+    }
+   
+    # Set the authorization header with the access token
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+
+    # Send a POST request to create the event
+    response = requests.post(event_create_url, json=event_payload, headers=headers)
+
+    if response.status_code == 201:
+        print("Event created successfully.")
+        return True
+    else:
+        print(f"Event creation failed. Status code: {response.status_code}")
+        print(response.text)
+        return False
+
+
+def is_gmail(email):
+    # Check if the email address ends with "@gmail.com"
+    return email.lower().endswith("@gmail.com")
+
 
 def create_notification(user, path, message):
     notification = Notification.objects.create(user=user, path=path, message=message)
@@ -123,16 +309,18 @@ def format_timestamp(timestamp):
 
 
 def get_date(timestamp):
-    dt = datetime.fromtimestamp(timestamp / 1000) + timedelta(
-        hours=5, minutes=30
-    )  # Convert milliseconds to seconds
+    dt = datetime.fromtimestamp(timestamp / 1000) 
+    # + timedelta(
+    #     hours=5, minutes=30
+    # )  # Convert milliseconds to seconds
     return dt.strftime("%d-%m-%Y")
 
 
 def get_time(timestamp):
-    dt = datetime.fromtimestamp(timestamp / 1000) + timedelta(
-        hours=5, minutes=30
-    )  # Convert milliseconds to seconds
+    dt = datetime.fromtimestamp(timestamp / 1000)
+    # + timedelta(
+    #     hours=5, minutes=30
+    # )  # Convert milliseconds to seconds
     return dt.strftime("%I:%M %p")
 
 
@@ -1749,6 +1937,28 @@ def login_view(request):
     login(request, user)
     user_data = get_user_data(user)
     if user_data:
+        user_token = None
+        try:
+            user_token = UserToken.objects.get(user_profile__user__username=username)
+
+        except ObjectDoesNotExist:
+            print("Does not exist")
+        access_token = user_token.access_token
+        if is_gmail(username):
+            access_token = refresh_google_access_token(user_token)
+            if not user_token:
+                google_auth_url = f"http://127.0.0.1:8000/api/google/oauth/{username}/"  # Replace with the actual URL
+
+                return JsonResponse({"redirect_url": google_auth_url})
+        # else:
+        #     access_token = refresh_microsoft_access_token(user_token)
+        #     if not user_token:
+        #         microsoft_auth_url = f"http://127.0.0.1:8000/api/microsoft/oauth/{username}/"  # Replace with the actual URL
+
+        #         return JsonResponse({"redirect_url": microsoft_auth_url})
+        # print(access_token)
+        
+
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -1864,11 +2074,36 @@ def validate_otp(request):
     user = otp_obj.user
     # token, created = Token.objects.get_or_create(user=learner.user.user)
     # Delete the OTP object after it has been validated
+    user_email = request.data["email"]
     otp_obj.delete()
     last_login = user.last_login
     login(request, user)
     user_data = get_user_data(user)
     if user_data:
+        user_token = None
+        try:
+            user_token = UserToken.objects.get(user_profile__user__username=user_email)
+
+        except ObjectDoesNotExist:
+            print("Does not exist")
+
+        access_token=None
+        if user_token:
+            access_token = user_token.access_token
+        if is_gmail(user_email):
+            access_token = refresh_google_access_token(user_token)
+            if not user_token:
+                google_auth_url = f"http://127.0.0.1:8000/api/google/oauth/{user_email}/"  
+
+                return JsonResponse({"redirect_url": google_auth_url})
+        # else:
+        #     access_token = refresh_microsoft_access_token(user_token)
+        #     if not user_token:
+        #         microsoft_auth_url = f"http://127.0.0.1:8000/api/microsoft/oauth/{user_email}/"  
+
+        #         return JsonResponse({"redirect_url": microsoft_auth_url})
+        # print(access_token)
+        
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -2521,6 +2756,70 @@ def book_session_caas(request):
                     },
                     [],  # no bcc
                 )
+
+                event_detail = {
+                    "title": f"{SESSION_TYPE_VALUE[session_request.session_type]} Session",
+                    "description": "Session Scheduled",
+                    "startDate": session_date,
+                    "startTime": start_time,
+                    "endDate": session_date,
+                    "endTime": end_time,
+                }
+                
+
+                if is_gmail(coach.email):
+                    coach_user_token = UserToken.objects.get(
+                        user_profile__user__username=coach.email
+                    )
+                    coach_access_token = coach_user_token.access_token
+                    coach_access_token = refresh_google_access_token(coach_user_token)
+                    
+                    create_google_calendar_event(
+                        coach_access_token,
+                        event_detail,
+                    )
+                # else:
+                #     coach_user_token = UserToken.objects.get(
+                #         user_profile__user__username=coach.email
+                #     )
+                #     coach_access_token = coach_user_token.access_token
+                #     coach_access_token = refresh_microsoft_access_token(
+                #         coach_user_token
+                #     )
+                #     create_microsoft_calendar_event(
+                #         coach_access_token,
+                #         event_detail,
+                #     )
+
+                
+
+                if is_gmail(coachee.email):
+                    coachee_user_token = UserToken.objects.get(
+                        user_profile__user__username=coachee.email
+                    )
+
+                    coachee_access_token = coachee_user_token.access_token
+                    coachee_access_token = refresh_google_access_token(
+                        coachee_user_token
+                    )
+                    create_google_calendar_event(
+                        coachee_access_token,
+                        event_detail,
+                    )
+
+                # else:
+                #     coachee_user_token = UserToken.objects.get(
+                #         user_profile__user__username=coachee.email
+                #     )
+
+                #     coachee_access_token = coachee_user_token.access_token
+                #     coachee_access_token = refresh_microsoft_access_token(
+                #         coachee_user_token
+                #     )
+                #     create_microsoft_calendar_event(
+                #         coachee_access_token,
+                #         event_detail,
+                #     )
 
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -4195,12 +4494,13 @@ def schedule_session_directly(request, session_id):
     start_time = format_timestamp(int(session.confirmed_availability.start_time))
     end_time = format_timestamp(int(session.confirmed_availability.end_time))
     slot_message = f"{start_time} - {end_time}"
+    
     session_date = get_date(int(session.confirmed_availability.start_time))
     start_time = get_time(int(session.confirmed_availability.start_time))
     end_time = get_time(int(session.confirmed_availability.end_time))
 
     session_time = f"{start_time} - {end_time} IST"
-
+    
     session.is_booked = True
 
     session.status = "booked"
@@ -4220,6 +4520,59 @@ def schedule_session_directly(request, session_id):
             },
             [],  # no bcc
         )
+        event_detail = {
+            "title": f"{SESSION_TYPE_VALUE[session.session_type]} Session",
+            "description": "Session Scheduled",
+            "startDate": session_date,
+            "startTime": start_time,
+            "endDate": session_date,
+            "endTime": end_time,
+        }
+
+        if is_gmail(coachee.email):
+            coachee_user_token = UserToken.objects.get(
+                user_profile__user__username=coachee.email
+            )
+
+        
+            coachee_access_token = coachee_user_token.access_token
+            coachee_access_token = refresh_google_access_token(coachee_user_token)
+            create_google_calendar_event(
+                coachee_access_token,
+                event_detail,
+            )
+        # else:
+        #     coachee_access_token = refresh_microsoft_access_token(coachee_user_token)
+        #     create_microsoft_calendar_event(
+        #         coachee_access_token,
+        #         event_detail,
+        #     )
+        if request.data["user_type"] == "coach":
+            coach = Coach.objects.get(id=request.data["user_id"])
+
+            if is_gmail(coach.email):
+                coach_user_token = UserToken.objects.get(
+                user_profile__user__username=coach.email
+                )
+                coach_access_token = coach_user_token.access_token
+                coach_access_token = refresh_google_access_token(coach_user_token)
+                create_google_calendar_event(
+                    coach_access_token,
+                    event_detail,
+                )
+            # else:
+            #     coach_user_token = UserToken.objects.get(
+            #         user_profile__user__username=coach.email
+            #         )
+            #     coach_access_token = coach_user_token.access_token
+            #     coach_access_token = refresh_microsoft_access_token(coach_user_token)
+            #     create_microsoft_calendar_event(
+            #         coach_access_token,
+            #         event_detail,
+            #     )
+            
+        
+
     return Response({"message": "Session booked successfully."})
 
 
@@ -4546,3 +4899,139 @@ class UpdateInviteesView(APIView):
             return Response(
                 data={"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+@api_view(["GET"])
+def google_oauth(request, user_email):
+    oauth2_endpoint = "https://accounts.google.com/o/oauth2/v2/auth"
+    
+    auth_params = {
+        "client_id": settings.GOOGLE_OAUTH2_CLIENT_ID,
+        "redirect_uri": settings.GOOGLE_OAUTH2_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email",
+        "access_type": "offline",
+        "login_hint": user_email,
+    }
+
+    auth_url = f"{oauth2_endpoint}?{urlencode(auth_params)}"
+
+    return HttpResponseRedirect(auth_url)
+
+
+@api_view(["GET"])
+def google_auth_callback(request):
+    code = request.GET.get("code")
+    
+    if code:
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            "code": code,
+            "client_id": settings.GOOGLE_OAUTH2_CLIENT_ID,
+            "client_secret": settings.GOOGLE_OAUTH2_CLIENT_SECRET,
+            "redirect_uri": settings.GOOGLE_OAUTH2_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        }
+
+        response = requests.post(token_url, data=token_data)
+        token_json = response.json()
+        
+        if "access_token" in token_json and "refresh_token" in token_json:
+            access_token = token_json["access_token"]
+            refresh_token = token_json["refresh_token"]
+            expires_in = token_json["expires_in"]
+            auth_code = code
+            user_info_url = "https://www.googleapis.com/oauth2/v3/userinfo"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            user_info_response = requests.get(user_info_url, headers=headers)
+            
+            if user_info_response.status_code == 200:
+                user_info_data = user_info_response.json()
+
+                user_email = user_info_data.get("email", "")
+
+                user = User.objects.get(username=user_email)
+                user_profile = Profile.objects.get(user=user)
+
+                user_token, created = UserToken.objects.get_or_create(
+                    user_profile=user_profile
+                )
+                user_token.access_token = access_token
+                user_token.refresh_token = refresh_token
+                user_token.access_token_expiry = expires_in
+                user_token.authorization_code = auth_code
+                user_token.save()
+
+            return HttpResponseRedirect("http://localhost:3000/")
+        else:
+            return JsonResponse({"error": "Token exchange failed."}, status=400)
+    else:
+        return JsonResponse(
+            {"error": "Authentication failed. Code not found."}, status=400
+        )
+
+
+@api_view(["GET"])
+def microsoft_auth(request, user_mail_address):
+    oauth2_endpoint = f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize"
+
+    auth_params = {
+    "client_id": settings.MICROSOFT_CLIENT_ID,
+    "response_type": "code",
+    "redirect_uri": settings.MICROSOFT_REDIRECT_URI,
+    "response_mode": "query",
+    "scope": "openid offline_access user.read Calendars.ReadWrite profile email",
+    "state": "shashankmeeraq",
+    "login_hint": user_mail_address,
+}
+
+    auth_url = f"{oauth2_endpoint}?{urlencode(auth_params)}"
+
+    return HttpResponseRedirect(auth_url)
+
+
+@api_view(["GET"])
+def microsoft_callback(request):
+    authorization_code = request.GET.get("code")
+    
+    token_url = f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/token"
+    token_data = {
+        "client_id": settings.MICROSOFT_CLIENT_ID,
+        "scope": "user.read mail.read",
+        "code": authorization_code,
+        "redirect_uri": settings.MICROSOFT_REDIRECT_URI,
+        "grant_type": "authorization_code",
+        "client_secret": settings.MICROSOFT_CLIENT_SECRET,
+    }
+
+    response = requests.post(token_url, data=token_data)
+    token_json = response.json()
+    if "access_token" in token_json and "refresh_token" in token_json:
+        access_token = token_json["access_token"]
+        refresh_token = token_json["refresh_token"]
+        expires_in = token_json["expires_in"]
+        auth_code = authorization_code
+        user_email_url = "https://graph.microsoft.com/email"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        user_email_response = requests.get(user_email_url, headers=headers)
+        
+        if user_email_response.status_code == 200:
+            user_info_data = user_email_response.json()
+
+            user_email = user_info_data.get("email", "")
+
+            user = User.objects.get(username=user_email)
+            user_profile = Profile.objects.get(user=user)
+
+            user_token, created = UserToken.objects.get_or_create(
+                user_profile=user_profile
+            )
+            user_token.access_token = access_token
+            user_token.refresh_token = refresh_token
+            user_token.access_token_expiry = expires_in
+            user_token.authorization_code = auth_code
+            user_token.save()
+        return HttpResponseRedirect("http://localhost:3000/")
+    else:
+        error_json = response.json()
+        return JsonResponse(error_json, status=response.status_code)

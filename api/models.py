@@ -394,3 +394,16 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+    
+
+class UserToken(models.Model):
+    user_profile = models.OneToOneField(Profile, on_delete=models.CASCADE)
+    access_token = models.TextField(blank=True) 
+    refresh_token = models.TextField(blank=True)  
+    access_token_expiry = models.CharField(blank=True,max_length=255) 
+    authorization_code = models.CharField(blank=True,max_length=255)  
+    updated_at = models.DateTimeField(auto_now=True) 
+    created_at = models.DateTimeField(auto_now_add=True) 
+
+    def __str__(self):
+        return self.user_profile.user.username

@@ -216,4 +216,8 @@ urlpatterns = [
     ),
     path("update-invitee/<int:session_request_id>/", UpdateInviteesView.as_view()),
     path("hr/<int:hr_id>/competencies/", views.get_all_competencies_of_hr),
+    path('google/oauth/<str:user_email>/', views.google_oauth, name='google_oauth'),
+    path('google-auth-callback/', views.google_auth_callback, name='google_auth_callback'),
+    path('microsoft/oauth/<str:user_mail_address>/', views.microsoft_auth),
+    path('microsoft-auth-callback/', views.microsoft_callback),
 ]

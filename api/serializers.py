@@ -14,6 +14,7 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    UserToken,
 )
 from django.contrib.auth.models import User
 
@@ -207,4 +208,9 @@ class PendingActionItemSerializer(serializers.ModelSerializer):
 class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
+        fields = '__all__'
+
+class UserTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserToken
         fields = '__all__'
