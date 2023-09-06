@@ -1,6 +1,6 @@
 from django.urls import path, include
 from . import views
-from .views import UpdateInviteesView
+from .views import UpdateInviteesView, SessionCountsForAllLearners
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
@@ -216,4 +216,5 @@ urlpatterns = [
     ),
     path("update-invitee/<int:session_request_id>/", UpdateInviteesView.as_view()),
     path("hr/<int:hr_id>/competencies/", views.get_all_competencies_of_hr),
+    path('coachee-session-counts/', SessionCountsForAllLearners.as_view()),
 ]
