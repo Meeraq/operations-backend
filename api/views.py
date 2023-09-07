@@ -2849,7 +2849,8 @@ def add_learner_to_project(request):
 
 
 def transform_project_structure(sessions):
-    # convert project level project structure to engagement level project structure
+    # convert project level 
+    #  to engagement level project structure
     # argument
     # sessions - array of objects where object has price, no. of sessions, session type, session durations
     # returns:
@@ -4643,8 +4644,6 @@ class UpdateInviteesView(APIView):
 
 
 
-
-
 @api_view(["DELETE"])
 def remove_coach_from_project(request, project_id):
     try:
@@ -4662,30 +4661,27 @@ def remove_coach_from_project(request, project_id):
 
     engagements_with_coach = Engagement.objects.filter(project=project, coach=coach)
 
-    coach_sessions = SessionRequestCaas.objects.filter(
-        project=project, coach=coach, is_booked=True
-    )
-
-    for session in coach_sessions:
-        session.is_booked = False
-        session.coach = None
-        session.status = "pending"  
-        session.save()
-
     for engagement in engagements_with_coach:
+        sessions = SessionRequestCaas.objects.filter(
+            project=project,
+            learner=engagement.learner,
+ 
+        )
+        for session in sessions:
+            session.status = "pending"
+            session.coach = None
+            session.invitees=[]
+            session.availibility.clear()
+            session.confirmed_availability = None
+            session.is_booked= False
+            session.reschedule_request = []
+            session.is_archive= False
+            session.save()
+
         engagement.coach = None
         engagement.save()
 
-    requested_sessions = SessionRequestCaas.objects.filter(
-        project=project, coach=coach, status="requested"
-    )
-
-    for session in requested_sessions:
-        session.status = "pending"  
-        session.save()
-
     for coach_status in project.coaches_status.all():
-        print(coach_status, "coach_status")
         if coach_status.coach.id == coach_id:
             project.coaches_status.remove(coach_status)
             project.coaches.remove(coach)
@@ -4693,10 +4689,10 @@ def remove_coach_from_project(request, project_id):
 
             return Response(
                 {"message": "Coach has been removed from the project."},
-                status=201,
+                status=status.HTTP_201_CREATED,
             )
 
     return Response(
         {"message": "Coach is not associated with the project"},
-        status=400,
+        status=status.HTTP_400_BAD_REQUEST,
     )
