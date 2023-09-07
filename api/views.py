@@ -3546,8 +3546,17 @@ def get_engagements_of_hr(request, user_id):
 
 
 class SessionCountsForAllLearners(APIView):
-    def get(self, request, format=None):
+    def get(self, request,user_type, user_id, format=None):
         try:
+            
+            if user_type == "pmo":
+                learners = Learner.objects.all()
+            elif user_type == "coach":
+                learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+            elif user_type == "hr":
+                learners = Learner.objects.filter(
+                    engagement__project__hr__id=user_id
+                ).distinct()
             engagements = Engagement.objects.all()
 
             learner_session_counts = {}
@@ -3565,13 +3574,14 @@ class SessionCountsForAllLearners(APIView):
                     is_archive=False,
                 ).count()
 
-                if learner_id not in learner_session_counts:
-                    learner_data = {
-                        "learner_id": learner_id,
-                        "completed_sessions_count": completed_sessions_count,
-                        "total_sessions_count": total_sessions_count,
-                    }
-                    learner_session_counts[learner_id] = learner_data
+                if learner_id in learners.values_list('id', flat=True):
+                    if learner_id not in learner_session_counts:
+                        learner_data = {
+                            "learner_id": learner_id,
+                            "completed_sessions_count": completed_sessions_count,
+                            "total_sessions_count": total_sessions_count,
+                        }
+                        learner_session_counts[learner_id] = learner_data
 
             learner_session_counts_list = list(learner_session_counts.values())
 

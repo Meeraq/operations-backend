@@ -216,5 +216,5 @@ urlpatterns = [
     ),
     path("update-invitee/<int:session_request_id>/", UpdateInviteesView.as_view()),
     path("hr/<int:hr_id>/competencies/", views.get_all_competencies_of_hr),
-    path('coachee-session-counts/', SessionCountsForAllLearners.as_view()),
+    path('coachee-session-counts/<str:user_type>/<int:user_id>/', SessionCountsForAllLearners.as_view()),
 ]
