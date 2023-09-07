@@ -217,4 +217,5 @@ urlpatterns = [
     path("update-invitee/<int:session_request_id>/", UpdateInviteesView.as_view()),
     path("hr/<int:hr_id>/competencies/", views.get_all_competencies_of_hr),
     path("coach/<int:coach_id>/sessions/", views.coach_session_list),
+    path("projects/<int:project_id>/coaches/", views.remove_coach_from_project),
 ]

@@ -2857,7 +2857,8 @@ def add_learner_to_project(request):
 
 
 def transform_project_structure(sessions):
-    # convert project level project structure to engagement level project structure
+    # convert project level
+    #  to engagement level project structure
     # argument
     # sessions - array of objects where object has price, no. of sessions, session type, session durations
     # returns:
@@ -4380,19 +4381,17 @@ def get_upcoming_session_count(request, hr_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     # Get the start and end of the current month
-    current_month = timezone.now().replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0
-    )
-    current_month_timestamp = int(current_month.timestamp() * 1000)
-    next_month = current_month.replace(month=current_month.month + 1, day=1)
-    if current_month.month == 12:  # Handle December case
-        next_month = next_month.replace(year=current_month.year + 1)
-    next_month_timestamp = int(next_month.timestamp() * 1000)
+    # current_month = timezone.now().replace(
+    #     day=1, hour=0, minute=0, second=0, microsecond=0
+    # )
+    # current_month_timestamp = int(current_month.timestamp() * 1000)
+    # next_month = current_month.replace(month=current_month.month + 1, day=1)
+    # if current_month.month == 12:  # Handle December case
+    #     next_month = next_month.replace(year=current_month.year + 1)
+    # next_month_timestamp = int(next_month.timestamp() * 1000)
     session_requests = SessionRequestCaas.objects.filter(
         Q(is_booked=True),
         Q(confirmed_availability__end_time__gt=current_time),
-        Q(confirmed_availability__end_time__gte=current_month_timestamp),
-        Q(confirmed_availability__end_time__lt=next_month_timestamp),
         Q(project__hr__id=hr_id),
         Q(is_archive=False),
         ~Q(status="completed"),
@@ -4427,7 +4426,7 @@ def get_requests_count(request, hr_id):
 @api_view(["GET"])
 def get_completed_sessions_count(request, hr_id):
     session_requests = SessionRequestCaas.objects.filter(
-        ~Q(session_type="interview") & Q(project__hr__id=hr_id) & Q(status="completed")
+        Q(project__hr__id=hr_id) & Q(status="completed")
     )
     sessions_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
@@ -4652,3 +4651,56 @@ class UpdateInviteesView(APIView):
 #     return Response(serializer_data, status=status.HTTP_200_OK)
 
 
+@api_view(["DELETE"])
+def remove_coach_from_project(request, project_id):
+    try:
+        project = Project.objects.get(id=project_id)
+        coach_id = request.data.get("coachIdToDelete")
+        coach = Coach.objects.get(id=coach_id)
+    except Project.DoesNotExist:
+        return Response(
+            {"message": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Coach.DoesNotExist:
+        return Response(
+            {"message": "Coach not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    engagements_with_coach = Engagement.objects.filter(project=project, coach=coach)
+
+    for engagement in engagements_with_coach:
+        sessions = SessionRequestCaas.objects.filter(
+            project=project,
+            learner=engagement.learner,
+        )
+        for session in sessions:
+            session.status = "pending"
+            session.hr = None
+            session.pmo = None
+            session.coach = None
+            session.invitees = []
+            session.availibility.clear()
+            session.confirmed_availability = None
+            session.is_booked = False
+            session.reschedule_request = []
+            session.is_archive = False
+            session.save()
+
+        engagement.coach = None
+        engagement.save()
+
+    for coach_status in project.coaches_status.all():
+        if coach_status.coach.id == coach_id:
+            project.coaches_status.remove(coach_status)
+            project.coaches.remove(coach)
+            project.save()
+
+            return Response(
+                {"message": "Coach has been removed from the project."},
+                status=status.HTTP_201_CREATED,
+            )
+
+    return Response(
+        {"message": "Coach is not associated with the project"},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
