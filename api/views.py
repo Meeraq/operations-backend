@@ -2849,7 +2849,7 @@ def add_learner_to_project(request):
 
 
 def transform_project_structure(sessions):
-    # convert project level 
+    # convert project level
     #  to engagement level project structure
     # argument
     # sessions - array of objects where object has price, no. of sessions, session type, session durations
@@ -4643,7 +4643,6 @@ class UpdateInviteesView(APIView):
 #     return Response(serializer_data, status=status.HTTP_200_OK)
 
 
-
 @api_view(["DELETE"])
 def remove_coach_from_project(request, project_id):
     try:
@@ -4665,17 +4664,18 @@ def remove_coach_from_project(request, project_id):
         sessions = SessionRequestCaas.objects.filter(
             project=project,
             learner=engagement.learner,
- 
         )
         for session in sessions:
             session.status = "pending"
+            session.hr = None
+            session.pmo = None
             session.coach = None
-            session.invitees=[]
+            session.invitees = []
             session.availibility.clear()
             session.confirmed_availability = None
-            session.is_booked= False
+            session.is_booked = False
             session.reschedule_request = []
-            session.is_archive= False
+            session.is_archive = False
             session.save()
 
         engagement.coach = None
