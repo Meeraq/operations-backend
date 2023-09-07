@@ -210,9 +210,3 @@ class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
         fields = "__all__"
-
-
-class SessionsDepthTwoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SessionRequestCaas
-        fields = "__all__" 

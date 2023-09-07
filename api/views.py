@@ -16,7 +16,6 @@ from .serializers import (
     SessionRequestCaasSerializer,
     CoachDepthOneSerializer,
     ProjectDepthTwoSerializer,
-    SessionsDepthTwoSerializer,
     HrSerializer,
     OrganisationSerializer,
     LearnerDepthOneSerializer,
@@ -1459,7 +1458,7 @@ def coach_session_list(request, coach_id):
 
     # Fetch sessions related to the coach
     sessions = SessionRequestCaas.objects.filter(coach_id=coach_id)
-    session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
+    session_serializer = SessionRequestCaasSerializer(sessions, many=True)
 
     # Group sessions by project ID
     sessions_dict = {}
