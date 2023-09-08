@@ -1416,6 +1416,64 @@ def get_projects_and_sessions_by_coach(request, coach_id):
     return Response({"projects": project_serializer.data})
 
 
+# @api_view(["GET"])
+# def coach_session_list(request, coach_id):
+#     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
+#     project_serializer = ProjectDepthTwoSerializer(projects, many=True)
+
+#     # Fetch sessions related to the coach
+#     sessions = SessionRequestCaas.objects.filter(coach_id=coach_id)
+#     session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
+
+#     # Group sessions by project ID
+#     sessions_dict = {}
+#     for session in session_serializer.data:
+#         project_id = session['project']['id']
+#         if project_id in sessions_dict:
+#             sessions_dict[project_id].append(session)
+#         else:
+#             sessions_dict[project_id] = [session]
+
+#     # Add the session data to the projects
+#     for project_data in project_serializer.data:
+#         project_id = project_data['id']
+#         if project_id in sessions_dict:
+#             project_data['sessions'] = sessions_dict[project_id]
+#         else:
+#             project_data['sessions'] = []
+
+#     return Response({"projects": project_serializer.data})
+
+
+@api_view(["GET"])
+def coach_session_list(request, coach_id):
+    projects = Project.objects.filter(coaches_status__coach__id=coach_id)
+    project_serializer = ProjectDepthTwoSerializer(projects, many=True)
+
+    # Fetch sessions related to the coach
+    sessions = SessionRequestCaas.objects.filter(coach_id=coach_id)
+    session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
+
+    # Group sessions by project ID
+    sessions_dict = {}
+    for session in session_serializer.data:
+        project_id = session["project"]
+        if project_id in sessions_dict:
+            sessions_dict[project_id].append(session)
+        else:
+            sessions_dict[project_id] = [session]
+
+    # Add the session data to the projects
+    for project_data in project_serializer.data:
+        project_id = project_data["id"]
+        if project_id in sessions_dict:
+            project_data["sessions"] = sessions_dict[project_id]
+        else:
+            project_data["sessions"] = []
+
+    return Response({"projects": project_serializer.data})
+
+
 # @api_view(['POST'])
 # def otp_generation_hr(request):
 #     try:
@@ -2791,7 +2849,8 @@ def add_learner_to_project(request):
 
 
 def transform_project_structure(sessions):
-    # convert project level project structure to engagement level project structure
+    # convert project level
+    #  to engagement level project structure
     # argument
     # sessions - array of objects where object has price, no. of sessions, session type, session durations
     # returns:
@@ -4372,12 +4431,12 @@ def get_upcoming_session_count(request, hr_id):
     #     next_month = next_month.replace(year=current_month.year + 1)
     # next_month_timestamp = int(next_month.timestamp() * 1000)
     session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__gt=current_time),
-            Q(project__hr__id=hr_id),
-            Q(is_archive=False),
-            ~Q(status="completed"),
-        )
+        Q(is_booked=True),
+        Q(confirmed_availability__end_time__gt=current_time),
+        Q(project__hr__id=hr_id),
+        Q(is_archive=False),
+        ~Q(status="completed"),
+    )
     upcoming_session_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(
@@ -4408,7 +4467,7 @@ def get_requests_count(request, hr_id):
 @api_view(["GET"])
 def get_completed_sessions_count(request, hr_id):
     session_requests = SessionRequestCaas.objects.filter(
-       Q(project__hr__id=hr_id) & Q(status="completed")
+        Q(project__hr__id=hr_id) & Q(status="completed")
     )
     sessions_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
@@ -4593,3 +4652,96 @@ class UpdateInviteesView(APIView):
             return Response(
                 data={"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+# @api_view(["GET"])
+# def coach_session_list(request, coach_id):
+#     try:
+#         coach = Coach.objects.get(id=coach_id)
+#     except Coach.DoesNotExist:
+#         return Response({"error": "Coach not found"}, status=status.HTTP_404_NOT_FOUND)
+
+#     sessions = SessionRequestCaas.objects.filter(coach=coach)
+#     serializer = SessionRequestCaasSerializer(sessions, many=True)
+
+#     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# @api_view(["GET"])
+# def coach_session_list(request, coach_id):
+#     try:
+#         coach = Coach.objects.get(id=coach_id)
+#     except Coach.DoesNotExist:
+#         return Response({"error": "Coach not found"}, status=status.HTTP_404_NOT_FOUND)
+
+#     sessions = SessionRequestCaas.objects.filter(coach=coach)
+#     serializer_data = []
+
+#     for session in sessions:
+#         print("4575", session)
+#         session_data = {
+#             "session_id": session.id,
+#             "session_status": session.status,
+#             "project_id": session.project.id,
+#             "project_name": session.project.name,
+#             "organisation_name": session.project.organisation.name,
+#             # Include other relevant project details here
+#         }
+#         serializer_data.append(session_data)
+
+#     return Response(serializer_data, status=status.HTTP_200_OK)
+
+
+@api_view(["DELETE"])
+def remove_coach_from_project(request, project_id):
+    try:
+        project = Project.objects.get(id=project_id)
+        coach_id = request.data.get("coachIdToDelete")
+        coach = Coach.objects.get(id=coach_id)
+    except Project.DoesNotExist:
+        return Response(
+            {"message": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Coach.DoesNotExist:
+        return Response(
+            {"message": "Coach not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    engagements_with_coach = Engagement.objects.filter(project=project, coach=coach)
+
+    for engagement in engagements_with_coach:
+        sessions = SessionRequestCaas.objects.filter(
+            project=project,
+            learner=engagement.learner,
+        )
+        for session in sessions:
+            session.status = "pending"
+            session.hr = None
+            session.pmo = None
+            session.coach = None
+            session.invitees = []
+            session.availibility.clear()
+            session.confirmed_availability = None
+            session.is_booked = False
+            session.reschedule_request = []
+            session.is_archive = False
+            session.save()
+
+        engagement.coach = None
+        engagement.save()
+
+    for coach_status in project.coaches_status.all():
+        if coach_status.coach.id == coach_id:
+            project.coaches_status.remove(coach_status)
+            project.coaches.remove(coach)
+            project.save()
+
+            return Response(
+                {"message": "Coach has been removed from the project."},
+                status=status.HTTP_201_CREATED,
+            )
+
+    return Response(
+        {"message": "Coach is not associated with the project"},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
