@@ -3660,6 +3660,26 @@ def get_session_requests_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
+def get_session_pending_of_user(request, user_type, user_id):
+    session_requests = []
+    if user_type == "pmo":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(confirmed_availability=None)
+            & Q(status="pending")
+            & ~Q(session_type="interview"),
+        )
+        if user_type == "hr":
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(confirmed_availability=None)
+                & Q(project__hr__id=user_id)
+                & Q(status="pending")
+            )
+
+    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
 def get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -3739,6 +3759,7 @@ def get_past_sessions_of_user(request, user_type, user_id):
 
 @api_view(["POST"])
 def edit_session_status(request, session_id):
+    time_arr = date.today
     try:
         session_request = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
@@ -3747,6 +3768,8 @@ def edit_session_status(request, session_id):
     if not new_status:
         return Response({"error": "Status field is required."}, status=400)
     session_request.status = new_status
+    current_time = datetime.now()
+    session_request.status_updated_at = current_time
     session_request.save()
     return Response({"message": "Session status updated successfully."}, status=200)
 

@@ -313,7 +313,8 @@ class SessionRequestCaas(models.Model):
     reschedule_request = models.JSONField(default=list, blank=True)
     status = models.CharField(max_length=30, default="", blank=True)
     session_number = models.IntegerField(blank=True, default=None, null=True)
-    session_duration = models.IntegerField(blank=True, default=None, null=True)
+    session_duration = models.DurationField(blank=True, null=True)
+    status_updated_at = models.DateTimeField(blank=True, null=True)
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
