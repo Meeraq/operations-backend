@@ -3637,7 +3637,7 @@ class SessionCountsForAllLearners(APIView):
                             "total_sessions_count": total_sessions_count,
                         }
                         learner_session_counts[learner_id] = learner_data
-            print(learner_session_counts)
+            
             return Response(learner_session_counts, status=status.HTTP_200_OK)
 
         except ObjectDoesNotExist as e:
