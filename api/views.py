@@ -3604,6 +3604,48 @@ def get_engagements_of_hr(request, user_id):
     return Response(engagements_data, status=200)
 
 
+class SessionCountsForAllLearners(APIView):
+    def get(self, request, user_type, user_id, format=None):
+        try:
+            if user_type == "pmo":
+                learners = Learner.objects.all()
+            elif user_type == "coach":
+                learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+            elif user_type == "hr":
+                learners = Learner.objects.filter(engagement__project__hr__id=user_id).distinct()
+            
+            engagements = Engagement.objects.all()
+            learner_session_counts = {}
+
+            for engagement in engagements:
+                learner_id = engagement.learner.id
+
+                completed_sessions_count = SessionRequestCaas.objects.filter(
+                    status="completed",
+                    learner__id=learner_id,
+                ).count()
+
+                total_sessions_count = SessionRequestCaas.objects.filter(
+                    learner__id=learner_id,
+                    is_archive=False,
+                ).count()
+
+                if learner_id in learners.values_list('id', flat=True):
+                    if learner_id not in learner_session_counts:
+                        learner_data = {
+                            "completed_sessions_count": completed_sessions_count,
+                            "total_sessions_count": total_sessions_count,
+                        }
+                        learner_session_counts[learner_id] = learner_data
+            
+            return Response(learner_session_counts, status=status.HTTP_200_OK)
+
+        except ObjectDoesNotExist as e:
+            return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(["GET"])
 def get_learner_engagement_of_project(request, project_id, learner_id):
     engagement = Engagement.objects.get(learner__id=learner_id, project__id=project_id)
