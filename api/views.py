@@ -3671,7 +3671,6 @@ def get_session_requests_of_user(request, user_type, user_id):
 
 @api_view(["GET"])
 def get_session_pending_of_user(request, user_type, user_id):
-    current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
@@ -3690,7 +3689,6 @@ def get_session_pending_of_user(request, user_type, user_id):
         print(session_requests, "3691")
 
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
-    # print(session_requests, "3697")
     return Response(serializer.data, status=200)
 
 
