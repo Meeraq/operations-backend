@@ -3334,11 +3334,29 @@ def get_notifications(request, user_id):
     return Response(serializer.data)
 
 
+# @api_view(["PUT"])
+# def mark_notifications_as_read(request):
+#     notifications = Notification.objects.filter(
+#         read_status=False, user__id=request.data["user_id"]
+#     )
+#     notifications.update(read_status=True)
+#     return Response("Notifications marked as read.")
+
+
 @api_view(["PUT"])
 def mark_notifications_as_read(request):
+    user_id = request.data.get("user_id")
+    notification_ids = request.data.get("notification_ids")
+
+    if user_id is None or notification_ids is None:
+        return Response("Both user_id and notification_ids are required.", status=400)
+
+    print("abcd")
+
     notifications = Notification.objects.filter(
-        read_status=False, user__id=request.data["user_id"]
+        id=notification_ids, user__id=user_id, read_status=False
     )
+
     notifications.update(read_status=True)
     return Response("Notifications marked as read.")
 
@@ -4323,12 +4341,12 @@ def get_upcoming_session_count(request, hr_id):
     #     next_month = next_month.replace(year=current_month.year + 1)
     # next_month_timestamp = int(next_month.timestamp() * 1000)
     session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__gt=current_time),
-            Q(project__hr__id=hr_id),
-            Q(is_archive=False),
-            ~Q(status="completed"),
-        )
+        Q(is_booked=True),
+        Q(confirmed_availability__end_time__gt=current_time),
+        Q(project__hr__id=hr_id),
+        Q(is_archive=False),
+        ~Q(status="completed"),
+    )
     upcoming_session_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(
@@ -4359,7 +4377,7 @@ def get_requests_count(request, hr_id):
 @api_view(["GET"])
 def get_completed_sessions_count(request, hr_id):
     session_requests = SessionRequestCaas.objects.filter(
-       Q(project__hr__id=hr_id) & Q(status="completed")
+        Q(project__hr__id=hr_id) & Q(status="completed")
     )
     sessions_count = session_requests.count()
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
