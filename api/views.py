@@ -2857,22 +2857,31 @@ def transform_project_structure(sessions):
     # sessions - array of objects where object has - session type, session name (session type + n (numbered)) , session duration, status (pending)
     session_counts = {}
     transformed_sessions = []
+    billable_session_number = 0
 
     for session in sessions:
         session_type = session["session_type"]
         session_duration = session["session_duration"]
+        is_billable = session["billable"]
         if session_type not in session_counts:
             session_counts[session_type] = 1
 
         for i in range(session["no_of_sessions"]):
             session_name = f"{session_type}_{session_counts[session_type]}"
+            if is_billable:
+                billable_session_number = billable_session_number + 1
+
             transformed_session = {
                 "session_name": session_name,
                 "session_number": session_counts[session_type],
                 "session_type": session_type,
                 "session_duration": session_duration,
+                "billable_session_number": billable_session_number
+                if is_billable
+                else None,
                 "status": "pending",
             }
+            print(transformed_session)
             transformed_sessions.append(transformed_session)
             session_counts[session_type] += 1
 
@@ -2894,6 +2903,7 @@ def create_engagement(learner, project):
                 session_duration=session["session_duration"],
                 session_number=session["session_number"],
                 session_type=session["session_type"],
+                billable_session_number=session["billable_session_number"],
                 status="pending",
                 order=index + 1,
             )
@@ -3702,6 +3712,28 @@ def get_session_requests_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
+def get_session_pending_of_user(request, user_type, user_id):
+    session_requests = []
+    if user_type == "pmo":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(confirmed_availability=None)
+            & Q(status="pending")
+            & ~Q(session_type="interview"),
+        )
+    if user_type == "hr":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(confirmed_availability=None),
+            Q(project__hr__id=user_id),
+            Q(status="pending"),
+            Q(is_archive=False),
+            ~Q(session_type="interview"),
+        )
+
+    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
 def get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -3789,6 +3821,8 @@ def edit_session_status(request, session_id):
     if not new_status:
         return Response({"error": "Status field is required."}, status=400)
     session_request.status = new_status
+    current_time = datetime.now()
+    session_request.status_updated_at = current_time
     session_request.save()
     return Response({"message": "Session status updated successfully."}, status=200)
 

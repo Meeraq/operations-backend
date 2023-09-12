@@ -314,6 +314,8 @@ class SessionRequestCaas(models.Model):
     status = models.CharField(max_length=30, default="", blank=True)
     session_number = models.IntegerField(blank=True, default=None, null=True)
     session_duration = models.IntegerField(blank=True, default=None, null=True)
+    status_updated_at = models.DateTimeField(blank=True, null=True, default=None)
+    billable_session_number = models.IntegerField(blank=True, default=None, null=True)
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
