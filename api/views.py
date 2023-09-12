@@ -2857,22 +2857,31 @@ def transform_project_structure(sessions):
     # sessions - array of objects where object has - session type, session name (session type + n (numbered)) , session duration, status (pending)
     session_counts = {}
     transformed_sessions = []
+    billable_session_number = 0
 
     for session in sessions:
         session_type = session["session_type"]
         session_duration = session["session_duration"]
+        is_billable = session["billable"]
         if session_type not in session_counts:
             session_counts[session_type] = 1
 
         for i in range(session["no_of_sessions"]):
             session_name = f"{session_type}_{session_counts[session_type]}"
+            if is_billable:
+                billable_session_number = billable_session_number + 1
+
             transformed_session = {
                 "session_name": session_name,
                 "session_number": session_counts[session_type],
                 "session_type": session_type,
                 "session_duration": session_duration,
+                "billable_session_number": billable_session_number
+                if is_billable
+                else None,
                 "status": "pending",
             }
+            print(transformed_session)
             transformed_sessions.append(transformed_session)
             session_counts[session_type] += 1
 
@@ -2894,6 +2903,7 @@ def create_engagement(learner, project):
                 session_duration=session["session_duration"],
                 session_number=session["session_number"],
                 session_type=session["session_type"],
+                billable_session_number=session["billable_session_number"],
                 status="pending",
                 order=index + 1,
             )
@@ -3610,10 +3620,14 @@ class SessionCountsForAllLearners(APIView):
             if user_type == "pmo":
                 learners = Learner.objects.all()
             elif user_type == "coach":
-                learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+                learners = Learner.objects.filter(
+                    engagement__coach__id=user_id
+                ).distinct()
             elif user_type == "hr":
-                learners = Learner.objects.filter(engagement__project__hr__id=user_id).distinct()
-            
+                learners = Learner.objects.filter(
+                    engagement__project__hr__id=user_id
+                ).distinct()
+
             engagements = Engagement.objects.all()
             learner_session_counts = {}
 
@@ -3630,20 +3644,22 @@ class SessionCountsForAllLearners(APIView):
                     is_archive=False,
                 ).count()
 
-                if learner_id in learners.values_list('id', flat=True):
+                if learner_id in learners.values_list("id", flat=True):
                     if learner_id not in learner_session_counts:
                         learner_data = {
                             "completed_sessions_count": completed_sessions_count,
                             "total_sessions_count": total_sessions_count,
                         }
                         learner_session_counts[learner_id] = learner_data
-            
+
             return Response(learner_session_counts, status=status.HTTP_200_OK)
 
         except ObjectDoesNotExist as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 @api_view(["GET"])
@@ -3697,6 +3713,28 @@ def get_session_requests_of_user(request, user_type, user_id):
             & Q(project__hr__id=user_id)
             & ~Q(status="pending")
         )
+    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+def get_session_pending_of_user(request, user_type, user_id):
+    session_requests = []
+    if user_type == "pmo":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(confirmed_availability=None)
+            & Q(status="pending")
+            & ~Q(session_type="interview"),
+        )
+    if user_type == "hr":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(confirmed_availability=None),
+            Q(project__hr__id=user_id),
+            Q(status="pending"),
+            Q(is_archive=False),
+            ~Q(session_type="interview"),
+        )
+
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
 
@@ -3789,6 +3827,8 @@ def edit_session_status(request, session_id):
     if not new_status:
         return Response({"error": "Status field is required."}, status=400)
     session_request.status = new_status
+    current_time = datetime.now()
+    session_request.status_updated_at = current_time
     session_request.save()
     return Response({"message": "Session status updated successfully."}, status=200)
 
@@ -4582,6 +4622,7 @@ def add_past_session(request, session_id):
 
     session.status = "completed"
     session.invitees = get_trimmed_emails(request.data.get("invitees", []))
+    session.status_updated_at = datetime.now()
     session.save()
     return Response({"message": "Session booked successfully."})
 
