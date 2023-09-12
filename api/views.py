@@ -3686,7 +3686,6 @@ def get_session_pending_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(session_type="interview"),
         )
-        print(session_requests, "3691")
 
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
@@ -3772,7 +3771,6 @@ def get_past_sessions_of_user(request, user_type, user_id):
 
 @api_view(["POST"])
 def edit_session_status(request, session_id):
-    time_arr = date.today
     try:
         session_request = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
