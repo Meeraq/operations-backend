@@ -3620,10 +3620,14 @@ class SessionCountsForAllLearners(APIView):
             if user_type == "pmo":
                 learners = Learner.objects.all()
             elif user_type == "coach":
-                learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+                learners = Learner.objects.filter(
+                    engagement__coach__id=user_id
+                ).distinct()
             elif user_type == "hr":
-                learners = Learner.objects.filter(engagement__project__hr__id=user_id).distinct()
-            
+                learners = Learner.objects.filter(
+                    engagement__project__hr__id=user_id
+                ).distinct()
+
             engagements = Engagement.objects.all()
             learner_session_counts = {}
 
@@ -3640,20 +3644,22 @@ class SessionCountsForAllLearners(APIView):
                     is_archive=False,
                 ).count()
 
-                if learner_id in learners.values_list('id', flat=True):
+                if learner_id in learners.values_list("id", flat=True):
                     if learner_id not in learner_session_counts:
                         learner_data = {
                             "completed_sessions_count": completed_sessions_count,
                             "total_sessions_count": total_sessions_count,
                         }
                         learner_session_counts[learner_id] = learner_data
-            
+
             return Response(learner_session_counts, status=status.HTTP_200_OK)
 
         except ObjectDoesNotExist as e:
             return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 @api_view(["GET"])
@@ -4616,6 +4622,7 @@ def add_past_session(request, session_id):
 
     session.status = "completed"
     session.invitees = get_trimmed_emails(request.data.get("invitees", []))
+    session.status_updated_at = datetime.now()
     session.save()
     return Response({"message": "Session booked successfully."})
 
