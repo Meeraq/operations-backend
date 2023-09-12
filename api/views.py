@@ -3636,11 +3636,14 @@ class SessionCountsForAllLearners(APIView):
 
                 completed_sessions_count = SessionRequestCaas.objects.filter(
                     status="completed",
+                    billable_session_number__isnull=False, 
                     learner__id=learner_id,
+                    is_archive=False,
                 ).count()
 
                 total_sessions_count = SessionRequestCaas.objects.filter(
                     learner__id=learner_id,
+                    billable_session_number__isnull=False, 
                     is_archive=False,
                 ).count()
 
