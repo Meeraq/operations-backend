@@ -233,6 +233,7 @@ class Project(models.Model):
     coach_fees_per_hour = models.IntegerField(default=0, blank=True)
     approx_coachee = models.TextField(blank=True)
     frequency_of_session = models.TextField(blank=True)
+    project_description = models.CharField(max_length=255, blank=True) 
 
     class Meta:
         ordering = ["-created_at"]

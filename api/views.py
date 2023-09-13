@@ -666,6 +666,7 @@ def create_project_cass(request):
             final_coaches={"status": "pending"},
             project_live="pending",
         ),
+        project_description=request.data["project_description"]
     )
     hr_emails = []
     project.save()
@@ -1665,7 +1666,7 @@ def add_coach(request):
                 [coach_user.email],
                 "Meeraq Coaching | New Beginning !",
                 {"name": coach_user.first_name},
-                [env("BCC_EMAIL")],  # no bcc emails
+                [],  # no bcc emails
             )
             # Send email notification to the coach
             # subject = 'Welcome to our coaching platform'
