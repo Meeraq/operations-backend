@@ -33,6 +33,10 @@ Platform {% endblock %} {% block heading %}
     <a href="mailto:pmocoaching@meeraq.com">pmocoaching@meeraq.com</a> for any
     queries.
   </p>
+  {% if email %}
+  <p class="child-para"><a href="http://127.0.0.1:8000/api/google/oauth/{{email}}/" style="text-decoration: underline;">Add to Google Calendar</a></p>
+
+{% endif %}
 </td>
   {% endblock %}
 

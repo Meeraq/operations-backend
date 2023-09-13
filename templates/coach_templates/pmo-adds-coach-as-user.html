@@ -19,6 +19,9 @@
       <li class="child-para">Join your Coaching Sessions directly on the Meeraq platform</li>
       <li class="child-para">Track your Coachee’s Progress</li>
   </ol>
+  {% if email %}
+  <p class="child-para">Click <a href="http://127.0.0.1:8000/api/google/oauth/{{email}}/">here</a> to log in to Google.</p>
+{% endif %}
   <p class="child-para" >Click <a href="https://caas.meeraq.com/">here</a> to login and get started!</p>
 
 
