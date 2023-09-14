@@ -4785,6 +4785,74 @@ def remove_coach_from_project(request, project_id):
         status=status.HTTP_400_BAD_REQUEST,
     )
 
+
+
+
+class AddRegisteredCoach(APIView):
+    def post(self, request, *args, **kwargs):
+        # Get data from request
+        print(request.data)
+        first_name = request.data.get("first_name")
+        last_name = request.data.get("last_name")
+        email = request.data.get("email")
+        phone = request.data.get("phone")
+        is_approved= request.data.get("is_approved")
+
+        if not all([first_name, last_name, email, phone]):
+            return Response({"error": "All required fields must be provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Create the Django User
+            if Coach.objects.filter(email=email).exists():
+                return Response({"error": "User with this email already exists."}, status=status.HTTP_400_BAD_REQUEST)
+
+            with transaction.atomic():
+                temp_password = "".join(
+                    random.choices(
+                        string.ascii_uppercase + string.ascii_lowercase + string.digits, k=8
+                    )
+                )
+                user = User.objects.create_user(
+                    username=email, password=temp_password, email=email
+                )
+
+                # Create the Coach Profile linked to the User
+                coach_profile = Profile.objects.create(user=user, type="coach")
+
+                # Create the Coach User using the Profile
+                coach_user = Coach.objects.create(
+                    user=coach_profile,
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=email,
+                    phone=phone,
+                    is_approved=is_approved,
+                )
+
+                # Approve coach
+                coach = Coach.objects.get(id=coach_user.id)
+                # Change the is_approved field to True
+                coach.is_approved = False
+                coach.save()
+                coach_serializer = CoachSerializer(coach)
+                print("coach Saved",coach)
+            return Response({"coach": coach_serializer.data})
+
+        except IntegrityError as e:
+            print(e)
+            return Response(
+                {"error": "A user with this email already exists."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        except Exception as e:
+            # Return error response if any other exception occurs
+            print(e)
+            return Response(
+                {"error": "An error occurred while registering."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+            
+
 @api_view(["GET"])
 def get_registered_coaches(request):
     try:
