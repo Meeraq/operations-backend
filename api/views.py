@@ -398,11 +398,12 @@ def coach_signup(request):
 
 
 @api_view(["PUT"])
-def approve_coach(request, coach_id):
+def approve_coach(request):
     try:
         # Get the Coach object
-        _mysql.connection.query(self, query)
-        coach = Coach.objects.get(id=coach_id)
+        unapproved_coach = request.data["coach"]
+        # 
+        coach = Coach.objects.get(id=unapproved_coach["id"])
 
         # Change the is_approved field to True
         coach.is_approved = True
@@ -455,8 +456,9 @@ def update_coach_profile(request, coach_id):
 @api_view(["GET"])
 def get_coaches(request):
     try:
+        
         # Get all the Coach objects
-        coaches = Coach.objects.all()
+        coaches =  Coach.objects.filter(is_approved=True)
 
         # Serialize the Coach objects
         serializer = CoachSerializer(coaches, many=True)
@@ -4782,3 +4784,19 @@ def remove_coach_from_project(request, project_id):
         {"message": "Coach is not associated with the project"},
         status=status.HTTP_400_BAD_REQUEST,
     )
+
+@api_view(["GET"])
+def get_registered_coaches(request):
+    try:
+        # Filter coaches where isapproved is False
+        unapproved_coaches = Coach.objects.filter(is_approved=False)
+
+        # Serialize the unapproved coaches
+        serializer = CoachSerializer(unapproved_coaches, many=True)
+
+        # Return the serialized unapproved coaches as the response
+        return Response(serializer.data, status=200)
+
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({"error": str(e)}, status=500)

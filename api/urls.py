@@ -6,7 +6,7 @@ urlpatterns = [
     path("pmos/", views.create_pmo),
     path("coaches/", views.coach_signup),
     path("coaches/all/", views.get_coaches),
-    path("coaches/<int:coach_id>/approve/", views.approve_coach),
+    path("coaches/approve/", views.approve_coach),
     path("pmo-login/", views.pmo_login, name="pmo-login"),
     path("coach-login/", views.coach_login, name="coach-login"),
     path(
@@ -226,4 +226,5 @@ urlpatterns = [
         "coachee-session-counts/<str:user_type>/<int:user_id>/",
         SessionCountsForAllLearners.as_view(),
     ),
+    path("get-registered-coaches/", views.get_registered_coaches),
 ]
