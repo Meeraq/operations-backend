@@ -1579,7 +1579,19 @@ def add_coach(request):
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
-
+    internal_coach = json.loads(request.data["internal_coach"])
+    print(internal_coach, "internal coach")
+    organization_of_coach = request.data.get("organization_of_coach")
+    print(organization_of_coach, "organization of coach")
+    reason_for_inactive = request.data.get("reason_for_inactive")
+    print(reason_for_inactive, "reason")
+    client_companies = json.loads(request.data["client_companies"])
+    print(client_companies, "client companies")
+    education_pic = request.data.get("education_pic", None)
+    print(education_pic, "education pic")
+    educational_qualification = json.loads(request.data["educational_qualification"])
+    print(educational_qualification, "qualification")
+    print("11111111111111111111111111111111111111111111111111111111111111111")
     # return Response({'error': 'A coach user with this email already exists.'}, status=400)
 
     # print('ctt not ctt', json.loads(  request.data['ctt_nctt']),type(json.loads(request.data['ctt_nctt'])))
@@ -1649,8 +1661,14 @@ def add_coach(request):
                 companies_worked_in=companies_worked_in,
                 other_certification=other_certification,
                 active_inactive=active_inactive,
+                internal_coach=internal_coach,
                 corporate_experience=corporate_experience,
                 coaching_experience=coaching_experience,
+                organization_of_coach=organization_of_coach,
+                reason_for_inactive=reason_for_inactive,
+                client_companies=client_companies,
+                education_pic=education_pic,
+                educational_qualification=educational_qualification,
             )
 
             # approve coach
@@ -3636,14 +3654,14 @@ class SessionCountsForAllLearners(APIView):
 
                 completed_sessions_count = SessionRequestCaas.objects.filter(
                     status="completed",
-                    billable_session_number__isnull=False, 
+                    billable_session_number__isnull=False,
                     learner__id=learner_id,
                     is_archive=False,
                 ).count()
 
                 total_sessions_count = SessionRequestCaas.objects.filter(
                     learner__id=learner_id,
-                    billable_session_number__isnull=False, 
+                    billable_session_number__isnull=False,
                     is_archive=False,
                 ).count()
 

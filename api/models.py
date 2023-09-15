@@ -145,6 +145,12 @@ class Coach(models.Model):
     other_certification = models.JSONField(default=list, blank=True)
     active_inactive = models.BooleanField(blank=True, default=False)
     currency = models.CharField(max_length=100, blank=True, default="")
+    internal_coach = models.BooleanField(blank=True, default=False)
+    organization_of_coach = models.CharField(max_length=100, default="", blank=True)
+    reason_for_inactive = models.CharField(max_length=100, default="", blank=True)
+    client_companies = models.JSONField(default=list, blank=True)
+    education_pic = models.ImageField(upload_to="post_images", blank=True)
+    educational_qualification = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
