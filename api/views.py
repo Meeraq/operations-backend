@@ -409,6 +409,11 @@ def approve_coach(request):
         coach.is_approved = True
         coach.save()
 
+        path = f"/profile"
+             
+        message = f"Congratulations ! Your profile has been approved. You will be notified for projects that match your profile. Thank You"
+              
+        create_notification(coach.user.user, path, message)
         # Return success response
         return Response({"message": "Coach approved successfully."}, status=200)
 
@@ -427,8 +432,8 @@ def update_coach_profile(request, coach_id):
         coach = Coach.objects.get(id=coach_id)
     except Coach.DoesNotExist:
         return Response(status=404)
-    pmo_user = User.objects.filter(profile__type="pmo").first()
-    pmo = Pmo.objects.get(email=pmo_user.email)
+    # pmo_user = User.objects.filter(profile__type="pmo").first()
+    # pmo = Pmo.objects.get(email=pmo_user.email)
 
     serializer = CoachSerializer(
         coach, data=request.data, partial=True
@@ -4791,7 +4796,7 @@ def remove_coach_from_project(request, project_id):
 class AddRegisteredCoach(APIView):
     def post(self, request, *args, **kwargs):
         # Get data from request
-        print(request.data)
+        
         first_name = request.data.get("first_name")
         last_name = request.data.get("last_name")
         email = request.data.get("email")
@@ -4835,7 +4840,13 @@ class AddRegisteredCoach(APIView):
                 coach.is_approved = False
                 coach.save()
                 coach_serializer = CoachSerializer(coach)
-                print("coach Saved",coach)
+                
+                path = f"/profile"
+             
+                message = f"Welcome to Meeraq. As next step, you need to fill out your details. Admin will look into your profile and contact you for profile approval. Thank You"
+              
+                create_notification(coach.user.user, path, message)
+                
             return Response({"coach": coach_serializer.data})
 
         except IntegrityError as e:
