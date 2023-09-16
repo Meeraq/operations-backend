@@ -411,7 +411,7 @@ def approve_coach(request):
 
         path = f"/profile"
              
-        message = f"Congratulations ! Your profile has been approved. You will be notified for projects that match your profile. Thank You"
+        message = f"Congratulations ! Your profile has been approved. You will be notified for projects that match your profile. Thank You !"
               
         create_notification(coach.user.user, path, message)
         # Return success response
@@ -427,9 +427,9 @@ def approve_coach(request):
 
 
 @api_view(["PUT"])
-def update_coach_profile(request, coach_id):
+def update_coach_profile(request, id):
     try:
-        coach = Coach.objects.get(id=coach_id)
+        coach = Coach.objects.get(id=id)
     except Coach.DoesNotExist:
         return Response(status=404)
     # pmo_user = User.objects.filter(profile__type="pmo").first()
@@ -438,6 +438,16 @@ def update_coach_profile(request, coach_id):
     serializer = CoachSerializer(
         coach, data=request.data, partial=True
     )  # partial argument added here
+    coach_id = request.data.get("coach_id")
+    
+    # Check if coach_id exists in request.data
+    if coach_id is not None:
+        # Check if any other coach already has this coach_id
+        existing_coach = Coach.objects.exclude(id=id).filter(coach_id=coach_id).first()
+        
+        if existing_coach:
+            return Response({"message": ["Coach ID must be unique"]}, status=400)
+
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
@@ -4843,9 +4853,13 @@ class AddRegisteredCoach(APIView):
                 
                 path = f"/profile"
              
-                message = f"Welcome to Meeraq. As next step, you need to fill out your details. Admin will look into your profile and contact you for profile approval. Thank You"
+                message = f"Welcome to Meeraq. As next step, you need to fill out your details. Admin will look into your profile and contact you for profile approval. Thank You!"
               
                 create_notification(coach.user.user, path, message)
+                pmo_user = User.objects.filter(profile__type="pmo").first()
+                    
+
+                create_notification(pmo_user, f"/registeredcoach", f"{coach.first_name} {coach.last_name} has registered as a coach. Please go through his Profile.")
                 
             return Response({"coach": coach_serializer.data})
 
