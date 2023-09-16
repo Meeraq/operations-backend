@@ -34,6 +34,7 @@ from .serializers import (
     GetActionItemDepthOneSerializer,
     PendingActionItemSerializer,
     UserTokenSerializer,
+    CalendarEventSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -68,6 +69,7 @@ from .models import (
     Competency,
     ActionItem,
     UserToken,
+    CalendarEvent,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -165,7 +167,47 @@ def refresh_google_access_token(user_token):
     return user_token.access_token
 
 
-def create_google_calendar_event(access_token, event_details):
+def refresh_microsoft_access_token(user_token):
+    if not user_token:
+        return None
+
+    refresh_token = user_token.refresh_token
+    access_token_expiry = user_token.access_token_expiry
+    auth_code = user_token.authorization_code
+    if not refresh_token:
+        return None
+
+    access_token_expiry = int(access_token_expiry)
+
+    expiration_timestamp = user_token.updated_at + timezone.timedelta(
+        seconds=access_token_expiry
+    )
+
+    if expiration_timestamp <= timezone.now():
+        token_url = f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/token"
+
+        token_data = {
+            "client_id": settings.MICROSOFT_CLIENT_ID,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+            "client_secret": settings.MICROSOFT_CLIENT_SECRET,
+        }
+
+        response = requests.post(token_url, data=token_data)
+        token_json = response.json()
+
+        if "access_token" in token_json:
+            user_token.access_token = token_json["access_token"]
+            user_token.access_token_expiry = token_json.get("expires_in")
+            user_token.updated_at = timezone.now()
+            user_token.save()
+
+            return user_token.access_token
+
+    return user_token.access_token
+
+
+def create_google_calendar_event(access_token, event_details, attendee_email, session):
     try:
         formatted_date = datetime.strptime(
             event_details.get("startDate"), "%d-%m-%Y"
@@ -173,10 +215,13 @@ def create_google_calendar_event(access_token, event_details):
 
         start_time = convert_to_24hr_format(event_details.get("startTime"))
         end_time = convert_to_24hr_format(event_details.get("endTime"))
-        print("start_time",event_details.get("startTime"))
-
+        
+        event_details_title = event_details.get("title")
+        if event_details.get("title") == "Coaching Session Session":
+            event_details_title = "Coaching Session"
+        
         event_data = {
-            "summary": event_details.get("title"),
+            "summary": event_details_title,
             "description": event_details.get("description"),
             "start": {
                 "dateTime": f"{formatted_date}T{start_time}:00",
@@ -186,8 +231,10 @@ def create_google_calendar_event(access_token, event_details):
                 "dateTime": f"{formatted_date}T{end_time}:00",
                 "timeZone": "IST",
             },
+            "attendees": [
+                {"email": attendee_email},
+            ],
         }
-        
 
         user_token = UserToken.objects.get(access_token=access_token)
         new_access_token = refresh_google_access_token(user_token)
@@ -207,6 +254,19 @@ def create_google_calendar_event(access_token, event_details):
         if response.status_code == 200:
             response_data = response.json()
 
+            calendar_event = CalendarEvent(
+                event_id=response_data.get("id"),
+                title=event_details_title,
+                description=event_details.get("description"),
+                start_datetime=f"{formatted_date}T{start_time}:00",
+                end_datetime=f"{formatted_date}T{end_time}:00",
+                attendee=attendee_email,
+                creator=response_data.get("creator", {}).get("email", ""),
+                session=session,
+                account_type="google",
+            )
+            calendar_event.save()
+
             return {
                 "message": "Event created successfully",
                 "event_data": response_data,
@@ -214,6 +274,120 @@ def create_google_calendar_event(access_token, event_details):
         else:
             return {
                 "error": "Failed to create event",
+                "status_code": response.status_code,
+            }
+
+    except Exception as e:
+        return {"error": "An error occurred", "details": str(e)}
+
+
+def create_microsoft_calendar_event(
+    access_token, event_details, attendee_email_name, session
+):
+    event_create_url = "https://graph.microsoft.com/v1.0/me/events"
+
+    formatted_date = datetime.strptime(event_details["startDate"], "%d-%m-%Y").strftime(
+        "%Y-%m-%d"
+    )
+
+    start_datetime = (
+        f"{formatted_date}T{convert_to_24hr_format(event_details['startTime'])}:00"
+    )
+    end_datetime = (
+        f"{formatted_date}T{convert_to_24hr_format(event_details['endTime'])}:00"
+    )
+
+    event_details_title = event_details["title"]
+    if event_details["title"] == "Coaching Session Session":
+        event_details_title = "Coaching Session"
+            
+    event_payload = {
+        "subject": event_details_title,
+        "body": {"contentType": "HTML", "content": event_details["description"]},
+        "start": {"dateTime": start_datetime, "timeZone": "Asia/Kolkata"},
+        "end": {"dateTime": end_datetime, "timeZone": "Asia/Kolkata"},
+        "attendees": [{"emailAddress": attendee_email_name, "type": "required"}],
+    }
+
+    user_token = UserToken.objects.get(access_token=access_token)
+    new_access_token = refresh_microsoft_access_token(user_token)
+    if not new_access_token:
+        new_access_token = access_token
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+
+    response = requests.post(event_create_url, json=event_payload, headers=headers)
+
+    if response.status_code == 201:
+        microsoft_response_data = response.json()
+
+        calendar_event = CalendarEvent(
+            event_id=microsoft_response_data.get("id"),
+            title=event_details_title,
+            description=event_details.get("description"),
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            attendee=attendee_email_name.get("address"),
+            creator=microsoft_response_data.get("organizer", {})
+            .get("emailAddress", {})
+            .get("address", ""),
+            session=session,
+            account_type="microsoft",
+        )
+        calendar_event.save()
+
+        print("Event created successfully.")
+        return True
+    else:
+        print(f"Event creation failed. Status code: {response.status_code}")
+        print(response.text)
+        return False
+
+
+def delete_google_calendar_event(access_token, event_id):
+    try:
+        response = requests.delete(
+            f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+        )
+
+        if response.status_code == 204:
+            return {"message": "Event deleted successfully"}
+        elif response.status_code == 404:
+            return {"error": "Event not found"}
+        else:
+            return {
+                "error": "Failed to delete event",
+                "status_code": response.status_code,
+            }
+
+    except Exception as e:
+        return {"error": "An error occurred", "details": str(e)}
+
+
+def delete_microsoft_calendar_event(access_token, event_id):
+    try:
+        event_delete_url = f"https://graph.microsoft.com/v1.0/me/events/{event_id}"
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+        }
+
+        response = requests.delete(event_delete_url, headers=headers)
+
+        if response.status_code == 204:
+            return {"message": "Event deleted successfully"}
+        elif response.status_code == 404:
+            return {"error": "Event not found"}
+        else:
+            return {
+                "error": "Failed to delete event",
                 "status_code": response.status_code,
             }
 
@@ -1717,17 +1891,12 @@ def add_coach(request):
             coach.save()
 
             full_name = coach_user.first_name + " " + coach_user.last_name
-            context = None
-            if is_gmail(coach_user.email) is False:
-                context = {"name": coach_user.first_name}
-            else:
-                context = {"name": coach_user.first_name,"email": coach_user.email}
 
             send_mail_templates(
                 "coach_templates/pmo-adds-coach-as-user.html",
                 [coach_user.email],
                 "Meeraq Coaching | New Beginning !",
-                context,
+                {"name": coach_user.first_name, "email": coach_user.email},
                 [env("BCC_EMAIL")],  # no bcc emails
             )
             # Send email notification to the coach
@@ -1873,7 +2042,11 @@ def login_view(request):
         user_token = None
         try:
             user_token = UserToken.objects.get(user_profile__user__username=username)
-            refresh_google_access_token(user_token)
+            if user_token.account_type == "google":
+                refresh_google_access_token(user_token)
+            else:
+                refresh_microsoft_access_token(user_token)
+
         except ObjectDoesNotExist:
             print("Does not exist")
 
@@ -1959,7 +2132,7 @@ def generate_otp(request):
             "hr_emails/login_with_otp.html",
             [user],
             subject,
-            {"name": name, "otp": created_otp.otp},
+            {"name": name, "otp": created_otp.otp, "email": request.data["email"]},
             [],  # no bcc
         )
         return Response({"message": f"OTP has been sent to {user.username}!"})
@@ -2001,7 +2174,10 @@ def validate_otp(request):
         user_token = None
         try:
             user_token = UserToken.objects.get(user_profile__user__username=user_email)
-            refresh_google_access_token(user_token)
+            if user_token.account_type == "google":
+                refresh_google_access_token(user_token)
+            else:
+                refresh_microsoft_access_token(user_token)
         except ObjectDoesNotExist:
             print("Does not exist")
 
@@ -2240,17 +2416,12 @@ def send_consent(request):
         message = f"Admin has requested your consent to share profile for new project."
         for coach in coaches:
             create_notification(coach.user.user, path, message)
-            context = None
-            if is_gmail(coach.email) is False:
-                context = {"name": coach.first_name}
-            else:
-                context = {"name": coach.first_name ,"email": coach.email}
-                       
+
             send_mail_templates(
                 "coach_templates/pmo_ask_for_consent.html",
                 [coach.email],
                 "Meeraq Coaching | New Project!",
-                context,
+                {"name": coach.first_name, "email": coach.email},
                 [],  # no bcc
             )
     except Exception as e:
@@ -2548,10 +2719,17 @@ def get_upcoming_booked_session_of_coach(request, coach_id):
 
 @api_view(["POST"])
 def book_session_caas(request):
-    print(request.data)
     session_request = SessionRequestCaas.objects.get(
         id=request.data.get("session_request")
     )
+
+    google_calendar_event = CalendarEvent.objects.filter(
+        session=session_request, account_type="google"
+    ).first()
+    microsoft_calendar_event = CalendarEvent.objects.filter(
+        session=session_request, account_type="microsoft"
+    ).first()
+
     session_request.confirmed_availability = Availibility.objects.get(
         id=request.data.get("confirmed_availability")
     )
@@ -2635,44 +2813,26 @@ def book_session_caas(request):
             message += slot_message
             create_notification(pmo_user, path, message)
             if coachee:
-                context = None
-                if is_gmail(coachee.email) is False:
-                    context = {
-                        "projectName": session_request.project.name,
-                        "name": coachee.name,
-                        "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
-                        "slot_date": session_date,
-                        "slot_time": session_time,
-                    }
-                else:
-                    context = {
+                send_mail_templates(
+                    "coachee_emails/session_booked.html",
+                    [coachee.email],
+                    "Meeraq Coaching | Session Booked",
+                    {
                         "projectName": session_request.project.name,
                         "name": coachee.name,
                         "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
                         "slot_date": session_date,
                         "slot_time": session_time,
                         "email": coachee.email,
-                    }
-                send_mail_templates(
-                    "coachee_emails/session_booked.html",
-                    [coachee.email],
-                    "Meeraq Coaching | Session Booked",
-                    context,
+                    },
                     [],  # no bcc
                 )
-                context1 = None
-                if is_gmail(pmo.email) is False:
-                    context1 = {
-                        "projectName": session_request.project.name,
-                        "name": pmo.name,
-                        "coachee_name": coachee.name,
-                        "coach_name": coach_name,
-                        "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
-                        "slot_date": session_date,
-                        "slot_time": session_time,
-                    }
-                else:
-                    context1 ={
+
+                send_mail_templates(
+                    "pmo_emails/session_scheduled.html",
+                    [pmo.email],
+                    "Meeraq Coaching | Session Booked",
+                    {
                         "projectName": session_request.project.name,
                         "name": pmo.name,
                         "coachee_name": coachee.name,
@@ -2681,13 +2841,7 @@ def book_session_caas(request):
                         "slot_date": session_date,
                         "slot_time": session_time,
                         "email": pmo.email,
-                    }
-
-                send_mail_templates(
-                    "pmo_emails/session_scheduled.html",
-                    [pmo.email],
-                    "Meeraq Coaching | Session Booked",
-                    context1,
+                    },
                     [],  # no bcc
                 )
 
@@ -2704,12 +2858,40 @@ def book_session_caas(request):
                         user_profile__user__username=coach.email
                     )
                     coach_access_token = coach_user_token.access_token
-                    coach_access_token = refresh_google_access_token(coach_user_token)
+                    if coach_user_token.account_type == "google":
+                        coach_access_token = refresh_google_access_token(
+                            coach_user_token
+                        )
 
-                    create_google_calendar_event(
-                        coach_access_token,
-                        event_detail,
-                    )
+                        if google_calendar_event:
+                            delete_google_calendar_event(
+                                coach_access_token, google_calendar_event.event_id
+                            )
+                            google_calendar_event.delete()
+
+                        create_google_calendar_event(
+                            coach_access_token,
+                            event_detail,
+                            coachee.email,
+                            session_request,
+                        )
+                    else:
+                        coach_access_token = refresh_microsoft_access_token(
+                            coach_user_token
+                        )
+                        if microsoft_calendar_event:
+                            delete_microsoft_calendar_event(
+                                coach_access_token, microsoft_calendar_event.event_id
+                            )
+                            microsoft_calendar_event.delete()
+
+                        create_microsoft_calendar_event(
+                            coach_access_token,
+                            event_detail,
+                            {"address": coachee.email, "name": coachee.name},
+                            session_request,
+                        )
+
                 except ObjectDoesNotExist:
                     print("Coach Does not exist")
 
@@ -2719,13 +2901,40 @@ def book_session_caas(request):
                     )
 
                     coachee_access_token = coachee_user_token.access_token
-                    coachee_access_token = refresh_google_access_token(
-                        coachee_user_token
-                    )
-                    create_google_calendar_event(
-                        coachee_access_token,
-                        event_detail,
-                    )
+                    if coachee_user_token.account_type == "google":
+                        coachee_access_token = refresh_google_access_token(
+                            coachee_user_token
+                        )
+
+                        if google_calendar_event:
+                            delete_google_calendar_event(
+                                coachee_access_token, google_calendar_event.event_id
+                            )
+                            google_calendar_event.delete()
+
+                        create_google_calendar_event(
+                            coachee_access_token,
+                            event_detail,
+                            coach.email,
+                            session_request,
+                        )
+                    else:
+                        coachee_access_token = refresh_microsoft_access_token(
+                            coachee_user_token
+                        )
+
+                        if microsoft_calendar_event:
+                            delete_microsoft_calendar_event(
+                                coachee_access_token, microsoft_calendar_event.event_id
+                            )
+                            microsoft_calendar_event.delete()
+
+                        create_microsoft_calendar_event(
+                            coachee_access_token,
+                            event_detail,
+                            {"address": coach.email, "name": coach_name},
+                            session_request,
+                        )
                 except ObjectDoesNotExist:
                     print("Coachee Does not exist")
 
@@ -2914,24 +3123,16 @@ def accept_coach_caas_hr(request):
                     },
                     [],  # no bcc
                 )
-                context = None
-                if is_gmail(coach.email) is False:
-                    context = {
-                        "name": coach.first_name,
-                        "orgName": project.organisation.name,
-                    }
-                else:
-                    context = {
-                        "name": coach.first_name,
-                        "orgName": project.organisation.name,
-                        "email": coach.email,
-                    }
 
                 send_mail_templates(
                     "coach_templates/intro_mail_to_coach.html",
                     [coach.email],
                     f"Meeraq Coaching | {project.organisation.name} has selected you",
-                    context,
+                    {
+                        "name": coach.first_name,
+                        "orgName": project.organisation.name,
+                        "email": coach.email,
+                    },
                     [env("BCC_EMAIL")],
                 )
 
@@ -2969,24 +3170,16 @@ def add_learner_to_project(request):
                 message = f"You have been added to Project - {project.name}"
                 create_notification(learner.user.user, path, message)
                 coacheeCounts = coacheeCounts + 1
-                context = None
-                if is_gmail(learner.email) is False:
-                    context = {
-                        "name": learner.name,
-                        "orgname": project.organisation.name,
-                    }
-                else:
-                    context = {
-                        "name": learner.name,
-                        "orgname": project.organisation.name,
-                        "email": learner.email,
-                    }
 
                 send_mail_templates(
                     "coachee_emails/add_coachee.html",
                     [learner.email],
                     "Meeraq Coaching | Welcome to Meeraq",
-                    context,
+                    {
+                        "name": learner.name,
+                        "orgname": project.organisation.name,
+                        "email": learner.email,
+                    },
                     [],
                 )
 
@@ -3336,17 +3529,15 @@ def send_list_to_hr(request):
         for hr_user in hr_users:
             hr_email = hr_user.email
             hr_name = hr_user.first_name
-            context = None
-            if is_gmail(hr_email) is False:
-                context = {"name": hr_name}
-            else:
-                context ={"name": hr_name,"email": hr_email,} 
 
             send_mail_templates(
                 "hr_emails/pmo_share_coach_list.html",
                 [hr_email],
                 "Welcome to the Meeraq Platform",
-                context,
+                {
+                    "name": hr_name,
+                    "email": hr_email,
+                },
                 [env("BCC_EMAIL")],  # bcc
             )
 
@@ -3934,10 +4125,22 @@ def edit_session_availability(request, session_id):
     try:
         # changing availability - edit request.
         session = SessionRequestCaas.objects.get(id=session_id)
+        google_calendar_event = CalendarEvent.objects.filter(
+            session=session, account_type="google"
+        ).first()
+        microsoft_calendar_event = CalendarEvent.objects.filter(
+            session=session, account_type="microsoft"
+        ).first()
         if session.is_booked:
             return Response({"message": "Session edit failed."}, status=401)
         session.availibility.set(time_arr)
         session.save()
+        if google_calendar_event:
+            google_calendar_event.session = session
+            google_calendar_event.save()
+        if microsoft_calendar_event:
+            microsoft_calendar_event.session = session
+            microsoft_calendar_event.save()
         return Response({"message": "Session updated successfully."}, status=201)
     except:
         return Response({"message": "Session edit failed."}, status=401)
@@ -4046,7 +4249,16 @@ def request_session(request, session_id, coach_id):
 @api_view(["POST"])
 def reschedule_session_of_coachee(request, session_id):
     session = SessionRequestCaas.objects.get(id=session_id)
+
+    google_calendar_event = CalendarEvent.objects.filter(
+        session=session, account_type="google"
+    ).first()
+    microsoft_calendar_event = CalendarEvent.objects.filter(
+        session=session, account_type="microsoft"
+    ).first()
+
     session.is_archive = True
+
     time_arr = create_time_arr(request.data["availibility"])
     new_session = SessionRequestCaas.objects.create(
         learner=session.learner,
@@ -4061,6 +4273,14 @@ def reschedule_session_of_coachee(request, session_id):
     new_session.availibility.set(time_arr)
     new_session.save()
     session.save()
+
+    if google_calendar_event:
+        google_calendar_event.session = new_session
+        google_calendar_event.save()
+    if microsoft_calendar_event:
+        microsoft_calendar_event.session = new_session
+        microsoft_calendar_event.save()
+
     return Response({"message": "Session reschedule successfully"}, status=200)
 
 
@@ -4407,6 +4627,14 @@ def schedule_session_directly(request, session_id):
         session = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
         return Response({"error": "Session not found."}, status=404)
+
+    google_calendar_event = CalendarEvent.objects.filter(
+        session=session, account_type="google"
+    ).first()
+    microsoft_calendar_event = CalendarEvent.objects.filter(
+        session=session, account_type="microsoft"
+    ).first()
+
     if session.learner:
         coachee = session.learner
 
@@ -4443,31 +4671,22 @@ def schedule_session_directly(request, session_id):
     session.status = "booked"
     session.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session.save()
-
+    coach = None
+    if request.data["user_type"] == "coach":
+        coach = Coach.objects.get(id=request.data["user_id"])
     if coachee:
-        context = None
-        if is_gmail(coachee.email) is False:
-            context = {
-                "projectName": session.project.name,
-                "name": coachee.name,
-                "sessionName": SESSION_TYPE_VALUE[session.session_type],
-                "slot_date": session_date,
-                "slot_time": session_time,
-            }
-        else:
-            context = {
+        send_mail_templates(
+            "coachee_emails/session_booked.html",
+            [coachee.email],
+            "Meeraq Coaching | Session Booked",
+            {
                 "projectName": session.project.name,
                 "name": coachee.name,
                 "sessionName": SESSION_TYPE_VALUE[session.session_type],
                 "slot_date": session_date,
                 "slot_time": session_time,
                 "email": coachee.email,
-            }
-        send_mail_templates(
-            "coachee_emails/session_booked.html",
-            [coachee.email],
-            "Meeraq Coaching | Session Booked",
-            context,
+            },
             [],  # no bcc
         )
         event_detail = {
@@ -4485,11 +4704,59 @@ def schedule_session_directly(request, session_id):
             )
 
             coachee_access_token = coachee_user_token.access_token
-            coachee_access_token = refresh_google_access_token(coachee_user_token)
-            create_google_calendar_event(
-                coachee_access_token,
-                event_detail,
-            )
+            if coachee_user_token.account_type == "google":
+                coachee_access_token = refresh_google_access_token(coachee_user_token)
+
+                if google_calendar_event:
+                    delete_google_calendar_event(
+                        coachee_access_token, google_calendar_event.event_id
+                    )
+                    google_calendar_event.delete()
+
+                if request.data["user_type"] == "coach":
+                    create_google_calendar_event(
+                        coachee_access_token,
+                        event_detail,
+                        coach.email,
+                        session,
+                    )
+                else:
+                    create_google_calendar_event(
+                        coachee_access_token,
+                        event_detail,
+                        "No Data",
+                        session,
+                    )
+            else:
+                coachee_access_token = refresh_microsoft_access_token(
+                    coachee_user_token
+                )
+
+                if microsoft_calendar_event:
+                
+                    delete_microsoft_calendar_event(
+                        coachee_access_token, microsoft_calendar_event.event_id
+                    )
+                    microsoft_calendar_event.delete()
+
+                if request.data["user_type"] == "coach":
+                    create_microsoft_calendar_event(
+                        coachee_access_token,
+                        event_detail,
+                        {
+                            "address": coach.email,
+                            "name": coach.first_name + " " + coach.last_name,
+                        },
+                        session,
+                    )
+                else:
+                    create_microsoft_calendar_event(
+                        coachee_access_token,
+                        event_detail,
+                        {"address": "No Data", "name": "No Data"},
+                        session,
+                    )
+
         except ObjectDoesNotExist:
             print("Coachee Does not exist")
 
@@ -4501,11 +4768,37 @@ def schedule_session_directly(request, session_id):
                     user_profile__user__username=coach.email
                 )
                 coach_access_token = coach_user_token.access_token
-                coach_access_token = refresh_google_access_token(coach_user_token)
-                create_google_calendar_event(
-                    coach_access_token,
-                    event_detail,
-                )
+                if coach_user_token.account_type == "google":
+                    coach_access_token = refresh_google_access_token(coach_user_token)
+
+                    if google_calendar_event:
+                        delete_google_calendar_event(
+                            coach_access_token, google_calendar_event.event_id
+                        )
+                        google_calendar_event.delete()
+
+                    create_google_calendar_event(
+                        coach_access_token,
+                        event_detail,
+                        coachee.email,
+                        session,
+                    )
+                else:
+                    coach_access_token = refresh_microsoft_access_token(
+                        coach_user_token
+                    )
+                    if microsoft_calendar_event:
+                        delete_microsoft_calendar_event(
+                            coach_access_token, microsoft_calendar_event.event_id
+                        )
+                        microsoft_calendar_event.delete()
+
+                    create_microsoft_calendar_event(
+                        coach_access_token,
+                        event_detail,
+                        {"address": coachee.email, "name": coachee.name},
+                        session,
+                    )
             except ObjectDoesNotExist:
                 print("Coach Does not exist")
 
@@ -4896,12 +5189,87 @@ def google_auth_callback(request):
                 user_token.refresh_token = refresh_token
                 user_token.access_token_expiry = expires_in
                 user_token.authorization_code = auth_code
+                user_token.account_type = "google"
                 user_token.save()
 
-            return HttpResponseRedirect("http://localhost:3000/")
+            return HttpResponseRedirect(env("APP_URL"))
         else:
             return JsonResponse({"error": "Token exchange failed."}, status=400)
     else:
         return JsonResponse(
             {"error": "Authentication failed. Code not found."}, status=400
         )
+
+
+@api_view(["GET"])
+def microsoft_auth(request, user_mail_address):
+    oauth2_endpoint = f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize"
+
+    auth_params = {
+        "client_id": settings.MICROSOFT_CLIENT_ID,
+        "response_type": "code",
+        "redirect_uri": settings.MICROSOFT_REDIRECT_URI,
+        "response_mode": "query",
+        "scope": "openid offline_access User.Read Calendars.ReadWrite profile email",
+        "state": "shashankmeeraq",
+        "login_hint": user_mail_address,
+    }
+
+    auth_url = f"{oauth2_endpoint}?{urlencode(auth_params)}"
+
+    return HttpResponseRedirect(auth_url)
+
+
+@api_view(["POST", "GET"])
+def microsoft_callback(request):
+    try:
+        authorization_code = request.GET.get("code")
+
+        token_url = f"https://login.microsoftonline.com/common/oauth2/v2.0/token"
+        token_data = {
+            "client_id": settings.MICROSOFT_CLIENT_ID,
+            "scope": "User.Read",
+            "code": authorization_code,
+            "redirect_uri": settings.MICROSOFT_REDIRECT_URI,
+            "grant_type": "authorization_code",
+            "client_secret": settings.MICROSOFT_CLIENT_SECRET,
+        }
+
+        response = requests.post(token_url, data=token_data)
+
+        token_json = response.json()
+
+        if "access_token" in token_json and "refresh_token" in token_json:
+            access_token = token_json["access_token"]
+            refresh_token = token_json["refresh_token"]
+            expires_in = token_json["expires_in"]
+            auth_code = authorization_code
+            user_email_url = "https://graph.microsoft.com/v1.0/me"
+            headers = {"Authorization": f"Bearer {access_token}"}
+
+            user_email_response = requests.get(user_email_url, headers=headers)
+
+            if user_email_response.status_code == 200:
+                user_info_data = user_email_response.json()
+                user_email = user_info_data.get("mail", "")
+                user = User.objects.get(username=user_email)
+                user_profile = Profile.objects.get(user=user)
+                user_token, created = UserToken.objects.get_or_create(
+                    user_profile=user_profile
+                )
+                user_token.access_token = access_token
+                user_token.refresh_token = refresh_token
+                user_token.access_token_expiry = expires_in
+                user_token.authorization_code = auth_code
+                user_token.account_type = "microsoft"
+                user_token.save()
+            return HttpResponseRedirect(env("APP_URL"))
+        else:
+            error_json = response.json()
+            return JsonResponse(error_json, status=response.status_code)
+
+    except Exception as e:
+        # Handle exceptions here, you can log the exception for debugging
+        print(f"An exception occurred: {str(e)}")
+        # You might want to return an error response or redirect to an error page.
+        return JsonResponse({"error": "An error occurred"}, status=500)

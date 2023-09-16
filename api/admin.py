@@ -16,6 +16,7 @@ from .models import (
     Competency,
     ActionItem,
     UserToken,
+    CalendarEvent,
 )
 
 # Register your models here.
@@ -38,3 +39,4 @@ admin.site.register(Goal)
 admin.site.register(Competency)
 admin.site.register(ActionItem)
 admin.site.register(UserToken)
+admin.site.register(CalendarEvent)

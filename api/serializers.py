@@ -15,6 +15,7 @@ from .models import (
     Competency,
     ActionItem,
     UserToken,
+    CalendarEvent,
 )
 from django.contrib.auth.models import User
 
@@ -213,4 +214,9 @@ class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
 class UserTokenSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserToken
+        fields = '__all__'
+        
+class CalendarEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CalendarEvent
         fields = '__all__'
