@@ -117,7 +117,7 @@ class Coach(models.Model):
     email = models.EmailField()
     age = models.CharField(max_length=10, default="", blank=True)
     gender = models.CharField(max_length=50, blank=True)
-    domain = models.CharField(max_length=50, blank=True)
+    domain = models.JSONField(default=list, blank=True)
     room_id = models.CharField(max_length=50, blank=True)
     phone = models.CharField(max_length=25)
     level = models.CharField(max_length=50)
@@ -125,7 +125,7 @@ class Coach(models.Model):
     area_of_expertise = models.JSONField(default=list, blank=True)
     completed_sessions = models.IntegerField(blank=True, default=0)
     profile_pic = models.ImageField(upload_to="post_images", blank=True)
-    education = models.CharField(max_length=200, blank=True)
+    education = models.JSONField(default=list, blank=True)
     corporate_experience = models.TextField(blank=True)
     coaching_experience = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
@@ -145,12 +145,15 @@ class Coach(models.Model):
     other_certification = models.JSONField(default=list, blank=True)
     active_inactive = models.BooleanField(blank=True, default=False)
     currency = models.CharField(max_length=100, blank=True, default="")
-    internal_coach = models.BooleanField(blank=True, default=False)
-    organization_of_coach = models.CharField(max_length=100, default="", blank=True)
-    reason_for_inactive = models.CharField(max_length=100, default="", blank=True)
+    internal_coach = models.CharField(max_length=50, blank=True)
+    organization_of_coach = models.CharField(max_length=100, blank=True)
+    reason_for_inactive = models.JSONField(default=list, blank=True)
     client_companies = models.JSONField(default=list, blank=True)
     education_pic = models.ImageField(upload_to="post_images", blank=True)
+
     educational_qualification = models.JSONField(default=list, blank=True)
+
+    education_upload_file = models.ImageField(upload_to="post_images", blank=True)
 
     def __str__(self):
         return self.first_name + " " + self.last_name

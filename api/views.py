@@ -1551,12 +1551,12 @@ def add_coach(request):
     email = request.data.get("email")
     age = request.data.get("age")
     gender = request.data.get("gender")
-    domain = request.data.get("domain")
+    domain = json.loads(request.data["domain"])
     room_id = request.data.get("room_id")
     phone = request.data.get("phone")
     level = request.data.get("level")
     currency = request.data.get("currency")
-    education = request.data.get("education")
+    education = json.loads(request.data["education"])
     rating = "5"
     min_fees = request.data["min_fees"]
     fee_remark = request.data.get("fee_remark", "")
@@ -1579,19 +1579,13 @@ def add_coach(request):
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
-    internal_coach = json.loads(request.data["internal_coach"])
-    print(internal_coach, "internal coach")
+    internal_coach = request.data.get("internal_coach")
     organization_of_coach = request.data.get("organization_of_coach")
-    print(organization_of_coach, "organization of coach")
-    reason_for_inactive = request.data.get("reason_for_inactive")
-    print(reason_for_inactive, "reason")
+    reason_for_inactive = json.loads(request.data["reason_for_inactive"])
     client_companies = json.loads(request.data["client_companies"])
-    print(client_companies, "client companies")
     education_pic = request.data.get("education_pic", None)
-    print(education_pic, "education pic")
     educational_qualification = json.loads(request.data["educational_qualification"])
-    print(educational_qualification, "qualification")
-    print("11111111111111111111111111111111111111111111111111111111111111111")
+    education_upload_file = request.data.get("education_upload_file", None)
     # return Response({'error': 'A coach user with this email already exists.'}, status=400)
 
     # print('ctt not ctt', json.loads(  request.data['ctt_nctt']),type(json.loads(request.data['ctt_nctt'])))
@@ -1669,6 +1663,7 @@ def add_coach(request):
                 client_companies=client_companies,
                 education_pic=education_pic,
                 educational_qualification=educational_qualification,
+                education_upload_file=education_upload_file,
             )
 
             # approve coach
@@ -1678,13 +1673,14 @@ def add_coach(request):
             coach.save()
 
             full_name = coach_user.first_name + " " + coach_user.last_name
-            send_mail_templates(
-                "coach_templates/pmo-adds-coach-as-user.html",
-                [coach_user.email],
-                "Meeraq Coaching | New Beginning !",
-                {"name": coach_user.first_name},
-                [env("BCC_EMAIL")],  # no bcc emails
-            )
+            # send_mail_templates(
+            #     "coach_templates/pmo-adds-coach-as-user.html",
+            #     [coach_user.email],
+            #     "Meeraq Coaching | New Beginning !",
+            #     {"name": coach_user.first_name},
+            #     [env("BCC_EMAIL")],  # no bcc emails
+            # )
+
             # Send email notification to the coach
             # subject = 'Welcome to our coaching platform'
             # message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {temp_password}\n\n Click on the link to login or reset the password http://localhost:3003/'
@@ -3230,12 +3226,12 @@ def finalized_coach_from_coach_consent(request):
 def get_coach_field_values(request):
     job_roles = set()
     languages = set()
-    educations = set()
     locations = set()
     companies_worked_in = set()
     other_certifications = set()
-    domains = set()
     industries = set()
+    functional_domain = set()
+    institute = set()
     for coach in Coach.objects.all():
         # 1st coach
         for role in coach.job_roles:
@@ -3250,17 +3246,22 @@ def get_coach_field_values(request):
             other_certifications.add(certificate)
         for industry in coach.area_of_expertise:
             industries.add(industry)
-        domains.add(coach.domain)
-        educations.add(coach.education)
+        for functional_dom in coach.domain:
+            functional_domain.add(functional_dom)
+        for edu in coach.education:
+            institute.add(edu)
+
+        # domains.add(coach.domain)
+        # educations.add(coach.education)
     return Response(
         {
             "job_roles": list(job_roles),
             "languages": list(languages),
-            "educations": list(educations),
+            "educations": list(institute),
             "locations": list(locations),
             "companies_worked_in": list(companies_worked_in),
             "other_certifications": list(other_certifications),
-            "domains": list(domains),
+            "domains": list(functional_domain),
             "industries": list(industries),
         },
         status=200,
