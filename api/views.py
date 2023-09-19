@@ -1579,7 +1579,7 @@ def add_coach(request):
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
-    internal_coach = request.data.get("internal_coach")
+    internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     reason_for_inactive = json.loads(request.data["reason_for_inactive"])
     client_companies = json.loads(request.data["client_companies"])

@@ -1,4 +1,5 @@
 from django.db import models
+import os
 
 # Create your models here.
 from django.contrib.auth.models import AbstractUser, Group
@@ -109,6 +110,12 @@ class Pmo(models.Model):
         return self.name
 
 
+def validate_pdf_extension(value):
+    ext = os.path.splitext(value.name)[1].lower()
+    if not ext == ".pdf":
+        raise ValidationError("Only PDF files are allowed.")
+
+
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     coach_id = models.CharField(max_length=20, blank=True)
@@ -145,7 +152,7 @@ class Coach(models.Model):
     other_certification = models.JSONField(default=list, blank=True)
     active_inactive = models.BooleanField(blank=True, default=False)
     currency = models.CharField(max_length=100, blank=True, default="")
-    internal_coach = models.CharField(max_length=50, blank=True)
+    internal_coach = models.BooleanField(blank=True, default=False)
     organization_of_coach = models.CharField(max_length=100, blank=True)
     reason_for_inactive = models.JSONField(default=list, blank=True)
     client_companies = models.JSONField(default=list, blank=True)
@@ -153,7 +160,10 @@ class Coach(models.Model):
 
     educational_qualification = models.JSONField(default=list, blank=True)
 
-    education_upload_file = models.ImageField(upload_to="post_images", blank=True)
+    # education_upload_file = models.ImageField(upload_to="post_images", blank=True)
+    education_upload_file = models.FileField(
+        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+    )
 
     def __str__(self):
         return self.first_name + " " + self.last_name
