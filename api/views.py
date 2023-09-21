@@ -148,8 +148,8 @@ def refresh_google_access_token(user_token):
         token_url = "https://oauth2.googleapis.com/token"
         token_data = {
             "refresh_token": refresh_token,
-            "client_id": settings.GOOGLE_OAUTH2_CLIENT_ID,
-            "client_secret": settings.GOOGLE_OAUTH2_CLIENT_SECRET,
+            "client_id": env("GOOGLE_OAUTH2_CLIENT_ID"),
+            "client_secret": env("GOOGLE_OAUTH2_CLIENT_SECRET"),
             "grant_type": "refresh_token",
         }
 
@@ -184,13 +184,13 @@ def refresh_microsoft_access_token(user_token):
     )
 
     if expiration_timestamp <= timezone.now():
-        token_url = f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/token"
+        token_url = f"https://login.microsoftonline.com/{env('MICROSOFT_TENANT_ID')}/oauth2/v2.0/token"
 
         token_data = {
-            "client_id": settings.MICROSOFT_CLIENT_ID,
+            "client_id": env("MICROSOFT_CLIENT_ID"),
             "refresh_token": refresh_token,
             "grant_type": "refresh_token",
-            "client_secret": settings.MICROSOFT_CLIENT_SECRET,
+            "client_secret": env("MICROSOFT_CLIENT_SECRET"),
         }
 
         response = requests.post(token_url, data=token_data)
@@ -315,7 +315,7 @@ def create_microsoft_calendar_event(
         new_access_token = access_token
 
     headers = {
-        "Authorization": f"Bearer {access_token}",
+        "Authorization": f"Bearer {new_access_token}",
         "Content-Type": "application/json",
     }
 
@@ -5135,8 +5135,8 @@ def google_oauth(request, user_email):
     oauth2_endpoint = "https://accounts.google.com/o/oauth2/v2/auth"
 
     auth_params = {
-        "client_id": settings.GOOGLE_OAUTH2_CLIENT_ID,
-        "redirect_uri": settings.GOOGLE_OAUTH2_REDIRECT_URI,
+        "client_id": env("GOOGLE_OAUTH2_CLIENT_ID"),
+        "redirect_uri": env("GOOGLE_OAUTH2_REDIRECT_URI"),
         "response_type": "code",
         "scope": "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email",
         "access_type": "offline",
@@ -5156,9 +5156,9 @@ def google_auth_callback(request):
         token_url = "https://oauth2.googleapis.com/token"
         token_data = {
             "code": code,
-            "client_id": settings.GOOGLE_OAUTH2_CLIENT_ID,
-            "client_secret": settings.GOOGLE_OAUTH2_CLIENT_SECRET,
-            "redirect_uri": settings.GOOGLE_OAUTH2_REDIRECT_URI,
+            "client_id": env("GOOGLE_OAUTH2_CLIENT_ID"),
+            "client_secret": env("GOOGLE_OAUTH2_CLIENT_SECRET"),
+            "redirect_uri": env("GOOGLE_OAUTH2_REDIRECT_URI"),
             "grant_type": "authorization_code",
         }
 
@@ -5203,12 +5203,12 @@ def google_auth_callback(request):
 
 @api_view(["GET"])
 def microsoft_auth(request, user_mail_address):
-    oauth2_endpoint = f"https://login.microsoftonline.com/{settings.MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize"
+    oauth2_endpoint = f"https://login.microsoftonline.com/{env('MICROSOFT_TENANT_ID')}/oauth2/v2.0/authorize"
 
     auth_params = {
-        "client_id": settings.MICROSOFT_CLIENT_ID,
+        "client_id": env("MICROSOFT_CLIENT_ID"),
         "response_type": "code",
-        "redirect_uri": settings.MICROSOFT_REDIRECT_URI,
+        "redirect_uri": env("MICROSOFT_REDIRECT_URI"),
         "response_mode": "query",
         "scope": "openid offline_access User.Read Calendars.ReadWrite profile email",
         "state": "shashankmeeraq",
@@ -5227,12 +5227,12 @@ def microsoft_callback(request):
 
         token_url = f"https://login.microsoftonline.com/common/oauth2/v2.0/token"
         token_data = {
-            "client_id": settings.MICROSOFT_CLIENT_ID,
+            "client_id": env("MICROSOFT_CLIENT_ID"),
             "scope": "User.Read",
             "code": authorization_code,
-            "redirect_uri": settings.MICROSOFT_REDIRECT_URI,
+            "redirect_uri": env("MICROSOFT_REDIRECT_URI"),
             "grant_type": "authorization_code",
-            "client_secret": settings.MICROSOFT_CLIENT_SECRET,
+            "client_secret": env("MICROSOFT_CLIENT_SECRET"),
         }
 
         response = requests.post(token_url, data=token_data)

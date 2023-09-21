@@ -184,13 +184,3 @@ AWS_DEFAULT_ACL = None
 AWS_S3_VERIFY = True
 
 
-GOOGLE_OAUTH2_CLIENT_ID = '616956776774-gg1gr58od11j5oa7fgfbsr9pafjg0tep.apps.googleusercontent.com'
-GOOGLE_OAUTH2_CLIENT_SECRET = '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'
-GOOGLE_OAUTH2_REDIRECT_URI = 'http://127.0.0.1:8000/api/google-auth-callback/'
-
-
-MICROSOFT_CLIENT_ID ='1faf2fa4-ca60-4070-a5ce-bb6a7a866e31'
-MICROSOFT_CLIENT_SECRET='XKu8Q~pxQpXqCPK~cg0cJQbuGVZLwOhvJnIyFbQC'
-MICROSOFT_REDIRECT_URI = 'https://127.0.0.1:8000/api/microsoft-auth-callback/' 
-MICROSOFT_TENANT_ID = '5503a9b6-e9d8-4483-a12e-cf74a5b5e2fd'
-
