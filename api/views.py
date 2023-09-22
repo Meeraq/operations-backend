@@ -402,11 +402,12 @@ def approve_coach(request):
     try:
         # Get the Coach object
         unapproved_coach = request.data["coach"]
-        # 
+        room_id = request.data["room_id"] 
         coach = Coach.objects.get(id=unapproved_coach["id"])
 
         # Change the is_approved field to True
         coach.is_approved = True
+        coach.room_id = room_id 
         coach.save()
 
         path = f"/profile"
@@ -446,7 +447,7 @@ def update_coach_profile(request, id):
         existing_coach = Coach.objects.exclude(id=id).filter(coach_id=coach_id).first()
         
         if existing_coach:
-            return Response({"message": ["Coach ID must be unique"]}, status=400)
+            return Response({"error": "Coach ID must be unique"}, status=400)
 
     if serializer.is_valid():
         serializer.save()
