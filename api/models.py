@@ -201,7 +201,7 @@ class CoachStatus(models.Model):
 
 class Project(models.Model):
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100,unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type = models.CharField(
         max_length=50, choices=project_type_choice, default="cod"

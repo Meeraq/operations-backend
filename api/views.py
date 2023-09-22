@@ -633,8 +633,9 @@ def create_project_cass(request):
             name=request.data["organisation_name"], image_url=request.data["image_url"]
         )
     organisation.save()
+    try:
+        project = Project(
     # print(organisation.name, organisation.image_url, "details of org")
-    project = Project(
         name=request.data["project_name"],
         organisation=organisation,
         approx_coachee=request.data["approx_coachee"],
@@ -666,9 +667,13 @@ def create_project_cass(request):
             final_coaches={"status": "pending"},
             project_live="pending",
         ),
-    )
+    		)
+        project.save()
+    except IntegrityError:
+        return Response({'error': "Project with this name already exists"},status=400)
+    except Exception as e:
+        return Response({"error": "Failed to create project."},status=400)
     hr_emails = []
-    project.save()
     project_name = project.name
     print(request.data["hr"], "HR ID")
     for hr in request.data["hr"]:
