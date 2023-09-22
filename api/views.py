@@ -3636,14 +3636,14 @@ class SessionCountsForAllLearners(APIView):
 
                 completed_sessions_count = SessionRequestCaas.objects.filter(
                     status="completed",
-                    billable_session_number__isnull=False, 
+                    billable_session_number__isnull=False,
                     learner__id=learner_id,
                     is_archive=False,
                 ).count()
 
                 total_sessions_count = SessionRequestCaas.objects.filter(
                     learner__id=learner_id,
-                    billable_session_number__isnull=False, 
+                    billable_session_number__isnull=False,
                     is_archive=False,
                 ).count()
 
@@ -3727,7 +3727,7 @@ def get_session_pending_of_user(request, user_type, user_id):
         session_requests = SessionRequestCaas.objects.filter(
             Q(confirmed_availability=None)
             & Q(status="pending")
-            & ~Q(session_type="interview"),
+            & ~Q(session_type="interview")
         )
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
@@ -3739,7 +3739,17 @@ def get_session_pending_of_user(request, user_type, user_id):
         )
 
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
-    return Response(serializer.data, status=200)
+    res = []
+    for session in serializer.data:
+        engagement = Engagement.objects.filter(
+            learner__id=session["learner"]["id"], project__id=session["project"]["id"]
+        )
+        if len(engagement) > 0 and engagement[0].coach:
+            coach_serializer = CoachSerializer(engagement[0].coach)
+            res.append({**session, "coach": coach_serializer.data})
+        else:
+            res.append({**session})
+    return Response(res, status=200)
 
 
 @api_view(["GET"])
