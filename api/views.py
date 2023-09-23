@@ -80,7 +80,7 @@ from collections import defaultdict
 from django.db.models import Avg
 from rest_framework import status
 from rest_framework.views import APIView
-
+from django.db.models import Count, Sum, Case, When, IntegerField
 # Create your views here.
 
 import environ
@@ -4797,3 +4797,44 @@ def remove_coach_from_project(request, project_id):
         {"message": "Coach is not associated with the project"},
         status=status.HTTP_400_BAD_REQUEST,
     )
+
+    
+class SessionsProgressOfAllCoacheeForAnHr(APIView):
+    def get(self, request, user_id, format=None):
+        session_requests = (
+            SessionRequestCaas.objects
+            .filter(project__hr__id=user_id)
+            .exclude(
+                Q(session_type="chemistry", billable_session_number__isnull=True) |
+                Q(session_type="interview")
+            )
+            .annotate(
+                completed_sessions_count=Count(
+                    Case(
+                        When(status="completed", then=1),
+                        output_field=IntegerField()
+                    )
+                ),
+                total_sessions_count=Count('pk'),
+                billable_count=Count(
+                    Case(
+                        When(billable_session_number__isnull=False, then=1),
+                        output_field=IntegerField()
+                    )
+                )
+            )
+            .prefetch_related('project', 'learner')
+        )
+
+        session_data = []
+        for session_request in session_requests:
+            session_data.append({
+                "session_type": session_request.session_type,
+                "project_data": ProjectDepthTwoSerializer(session_request.project).data,  
+                "learner": LearnerDepthOneSerializer(session_request.learner).data,
+                "billable": session_request.billable_count > 0,
+                "duration": session_request.session_duration,
+                "completed_sessions": session_request.completed_sessions_count > 0,
+            })
+
+        return Response({"session_data": session_data})
