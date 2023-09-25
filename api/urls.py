@@ -115,6 +115,10 @@ urlpatterns = [
         views.get_session_requests_of_user,
     ),
     path(
+        "sessions/pending/<str:user_type>/<int:user_id>/",
+        views.get_session_pending_of_user,
+    ),
+    path(
         "sessions/upcoming/<str:user_type>/<int:user_id>/",
         views.get_upcoming_sessions_of_user,
     ),
