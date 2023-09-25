@@ -3793,6 +3793,18 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
             ~Q(status="completed"),
         )
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    if user_type == "hr" or user_type == "pmo" :
+        res = []
+        for session in serializer.data:
+            engagement = Engagement.objects.filter(
+                learner__id=session["learner"]["id"], project__id=session["project"]["id"]
+            )
+            if len(engagement) > 0 and engagement[0].coach:
+                coach_serializer = CoachSerializer(engagement[0].coach)
+                res.append({**session, "coach": coach_serializer.data})
+            else:
+                res.append({**session})
+        return Response(res, status=200)
     return Response(serializer.data, status=200)
 
 
@@ -3832,6 +3844,18 @@ def get_past_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
         )
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    if user_type == "hr" or user_type == "pmo" :
+        res = []
+        for session in serializer.data:
+            engagement = Engagement.objects.filter(
+                learner__id=session["learner"]["id"], project__id=session["project"]["id"]
+            )
+            if len(engagement) > 0 and engagement[0].coach:
+                coach_serializer = CoachSerializer(engagement[0].coach)
+                res.append({**session, "coach": coach_serializer.data})
+            else:
+                res.append({**session})
+        return Response(res, status=200)
     return Response(serializer.data, status=200)
 
 
