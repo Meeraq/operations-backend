@@ -75,7 +75,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 import json
 import string
 import random
-from django.db.models import Q
+from django.db.models import Q,Min
 from collections import defaultdict
 from django.db.models import Avg
 from rest_framework import status
@@ -3596,7 +3596,7 @@ def get_engagement_in_projects(request, project_id):
 def get_engagements_of_hr(request, user_id):
     engagements = Engagement.objects.filter(project__hr__id=user_id)
     engagements_data = []
-
+    current_time = int(timezone.now().timestamp() * 1000)
     for engagement in engagements:
         completed_sessions_count = SessionRequestCaas.objects.filter(
             status="completed",
@@ -3609,11 +3609,22 @@ def get_engagements_of_hr(request, user_id):
             learner__id=engagement.learner.id,
             is_archive=False,
         ).count()
-
+        
+        upcoming_session = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__gt=current_time),
+                Q(project__hr__id=user_id),
+                Q(project__id=engagement.project.id),
+                Q(learner__id=engagement.learner.id),
+                Q(is_archive=False),
+                ~Q(status="completed"),
+            ).aggregate(Min('confirmed_availability__end_time'))
+        
         serializer = EngagementDepthOneSerializer(engagement)
         data = serializer.data
         data["completed_sessions_count"] = completed_sessions_count
         data["total_sessions_count"] = total_sessions_count
+        data["next_session_time"] = upcoming_session.get('confirmed_availability__end_time__min')
         engagements_data.append(data)
 
     return Response(engagements_data, status=200)
