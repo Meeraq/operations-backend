@@ -3334,13 +3334,13 @@ def get_notifications(request, user_id):
     return Response(serializer.data)
 
 
-# @api_view(["PUT"])
-# def mark_notifications_as_read(request):
-#     notifications = Notification.objects.filter(
-#         read_status=False, user__id=request.data["user_id"]
-#     )
-#     notifications.update(read_status=True)
-#     return Response("Notifications marked as read.")
+@api_view(["PUT"])
+def mark_all_notifications_as_read(request):
+    notifications = Notification.objects.filter(
+        read_status=False, user__id=request.data["user_id"]
+    )
+    notifications.update(read_status=True)
+    return Response("Notifications marked as read.")
 
 
 @api_view(["PUT"])
