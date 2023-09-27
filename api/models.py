@@ -201,7 +201,7 @@ class CoachStatus(models.Model):
 
 class Project(models.Model):
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
-    name = models.CharField(max_length=100,unique=True)
+    name = models.CharField(max_length=100, unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type = models.CharField(
         max_length=50, choices=project_type_choice, default="cod"
@@ -396,3 +396,8 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+
+
+class Analytics(models.Model):
+    user_id = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.JSONField(default=list, blank=True)
