@@ -635,44 +635,44 @@ def create_project_cass(request):
     organisation.save()
     try:
         project = Project(
-    # print(organisation.name, organisation.image_url, "details of org")
-        name=request.data["project_name"],
-        organisation=organisation,
-        approx_coachee=request.data["approx_coachee"],
-        frequency_of_session=request.data["frequency_of_session"],
-        # currency=request.data["currency"],
-        # price_per_hour=request.data["price_per_hour"],
-        # coach_fees_per_hour=request.data["coach_fees_per_hour"],
-        project_type="CAAS",
-        interview_allowed=request.data["interview_allowed"],
-        # chemistry_allowed= request.data['chemistry_allowed'],
-        specific_coach=request.data["specific_coach"],
-        empanelment=request.data["empanelment"],
-        end_date=datetime.now() + timedelta(days=365),
-        tentative_start_date=request.data["tentative_start_date"],
-        mode=request.data["mode"],
-        sold=request.data["sold"],
-        # updated_to_sold= request.data['updated_to_sold'],
-        location=json.loads(request.data["location"]),
-        steps=dict(
-            project_structure={"status": "pending"},
-            coach_list={"status": "pending"},
-            coach_consent={"status": "pending"},
-            coach_list_to_hr={"status": "pending"},
-            interviews={"status": "pending"},
-            add_learners={"status": "pending"},
-            coach_approval={"status": "pending"},
-            chemistry_session={"status": "pending"},
-            coach_selected={"status": "pending"},
-            final_coaches={"status": "pending"},
-            project_live="pending",
-        ),
-    		)
+            # print(organisation.name, organisation.image_url, "details of org")
+            name=request.data["project_name"],
+            organisation=organisation,
+            approx_coachee=request.data["approx_coachee"],
+            frequency_of_session=request.data["frequency_of_session"],
+            # currency=request.data["currency"],
+            # price_per_hour=request.data["price_per_hour"],
+            # coach_fees_per_hour=request.data["coach_fees_per_hour"],
+            project_type="CAAS",
+            interview_allowed=request.data["interview_allowed"],
+            # chemistry_allowed= request.data['chemistry_allowed'],
+            specific_coach=request.data["specific_coach"],
+            empanelment=request.data["empanelment"],
+            end_date=datetime.now() + timedelta(days=365),
+            tentative_start_date=request.data["tentative_start_date"],
+            mode=request.data["mode"],
+            sold=request.data["sold"],
+            # updated_to_sold= request.data['updated_to_sold'],
+            location=json.loads(request.data["location"]),
+            steps=dict(
+                project_structure={"status": "pending"},
+                coach_list={"status": "pending"},
+                coach_consent={"status": "pending"},
+                coach_list_to_hr={"status": "pending"},
+                interviews={"status": "pending"},
+                add_learners={"status": "pending"},
+                coach_approval={"status": "pending"},
+                chemistry_session={"status": "pending"},
+                coach_selected={"status": "pending"},
+                final_coaches={"status": "pending"},
+                project_live="pending",
+            ),
+        )
         project.save()
     except IntegrityError:
-        return Response({'error': "Project with this name already exists"},status=400)
+        return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
-        return Response({"error": "Failed to create project."},status=400)
+        return Response({"error": "Failed to create project."}, status=400)
     hr_emails = []
     project_name = project.name
     print(request.data["hr"], "HR ID")
@@ -4044,6 +4044,16 @@ def edit_goal(request, goal_id):
         )
 
 
+@api_view(["DELETE"])
+def delete_goal(request, goal_id):
+    try:
+        goal = Goal.objects.get(id=goal_id)
+    except Goal.DoesNotExist:
+        return Response({"error": "Goal not found."}, status=404)
+    goal.delete()
+    return Response({"message": "Goal deleted successfully."}, status=204)
+
+
 @api_view(["POST"])
 def create_competency(request):
     serializer = CompetencySerializer(data=request.data)
@@ -4087,6 +4097,16 @@ def edit_competency(request, competency_id):
             },
             status=400,
         )
+
+
+@api_view(["DELETE"])
+def delete_competency(request, competency_id):
+    try:
+        competency = Competency.objects.get(id=competency_id)
+    except Competency.DoesNotExist:
+        return Response({"error": "Competency not found."}, status=404)
+    competency.delete()
+    return Response({"message": "Goal deleted successfully."}, status=204)
 
 
 @api_view(["GET"])
@@ -4174,6 +4194,16 @@ def edit_action_item(request, action_item_id):
         serializer.save()
         return Response({"message": "Action item updated successfully."}, status=200)
     return Response(serializer.errors, status=400)
+
+
+@api_view(["DELETE"])
+def delete_action_item(request, action_item_id):
+    try:
+        action_item = ActionItem.objects.get(id=action_item_id)
+    except ActionItem.DoesNotExist:
+        return Response({"error": "Action item not found."}, status=404)
+    action_item.delete()
+    return Response({"message": "Action item deleted successfully"}, status=204)
 
 
 @api_view(["POST"])
