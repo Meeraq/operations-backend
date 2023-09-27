@@ -226,4 +226,5 @@ urlpatterns = [
         "coachee-session-counts/<str:user_type>/<int:user_id>/",
         SessionCountsForAllLearners.as_view(),
     ),
+    path('edit-project-caas/<int:project_id>/', views.edit_project_caas),
 ]

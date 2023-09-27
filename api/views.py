@@ -80,7 +80,11 @@ from collections import defaultdict
 from django.db.models import Avg
 from rest_framework import status
 from rest_framework.views import APIView
-
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Project
 # Create your views here.
 
 import environ
@@ -633,6 +637,7 @@ def create_project_cass(request):
             name=request.data["organisation_name"], image_url=request.data["image_url"]
         )
     organisation.save()
+    desc = request.data["project_description"]
     try:
         project = Project(
             # print(organisation.name, organisation.image_url, "details of org")
@@ -650,8 +655,11 @@ def create_project_cass(request):
             empanelment=request.data["empanelment"],
             end_date=datetime.now() + timedelta(days=365),
             tentative_start_date=request.data["tentative_start_date"],
+            # tentative_start_date=datetime.strptime(request.data["tentative_start_date"], "%Y-%m-%d").strftime("%d-%m-%Y"),
             mode=request.data["mode"],
             sold=request.data["sold"],
+            project_description=desc,
+
             # updated_to_sold= request.data['updated_to_sold'],
             location=json.loads(request.data["location"]),
             steps=dict(
@@ -667,15 +675,13 @@ def create_project_cass(request):
                 final_coaches={"status": "pending"},
                 project_live="pending",
             ),
-            project_description=request.data["project_description"],
         )
         project.save()
     except IntegrityError:
         return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
-        return Response({"error": "Failed to create project."}, status=400)
-    hr_emails = []
-    project_name = project.name
+        return Response({"error": f"Failed to create project: {str(e)}"}, status=400)
+    
     print(request.data["hr"], "HR ID")
     for hr in request.data["hr"]:
         single_hr = HR.objects.get(id=hr)
@@ -4798,3 +4804,36 @@ def remove_coach_from_project(request, project_id):
         {"message": "Coach is not associated with the project"},
         status=status.HTTP_400_BAD_REQUEST,
     )
+
+@api_view(['PUT'])
+def edit_project_caas(request, project_id):
+    try:
+        # Retrieve the existing project from the database
+        project = get_object_or_404(Project, pk=project_id)
+        # Update project attributes based on the data in the PUT request
+        project.name = request.data.get('project_name', project.name)
+        project.approx_coachee = request.data.get('approx_coachee', project.approx_coachee)
+        project.frequency_of_session = request.data.get('frequency_of_session', project.frequency_of_session)
+        project.interview_allowed = request.data.get('interview_allowed', project.interview_allowed)
+        project.specific_coach = request.data.get('specific_coach', project.specific_coach)
+        project.empanelment = request.data.get('empanelment', project.empanelment)
+        project.tentative_start_date = request.data.get('tentative_start_date', project.tentative_start_date)
+        project.mode = request.data.get('mode', project.mode)
+        project.sold = request.data.get('sold', project.sold)
+        project.location = json.loads(request.data.get('location', '[]'))
+        project.project_description = request.data.get('project_description', project.project_description)
+        for hr in request.data["hr"]:
+            single_hr = HR.objects.get(id=hr)
+            project.hr.add(single_hr)
+        
+        # Save the updated project
+        project.save()
+        
+        # You can return a success response with the updated project details
+        return JsonResponse({'message': 'Project updated successfully', 'project_id': project.id})
+    
+    except Project.DoesNotExist:
+        return JsonResponse({'error': 'Project not found'}, status=404)
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
