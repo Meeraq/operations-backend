@@ -396,3 +396,27 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+
+class ProfileEditActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+    time_spent = models.DurationField(null=True, blank=True)
+    save_timestamp = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"Profile Edit for {self.user.username}"
+
+class UserLoginActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    login_timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"User Login Activity for {self.user.username}"
+
+class SentEmailActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    email_subject = models.CharField(max_length=500)  
+    timestamp = models.DateTimeField() 
+
+    def __str__(self):
+        return f"Sent Email - {self.user.username}"

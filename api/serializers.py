@@ -14,6 +14,7 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    ProfileEditActivity,
 )
 from django.contrib.auth.models import User
 
@@ -208,3 +209,8 @@ class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
         fields = '__all__'
+
+class ProfileEditSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProfileEditActivity
+        fields = '__all__'  

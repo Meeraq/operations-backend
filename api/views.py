@@ -32,6 +32,7 @@ from .serializers import (
     ActionItemSerializer,
     GetActionItemDepthOneSerializer,
     PendingActionItemSerializer,
+    ProfileEditSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -65,6 +66,9 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    ProfileEditActivity,
+    UserLoginActivity,
+    SentEmailActivity,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -87,10 +91,20 @@ import environ
 
 env = environ.Env()
 
-
 class EmailSendingError(Exception):
     pass
 
+
+def create_send_email(user_email,file_name):
+    
+    user =User.objects.get(username=user_email)
+            
+    sent_email = SentEmailActivity.objects.create(
+            user=user,
+            email_subject=file_name,
+            timestamp=timezone.now(),
+            )
+    sent_email.save()
 
 def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
     email_message = render_to_string(file_name, content)
@@ -106,6 +120,8 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
 
     try:
         email.send(fail_silently=False)
+        for email in user_email:
+            create_send_email(email,file_name)
     except BadHeaderError as e:
         print(f"Error occurred while sending emails: {str(e)}")
         raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
@@ -420,6 +436,31 @@ def approve_coach(request, coach_id):
         return Response({"error": str(e)}, status=500)
 
 
+# @api_view(["PUT"])
+# def update_coach_profile(request, coach_id):
+#     try:
+#         coach = Coach.objects.get(id=coach_id)
+#     except Coach.DoesNotExist:
+#         return Response(status=404)
+#     pmo_user = User.objects.filter(profile__type="pmo").first()
+#     pmo = Pmo.objects.get(email=pmo_user.email)
+
+#     serializer = CoachSerializer(
+#         coach, data=request.data, partial=True
+#     )  
+#     if serializer.is_valid():
+#         serializer.save()
+#         depth_serializer = CoachDepthOneSerializer(coach)
+
+        
+
+#         return Response(
+#             {**depth_serializer.data, "last_login": coach.user.user.last_login},
+#             status=200,
+#         )
+
+#     return Response(serializer.errors, status=400)
+
 @api_view(["PUT"])
 def update_coach_profile(request, coach_id):
     try:
@@ -429,20 +470,25 @@ def update_coach_profile(request, coach_id):
     pmo_user = User.objects.filter(profile__type="pmo").first()
     pmo = Pmo.objects.get(email=pmo_user.email)
 
+    profile_edit_start = ProfileEditActivity.objects.create(user=coach.user.user,timestamp=timezone.now(),)
+    print(profile_edit_start)
+
     serializer = CoachSerializer(
         coach, data=request.data, partial=True
-    )  # partial argument added here
+    )  
     if serializer.is_valid():
         serializer.save()
+
+        # Capture the save timestamp when changes are saved
+        profile_edit_start.save_timestamp = timezone.now()  # Assuming you have imported 'timezone' from 'django.utils'
+        profile_edit_start.save()
+
         depth_serializer = CoachDepthOneSerializer(coach)
 
-        # send_mail_templates(
-        #     "pmo_emails/coach_update_profile.html",
-        #     [pmo.email],
-        #     f"Meeraq Coaching | {coach.first_name} {coach.last_name} updated their profile",
-        #     {"name": pmo.name, "coachName": coach.first_name},
-        # 		[] # no bcc emails
-        # )
+        # Calculate the time spent on the edit page
+        profile_edit_start.time_spent = profile_edit_start.save_timestamp - profile_edit_start.timestamp
+        profile_edit_start.save()
+
 
         return Response(
             {**depth_serializer.data, "last_login": coach.user.user.last_login},
@@ -1795,13 +1841,13 @@ def login_view(request):
     if username is None or password is None:
         raise ValidationError({"detail": "Please provide username and password."})
     user = authenticate(request, username=username, password=password)
-    # check_user = Profile.objects.get(user__username=username)
-    # if check_user:
-    #     if check_user.type == 'hr':
-    #         raise AuthenticationFailed({'detail': 'Try login with OTP.'})
+    
 
     if user is None:
         raise AuthenticationFailed({"detail": "Invalid credentials."})
+    
+    login_timestamp = datetime.now()
+    UserLoginActivity.objects.create(user=user, login_timestamp=login_timestamp)
 
     last_login = user.last_login
     login(request, user)
@@ -1920,8 +1966,10 @@ def validate_otp(request):
         raise AuthenticationFailed("Invalid OTP")
 
     user = otp_obj.user
-    # token, created = Token.objects.get_or_create(user=learner.user.user)
-    # Delete the OTP object after it has been validated
+    
+    login_timestamp = datetime.now()
+    UserLoginActivity.objects.create(user=user, login_timestamp=login_timestamp)
+   
     otp_obj.delete()
     last_login = user.last_login
     login(request, user)
@@ -1937,9 +1985,6 @@ def validate_otp(request):
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
 
-    # learner_data = {'id':learner.id,'name':learner.name,'email': learner.email,'phone': learner.email,'last_login': learner.user.user.last_login ,'token': token.key}
-    # updateLastLogin(learner.email)
-    # return Response({ 'learner': learner_data},status=200)
 
 
 @api_view(["GET"])
