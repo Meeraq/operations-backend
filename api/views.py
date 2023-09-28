@@ -3309,7 +3309,11 @@ def add_mulitple_coaches(request):
                 linkedin_profile_link = coach_data.get("linkedin_profile", "")
                 coaching_hours = coach_data.get("coaching_hours", "")
                 fee_remark = coach_data.get("fee_remark", "")
-
+                client_companies = coach_data.get("client_companies", [])
+                educational_qualification = coach_data.get("educational_qualification",[])
+                corporate_experience = coach_data.get("corporate_experience", "")
+                coaching_experience = coach_data.get("coaching_experience", "")
+            
                 if coach_data.get("ctt_nctt") == "Yes":
                     ctt_nctt = True
                 else:
@@ -3397,6 +3401,10 @@ def add_mulitple_coaches(request):
                     location=location,
                     linkedin_profile_link=linkedin_profile_link,
                     coaching_hours=coaching_hours,
+                    client_companies = client_companies,
+                    educational_qualification = educational_qualification,
+                    corporate_experience = corporate_experience,
+                    coaching_experience = coaching_experience,
                 )
 
                 # Approve coach
