@@ -10,15 +10,29 @@ def change_field_data(apps, schema_editor):
     for coach in Coach.objects.all():
         try:
             domain_data = json.loads(coach.domain)
+            education_data=json.loads(coach.education)
             if not domain_data:
                 coach.domain = json.dumps(domain_data)
+                coach.save()
+            if not education_data:  
+                coach.education=json.dumps(education_data)
                 coach.save()
         except (json.JSONDecodeError, ValidationError):
             if coach.domain:
                 coach.domain = json.dumps([coach.domain])
             else:
                 coach.domain = json.dumps([])
+                
+            if coach.education:
+                coach.education=json.dumps([coach.education])
+            else:
+                coach.education=json.dumps([])
+                
             coach.save()
+            
+            
+
+            
             
 
 class Migration(migrations.Migration):
