@@ -3313,7 +3313,7 @@ def add_mulitple_coaches(request):
                 educational_qualification = coach_data.get("educational_qualification",[])
                 corporate_experience = coach_data.get("corporate_experience", "")
                 coaching_experience = coach_data.get("coaching_experience", "")
-            
+                education=coach_data.get("education",[])
                 if coach_data.get("ctt_nctt") == "Yes":
                     ctt_nctt = True
                 else:
@@ -3405,6 +3405,7 @@ def add_mulitple_coaches(request):
                     educational_qualification = educational_qualification,
                     corporate_experience = corporate_experience,
                     coaching_experience = coaching_experience,
+                    education=education,
                 )
 
                 # Approve coach
