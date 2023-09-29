@@ -424,14 +424,22 @@ def approve_coach(request, coach_id):
 def update_coach_profile(request, coach_id):
     try:
         coach = Coach.objects.get(id=coach_id)
+       
+        mutable_data = request.data.copy()
+        
+        if  not mutable_data['coach_id']:
+            mutable_data['coach_id'] = coach.coach_id
+
     except Coach.DoesNotExist:
         return Response(status=404)
+    
     pmo_user = User.objects.filter(profile__type="pmo").first()
-    pmo = Pmo.objects.get(email=pmo_user.email)
-
+    pmo = Pmo.objects.get(email=pmo_user.username)
+    
     serializer = CoachSerializer(
-        coach, data=request.data, partial=True
-    )  # partial argument added here
+        coach, data=mutable_data, partial=True
+    )
+    
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
