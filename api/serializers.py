@@ -14,6 +14,8 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    StandardizedField,
+    StandardizedFieldRequest,
 )
 from django.contrib.auth.models import User
 
@@ -208,3 +210,13 @@ class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
         fields = '__all__'
+
+class StandardizedFieldSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StandardizedField
+        fields = "__all__"
+        
+class StandardizedFieldRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StandardizedFieldRequest
+        fields = "__all__"

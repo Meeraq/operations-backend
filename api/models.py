@@ -415,3 +415,44 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+
+
+class StandardizedField(models.Model):
+    FIELD_CHOICES = (
+        ("location", "Location"),
+        ("other_certification", "Other Certification"),
+        ("area_of_expertise", "Industry"),
+        ("job_roles", "Job roles"),
+        ("companies_worked_in", "Companies worked in"),
+        ("language", "Language"),
+        ("education", "Education institutions"),
+        ("domain", "Functional Domain"),
+        ("client_companies", "Client companies"),
+    )
+
+    field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
+    values = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class StandardizedFieldRequest(models.Model):
+    STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("accepted", "Accepted"),
+        ("rejected", "Rejected"),
+    )
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True)
+    standardized_field_name = models.ForeignKey(
+        StandardizedField, on_delete=models.CASCADE, blank=True
+    )
+    value = models.CharField(
+        max_length=255, blank=True
+    ) 
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.coach.username} - {self.standardized_field_name} - {self.status}"
