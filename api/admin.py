@@ -18,6 +18,11 @@ from .models import (
     ProfileEditActivity,
     UserLoginActivity,
     SentEmailActivity,
+    AddCoachActivity,
+    AddGoalActivity,
+    RemoveCoachActivity,
+
+
 )
 
 # Register your models here.
@@ -28,8 +33,7 @@ admin.site.register(Organisation)
 admin.site.register(Project)
 admin.site.register(Learner)
 admin.site.register(Availibility)
-# admin.site.register(SessionRequest)
-# admin.site.register(Session)
+
 admin.site.register(HR)
 admin.site.register(Profile)
 admin.site.register(Engagement)
@@ -42,3 +46,6 @@ admin.site.register(ActionItem)
 admin.site.register(ProfileEditActivity)
 admin.site.register(UserLoginActivity)
 admin.site.register(SentEmailActivity)
+admin.site.register(AddCoachActivity)
+admin.site.register(AddGoalActivity)
+admin.site.register(RemoveCoachActivity)

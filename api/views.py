@@ -32,7 +32,11 @@ from .serializers import (
     ActionItemSerializer,
     GetActionItemDepthOneSerializer,
     PendingActionItemSerializer,
-    ProfileEditSerializer,
+    ProfileEditActivitySerializer,
+    UserLoginActivitySerializer,
+    AddGoalActivitySerializer,
+    AddCoachActivitySerializer,
+    SentEmailActivitySerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -69,6 +73,9 @@ from .models import (
     ProfileEditActivity,
     UserLoginActivity,
     SentEmailActivity,
+    AddCoachActivity,
+    AddGoalActivity,
+    RemoveCoachActivity,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -468,10 +475,8 @@ def update_coach_profile(request, coach_id):
     except Coach.DoesNotExist:
         return Response(status=404)
     pmo_user = User.objects.filter(profile__type="pmo").first()
-    pmo = Pmo.objects.get(email=pmo_user.email)
-
+    pmo = Pmo.objects.get(email=pmo_user)
     profile_edit_start = ProfileEditActivity.objects.create(user=coach.user.user,timestamp=timezone.now(),)
-    print(profile_edit_start)
 
     serializer = CoachSerializer(
         coach, data=request.data, partial=True
@@ -501,17 +506,13 @@ def update_coach_profile(request, coach_id):
 @api_view(["GET"])
 def get_coaches(request):
     try:
-        # Get all the Coach objects
         coaches = Coach.objects.all()
 
-        # Serialize the Coach objects
         serializer = CoachSerializer(coaches, many=True)
 
-        # Return the serialized Coach objects as the response
         return Response(serializer.data, status=200)
 
     except Exception as e:
-        # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
 
 
@@ -1626,11 +1627,6 @@ def add_coach(request):
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
 
-    # return Response({'error': 'A coach user with this email already exists.'}, status=400)
-
-    # print('ctt not ctt', json.loads(  request.data['ctt_nctt']),type(json.loads(request.data['ctt_nctt'])))
-
-    # Check if required data is provided
     if not all(
         [
             coach_id,
@@ -1645,12 +1641,16 @@ def add_coach(request):
         ]
     ):
         return Response({"error": "All required fields must be provided."}, status=400)
+            
+            
 
     try:
         # Create the Django User
         if coach_exists(coach_id):
-            return Response({"error": "Coach with this ID already exists."}, status=400)
 
+            return Response({"error": "Coach with this ID already exists."}, status=400)
+        else:
+            print("coach doesnt exist")
         with transaction.atomic():
             temp_password = "".join(
                 random.choices(
@@ -1660,11 +1660,7 @@ def add_coach(request):
             user = User.objects.create_user(
                 username=username, password=temp_password, email=email
             )
-
-            # Create the Coach Profile linked to the User
             coach_profile = Profile.objects.create(user=user, type="coach")
-
-            # Create the Coach User using the Profile
             coach_user = Coach.objects.create(
                 user=coach_profile,
                 coach_id=coach_id,
@@ -1698,12 +1694,14 @@ def add_coach(request):
                 corporate_experience=corporate_experience,
                 coaching_experience=coaching_experience,
             )
-
             # approve coach
             coach = Coach.objects.get(id=coach_user.id)
-            # Change the is_approved field to True
             coach.is_approved = True
             coach.save()
+
+            coach_add = AddCoachActivity.objects.create(user=user, timestamp=timezone.now())
+            coach_add.save_timestamp = timezone.now()
+            coach_add.save()
 
             full_name = coach_user.first_name + " " + coach_user.last_name
             send_mail_templates(
@@ -1713,18 +1711,10 @@ def add_coach(request):
                 {"name": coach_user.first_name},
                 [env("BCC_EMAIL")],  # no bcc emails
             )
-            # Send email notification to the coach
-            # subject = 'Welcome to our coaching platform'
-            # message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {temp_password}\n\n Click on the link to login or reset the password http://localhost:3003/'
-            # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
-
-            # # Send email notification to the admin
-            # admin_email = 'jatin@meeraq.com'
-            # admin_message = f'Dear PMO! \n\n A new coach {full_name} has been added on our coaching platform.'
-            # send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])
-
-            # Return success response
+            print("100")
         return Response({"message": "Coach added successfully."}, status=201)
+        
+
 
     except IntegrityError as e:
         print(e)
@@ -1912,14 +1902,16 @@ def get_user_data(user):
 @permission_classes([AllowAny])
 def generate_otp(request):
     try:
+        print("789",request.data)
         user = User.objects.get(username=request.data["email"])
+        print("7879",user)
         try:
             # Check if OTP already exists for the user
             otp_obj = OTP.objects.get(user=user)
             otp_obj.delete()
         except OTP.DoesNotExist:
             pass
-
+        print("6789")
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars="0123456789")
         created_otp = OTP.objects.create(user=user, otp=otp)
@@ -1930,6 +1922,7 @@ def generate_otp(request):
         message = (
             f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
         )
+        print("789")
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
         send_mail_templates(
             "hr_emails/login_with_otp.html",
@@ -1938,6 +1931,7 @@ def generate_otp(request):
             {"name": name, "otp": created_otp.otp},
             [],  # no bcc
         )
+        print("976")
         return Response({"message": f"OTP has been sent to {user.username}!"})
 
     except User.DoesNotExist:
@@ -1954,6 +1948,7 @@ def generate_otp(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def validate_otp(request):
+    print("1")
     otp_obj = (
         OTP.objects.filter(
             user__username=request.data["email"], otp=request.data["otp"]
@@ -1961,15 +1956,15 @@ def validate_otp(request):
         .order_by("-created_at")
         .first()
     )
-
+    print("2")
     if otp_obj is None:
         raise AuthenticationFailed("Invalid OTP")
 
     user = otp_obj.user
-    
+    print("3")
     login_timestamp = datetime.now()
     UserLoginActivity.objects.create(user=user, login_timestamp=login_timestamp)
-   
+    print("4")
     otp_obj.delete()
     last_login = user.last_login
     login(request, user)
@@ -4019,6 +4014,9 @@ def reschedule_session_of_coachee(request, session_id):
 
 @api_view(["POST"])
 def create_goal(request):
+    print(request.data,"helo")
+    user_data = request.data.get('user')
+    print(user_data)
     serializer = GoalSerializer(data=request.data)
     goal_name = request.data["name"]
     engagement_id = request.data.get("engagement")
@@ -4027,6 +4025,16 @@ def create_goal(request):
         if Goal.objects.filter(engagement__id=engagement_id).count() < 10:
             if serializer.is_valid():
                 serializer.save()
+                # print("565")
+                try:
+                    user_instance = get_object_or_404(User, email=user_data)
+                except User.DoesNotExist:
+                    return Response({"message": "User not found."}, status=404)
+ 
+                AddGoalActivity.objects.create(
+                    user=user_instance,  
+                    timestamp=timezone.now(),
+                )
                 return Response({"message": "Goal created successfully."}, status=201)
             return Response(serializer.errors, status=400)
         else:
@@ -4827,3 +4835,43 @@ def remove_coach_from_project(request, project_id):
         {"message": "Coach is not associated with the project"},
         status=status.HTTP_400_BAD_REQUEST,
     )
+
+
+
+
+
+@api_view(["GET"])
+def get_total_login_count(request):
+    user_login_activities = UserLoginActivity.objects.all()
+    total_login_count = user_login_activities.count()
+    serializer = UserLoginActivitySerializer(user_login_activities, many=True)
+   
+    return Response({"total_login_count": total_login_count, "login_activities": serializer.data})
+
+@api_view(["GET"])
+def get_profile_edit_activity(request):
+    profile_edit_activities = ProfileEditActivity.objects.all()
+    total_activity_count = profile_edit_activities.count()
+    serializer = ProfileEditActivitySerializer(profile_edit_activities, many=True) 
+    print("serializer data", serializer.data[3])
+    return Response({"total_activity_count": total_activity_count, "profile_edit_activities": serializer.data}) 
+
+@api_view(["GET"])
+def get_goal_add_activity(request):
+    goal_add_activities = AddGoalActivity.objects.all()
+    total_activity_count = goal_add_activities.count()
+    serializer = AddGoalActivitySerializer(goal_add_activities, many=True) 
+    return Response({"total_activity_count": total_activity_count, "goal_add_activities": serializer.data}) 
+
+@api_view(["GET"])
+def get_coach_add_activity(request):
+    coach_add_activities = AddCoachActivity.objects.all()
+    total_activity_count = coach_add_activities.count()
+    serializer = AddCoachActivitySerializer(coach_add_activities, many=True) 
+    return Response({"total_activity_count": total_activity_count, "coach_add_activities": serializer.data}) 
+@api_view(["GET"])
+def sent_email_activity(request):
+    sent_email_activity = SentEmailActivity.objects.all()
+    total_activity_count = sent_email_activity.count()
+    serializer = SentEmailActivitySerializer(sent_email_activity, many=True) 
+    return Response({"total_activity_count": total_activity_count, "sent_email_activity": serializer.data}) 

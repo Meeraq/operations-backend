@@ -420,3 +420,28 @@ class SentEmailActivity(models.Model):
 
     def __str__(self):
         return f"Sent Email - {self.user.username}"
+    
+class RemoveCoachActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"Removal of Coach {self.user.username}"
+    
+class AddCoachActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"Coach Added - {self.user.username}"
+    
+class AddGoalActivity(models.Model):
+    user=models.ForeignKey(User,on_delete=models.CASCADE)
+    timestamp=models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user} added a goal."
+
+    
+        
+
