@@ -4198,33 +4198,81 @@ def complete_engagement(request, engagement_id):
     return Response({"message": "Engagement is completed."}, status=201)
 
 
+# @api_view(["GET"])
+# def get_all_competencies(request):
+#     competencies = Competency.objects.all()
+#     competency_list = []
+
+#     for competency in competencies:
+#         goal_name = (competency.goal.name if competency.goal else "N/A",)
+#         project_name = (
+#             competency.goal.engagement.project.name
+#             if competency.goal and competency.goal.engagement.project
+#             else "N/A"
+#         )
+#         coachee_name = (
+#             competency.goal.engagement.learner.name
+#             if competency.goal and competency.goal.engagement.learner
+#             else "N/A"
+#         )
+#         competency_data = {
+#             "id": competency.id,
+#             "goal_id": goal_name,
+#             "name": competency.name,
+#             "scoring": competency.scoring,
+#             "created_at": competency.created_at.isoformat(),
+#             "project_name": project_name,
+#             "learner_name": coachee_name,
+#         }
+#         competency_list.append(competency_data)
+
+#     return Response({"competencies": competency_list})
+
+
 @api_view(["GET"])
 def get_all_competencies(request):
-    competencies = Competency.objects.all()
+    goals_with_competencies = Goal.objects.prefetch_related("competency_set").all()
+
     competency_list = []
 
-    for competency in competencies:
-        goal_name = (competency.goal.name if competency.goal else "N/A",)
+    for goal in goals_with_competencies:
+        goal_name = goal.name
         project_name = (
-            competency.goal.engagement.project.name
-            if competency.goal and competency.goal.engagement.project
+            goal.engagement.project.name
+            if goal.engagement and goal.engagement.project
             else "N/A"
         )
         coachee_name = (
-            competency.goal.engagement.learner.name
-            if competency.goal and competency.goal.engagement.learner
+            goal.engagement.learner.name
+            if goal.engagement and goal.engagement.learner
             else "N/A"
         )
-        competency_data = {
-            "id": competency.id,
-            "goal_id": goal_name,
-            "name": competency.name,
-            "scoring": competency.scoring,
-            "created_at": competency.created_at.isoformat(),
-            "project_name": project_name,
-            "learner_name": coachee_name,
-        }
-        competency_list.append(competency_data)
+
+        # Include goals without competencies
+        if goal.competency_set.exists():
+            for competency in goal.competency_set.all():
+                competency_data = {
+                    "id": competency.id,
+                    "goal_id": goal_name,
+                    "name": competency.name,
+                    "scoring": competency.scoring,
+                    "created_at": competency.created_at.isoformat(),
+                    "project_name": project_name,
+                    "learner_name": coachee_name,
+                }
+                competency_list.append(competency_data)
+        else:
+            # Include goals with no competencies
+            competency_data = {
+                "id": None,
+                "goal_id": goal_name,
+                "name": "N/A",
+                "scoring": [],
+                "created_at": None,
+                "project_name": project_name,
+                "learner_name": coachee_name,
+            }
+            competency_list.append(competency_data)
 
     return Response({"competencies": competency_list})
 
@@ -4654,35 +4702,158 @@ def get_pending_action_items_by_competency(request, learner_id):
     return Response(serializer.data, status=200)
 
 
+# @api_view(["GET"])
+# def get_all_competencies_of_hr(request, hr_id):
+#     competencies = Competency.objects.filter(goal__engagement__project__hr=hr_id)
+#     competency_list = []
+
+#     for competency in competencies:
+#         goal_name = (competency.goal.name if competency.goal else "N/A",)
+#         project_name = (
+#             competency.goal.engagement.project.name
+#             if competency.goal and competency.goal.engagement.project
+#             else "N/A"
+#         )
+#         coachee_name = (
+#             competency.goal.engagement.learner.name
+#             if competency.goal and competency.goal.engagement.learner
+#             else "N/A"
+#         )
+#         competency_data = {
+#             "id": competency.id,
+#             "goal_id": goal_name,
+#             "name": competency.name,
+#             "scoring": competency.scoring,
+#             "created_at": competency.created_at.isoformat(),
+#             "project_name": project_name,
+#             "learner_name": coachee_name,
+#         }
+#         competency_list.append(competency_data)
+
+#     return Response({"competencies": competency_list})
+
+
+# @api_view(["GET"])
+# def get_all_competencies_of_hr(request, hr_id):
+#     competencies = Competency.objects.filter(
+#         goal__engagement__project__hr=hr_id
+#     ).select_related("goal__engagement__learner", "goal__engagement__project")
+
+#     competency_list = []
+
+#     for competency in competencies:
+#         goal = competency.goal
+#         goal_name = goal.name if goal else "N/A"
+#         coachee_name = (
+#             goal.engagement.learner.name if goal and goal.engagement.learner else "N/A"
+#         )
+#         project_name = (
+#             goal.engagement.project.name
+#             if goal and goal.engagement.project
+#             else "N/A"
+#         )
+
+#         competency_data = {
+#             "id": competency.id,
+#             "goal_id": goal_name,
+#             "name": competency.name,
+#             "scoring": competency.scoring,
+#             "created_at": competency.created_at.isoformat(),
+#             "project_name": project_name,
+#             "learner_name": coachee_name,
+#         }
+#         competency_list.append(competency_data)
+
+#     return Response({"competencies": competency_list})
+
+
+# @api_view(["GET"])
+# def get_all_competencies_of_hr(request, hr_id):
+#     goals = Goal.objects.filter(engagement__project__hr=hr_id).select_related(
+#         "engagement__learner", "engagement__project"
+#     )
+
+#     goal_list = []
+
+#     for goal in goals:
+#         coachee_name = (
+#             goal.engagement.learner.name if goal and goal.engagement.learner else "N/A"
+#         )
+#         project_name = (
+#             goal.engagement.project.name if goal and goal.engagement.project else "N/A"
+#         )
+
+#         competencies = Competency.objects.filter(goal=goal)
+#         competency_list = []
+
+#         for competency in competencies:
+#             competency_data = {
+#                 "id": competency.id,
+#                 "name": competency.name,
+#                 "scoring": competency.scoring,
+#                 "created_at": competency.created_at.isoformat(),
+#             }
+#             competency_list.append(competency_data)
+
+#         goal_data = {
+#             "id": goal.id,
+#             "name": goal.name if goal else "N/A",
+#             "coachee_name": coachee_name,
+#             "project_name": project_name,
+#             "competencies": competency_list,
+#         }
+#         goal_list.append(goal_data)
+
+#     return Response({"goals": goal_list})
+
 @api_view(["GET"])
-def get_all_competencies_of_hr(request, hr_id):
-    competencies = Competency.objects.filter(goal__engagement__project__hr=hr_id)
+def get_all_competencies_of_hr(request,hr_id):
+    goals_with_competencies = Goal.objects.prefetch_related("competency_set").filter(engagement__project__hr=hr_id)
+
     competency_list = []
 
-    for competency in competencies:
-        goal_name = (competency.goal.name if competency.goal else "N/A",)
+    for goal in goals_with_competencies:
+        goal_name = goal.name
         project_name = (
-            competency.goal.engagement.project.name
-            if competency.goal and competency.goal.engagement.project
+            goal.engagement.project.name
+            if goal.engagement and goal.engagement.project
             else "N/A"
         )
         coachee_name = (
-            competency.goal.engagement.learner.name
-            if competency.goal and competency.goal.engagement.learner
+            goal.engagement.learner.name
+            if goal.engagement and goal.engagement.learner
             else "N/A"
         )
-        competency_data = {
-            "id": competency.id,
-            "goal_id": goal_name,
-            "name": competency.name,
-            "scoring": competency.scoring,
-            "created_at": competency.created_at.isoformat(),
-            "project_name": project_name,
-            "learner_name": coachee_name,
-        }
-        competency_list.append(competency_data)
+
+        # Include goals without competencies
+        if goal.competency_set.exists():
+            for competency in goal.competency_set.all():
+                competency_data = {
+                    "id": competency.id,
+                    "goal_id": goal_name,
+                    "name": competency.name,
+                    "scoring": competency.scoring,
+                    "created_at": competency.created_at.isoformat(),
+                    "project_name": project_name,
+                    "learner_name": coachee_name,
+                }
+                competency_list.append(competency_data)
+        else:
+            # Include goals with no competencies
+            competency_data = {
+                "id": None,
+                "goal_id": goal_name,
+                "name": "N/A",
+                "scoring": [],
+                "created_at": None,
+                "project_name": project_name,
+                "learner_name": coachee_name,
+            }
+            competency_list.append(competency_data)
 
     return Response({"competencies": competency_list})
+
+
 
 
 class UpdateInviteesView(APIView):
