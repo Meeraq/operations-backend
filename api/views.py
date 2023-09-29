@@ -635,44 +635,44 @@ def create_project_cass(request):
     organisation.save()
     try:
         project = Project(
-    # print(organisation.name, organisation.image_url, "details of org")
-        name=request.data["project_name"],
-        organisation=organisation,
-        approx_coachee=request.data["approx_coachee"],
-        frequency_of_session=request.data["frequency_of_session"],
-        # currency=request.data["currency"],
-        # price_per_hour=request.data["price_per_hour"],
-        # coach_fees_per_hour=request.data["coach_fees_per_hour"],
-        project_type="CAAS",
-        interview_allowed=request.data["interview_allowed"],
-        # chemistry_allowed= request.data['chemistry_allowed'],
-        specific_coach=request.data["specific_coach"],
-        empanelment=request.data["empanelment"],
-        end_date=datetime.now() + timedelta(days=365),
-        tentative_start_date=request.data["tentative_start_date"],
-        mode=request.data["mode"],
-        sold=request.data["sold"],
-        # updated_to_sold= request.data['updated_to_sold'],
-        location=json.loads(request.data["location"]),
-        steps=dict(
-            project_structure={"status": "pending"},
-            coach_list={"status": "pending"},
-            coach_consent={"status": "pending"},
-            coach_list_to_hr={"status": "pending"},
-            interviews={"status": "pending"},
-            add_learners={"status": "pending"},
-            coach_approval={"status": "pending"},
-            chemistry_session={"status": "pending"},
-            coach_selected={"status": "pending"},
-            final_coaches={"status": "pending"},
-            project_live="pending",
-        ),
-    		)
+            # print(organisation.name, organisation.image_url, "details of org")
+            name=request.data["project_name"],
+            organisation=organisation,
+            approx_coachee=request.data["approx_coachee"],
+            frequency_of_session=request.data["frequency_of_session"],
+            # currency=request.data["currency"],
+            # price_per_hour=request.data["price_per_hour"],
+            # coach_fees_per_hour=request.data["coach_fees_per_hour"],
+            project_type="CAAS",
+            interview_allowed=request.data["interview_allowed"],
+            # chemistry_allowed= request.data['chemistry_allowed'],
+            specific_coach=request.data["specific_coach"],
+            empanelment=request.data["empanelment"],
+            end_date=datetime.now() + timedelta(days=365),
+            tentative_start_date=request.data["tentative_start_date"],
+            mode=request.data["mode"],
+            sold=request.data["sold"],
+            # updated_to_sold= request.data['updated_to_sold'],
+            location=json.loads(request.data["location"]),
+            steps=dict(
+                project_structure={"status": "pending"},
+                coach_list={"status": "pending"},
+                coach_consent={"status": "pending"},
+                coach_list_to_hr={"status": "pending"},
+                interviews={"status": "pending"},
+                add_learners={"status": "pending"},
+                coach_approval={"status": "pending"},
+                chemistry_session={"status": "pending"},
+                coach_selected={"status": "pending"},
+                final_coaches={"status": "pending"},
+                project_live="pending",
+            ),
+        )
         project.save()
     except IntegrityError:
-        return Response({'error': "Project with this name already exists"},status=400)
+        return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
-        return Response({"error": "Failed to create project."},status=400)
+        return Response({"error": "Failed to create project."}, status=400)
     hr_emails = []
     project_name = project.name
     print(request.data["hr"], "HR ID")
@@ -4266,7 +4266,7 @@ def get_all_competencies(request):
             competency_data = {
                 "id": None,
                 "goal_id": goal_name,
-                "name": "N/A",
+                "name": "-",
                 "scoring": [],
                 "created_at": None,
                 "project_name": project_name,
@@ -4806,9 +4806,12 @@ def get_pending_action_items_by_competency(request, learner_id):
 
 #     return Response({"goals": goal_list})
 
+
 @api_view(["GET"])
-def get_all_competencies_of_hr(request,hr_id):
-    goals_with_competencies = Goal.objects.prefetch_related("competency_set").filter(engagement__project__hr=hr_id)
+def get_all_competencies_of_hr(request, hr_id):
+    goals_with_competencies = Goal.objects.prefetch_related("competency_set").filter(
+        engagement__project__hr=hr_id
+    )
 
     competency_list = []
 
@@ -4843,7 +4846,7 @@ def get_all_competencies_of_hr(request,hr_id):
             competency_data = {
                 "id": None,
                 "goal_id": goal_name,
-                "name": "N/A",
+                "name": "-",
                 "scoring": [],
                 "created_at": None,
                 "project_name": project_name,
@@ -4852,8 +4855,6 @@ def get_all_competencies_of_hr(request,hr_id):
             competency_list.append(competency_data)
 
     return Response({"competencies": competency_list})
-
-
 
 
 class UpdateInviteesView(APIView):
