@@ -142,11 +142,17 @@ urlpatterns = [
     path("goals/", views.create_goal),
     path("goals/<int:engagement_id>/", views.get_engagement_goals),
     path("goals/edit/<int:goal_id>/", views.edit_goal, name="edit_goal"),
+    path("goals/delete/<int:goal_id>/", views.delete_goal, name="delete_goal"),
     path("competency/", views.create_competency),
     path(
         "competency/edit/<int:competency_id>/",
         views.edit_competency,
         name="edit_competency",
+    ),
+    path(
+        "competency/delete/<int:competency_id>/",
+        views.delete_competency,
+        name="delete_competency",
     ),
     path("competency/<int:engagement_id>/", views.get_engagement_competency),
     path(
@@ -160,6 +166,11 @@ urlpatterns = [
         "action_items/edit/<int:action_item_id>/",
         views.edit_action_item,
         name="edit_action_item",
+    ),
+    path(
+        "action-items/delete/<int:action_item_id>/",
+        views.delete_action_item,
+        name="delete_action_item",
     ),
     path(
         "session/complete/<int:session_id>/",
