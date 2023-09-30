@@ -4807,8 +4807,8 @@ def coaches_which_are_included_in_projects(request):
             if coach_status.status["hr"]["status"] == "select" and coach_status.status["project_structure"]["status"]=="select":
                 coachesId.append(coach_status.coach.id) 
     
-    # print(coachesId)
+    
     coachesId=set(coachesId)
-    print(coachesId)
+    
     
     return Response(coachesId) 
