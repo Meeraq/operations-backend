@@ -4959,3 +4959,18 @@ def remove_coach_from_project(request, project_id):
         {"message": "Coach is not associated with the project"},
         status=status.HTTP_400_BAD_REQUEST,
     )
+
+@api_view(["GET"])
+def coaches_which_are_included_in_projects(request):
+    coachesId=[]
+    projects=Project.objects.all()
+    for project in projects:
+        for coach_status in project.coaches_status.all():
+            if coach_status.status["hr"]["status"] == "select" and coach_status.status["project_structure"]["status"]=="select":
+                coachesId.append(coach_status.coach.id) 
+    
+    
+    coachesId=set(coachesId)
+    
+    
+    return Response(coachesId) 
