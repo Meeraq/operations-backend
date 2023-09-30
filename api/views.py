@@ -432,7 +432,11 @@ def update_coach_profile(request, coach_id):
 
     except Coach.DoesNotExist:
         return Response(status=404)
+    internal_coach = json.loads(request.data["internal_coach"])
+    organization_of_coach = request.data.get("organization_of_coach")
     
+    if internal_coach and not organization_of_coach:
+        return Response({"error": "Organization field must not be empty if internal coach is selected yes."}, status=400)
     pmo_user = User.objects.filter(profile__type="pmo").first()
     pmo = Pmo.objects.get(email=pmo_user.username)
     
@@ -1618,7 +1622,8 @@ def add_coach(request):
         ]
     ):
         return Response({"error": "All required fields must be provided."}, status=400)
-
+    if internal_coach and not organization_of_coach:
+        return Response({"error": "Organization field must not be empty if internal coach is selected yes."}, status=400)
     try:
         # Create the Django User
         if coach_exists(coach_id):
