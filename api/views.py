@@ -3798,6 +3798,29 @@ def get_session_pending_of_user(request, user_type, user_id):
     return Response(res, status=200)
 
 
+# used for pmo and hr report section 
+@api_view(['GET'])
+def get_all_sessions_of_user(request, user_type,user_id):
+    session_requests = []
+    if user_type == "pmo":
+        session_requests = SessionRequestCaas.objects.filter(
+          ~Q(session_type="interview"), ~Q(billable_session_number=None), is_archive=False
+        )
+    elif user_type == "hr":
+        session_requests = SessionRequestCaas.objects.filter( ~Q(session_type="interview"), ~Q(billable_session_number=None), is_archive=False, project__hr__id = user_id)
+    sessions_serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    res = []
+    for session in sessions_serializer.data:
+        engagement = Engagement.objects.filter(
+            learner__id=session["learner"]["id"], project__id=session["project"]["id"]
+        )
+        if len(engagement) > 0 and engagement[0].coach:
+            coach_serializer = CoachSerializer(engagement[0].coach)
+            res.append({**session, "coach": coach_serializer.data})
+        else:
+            res.append({**session})
+    return Response(res, status=200)
+
 @api_view(["GET"])
 def get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
