@@ -424,14 +424,26 @@ def approve_coach(request, coach_id):
 def update_coach_profile(request, coach_id):
     try:
         coach = Coach.objects.get(id=coach_id)
+       
+        mutable_data = request.data.copy()
+        
+        if  not mutable_data['coach_id']:
+            mutable_data['coach_id'] = coach.coach_id
+
     except Coach.DoesNotExist:
         return Response(status=404)
+    internal_coach = json.loads(request.data["internal_coach"])
+    organization_of_coach = request.data.get("organization_of_coach")
+    
+    if internal_coach and not organization_of_coach:
+        return Response({"error": "Organization field must not be empty if internal coach is selected yes."}, status=400)
     pmo_user = User.objects.filter(profile__type="pmo").first()
-    pmo = Pmo.objects.get(email=pmo_user.email)
-
+    pmo = Pmo.objects.get(email=pmo_user.username)
+    
     serializer = CoachSerializer(
-        coach, data=request.data, partial=True
-    )  # partial argument added here
+        coach, data=mutable_data, partial=True
+    )
+    
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
@@ -1556,12 +1568,12 @@ def add_coach(request):
     email = request.data.get("email")
     age = request.data.get("age")
     gender = request.data.get("gender")
-    domain = request.data.get("domain")
+    domain = json.loads(request.data["domain"])
     room_id = request.data.get("room_id")
     phone = request.data.get("phone")
     level = request.data.get("level")
     currency = request.data.get("currency")
-    education = request.data.get("education")
+    education = json.loads(request.data["education"])
     rating = "5"
     min_fees = request.data["min_fees"]
     fee_remark = request.data.get("fee_remark", "")
@@ -1584,7 +1596,13 @@ def add_coach(request):
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
-
+    internal_coach = json.loads(request.data["internal_coach"])
+    organization_of_coach = request.data.get("organization_of_coach")
+    reason_for_inactive = json.loads(request.data["reason_for_inactive"])
+    client_companies = json.loads(request.data["client_companies"])
+    education_pic = request.data.get("education_pic", None)
+    educational_qualification = json.loads(request.data["educational_qualification"])
+    education_upload_file = request.data.get("education_upload_file", None)
     # return Response({'error': 'A coach user with this email already exists.'}, status=400)
 
     # print('ctt not ctt', json.loads(  request.data['ctt_nctt']),type(json.loads(request.data['ctt_nctt'])))
@@ -1604,7 +1622,8 @@ def add_coach(request):
         ]
     ):
         return Response({"error": "All required fields must be provided."}, status=400)
-
+    if internal_coach and not organization_of_coach:
+        return Response({"error": "Organization field must not be empty if internal coach is selected yes."}, status=400)
     try:
         # Create the Django User
         if coach_exists(coach_id):
@@ -1654,8 +1673,15 @@ def add_coach(request):
                 companies_worked_in=companies_worked_in,
                 other_certification=other_certification,
                 active_inactive=active_inactive,
+                internal_coach=internal_coach,
                 corporate_experience=corporate_experience,
                 coaching_experience=coaching_experience,
+                organization_of_coach=organization_of_coach,
+                reason_for_inactive=reason_for_inactive,
+                client_companies=client_companies,
+                education_pic=education_pic,
+                educational_qualification=educational_qualification,
+                education_upload_file=education_upload_file,
             )
 
             # approve coach
@@ -1665,13 +1691,14 @@ def add_coach(request):
             coach.save()
 
             full_name = coach_user.first_name + " " + coach_user.last_name
-            send_mail_templates(
-                "coach_templates/pmo-adds-coach-as-user.html",
-                [coach_user.email],
-                "Meeraq Coaching | New Beginning !",
-                {"name": coach_user.first_name},
-                [env("BCC_EMAIL")],  # no bcc emails
-            )
+            # send_mail_templates(
+            #     "coach_templates/pmo-adds-coach-as-user.html",
+            #     [coach_user.email],
+            #     "Meeraq Coaching | New Beginning !",
+            #     {"name": coach_user.first_name},
+            #     [env("BCC_EMAIL")],  # no bcc emails
+            # )
+
             # Send email notification to the coach
             # subject = 'Welcome to our coaching platform'
             # message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {temp_password}\n\n Click on the link to login or reset the password http://localhost:3003/'
@@ -3217,12 +3244,12 @@ def finalized_coach_from_coach_consent(request):
 def get_coach_field_values(request):
     job_roles = set()
     languages = set()
-    educations = set()
     locations = set()
     companies_worked_in = set()
     other_certifications = set()
-    domains = set()
     industries = set()
+    functional_domain = set()
+    institute = set()
     for coach in Coach.objects.all():
         # 1st coach
         for role in coach.job_roles:
@@ -3237,17 +3264,22 @@ def get_coach_field_values(request):
             other_certifications.add(certificate)
         for industry in coach.area_of_expertise:
             industries.add(industry)
-        domains.add(coach.domain)
-        educations.add(coach.education)
+        for functional_dom in coach.domain:
+            functional_domain.add(functional_dom)
+        for edu in coach.education:
+            institute.add(edu)
+
+        # domains.add(coach.domain)
+        # educations.add(coach.education)
     return Response(
         {
             "job_roles": list(job_roles),
             "languages": list(languages),
-            "educations": list(educations),
+            "educations": list(institute),
             "locations": list(locations),
             "companies_worked_in": list(companies_worked_in),
             "other_certifications": list(other_certifications),
-            "domains": list(domains),
+            "domains": list(functional_domain),
             "industries": list(industries),
         },
         status=200,
@@ -3290,7 +3322,11 @@ def add_mulitple_coaches(request):
                 linkedin_profile_link = coach_data.get("linkedin_profile", "")
                 coaching_hours = coach_data.get("coaching_hours", "")
                 fee_remark = coach_data.get("fee_remark", "")
-
+                client_companies = coach_data.get("client_companies", [])
+                educational_qualification = coach_data.get("educational_qualification",[])
+                corporate_experience = coach_data.get("corporate_experience", "")
+                coaching_experience = coach_data.get("coaching_experience", "")
+                education=coach_data.get("education",[])
                 if coach_data.get("ctt_nctt") == "Yes":
                     ctt_nctt = True
                 else:
@@ -3378,6 +3414,11 @@ def add_mulitple_coaches(request):
                     location=location,
                     linkedin_profile_link=linkedin_profile_link,
                     coaching_hours=coaching_hours,
+                    client_companies = client_companies,
+                    educational_qualification = educational_qualification,
+                    corporate_experience = corporate_experience,
+                    coaching_experience = coaching_experience,
+                    education=education,
                 )
 
                 # Approve coach
