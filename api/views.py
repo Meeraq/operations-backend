@@ -75,13 +75,20 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 import json
 import string
 import random
-from django.db.models import Q
+from django.db.models import Q,Min
 from collections import defaultdict
 from django.db.models import Avg
 from rest_framework import status
 from rest_framework.views import APIView
 
+from django.db.models import Count, Sum, Case, When, IntegerField
+import io
+from openpyxl import Workbook
+from openpyxl.styles import Font
+
 # Create your views here.
+from collections import defaultdict
+import pandas as pd
 
 import environ
 
@@ -3637,7 +3644,7 @@ def get_engagement_in_projects(request, project_id):
 def get_engagements_of_hr(request, user_id):
     engagements = Engagement.objects.filter(project__hr__id=user_id)
     engagements_data = []
-
+    current_time = int(timezone.now().timestamp() * 1000)
     for engagement in engagements:
         completed_sessions_count = SessionRequestCaas.objects.filter(
             status="completed",
@@ -3650,11 +3657,20 @@ def get_engagements_of_hr(request, user_id):
             learner__id=engagement.learner.id,
             is_archive=False,
         ).count()
-
+        upcoming_session = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__gt=current_time),
+                Q(project__hr__id=user_id),
+                Q(project__id=engagement.project.id),
+                Q(learner__id=engagement.learner.id),
+                Q(is_archive=False),
+                ~Q(status="completed"),
+        ).aggregate(Min('confirmed_availability__end_time'))
         serializer = EngagementDepthOneSerializer(engagement)
         data = serializer.data
         data["completed_sessions_count"] = completed_sessions_count
         data["total_sessions_count"] = total_sessions_count
+        data["next_session_time"] = upcoming_session.get('confirmed_availability__end_time__min')
         engagements_data.append(data)
 
     return Response(engagements_data, status=200)
@@ -4974,3 +4990,156 @@ def coaches_which_are_included_in_projects(request):
     
     
     return Response(coachesId) 
+
+def calculate_session_progress_data_for_hr(user_id):
+    session_requests = (
+        SessionRequestCaas.objects.filter(project__hr__id=user_id)
+        .exclude(
+            Q(session_type="chemistry", billable_session_number__isnull=True)
+            | Q(session_type="interview")
+        )
+        .annotate(
+            completed_sessions_count=Count(
+                Case(When(status="completed", then=1), output_field=IntegerField())
+            ),
+            total_sessions_count=Count("pk"),
+            billable_count=Count(
+                Case(
+                    When(billable_session_number__isnull=False, then=1),
+                    output_field=IntegerField(),
+                )
+            ),
+        )
+        .prefetch_related("project", "learner")
+    )
+
+    session_data = []
+    for session_request in session_requests:
+        session_data.append(
+            {
+                "session_type": session_request.session_type,
+                "project_data": ProjectDepthTwoSerializer(session_request.project).data,
+                "learner": LearnerDepthOneSerializer(session_request.learner).data,
+                "billable": session_request.billable_count > 0,
+                "duration": session_request.session_duration,
+                "completed_sessions": session_request.completed_sessions_count > 0,
+            }
+        )
+    return session_data
+
+
+
+def calculate_and_send_session_data(user_id):
+    try:
+        filtered_sessions = calculate_session_progress_data_for_hr(user_id)
+
+        session_type_data = defaultdict(
+            lambda: defaultdict(
+                lambda: {
+                    "session_type": None,
+                    "billable": "No",
+                    "duration": None,
+                    "total_sessions": 0,
+                    "completed_sessions": 0,
+                }
+            )
+        )
+
+        for session in filtered_sessions:
+            project_data = session.get("project_data")
+            project_name = project_data.get("name")
+            session_type = session.get("session_type")
+
+            session_type_data[project_name][session_type]["session_type"] = session_type
+            session_type_data[project_name][session_type]["billable"] = (
+                "Yes" if session.get("billable") else "No"
+            )
+            session_type_data[project_name][session_type]["duration"] = session.get(
+                "duration"
+            )
+
+            session_type_data[project_name][session_type]["total_sessions"] += 1
+            session_type_data[project_name][session_type][
+                "completed_sessions"
+            ] += session.get("completed_sessions", 0)
+
+        calculated_data = {
+            project_name: {
+                session_type: {
+                    **session,
+                    "completion_percentage": format(
+                        (session["completed_sessions"] / session["total_sessions"])
+                        * 100,
+                        ".1f",
+                    )
+                    if session["total_sessions"] > 0
+                    else 0,
+                }
+                for session_type, session in project_data.items()
+            }
+            for project_name, project_data in session_type_data.items()
+        }
+
+        hr = HR.objects.get(id=user_id)
+
+        email_message = render_to_string(
+            "hr_emails/progress_data_excel_send.html",
+            {"name": hr.first_name},
+        )
+        email = EmailMessage(
+            f"{env('EMAIL_SUBJECT_INITIAL',default='')}{'Progress Data'}",
+            email_message,
+            settings.DEFAULT_FROM_EMAIL,
+            [hr.email],
+            bcc=[],
+        )
+
+        excel_buffer = io.BytesIO()
+
+        wb = Workbook()
+
+        for project_name, project_data in calculated_data.items():
+            ws = wb.create_sheet(title=project_name)
+
+            df = pd.DataFrame.from_dict(project_data, orient="index")
+            df.columns = [col.replace("_", " ").capitalize() for col in df.columns]
+            # Add column names as the first row in the worksheet
+            for c_idx, col_name in enumerate(df.columns, start=1):
+                if col_name == "Duration":
+                    col_name = "Duration (Min)"
+                cell = ws.cell(row=1, column=c_idx, value=col_name)
+                cell.font = Font(bold=True)
+
+            # Iterate over DataFrame rows and add data to the worksheet
+            for r_idx, row in enumerate(df.iterrows(), start=2):
+                for c_idx, value in enumerate(row[1], start=1):
+                    if isinstance(value, str):
+                        value = str(value).replace("_", " ").capitalize()
+                    if value == "Stakeholder without coach":
+                        value = "Tripartate without coach"
+                    cell = ws.cell(row=r_idx, column=c_idx, value=value)
+
+        default_sheet = wb["Sheet"]
+        wb.remove(default_sheet)
+
+        wb.save(excel_buffer)
+        
+        email.attach(
+            "progress_data.xlsx",
+            excel_buffer.getvalue(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        email.send(fail_silently=False)
+
+    except Exception as e:
+        print(f"Error occurred while sending email with attachment: {str(e)}")
+
+
+class SessionsProgressOfAllCoacheeForAnHr(APIView):
+    def get(self, request, user_id, format=None):
+        session_data = calculate_session_progress_data_for_hr(user_id)
+        
+        return Response({"session_data": session_data})
+
+    
