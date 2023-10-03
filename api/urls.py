@@ -1,6 +1,10 @@
 from django.urls import path, include
 from . import views
-from .views import UpdateInviteesView, SessionCountsForAllLearners,SessionsProgressOfAllCoacheeForAnHr
+from .views import (
+    UpdateInviteesView,
+    SessionCountsForAllLearners,
+    SessionsProgressOfAllCoacheeForAnHr,
+)
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
@@ -119,6 +123,10 @@ urlpatterns = [
         views.get_session_pending_of_user,
     ),
     path(
+        "sessions/all/<str:user_type>/<int:user_id>/",
+        views.get_all_sessions_of_user,
+    ),
+    path(
         "sessions/upcoming/<str:user_type>/<int:user_id>/",
         views.get_upcoming_sessions_of_user,
     ),
@@ -142,11 +150,17 @@ urlpatterns = [
     path("goals/", views.create_goal),
     path("goals/<int:engagement_id>/", views.get_engagement_goals),
     path("goals/edit/<int:goal_id>/", views.edit_goal, name="edit_goal"),
+    path("goals/delete/<int:goal_id>/", views.delete_goal, name="delete_goal"),
     path("competency/", views.create_competency),
     path(
         "competency/edit/<int:competency_id>/",
         views.edit_competency,
         name="edit_competency",
+    ),
+    path(
+        "competency/delete/<int:competency_id>/",
+        views.delete_competency,
+        name="delete_competency",
     ),
     path("competency/<int:engagement_id>/", views.get_engagement_competency),
     path(
@@ -160,6 +174,11 @@ urlpatterns = [
         "action_items/edit/<int:action_item_id>/",
         views.edit_action_item,
         name="edit_action_item",
+    ),
+    path(
+        "action-items/delete/<int:action_item_id>/",
+        views.delete_action_item,
+        name="delete_action_item",
     ),
     path(
         "session/complete/<int:session_id>/",
@@ -229,5 +248,9 @@ urlpatterns = [
     path(
         "sessions-progress-of-all-coachee-for-an-hr/<int:user_id>/",
         SessionsProgressOfAllCoacheeForAnHr.as_view(),
+    ),
+    path(
+        "coaches-which-are-included-in-projects/",
+        views.coaches_which_are_included_in_projects,
     ),
 ]
