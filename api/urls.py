@@ -1,6 +1,11 @@
 from django.urls import path, include
 from . import views
-from .views import UpdateInviteesView, SessionCountsForAllLearners,AddRegisteredCoach
+from .views import (
+    UpdateInviteesView,
+    SessionCountsForAllLearners,
+    SessionsProgressOfAllCoacheeForAnHr,
+    AddRegisteredCoach,
+)
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
@@ -94,6 +99,7 @@ urlpatterns = [
     path("coach/delete/", views.delete_coach),
     path("notifications/all/<int:user_id>/", views.get_notifications),
     path("notifications/mark-as-read/", views.mark_notifications_as_read),
+    path("notifications/mark-all-as-read/", views.mark_all_notifications_as_read),
     path("notifications/unread-count/<int:user_id>/", views.unread_notification_count),
     path("mark_project_as_sold/", views.mark_project_as_sold),
     path(
@@ -119,6 +125,10 @@ urlpatterns = [
         views.get_session_pending_of_user,
     ),
     path(
+        "sessions/all/<str:user_type>/<int:user_id>/",
+        views.get_all_sessions_of_user,
+    ),
+    path(
         "sessions/upcoming/<str:user_type>/<int:user_id>/",
         views.get_upcoming_sessions_of_user,
     ),
@@ -142,11 +152,17 @@ urlpatterns = [
     path("goals/", views.create_goal),
     path("goals/<int:engagement_id>/", views.get_engagement_goals),
     path("goals/edit/<int:goal_id>/", views.edit_goal, name="edit_goal"),
+    path("goals/delete/<int:goal_id>/", views.delete_goal, name="delete_goal"),
     path("competency/", views.create_competency),
     path(
         "competency/edit/<int:competency_id>/",
         views.edit_competency,
         name="edit_competency",
+    ),
+    path(
+        "competency/delete/<int:competency_id>/",
+        views.delete_competency,
+        name="delete_competency",
     ),
     path("competency/<int:engagement_id>/", views.get_engagement_competency),
     path(
@@ -160,6 +176,11 @@ urlpatterns = [
         "action_items/edit/<int:action_item_id>/",
         views.edit_action_item,
         name="edit_action_item",
+    ),
+    path(
+        "action-items/delete/<int:action_item_id>/",
+        views.delete_action_item,
+        name="delete_action_item",
     ),
     path(
         "session/complete/<int:session_id>/",
@@ -226,6 +247,14 @@ urlpatterns = [
         "coachee-session-counts/<str:user_type>/<int:user_id>/",
         SessionCountsForAllLearners.as_view(),
     ),
-    path('add_registered_coach/', AddRegisteredCoach.as_view()),
+    path(
+        "sessions-progress-of-all-coachee-for-an-hr/<int:user_id>/",
+        SessionsProgressOfAllCoacheeForAnHr.as_view(),
+    ),
+    path(
+        "coaches-which-are-included-in-projects/",
+        views.coaches_which_are_included_in_projects,
+    ),
+    path("add_registered_coach/", AddRegisteredCoach.as_view()),
     path("get-registered-coaches/", views.get_registered_coaches),
 ]
