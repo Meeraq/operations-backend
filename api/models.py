@@ -1,4 +1,5 @@
 from django.db import models
+import os
 
 # Create your models here.
 from django.contrib.auth.models import AbstractUser, Group
@@ -109,6 +110,12 @@ class Pmo(models.Model):
         return self.name
 
 
+def validate_pdf_extension(value):
+    ext = os.path.splitext(value.name)[1].lower()
+    if not ext == ".pdf":
+        raise ValidationError("Only PDF files are allowed.")
+
+
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     coach_id = models.CharField(max_length=20, blank=True)
@@ -117,7 +124,7 @@ class Coach(models.Model):
     email = models.EmailField()
     age = models.CharField(max_length=10, default="", blank=True)
     gender = models.CharField(max_length=50, blank=True)
-    domain = models.CharField(max_length=50, blank=True)
+    domain = models.JSONField(default=list, blank=True)
     room_id = models.CharField(max_length=50, blank=True)
     phone = models.CharField(max_length=25)
     level = models.CharField(max_length=50)
@@ -125,7 +132,7 @@ class Coach(models.Model):
     area_of_expertise = models.JSONField(default=list, blank=True)
     completed_sessions = models.IntegerField(blank=True, default=0)
     profile_pic = models.ImageField(upload_to="post_images", blank=True)
-    education = models.CharField(max_length=200, blank=True)
+    education = models.JSONField(default=list, blank=True)
     corporate_experience = models.TextField(blank=True)
     coaching_experience = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
@@ -145,6 +152,18 @@ class Coach(models.Model):
     other_certification = models.JSONField(default=list, blank=True)
     active_inactive = models.BooleanField(blank=True, default=False)
     currency = models.CharField(max_length=100, blank=True, default="")
+    internal_coach = models.BooleanField(blank=True, default=False)
+    organization_of_coach = models.CharField(max_length=100, blank=True)
+    reason_for_inactive = models.JSONField(default=list, blank=True)
+    client_companies = models.JSONField(default=list, blank=True)
+    education_pic = models.ImageField(upload_to="post_images", blank=True)
+
+    educational_qualification = models.JSONField(default=list, blank=True)
+
+    # education_upload_file = models.ImageField(upload_to="post_images", blank=True)
+    education_upload_file = models.FileField(
+        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+    )
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -201,7 +220,7 @@ class CoachStatus(models.Model):
 
 class Project(models.Model):
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100,unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type = models.CharField(
         max_length=50, choices=project_type_choice, default="cod"
