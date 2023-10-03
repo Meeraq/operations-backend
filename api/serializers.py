@@ -243,4 +243,4 @@ class SentEmailActivitySerializer(serializers.ModelSerializer):
     user=UserSerializer()
     class Meta:
         model = SentEmailActivity
-        fields = ["user","timestamp"]
+        fields = '__all__'

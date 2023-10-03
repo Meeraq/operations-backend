@@ -233,7 +233,7 @@ def create_pmo(request):
     name = request.data.get("name")
     email = request.data.get("email")
     phone = request.data.get("phone")
-    username = email  # username and email are the same
+    username = email  
     password = request.data.get("password")
 
     room_id = generate_room_id(email)
@@ -312,7 +312,7 @@ def create_pmo(request):
 #             )
 #         # Return success response
 #         return Response({"message": "PMO added successfully."}, status=201)
-
+#     except IntegrityError:
 #     except Exception as e:
 #         # Return error response if any exception occurs
 #         return Response({"error": str(e)}, status=500)
@@ -335,12 +335,10 @@ def coach_signup(request):
     area_of_expertise = request.data.get("area_of_expertise")
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
-    username = request.data.get("email")  # keeping username and email same
+    username = request.data.get("email")  
     password = request.data.get("password")
 
-    # print(first_name, last_name, email, age, gender, domain, room_id, phone, level, area_of_expertise, username, password)
 
-    # Check if required data is provided
     if not all(
         [
             first_name,
@@ -1711,7 +1709,6 @@ def add_coach(request):
                 {"name": coach_user.first_name},
                 [env("BCC_EMAIL")],  # no bcc emails
             )
-            print("100")
         return Response({"message": "Coach added successfully."}, status=201)
         
 
@@ -1902,16 +1899,13 @@ def get_user_data(user):
 @permission_classes([AllowAny])
 def generate_otp(request):
     try:
-        print("789",request.data)
         user = User.objects.get(username=request.data["email"])
-        print("7879",user)
         try:
             # Check if OTP already exists for the user
             otp_obj = OTP.objects.get(user=user)
             otp_obj.delete()
         except OTP.DoesNotExist:
             pass
-        print("6789")
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars="0123456789")
         created_otp = OTP.objects.create(user=user, otp=otp)
@@ -1922,7 +1916,6 @@ def generate_otp(request):
         message = (
             f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
         )
-        print("789")
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
         send_mail_templates(
             "hr_emails/login_with_otp.html",
@@ -1931,7 +1924,6 @@ def generate_otp(request):
             {"name": name, "otp": created_otp.otp},
             [],  # no bcc
         )
-        print("976")
         return Response({"message": f"OTP has been sent to {user.username}!"})
 
     except User.DoesNotExist:
@@ -1948,7 +1940,6 @@ def generate_otp(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def validate_otp(request):
-    print("1")
     otp_obj = (
         OTP.objects.filter(
             user__username=request.data["email"], otp=request.data["otp"]
@@ -1956,15 +1947,12 @@ def validate_otp(request):
         .order_by("-created_at")
         .first()
     )
-    print("2")
     if otp_obj is None:
         raise AuthenticationFailed("Invalid OTP")
 
     user = otp_obj.user
-    print("3")
     login_timestamp = datetime.now()
     UserLoginActivity.objects.create(user=user, login_timestamp=login_timestamp)
-    print("4")
     otp_obj.delete()
     last_login = user.last_login
     login(request, user)
@@ -2484,7 +2472,6 @@ def get_session_requests_of_hr(request, hr_id):
 @api_view(["GET"])
 def get_session_requests_of_learner(request, learner_id):
     sessions = SessionRequestCaas.objects.filter(learner__id=learner_id).all()
-    print(sessions, "session")
     serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
@@ -2504,7 +2491,6 @@ def get_upcoming_booked_session_of_coach(request, coach_id):
 
 @api_view(["POST"])
 def book_session_caas(request):
-    print(request.data)
     session_request = SessionRequestCaas.objects.get(
         id=request.data.get("session_request")
     )
@@ -2772,7 +2758,6 @@ def accept_coach_caas_hr(request):
 
     project.save()
 
-    print(coaches_selected_count)
     # for i in range(0,len(project.coaches_status)):
     #     print(project.coaches_status[i])
     #     status=project.coaches_status[i].status.hr.status
@@ -2921,7 +2906,6 @@ def transform_project_structure(sessions):
                 else None,
                 "status": "pending",
             }
-            print(transformed_session)
             transformed_sessions.append(transformed_session)
             session_counts[session_type] += 1
 
@@ -3204,7 +3188,6 @@ def send_list_to_hr(request):
 
     for coach_id in request.data["coach_list"]:
         coach_status = project.coaches_status.get(coach__id=coach_id)
-        print(coach_status.status)
         coach_status.status["hr"]["status"] = "sent"
         coach_status.save()
     project.save()
@@ -3952,7 +3935,6 @@ def request_chemistry_session(request, project_id, learner_id):
         session_type="chemistry",
         status="pending",
     )
-    print(session)
     if len(session) == 0:
         return Response({"error": "Max sessions exceeded."}, status=400)
     else:
@@ -4014,9 +3996,7 @@ def reschedule_session_of_coachee(request, session_id):
 
 @api_view(["POST"])
 def create_goal(request):
-    print(request.data,"helo")
     user_data = request.data.get('user')
-    print(user_data)
     serializer = GoalSerializer(data=request.data)
     goal_name = request.data["name"]
     engagement_id = request.data.get("engagement")
@@ -4732,7 +4712,6 @@ class UpdateInviteesView(APIView):
 
         try:
             invitee_emails = request.data.get("inviteeEmails", [])
-            print(invitee_emails)
             session_request.invitees = get_trimmed_emails(invitee_emails)
             session_request.save()
             return Response(
@@ -4826,6 +4805,8 @@ def remove_coach_from_project(request, project_id):
             project.coaches.remove(coach)
             project.save()
 
+            RemoveCoachActivity.objects.create(user=coach.user.user, timestamp=timezone.now())
+
             return Response(
                 {"message": "Coach has been removed from the project."},
                 status=status.HTTP_201_CREATED,
@@ -4835,10 +4816,6 @@ def remove_coach_from_project(request, project_id):
         {"message": "Coach is not associated with the project"},
         status=status.HTTP_400_BAD_REQUEST,
     )
-
-
-
-
 
 @api_view(["GET"])
 def get_total_login_count(request):
@@ -4853,7 +4830,6 @@ def get_profile_edit_activity(request):
     profile_edit_activities = ProfileEditActivity.objects.all()
     total_activity_count = profile_edit_activities.count()
     serializer = ProfileEditActivitySerializer(profile_edit_activities, many=True) 
-    print("serializer data", serializer.data[3])
     return Response({"total_activity_count": total_activity_count, "profile_edit_activities": serializer.data}) 
 
 @api_view(["GET"])
