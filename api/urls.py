@@ -1,6 +1,10 @@
 from django.urls import path, include
 from . import views
-from .views import UpdateInviteesView, SessionCountsForAllLearners
+from .views import (
+    UpdateInviteesView,
+    SessionCountsForAllLearners,
+    SessionsProgressOfAllCoacheeForAnHr,
+)
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
@@ -94,6 +98,7 @@ urlpatterns = [
     path("coach/delete/", views.delete_coach),
     path("notifications/all/<int:user_id>/", views.get_notifications),
     path("notifications/mark-as-read/", views.mark_notifications_as_read),
+    path("notifications/mark-all-as-read/", views.mark_all_notifications_as_read),
     path("notifications/unread-count/<int:user_id>/", views.unread_notification_count),
     path("mark_project_as_sold/", views.mark_project_as_sold),
     path(
@@ -241,5 +246,12 @@ urlpatterns = [
         "coachee-session-counts/<str:user_type>/<int:user_id>/",
         SessionCountsForAllLearners.as_view(),
     ),
-    path("coaches-which-are-included-in-projects/", views.coaches_which_are_included_in_projects),
+    path(
+        "sessions-progress-of-all-coachee-for-an-hr/<int:user_id>/",
+        SessionsProgressOfAllCoacheeForAnHr.as_view(),
+    ),
+    path(
+        "coaches-which-are-included-in-projects/",
+        views.coaches_which_are_included_in_projects,
+    ),
 ]
