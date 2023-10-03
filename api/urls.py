@@ -98,6 +98,7 @@ urlpatterns = [
     path("coach/delete/", views.delete_coach),
     path("notifications/all/<int:user_id>/", views.get_notifications),
     path("notifications/mark-as-read/", views.mark_notifications_as_read),
+    path("notifications/mark-all-as-read/", views.mark_all_notifications_as_read),
     path("notifications/unread-count/<int:user_id>/", views.unread_notification_count),
     path("mark_project_as_sold/", views.mark_project_as_sold),
     path(

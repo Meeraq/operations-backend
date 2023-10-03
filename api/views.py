@@ -3457,10 +3457,28 @@ def get_notifications(request, user_id):
 
 
 @api_view(["PUT"])
-def mark_notifications_as_read(request):
+def mark_all_notifications_as_read(request):
     notifications = Notification.objects.filter(
         read_status=False, user__id=request.data["user_id"]
     )
+    notifications.update(read_status=True)
+    return Response("Notifications marked as read.")
+
+
+@api_view(["PUT"])
+def mark_notifications_as_read(request):
+    user_id = request.data.get("user_id")
+    notification_ids = request.data.get("notification_ids")
+
+    if user_id is None or notification_ids is None:
+        return Response("Both user_id and notification_ids are required.", status=400)
+
+    print("abcd")
+
+    notifications = Notification.objects.filter(
+        id=notification_ids, user__id=user_id, read_status=False
+    )
+
     notifications.update(read_status=True)
     return Response("Notifications marked as read.")
 
