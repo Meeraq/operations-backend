@@ -3830,6 +3830,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             ~Q(status="completed"),
+            ~Q(status="Coachee Didn't Show Up"),
         )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
@@ -3839,6 +3840,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
             ~Q(session_type="chemistry"),
             Q(is_archive=False),
             ~Q(status="completed"),
+            ~Q(status="Coachee Didn't Show Up"),
         )
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
@@ -3847,6 +3849,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(coach__id=user_id),
             Q(is_archive=False),
             ~Q(status="completed"),
+            ~Q(status="Coachee Didn't Show Up"),
         )
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
@@ -3855,6 +3858,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(project__hr__id=user_id),
             Q(is_archive=False),
             ~Q(status="completed"),
+            ~Q(status="Coachee Didn't Show Up"),
         )
     serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
@@ -3868,7 +3872,7 @@ def get_past_sessions_of_user(request, user_type, user_id):
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__lt=current_time)
-            | Q(status="completed"),
+            | Q(status="completed") | Q(status="Coachee Didn't Show Up"),
         )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
@@ -3883,7 +3887,7 @@ def get_past_sessions_of_user(request, user_type, user_id):
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__lt=current_time)
-            | Q(status="completed"),
+            | Q(status="completed") | Q(status="Coachee Didn't Show Up"),
             Q(coach__id=user_id),
             Q(is_archive=False),
         )
@@ -4276,7 +4280,17 @@ def mark_session_as_complete(request, session_id):
         session = SessionRequestCaas.objects.get(id=session_id)
     except ActionItem.DoesNotExist:
         return Response({"error": "Session not found."}, status=404)
-    session.status = "completed"
+
+    # Get the 'status' parameter from the request data
+    status = request.data.get("status")
+
+    if status == "markComplete":
+        session.status = "completed"
+    elif status == "coacheeDidntShowUp":
+        session.status = "Coachee Didn't Show Up"
+    else:
+        return Response({"error": "Invalid status value."}, status=400)
+
     session.save()
     return Response({"message": "Session marked as complete."}, status=201)
 
@@ -4969,8 +4983,5 @@ def coaches_which_are_included_in_projects(request):
             if coach_status.status["hr"]["status"] == "select" and coach_status.status["project_structure"]["status"]=="select":
                 coachesId.append(coach_status.coach.id) 
     
-    
     coachesId=set(coachesId)
-    
-    
     return Response(coachesId) 
