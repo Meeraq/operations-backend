@@ -15,6 +15,8 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    StandardizedField,
+    StandardizedFieldRequest,
 )
 
 # Register your models here.
@@ -36,3 +38,5 @@ admin.site.register(Notification)
 admin.site.register(Goal)
 admin.site.register(Competency)
 admin.site.register(ActionItem)
+admin.site.register(StandardizedField)
+admin.site.register(StandardizedFieldRequest)

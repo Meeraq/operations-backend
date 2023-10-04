@@ -241,5 +241,9 @@ urlpatterns = [
         "coachee-session-counts/<str:user_type>/<int:user_id>/",
         SessionCountsForAllLearners.as_view(),
     ),
-    path("coaches-which-are-included-in-projects/", views.coaches_which_are_included_in_projects),
+    path(
+        "coaches-which-are-included-in-projects/",
+        views.coaches_which_are_included_in_projects,
+    ),
+    path("standard_field/<int:user_id>/", views.standard_field_request),
 ]

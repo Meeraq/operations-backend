@@ -65,6 +65,8 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    StandardizedField,
+    StandardizedFieldRequest,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -424,26 +426,29 @@ def approve_coach(request, coach_id):
 def update_coach_profile(request, coach_id):
     try:
         coach = Coach.objects.get(id=coach_id)
-       
+
         mutable_data = request.data.copy()
-        
-        if  not mutable_data['coach_id']:
-            mutable_data['coach_id'] = coach.coach_id
+
+        if not mutable_data["coach_id"]:
+            mutable_data["coach_id"] = coach.coach_id
 
     except Coach.DoesNotExist:
         return Response(status=404)
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
-    
+
     if internal_coach and not organization_of_coach:
-        return Response({"error": "Organization field must not be empty if internal coach is selected yes."}, status=400)
+        return Response(
+            {
+                "error": "Organization field must not be empty if internal coach is selected yes."
+            },
+            status=400,
+        )
     pmo_user = User.objects.filter(profile__type="pmo").first()
-    pmo = Pmo.objects.get(email=pmo_user.username)
-    
-    serializer = CoachSerializer(
-        coach, data=mutable_data, partial=True
-    )
-    
+    # pmo = Pmo.objects.get(email=pmo_user)
+
+    serializer = CoachSerializer(coach, data=mutable_data, partial=True)
+
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
@@ -1623,7 +1628,12 @@ def add_coach(request):
     ):
         return Response({"error": "All required fields must be provided."}, status=400)
     if internal_coach and not organization_of_coach:
-        return Response({"error": "Organization field must not be empty if internal coach is selected yes."}, status=400)
+        return Response(
+            {
+                "error": "Organization field must not be empty if internal coach is selected yes."
+            },
+            status=400,
+        )
     try:
         # Create the Django User
         if coach_exists(coach_id):
@@ -3323,10 +3333,12 @@ def add_mulitple_coaches(request):
                 coaching_hours = coach_data.get("coaching_hours", "")
                 fee_remark = coach_data.get("fee_remark", "")
                 client_companies = coach_data.get("client_companies", [])
-                educational_qualification = coach_data.get("educational_qualification",[])
+                educational_qualification = coach_data.get(
+                    "educational_qualification", []
+                )
                 corporate_experience = coach_data.get("corporate_experience", "")
                 coaching_experience = coach_data.get("coaching_experience", "")
-                education=coach_data.get("education",[])
+                education = coach_data.get("education", [])
                 if coach_data.get("ctt_nctt") == "Yes":
                     ctt_nctt = True
                 else:
@@ -3414,10 +3426,10 @@ def add_mulitple_coaches(request):
                     location=location,
                     linkedin_profile_link=linkedin_profile_link,
                     coaching_hours=coaching_hours,
-                    client_companies = client_companies,
-                    educational_qualification = educational_qualification,
-                    corporate_experience = corporate_experience,
-                    coaching_experience = coaching_experience,
+                    client_companies=client_companies,
+                    educational_qualification=educational_qualification,
+                    corporate_experience=corporate_experience,
+                    coaching_experience=coaching_experience,
                     education=education,
                 )
 
@@ -3798,17 +3810,26 @@ def get_session_pending_of_user(request, user_type, user_id):
     return Response(res, status=200)
 
 
-# used for pmo and hr report section 
-@api_view(['GET'])
-def get_all_sessions_of_user(request, user_type,user_id):
+# used for pmo and hr report section
+@api_view(["GET"])
+def get_all_sessions_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
-          ~Q(session_type="interview"), ~Q(billable_session_number=None), is_archive=False
+            ~Q(session_type="interview"),
+            ~Q(billable_session_number=None),
+            is_archive=False,
         )
     elif user_type == "hr":
-        session_requests = SessionRequestCaas.objects.filter( ~Q(session_type="interview"), ~Q(billable_session_number=None), is_archive=False, project__hr__id = user_id)
-    sessions_serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+        session_requests = SessionRequestCaas.objects.filter(
+            ~Q(session_type="interview"),
+            ~Q(billable_session_number=None),
+            is_archive=False,
+            project__hr__id=user_id,
+        )
+    sessions_serializer = SessionRequestCaasDepthOneSerializer(
+        session_requests, many=True
+    )
     res = []
     for session in sessions_serializer.data:
         engagement = Engagement.objects.filter(
@@ -3820,6 +3841,7 @@ def get_all_sessions_of_user(request, user_type,user_id):
         else:
             res.append({**session})
     return Response(res, status=200)
+
 
 @api_view(["GET"])
 def get_upcoming_sessions_of_user(request, user_type, user_id):
@@ -4796,7 +4818,6 @@ def get_pending_action_items_by_competency(request, learner_id):
     return Response(serializer.data, status=200)
 
 
-
 @api_view(["GET"])
 def get_all_competencies_of_hr(request, hr_id):
     goals_with_competencies = Goal.objects.prefetch_related("competency_set").filter(
@@ -4960,17 +4981,42 @@ def remove_coach_from_project(request, project_id):
         status=status.HTTP_400_BAD_REQUEST,
     )
 
+    # if request.method == "POST":
+
+
+@api_view(["POST"])
+def standard_field_request(request, user_id):
+    value = request.data.get("value")
+
+    user_instance = Coach.objects.get(id=user_id)
+
+    field_name = request.data.get("field_name")  # Adjust this based on your field name
+    standardized_field, created = StandardizedField.objects.get_or_create(
+        field=field_name
+    )
+
+    standardized_field_request = StandardizedFieldRequest(
+        standardized_field_name=standardized_field,
+        coach=user_instance,
+        value=value,
+        status="pending",
+    )
+    standardized_field_request.save()
+
+    return Response({"message": "Request sent."}, status=200)
+
 @api_view(["GET"])
 def coaches_which_are_included_in_projects(request):
-    coachesId=[]
-    projects=Project.objects.all()
+    coachesId = []
+    projects = Project.objects.all()
     for project in projects:
         for coach_status in project.coaches_status.all():
-            if coach_status.status["hr"]["status"] == "select" and coach_status.status["project_structure"]["status"]=="select":
-                coachesId.append(coach_status.coach.id) 
-    
-    
-    coachesId=set(coachesId)
-    
-    
-    return Response(coachesId) 
+            if (
+                coach_status.status["hr"]["status"] == "select"
+                and coach_status.status["project_structure"]["status"] == "select"
+            ):
+                coachesId.append(coach_status.coach.id)
+
+    coachesId = set(coachesId)
+
+    return Response(coachesId)
