@@ -32,6 +32,8 @@ from .serializers import (
     ActionItemSerializer,
     GetActionItemDepthOneSerializer,
     PendingActionItemSerializer,
+    StandardizedFieldSerializer,
+    StandardizedFieldRequestSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -65,6 +67,8 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    StandardizedField,
+    StandardizedFieldRequest,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -4825,3 +4829,45 @@ def remove_coach_from_project(request, project_id):
         {"message": "Coach is not associated with the project"},
         status=status.HTTP_400_BAD_REQUEST,
     )
+
+
+class StandardizedFieldAPI(APIView):
+    def get(self, request):
+        standardized_fields = StandardizedField.objects.all()
+
+        standardized_fields_serializer = StandardizedFieldSerializer(
+            standardized_fields, many=True
+        )
+        
+        field_data = {
+        field_data['field']: field_data['values'] for field_data in standardized_fields_serializer.data       
+        }
+       
+        return Response(field_data)
+
+
+class StandardizedFieldRequestAPI(APIView):
+    def get(self, request):
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        today_requests = StandardizedFieldRequest.objects.filter(
+            requested_at__gte=today_start, status="pending"
+        ).order_by("-requested_at")
+
+        other_requests = StandardizedFieldRequest.objects.exclude(
+            requested_at__gte=today_start, status="pending"
+        ).order_by("-requested_at")
+
+        today_requests_serializer = StandardizedFieldRequestSerializer(
+            today_requests, many=True
+        )
+        other_requests_serializer = StandardizedFieldRequestSerializer(
+            other_requests, many=True
+        )
+
+        return Response(
+            {
+                "today_requests": today_requests_serializer.data,
+                "other_requests": other_requests_serializer.data,
+            }
+        )

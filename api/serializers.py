@@ -220,3 +220,4 @@ class StandardizedFieldRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = StandardizedFieldRequest
         fields = "__all__"
+        depth=1

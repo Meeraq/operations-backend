@@ -434,6 +434,9 @@ class StandardizedField(models.Model):
     values = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.field}"
 
 
 class StandardizedFieldRequest(models.Model):
@@ -455,4 +458,4 @@ class StandardizedFieldRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
-        return f"{self.coach.username} - {self.standardized_field_name} - {self.status}"
+        return f"{self.coach.email} - {self.standardized_field_name} - {self.status}"
