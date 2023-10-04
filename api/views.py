@@ -4995,6 +4995,7 @@ def edit_project_caas(request, project_id):
         project.sold = request.data.get('sold', project.sold)
         project.location = json.loads(request.data.get('location', '[]'))
         project.project_description = request.data.get('project_description', project.project_description)
+        project.hr.clear()
         for hr in request.data["hr"]:
             single_hr = HR.objects.get(id=hr)
             project.hr.add(single_hr)
