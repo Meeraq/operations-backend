@@ -428,14 +428,29 @@ def approve_coach(request, coach_id):
 def update_coach_profile(request, coach_id):
     try:
         coach = Coach.objects.get(id=coach_id)
+
+        mutable_data = request.data.copy()
+
+        if not mutable_data["coach_id"]:
+            mutable_data["coach_id"] = coach.coach_id
+
     except Coach.DoesNotExist:
         return Response(status=404)
-    pmo_user = User.objects.filter(profile__type="pmo").first()
-    pmo = Pmo.objects.get(email=pmo_user.email)
+    internal_coach = json.loads(request.data["internal_coach"])
+    organization_of_coach = request.data.get("organization_of_coach")
 
-    serializer = CoachSerializer(
-        coach, data=request.data, partial=True
-    )  # partial argument added here
+    if internal_coach and not organization_of_coach:
+        return Response(
+            {
+                "error": "Organization field must not be empty if internal coach is selected yes."
+            },
+            status=400,
+        )
+    pmo_user = User.objects.filter(profile__type="pmo").first()
+    # pmo = Pmo.objects.get(email=pmo_user)
+
+    serializer = CoachSerializer(coach, data=mutable_data, partial=True)
+
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
@@ -1614,7 +1629,13 @@ def add_coach(request):
         ]
     ):
         return Response({"error": "All required fields must be provided."}, status=400)
-
+    if internal_coach and not organization_of_coach:
+        return Response(
+            {
+                "error": "Organization field must not be empty if internal coach is selected yes."
+            },
+            status=400,
+        )
     try:
         # Create the Django User
         if coach_exists(coach_id):
@@ -3789,6 +3810,39 @@ def get_session_pending_of_user(request, user_type, user_id):
     return Response(res, status=200)
 
 
+# used for pmo and hr report section
+@api_view(["GET"])
+def get_all_sessions_of_user(request, user_type, user_id):
+    session_requests = []
+    if user_type == "pmo":
+        session_requests = SessionRequestCaas.objects.filter(
+            ~Q(session_type="interview"),
+            ~Q(billable_session_number=None),
+            is_archive=False,
+        )
+    elif user_type == "hr":
+        session_requests = SessionRequestCaas.objects.filter(
+            ~Q(session_type="interview"),
+            ~Q(billable_session_number=None),
+            is_archive=False,
+            project__hr__id=user_id,
+        )
+    sessions_serializer = SessionRequestCaasDepthOneSerializer(
+        session_requests, many=True
+    )
+    res = []
+    for session in sessions_serializer.data:
+        engagement = Engagement.objects.filter(
+            learner__id=session["learner"]["id"], project__id=session["project"]["id"]
+        )
+        if len(engagement) > 0 and engagement[0].coach:
+            coach_serializer = CoachSerializer(engagement[0].coach)
+            res.append({**session, "coach": coach_serializer.data})
+        else:
+            res.append({**session})
+    return Response(res, status=200)
+
+
 @api_view(["GET"])
 def get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
@@ -4076,6 +4130,16 @@ def edit_goal(request, goal_id):
         )
 
 
+@api_view(["DELETE"])
+def delete_goal(request, goal_id):
+    try:
+        goal = Goal.objects.get(id=goal_id)
+    except Goal.DoesNotExist:
+        return Response({"error": "Goal not found."}, status=404)
+    goal.delete()
+    return Response({"message": "Goal deleted successfully."}, status=204)
+
+
 @api_view(["POST"])
 def create_competency(request):
     serializer = CompetencySerializer(data=request.data)
@@ -4119,6 +4183,16 @@ def edit_competency(request, competency_id):
             },
             status=400,
         )
+
+
+@api_view(["DELETE"])
+def delete_competency(request, competency_id):
+    try:
+        competency = Competency.objects.get(id=competency_id)
+    except Competency.DoesNotExist:
+        return Response({"error": "Competency not found."}, status=404)
+    competency.delete()
+    return Response({"message": "Goal deleted successfully."}, status=204)
 
 
 @api_view(["GET"])
@@ -4208,6 +4282,16 @@ def edit_action_item(request, action_item_id):
     return Response(serializer.errors, status=400)
 
 
+@api_view(["DELETE"])
+def delete_action_item(request, action_item_id):
+    try:
+        action_item = ActionItem.objects.get(id=action_item_id)
+    except ActionItem.DoesNotExist:
+        return Response({"error": "Action item not found."}, status=404)
+    action_item.delete()
+    return Response({"message": "Action item deleted successfully"}, status=204)
+
+
 @api_view(["POST"])
 def mark_session_as_complete(request, session_id):
     try:
@@ -4232,31 +4316,48 @@ def complete_engagement(request, engagement_id):
 
 @api_view(["GET"])
 def get_all_competencies(request):
-    competencies = Competency.objects.all()
+    goals_with_competencies = Goal.objects.prefetch_related("competency_set").all()
+
     competency_list = []
 
-    for competency in competencies:
-        goal_name = (competency.goal.name if competency.goal else "N/A",)
+    for goal in goals_with_competencies:
+        goal_name = goal.name
         project_name = (
-            competency.goal.engagement.project.name
-            if competency.goal and competency.goal.engagement.project
+            goal.engagement.project.name
+            if goal.engagement and goal.engagement.project
             else "N/A"
         )
         coachee_name = (
-            competency.goal.engagement.learner.name
-            if competency.goal and competency.goal.engagement.learner
+            goal.engagement.learner.name
+            if goal.engagement and goal.engagement.learner
             else "N/A"
         )
-        competency_data = {
-            "id": competency.id,
-            "goal_id": goal_name,
-            "name": competency.name,
-            "scoring": competency.scoring,
-            "created_at": competency.created_at.isoformat(),
-            "project_name": project_name,
-            "learner_name": coachee_name,
-        }
-        competency_list.append(competency_data)
+
+        # Include goals without competencies
+        if goal.competency_set.exists():
+            for competency in goal.competency_set.all():
+                competency_data = {
+                    "id": competency.id,
+                    "goal_id": goal_name,
+                    "name": competency.name,
+                    "scoring": competency.scoring,
+                    "created_at": competency.created_at.isoformat(),
+                    "project_name": project_name,
+                    "learner_name": coachee_name,
+                }
+                competency_list.append(competency_data)
+        else:
+            # Include goals with no competencies
+            competency_data = {
+                "id": None,
+                "goal_id": goal_name,
+                "name": "-",
+                "scoring": [],
+                "created_at": None,
+                "project_name": project_name,
+                "learner_name": coachee_name,
+            }
+            competency_list.append(competency_data)
 
     return Response({"competencies": competency_list})
 
@@ -4688,31 +4789,50 @@ def get_pending_action_items_by_competency(request, learner_id):
 
 @api_view(["GET"])
 def get_all_competencies_of_hr(request, hr_id):
-    competencies = Competency.objects.filter(goal__engagement__project__hr=hr_id)
+    goals_with_competencies = Goal.objects.prefetch_related("competency_set").filter(
+        engagement__project__hr=hr_id
+    )
+
     competency_list = []
 
-    for competency in competencies:
-        goal_name = (competency.goal.name if competency.goal else "N/A",)
+    for goal in goals_with_competencies:
+        goal_name = goal.name
         project_name = (
-            competency.goal.engagement.project.name
-            if competency.goal and competency.goal.engagement.project
+            goal.engagement.project.name
+            if goal.engagement and goal.engagement.project
             else "N/A"
         )
         coachee_name = (
-            competency.goal.engagement.learner.name
-            if competency.goal and competency.goal.engagement.learner
+            goal.engagement.learner.name
+            if goal.engagement and goal.engagement.learner
             else "N/A"
         )
-        competency_data = {
-            "id": competency.id,
-            "goal_id": goal_name,
-            "name": competency.name,
-            "scoring": competency.scoring,
-            "created_at": competency.created_at.isoformat(),
-            "project_name": project_name,
-            "learner_name": coachee_name,
-        }
-        competency_list.append(competency_data)
+
+        # Include goals without competencies
+        if goal.competency_set.exists():
+            for competency in goal.competency_set.all():
+                competency_data = {
+                    "id": competency.id,
+                    "goal_id": goal_name,
+                    "name": competency.name,
+                    "scoring": competency.scoring,
+                    "created_at": competency.created_at.isoformat(),
+                    "project_name": project_name,
+                    "learner_name": coachee_name,
+                }
+                competency_list.append(competency_data)
+        else:
+            # Include goals with no competencies
+            competency_data = {
+                "id": None,
+                "goal_id": goal_name,
+                "name": "-",
+                "scoring": [],
+                "created_at": None,
+                "project_name": project_name,
+                "learner_name": coachee_name,
+            }
+            competency_list.append(competency_data)
 
     return Response({"competencies": competency_list})
 
@@ -4829,6 +4949,47 @@ def remove_coach_from_project(request, project_id):
         {"message": "Coach is not associated with the project"},
         status=status.HTTP_400_BAD_REQUEST,
     )
+
+    # if request.method == "POST":
+
+
+@api_view(["POST"])
+def standard_field_request(request, user_id):
+    value = request.data.get("value")
+
+    user_instance = Coach.objects.get(id=user_id)
+
+    field_name = request.data.get("field_name")  # Adjust this based on your field name
+    standardized_field, created = StandardizedField.objects.get_or_create(
+        field=field_name
+    )
+
+    standardized_field_request = StandardizedFieldRequest(
+        standardized_field_name=standardized_field,
+        coach=user_instance,
+        value=value,
+        status="pending",
+    )
+    standardized_field_request.save()
+
+    return Response({"message": "Request sent."}, status=200)
+
+@api_view(["GET"])
+def coaches_which_are_included_in_projects(request):
+    coachesId = []
+    projects = Project.objects.all()
+    for project in projects:
+        for coach_status in project.coaches_status.all():
+            if (
+                coach_status.status["hr"]["status"] == "select"
+                and coach_status.status["project_structure"]["status"] == "select"
+            ):
+                coachesId.append(coach_status.coach.id)
+
+    coachesId = set(coachesId)
+
+    return Response(coachesId)
+    
 
 
 class StandardizedFieldAPI(APIView):
