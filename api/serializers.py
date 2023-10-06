@@ -198,13 +198,15 @@ class ActionItemSerializer(serializers.ModelSerializer):
         model = ActionItem
         fields = ["id", "name", "status", "competency"]
 
-class PendingActionItemSerializer(serializers.ModelSerializer):    
+
+class PendingActionItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
-        fields='__all__'
-        depth=2
-        
+        fields = "__all__"
+        depth = 2
+
+
 class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
-        fields = '__all__'
+        fields = "__all__"
