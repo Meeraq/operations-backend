@@ -4980,12 +4980,17 @@ def coaches_which_are_included_in_projects(request):
 
 @api_view(['PUT'])
 def edit_project_caas(request, project_id):
+    organisation = Organisation.objects.filter(
+        id=request.data["organisation_id"]
+    ).first()
+    
     try:
         # Retrieve the existing project from the database
         project = get_object_or_404(Project, pk=project_id)
         # Update project attributes based on the data in the PUT request
         project.name = request.data.get('project_name', project.name)
         project.approx_coachee = request.data.get('approx_coachee', project.approx_coachee)
+        project.organisation=organisation
         project.frequency_of_session = request.data.get('frequency_of_session', project.frequency_of_session)
         project.interview_allowed = request.data.get('interview_allowed', project.interview_allowed)
         project.specific_coach = request.data.get('specific_coach', project.specific_coach)
