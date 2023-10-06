@@ -1459,6 +1459,9 @@ def get_projects_and_sessions_by_coach(request, coach_id):
     return Response({"projects": project_serializer.data})
 
 
+
+
+
 # @api_view(["GET"])
 # def coach_session_list(request, coach_id):
 #     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
@@ -1488,6 +1491,9 @@ def get_projects_and_sessions_by_coach(request, coach_id):
 #     return Response({"projects": project_serializer.data})
 
 
+
+
+
 @api_view(["GET"])
 def coach_session_list(request, coach_id):
     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
@@ -1495,12 +1501,12 @@ def coach_session_list(request, coach_id):
 
     # Fetch sessions related to the coach
     sessions = SessionRequestCaas.objects.filter(coach_id=coach_id)
-    session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
+    session_serializer = SessionRequestCaasSerializer(sessions, many=True)
 
     # Group sessions by project ID
     sessions_dict = {}
     for session in session_serializer.data:
-        project_id = session["project"]
+        project_id = session['project']
         if project_id in sessions_dict:
             sessions_dict[project_id].append(session)
         else:
@@ -1508,13 +1514,14 @@ def coach_session_list(request, coach_id):
 
     # Add the session data to the projects
     for project_data in project_serializer.data:
-        project_id = project_data["id"]
+        project_id = project_data['id']
         if project_id in sessions_dict:
-            project_data["sessions"] = sessions_dict[project_id]
+            project_data['sessions'] = sessions_dict[project_id]
         else:
-            project_data["sessions"] = []
+            project_data['sessions'] = []
 
     return Response({"projects": project_serializer.data})
+
 
 
 # @api_view(['POST'])
