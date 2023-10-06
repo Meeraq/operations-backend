@@ -5015,10 +5015,10 @@ class StandardizedFieldRequestAPI(APIView):
             requested_at__gte=today_start, status="pending"
         ).order_by("-requested_at")
 
-        other_requests = StandardizedFieldRequest.objects.exclude(
-            requested_at__gte=today_start, status="pending"
+        other_requests = StandardizedFieldRequest.objects.filter(
+            Q(status="pending") & Q(requested_at__lt=today_start)
         ).order_by("-requested_at")
-
+        
         today_requests_serializer = StandardizedFieldRequestSerializer(
             today_requests, many=True
         )
@@ -5032,3 +5032,93 @@ class StandardizedFieldRequestAPI(APIView):
                 "other_requests": other_requests_serializer.data,
             }
         )
+
+
+class StandardFieldAddValue(APIView):
+    def post(self, request):
+        
+        field_name = request.data.get('field_name')
+        option_value = request.data.get('optionValue')
+
+        standardized_field, created = StandardizedField.objects.get_or_create(field=field_name)
+
+        if option_value not in standardized_field.values:
+            standardized_field.values.append(option_value)
+            standardized_field.save()
+        else:
+            return Response({"error": "Value already present."}, status=404)
+
+        return Response({"message": f"Value Added to {field_name} field."}, status=200)
+    
+
+class StandardFieldEditValue(APIView):
+    def put(self, request):
+
+        field_name = request.data.get('field_name')
+        previous_value = request.data.get('previous_value')
+        new_value = request.data.get('new_value')
+
+        try:
+            
+            standardized_field = StandardizedField.objects.get(field=field_name)
+
+            if previous_value in standardized_field.values:
+
+                index = standardized_field.values.index(previous_value)
+                standardized_field.values[index] = new_value
+
+                standardized_field.save()
+
+                return Response({"message": f"Value Updated in {field_name} field."}, status=200)
+            else:
+                return Response({"message": f"{previous_value} not found in {field_name} field."}, status=404)
+        except StandardizedField.DoesNotExist:
+            return Response({"error": f"{field_name} not found."}, status=404)
+        
+        
+class StandardizedFieldRequestAcceptReject(APIView):
+    def put(self, request):
+        status = request.data.get('status')
+        request_id = request.data.get('request_id')
+
+        try:
+            request_instance = StandardizedFieldRequest.objects.get(id=request_id)
+
+            if status == 'accepted':
+                
+                request_instance.status = status
+                request_instance.save()
+
+                field_name = request_instance.standardized_field_name.field
+                value = request_instance.value
+
+                standardized_field, created = StandardizedField.objects.get_or_create(field=field_name)
+                
+                if value not in standardized_field.values:
+                    standardized_field.values.append(value)
+                    standardized_field.save()
+                else:
+                    return Response({"error": "Value already present."}, status=404)
+                return Response({"message": f"Status {status} for request."}, status=200)
+            else:
+                request_instance.status = status
+                request_instance.save()
+
+                return Response({"message": f"Status {status} for request."}, status=200)
+        except StandardizedFieldRequest.DoesNotExist:
+            return Response({"error": f"Request not found."}, status=404)
+        
+class StandardFieldDeleteValue(APIView):
+    def delete(self, request):
+        field_name = request.data.get('field_name')
+        option_value = request.data.get('optionValue')
+
+        standardized_field= StandardizedField.objects.get(field=field_name)
+
+        if option_value in standardized_field.values:
+            standardized_field.values.remove(option_value)
+            standardized_field.save()
+        else:
+            return Response({"error": "Value not present."}, status=404)
+
+        return Response({"message": f"Value deleted from {field_name} field."}, status=200)

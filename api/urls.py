@@ -5,6 +5,10 @@ from .views import (
     SessionCountsForAllLearners,
     StandardizedFieldAPI,
     StandardizedFieldRequestAPI,
+    StandardFieldAddValue,
+    StandardFieldEditValue,
+    StandardFieldDeleteValue,
+    StandardizedFieldRequestAcceptReject,
 )
 
 urlpatterns = [
@@ -253,4 +257,8 @@ urlpatterns = [
     path("standard_field/<int:user_id>/", views.standard_field_request),
     path("standardized-fields/", StandardizedFieldAPI.as_view()),
     path("standardized-field-requests/", StandardizedFieldRequestAPI.as_view()),
+    path("standard-field-add-value/", StandardFieldAddValue.as_view()),
+    path("standard-field-edit-value/", StandardFieldEditValue.as_view()),
+    path("standardized-field-request-accept-reject/",StandardizedFieldRequestAcceptReject.as_view()),
+    path("standard-field-delete-value/",StandardFieldDeleteValue.as_view()),
 ]
