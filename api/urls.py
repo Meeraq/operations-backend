@@ -4,13 +4,14 @@ from .views import (
     UpdateInviteesView,
     SessionCountsForAllLearners,
     SessionsProgressOfAllCoacheeForAnHr,
+    AddRegisteredCoach,
 )
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
     path("coaches/", views.coach_signup),
     path("coaches/all/", views.get_coaches),
-    path("coaches/<int:coach_id>/approve/", views.approve_coach),
+    path("coaches/approve/", views.approve_coach),
     path("pmo-login/", views.pmo_login, name="pmo-login"),
     path("coach-login/", views.coach_login, name="coach-login"),
     path(
@@ -28,7 +29,7 @@ urlpatterns = [
     # path('projects/completed/hr/<int:hr_id>/',views.get_completed_projects_of_hr),
     path("add-coach/", views.add_coach),
     path("hr/all/", views.get_hr),
-    path("coaches/profile/<int:coach_id>/", views.update_coach_profile),
+    path("coaches/profile/<int:id>/", views.update_coach_profile),
     path("csrf/", views.get_csrf, name="api-csrf"),
     path("login/", views.login_view, name="api-login"),
     path("logout/", views.logout_view, name="api-logout"),
@@ -254,4 +255,6 @@ urlpatterns = [
         "coaches-which-are-included-in-projects/",
         views.coaches_which_are_included_in_projects,
     ),
+    path("add_registered_coach/", AddRegisteredCoach.as_view()),
+    path("get-registered-coaches/", views.get_registered_coaches),
 ]
