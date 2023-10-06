@@ -5339,10 +5339,10 @@ def edit_project_caas(request, project_id):
         project.save()
         
         # You can return a success response with the updated project details
-        return JsonResponse({'message': 'Project updated successfully', 'project_id': project.id})
+        return Response({'message': 'Project updated successfully', 'project_id': project.id})
     
     except Project.DoesNotExist:
-        return JsonResponse({'error': 'Project not found'}, status=404)
+        return Response({'error': 'Project not found'}, status=404)
     
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return Response({'error': str(e)}, status=500)
