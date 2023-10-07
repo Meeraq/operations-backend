@@ -182,7 +182,7 @@ def refresh_microsoft_access_token(user_token):
     )
 
     if expiration_timestamp <= timezone.now():
-        token_url = f"https://login.microsoftonline.com/{env('MICROSOFT_TENANT_ID')}/oauth2/v2.0/token"
+        token_url = f"https://login.microsoftonline.com/common/oauth2/v2.0/token"
 
         token_data = {
             "client_id": env("MICROSOFT_CLIENT_ID"),
@@ -5201,7 +5201,7 @@ def google_auth_callback(request):
 
 @api_view(["GET"])
 def microsoft_auth(request, user_mail_address):
-    oauth2_endpoint = f"https://login.microsoftonline.com/{env('MICROSOFT_TENANT_ID')}/oauth2/v2.0/authorize"
+    oauth2_endpoint = f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
 
     auth_params = {
         "client_id": env("MICROSOFT_CLIENT_ID"),
