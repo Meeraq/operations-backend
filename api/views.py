@@ -686,6 +686,7 @@ def create_project_cass(request):
                 final_coaches={"status": "pending"},
                 project_live="pending",
             ),
+            status="active"
         )
         project.save()
     except IntegrityError:
@@ -1698,14 +1699,13 @@ def add_coach(request):
             coach.save()
 
             full_name = coach_user.first_name + " " + coach_user.last_name
-            # send_mail_templates(
-            #     "coach_templates/pmo-adds-coach-as-user.html",
-            #     [coach_user.email],
-            #     "Meeraq Coaching | New Beginning !",
-            #     {"name": coach_user.first_name},
-            #     [env("BCC_EMAIL")],  # no bcc emails
-            # )
-
+            send_mail_templates(
+                "coach_templates/pmo-adds-coach-as-user.html",
+                [coach_user.email],
+                "Meeraq Coaching | New Beginning !",
+                {"name": coach_user.first_name},
+                [],  # no bcc emails
+            )
             # Send email notification to the coach
             # subject = 'Welcome to our coaching platform'
             # message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {temp_password}\n\n Click on the link to login or reset the password http://localhost:3003/'
@@ -5160,4 +5160,35 @@ class SessionsProgressOfAllCoacheeForAnHr(APIView):
         
         return Response({"session_data": session_data})
 
-    
+@api_view(["PUT"])
+def project_status(request, project_id):
+    try:
+        # Use get_object_or_404 to retrieve the project or return a 404 response if it doesn't exist
+        project = get_object_or_404(Project, id=project_id)
+
+        # Retrieve engagements related to the project
+        engagements = Engagement.objects.filter(project=project)
+
+        # Update the project status
+        if not engagements.exists():
+            project.status = "completed" if project.status == "active" else "active"
+        else:
+            # Check if any engagement is active
+            if any(engagement.status == "active" for engagement in engagements):
+                return Response({"error": "Some of the Engagements are active."}, status=404)
+            
+            # Check if all engagements are completed
+            if all(engagement.status == "completed" for engagement in engagements):
+                project.status = "completed"
+            else:
+                project.status = "active"
+
+        # Save the updated project status
+        project.save()
+
+        # Return a success response
+        return Response({"message": f"Project status updated successfully to {project.status}"}, status=200)
+
+    except Exception as e:
+        # Return a 500 response for other exceptions
+        return Response({"error": str(e)}, status=500)
