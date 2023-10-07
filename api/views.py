@@ -87,9 +87,7 @@ from rest_framework import status
 from rest_framework.views import APIView
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from oauth2client import client
+
 import os
 
 # Create your views here.
