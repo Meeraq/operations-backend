@@ -18,6 +18,7 @@ from .serializers import (
     ProjectDepthTwoSerializer,
     HrSerializer,
     OrganisationSerializer,
+    ProjectSerializer,
     LearnerDepthOneSerializer,
     HrDepthOneSerializer,
     SessionRequestCaasDepthOneSerializer,
@@ -32,6 +33,7 @@ from .serializers import (
     ActionItemSerializer,
     GetActionItemDepthOneSerializer,
     PendingActionItemSerializer,
+    EngagementSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -85,6 +87,7 @@ from django.db.models import Count, Sum, Case, When, IntegerField
 import io
 from openpyxl import Workbook
 from openpyxl.styles import Font
+from rest_framework import generics
 
 # Create your views here.
 from collections import defaultdict
@@ -3751,6 +3754,7 @@ class SessionCountsForAllLearners(APIView):
 
                 total_sessions_count = SessionRequestCaas.objects.filter(
                     learner__id=learner_id,
+                    # project_id = engagement.project_id
                     billable_session_number__isnull=False,
                     is_archive=False,
                 ).count()
@@ -5301,3 +5305,45 @@ def get_registered_coaches(request):
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
+
+
+# @api_view(["GET"])
+# def pmo_dashboard(request):
+#     try:
+#         organisations = Organisation.objects.all()
+#         serialized_data = []
+
+#         for organisation in organisations:
+#             projects = Project.objects.filter(organisation=organisation)
+#             organisation_data = OrganisationSerializer(organisation).data
+#             organisation_data["projects"] = []
+
+#             for project in projects:
+#                 project_data = ProjectSerializer(project).data
+
+#                 # Get all engagements in the project
+#                 engagements = Engagement.objects.filter(project=project)
+#                 engagement_data = EngagementSerializer(engagements, many=True).data
+
+#                 project_data["engagements"] = engagement_data
+#                 organisation_data["projects"].append(project_data)
+
+#             serialized_data.append(organisation_data)
+
+#         return Response(serialized_data, status=200)
+#     except Exception as e:
+#         return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+def get_all_engagements(request):
+    engagements = Engagement.objects.all()
+    serializer = EngagementSerializer(engagements, many=True)
+    return Response(serializer.data)
+
+
+# @api_view(["GET"])
+# def get_all_completed_sessions(request):
+#     completed_sessions = SessionRequestCaas.objects.filter(status="completed")
+#     serializer = SessionRequestCaasSerializer(completed_sessions, many=True)
+#     return Response(serializer.data)
