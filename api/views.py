@@ -5335,11 +5335,11 @@ def get_registered_coaches(request):
 #         return Response({"error": str(e)}, status=500)
 
 
-@api_view(["GET"])
-def get_all_engagements(request):
-    engagements = Engagement.objects.all()
-    serializer = EngagementSerializer(engagements, many=True)
-    return Response(serializer.data)
+# @api_view(["GET"])
+# def get_all_engagements(request):
+#     engagements = Engagement.objects.all()
+#     serializer = EngagementSerializer(engagements, many=True)
+#     return Response(serializer.data)
 
 
 # @api_view(["GET"])
@@ -5347,3 +5347,93 @@ def get_all_engagements(request):
 #     completed_sessions = SessionRequestCaas.objects.filter(status="completed")
 #     serializer = SessionRequestCaasSerializer(completed_sessions, many=True)
 #     return Response(serializer.data)
+
+
+# @api_view(["GET"])
+# def get_all_engagements(request):
+#     # Get all engagements
+#     engagements = Engagement.objects.all()
+
+#     # Create a list to store engagement data with session counts
+#     engagement_data_list = []
+
+#     for engagement in engagements:
+#         # Get the engagement ID
+#         engagement_id = engagement.id
+
+#         # Count completed sessions for the learner in this engagement
+#         completed_sessions_count = SessionRequestCaas.objects.filter(
+#             status="completed",
+#             billable_session_number__isnull=False,
+#             learner__id=engagement.learner.id,
+#             project__id=engagement.project.id,
+#             is_archive=False,
+#         ).count()
+
+#         # Count total sessions for the learner in this engagement
+#         total_sessions_count = SessionRequestCaas.objects.filter(
+#             learner__id=engagement.learner.id,
+#             billable_session_number__isnull=False,
+#             project__id=engagement.project.id,
+#             is_archive=False,
+#         ).count()
+
+#         # Create a dictionary with session counts for this engagement
+#         engagement_data = {
+#             "completed_sessions_count": completed_sessions_count,
+#             "total_sessions_count": total_sessions_count,
+#         }
+
+#         # Add engagement data to the list
+#         engagement_data_list.append(engagement_data)
+
+#     # Serialize the engagements along with session counts
+#     serialized_engagements = [
+#         {"engagement": engagement, "session_counts": data}
+#         for engagement, data in zip(engagements, engagement_data_list)
+#     ]
+
+#     # Serialize and return the data
+#     serializer = EngagementSerializer(serialized_engagements, many=True)
+#     return Response(serializer.data)
+
+
+@api_view(["GET"])
+def get_all_engagements(request):
+    # Get all engagements
+    engagements = Engagement.objects.all()
+
+    # Create a list to store serialized engagement data with session counts
+    engagement_data_list = []
+
+    for engagement in engagements:
+        # Get the engagement ID
+        engagement_id = engagement.id
+
+        # Count completed sessions for the learner in this engagement
+        completed_sessions_count = SessionRequestCaas.objects.filter(
+            status="completed",
+            # billable_session_number__isnull=False,
+            learner__id=engagement.learner.id,
+            project__id=engagement.project.id,
+            is_archive=False,
+        ).count()
+
+        # Count total sessions for the learner in this engagement
+        total_sessions_count = SessionRequestCaas.objects.filter(
+            learner__id=engagement.learner.id,
+            billable_session_number__isnull=False,
+            project__id=engagement.project.id,
+            is_archive=False,
+        ).count()
+
+        # Serialize the engagement along with session counts
+        serialized_engagement = EngagementSerializer(engagement).data
+        serialized_engagement["completed_sessions_count"] = completed_sessions_count
+        serialized_engagement["total_sessions_count"] = total_sessions_count
+
+        # Add serialized engagement data to the list
+        engagement_data_list.append(serialized_engagement)
+
+    # Return the list of serialized engagement data with session counts
+    return Response(engagement_data_list)
