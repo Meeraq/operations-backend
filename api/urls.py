@@ -1,10 +1,12 @@
 from django.urls import path, include
 from . import views
+
 from .views import (
     UpdateInviteesView,
     SessionCountsForAllLearners,
     SessionsProgressOfAllCoacheeForAnHr,
     AddRegisteredCoach,
+    ActivitySummary
 )
 
 urlpatterns = [
@@ -262,13 +264,5 @@ urlpatterns = [
         "pmo-dashboard/",
         views.get_all_engagements,
     ),
-    path("total-login-count/", views.get_total_login_count),
-    path("total_profileEdit_count/", views.get_profile_edit_activity),
-    path("total_goal_add_count/", views.get_goal_add_activity),
-    path("total_coach_add_count/", views.get_coach_add_activity),
-    path("sent_email/", views.sent_email_activity),
-
-
-
-    
+    path("activity-summary/", ActivitySummary.as_view())
 ]

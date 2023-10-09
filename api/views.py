@@ -1799,7 +1799,7 @@ def add_coach(request):
             # admin_email = 'jatin@meeraq.com'
             # admin_message = f'Dear PMO! \n\n A new coach {full_name} has been added on our coaching platform.'
             # send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])
-
+        return Response({"success": "Coach added successfully."}, status=status.HTTP_201_CREATED)
 
     except IntegrityError as e:
         print(e)
@@ -5979,37 +5979,70 @@ def edit_project_caas(request, project_id):
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
-@api_view(["GET"])
-def get_total_login_count(request):
-    user_login_activities = UserLoginActivity.objects.all()
-    total_login_count = user_login_activities.count()
-    serializer = UserLoginActivitySerializer(user_login_activities, many=True)
-   
-    return Response({"total_login_count": total_login_count, "login_activities": serializer.data})
 
-@api_view(["GET"])
-def get_profile_edit_activity(request):
-    profile_edit_activities = ProfileEditActivity.objects.all()
-    total_activity_count = profile_edit_activities.count()
-    serializer = ProfileEditActivitySerializer(profile_edit_activities, many=True) 
-    return Response({"total_activity_count": total_activity_count, "profile_edit_activities": serializer.data}) 
+class ActivitySummary(APIView):
+    def get(self, request):
+        try:
+            user_login_activities = UserLoginActivity.objects.all()
+            total_login_count = user_login_activities.count()
+            user_login_serializer = UserLoginActivitySerializer(user_login_activities, many=True)
+        except Exception as e:
+            print("user_login_activities", str(e))
+            user_login_serializer = []
 
-@api_view(["GET"])
-def get_goal_add_activity(request):
-    goal_add_activities = AddGoalActivity.objects.all()
-    total_activity_count = goal_add_activities.count()
-    serializer = AddGoalActivitySerializer(goal_add_activities, many=True) 
-    return Response({"total_activity_count": total_activity_count, "goal_add_activities": serializer.data}) 
+        try:
+            profile_edit_activities = ProfileEditActivity.objects.all()
+            total_profile_edit_count = profile_edit_activities.count()
+            profile_edit_serializer = ProfileEditActivitySerializer(profile_edit_activities, many=True)
+        except Exception as e:
+            print("profile_edit_activities", str(e))
+            profile_edit_serializer = []
 
-@api_view(["GET"])
-def get_coach_add_activity(request):
-    coach_add_activities = AddCoachActivity.objects.all()
-    total_activity_count = coach_add_activities.count()
-    serializer = AddCoachActivitySerializer(coach_add_activities, many=True) 
-    return Response({"total_activity_count": total_activity_count, "coach_add_activities": serializer.data}) 
-@api_view(["GET"])
-def sent_email_activity(request):
-    sent_email_activity = SentEmailActivity.objects.all()
-    total_activity_count = sent_email_activity.count()
-    serializer = SentEmailActivitySerializer(sent_email_activity, many=True) 
-    return Response({"total_activity_count": total_activity_count, "sent_email_activity": serializer.data}) 
+        try:
+            goal_add_activities = AddGoalActivity.objects.all()
+            total_goal_add_count = goal_add_activities.count()
+            goal_add_serializer = AddGoalActivitySerializer(goal_add_activities, many=True)
+        except Exception as e:
+            print("goal_add_activities", str(e))
+            goal_add_serializer = []
+
+        try:
+            coach_add_activities = AddCoachActivity.objects.all()
+            total_coach_add_count = coach_add_activities.count()
+            coach_add_serializer = AddCoachActivitySerializer(coach_add_activities, many=True)
+        except Exception as e:
+            print("coach_add_activities", str(e))
+            coach_add_serializer = []
+
+        try:
+            sent_email_activities = SentEmailActivity.objects.all()
+            total_sent_email_count = sent_email_activities.count()
+            sent_email_serializer = SentEmailActivitySerializer(sent_email_activities, many=True)
+        except Exception as e:
+            print("sent_email_activities", str(e))
+            sent_email_serializer = []
+
+        response_data = {
+            "user_login": {
+                "total_count": total_login_count,
+                "activity": user_login_serializer.data,
+            },
+            "profile_edit": {
+                "total_count": total_profile_edit_count,
+                "activity": profile_edit_serializer.data,
+            },
+            "goal_add": {
+                "total_count": total_goal_add_count,
+                "activity": goal_add_serializer.data,
+            },
+            "coach_add": {
+                "total_count": total_coach_add_count,
+                "activity": coach_add_serializer.data,
+            },
+            "sent_email": {
+                "total_count": total_sent_email_count,
+                "activity": sent_email_serializer.data,
+            },
+        }
+
+        return Response(response_data)

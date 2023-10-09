@@ -446,7 +446,7 @@ class ProfileEditActivity(models.Model):
 
 class UserLoginActivity(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    login_timestamp = models.DateTimeField()
+    timestamp = models.DateTimeField()
 
     def __str__(self):
         return f"User Login Activity for {self.user.username}"
