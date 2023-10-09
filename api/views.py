@@ -671,6 +671,7 @@ def create_project_cass(request):
             name=request.data["organisation_name"], image_url=request.data["image_url"]
         )
     organisation.save()
+    desc = request.data["project_description"]
     try:
         project = Project(
             # print(organisation.name, organisation.image_url, "details of org")
@@ -690,6 +691,8 @@ def create_project_cass(request):
             tentative_start_date=request.data["tentative_start_date"],
             mode=request.data["mode"],
             sold=request.data["sold"],
+            project_description=desc,
+
             # updated_to_sold= request.data['updated_to_sold'],
             location=json.loads(request.data["location"]),
             steps=dict(
@@ -5308,3 +5311,43 @@ def get_registered_coaches(request):
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(['PUT'])
+def edit_project_caas(request, project_id):
+    organisation = Organisation.objects.filter(
+        id=request.data["organisation_id"]
+    ).first()
+    
+    try:
+        # Retrieve the existing project from the database
+        project = get_object_or_404(Project, pk=project_id)
+        # Update project attributes based on the data in the PUT request
+        project.name = request.data.get('project_name', project.name)
+        project.approx_coachee = request.data.get('approx_coachee', project.approx_coachee)
+        project.organisation=organisation
+        project.frequency_of_session = request.data.get('frequency_of_session', project.frequency_of_session)
+        project.interview_allowed = request.data.get('interview_allowed', project.interview_allowed)
+        project.specific_coach = request.data.get('specific_coach', project.specific_coach)
+        project.empanelment = request.data.get('empanelment', project.empanelment)
+        project.tentative_start_date = request.data.get('tentative_start_date', project.tentative_start_date)
+        project.mode = request.data.get('mode', project.mode)
+        project.sold = request.data.get('sold', project.sold)
+        project.location = json.loads(request.data.get('location', '[]'))
+        project.project_description = request.data.get('project_description', project.project_description)
+        project.hr.clear()
+        for hr in request.data["hr"]:
+            single_hr = HR.objects.get(id=hr)
+            project.hr.add(single_hr)
+        
+        # Save the updated project
+        project.save()
+        
+        # You can return a success response with the updated project details
+        return Response({'message': 'Project updated successfully', 'project_id': project.id})
+    
+    except Project.DoesNotExist:
+        return Response({'error': 'Project not found'}, status=404)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
