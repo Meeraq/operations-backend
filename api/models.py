@@ -1,4 +1,5 @@
 from django.db import models
+import os
 
 # Create your models here.
 from django.contrib.auth.models import AbstractUser, Group
@@ -53,14 +54,17 @@ def password_reset_token_created(
         reverse("password_reset:reset-password-request"), reset_password_token.key
     )
     subject = "Meeraq - Forgot Password"
-
+    
     user_type = reset_password_token.user.profile.type
+    not_approved_coach=False
     if user_type == "pmo":
         user = Pmo.objects.get(email=reset_password_token.user.email)
         name = user.name
     elif user_type == "coach":
         user = Coach.objects.get(email=reset_password_token.user.email)
         name = user.first_name
+        if not user.is_approved:
+           not_approved_coach=True 
     elif user_type == "learner":
         user = Learner.objects.get(email=reset_password_token.user.email)
         name = user.name
@@ -69,19 +73,34 @@ def password_reset_token_created(
         name = user.first_name
     else:
         name = "User"
-
-    # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
-    link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
-    # send_mail(
-    #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
-    # )
-    send_mail_templates(
-        "hr_emails/forgot_password.html",
-        [reset_password_token.user.email],
-        "Meeraq Platform | Password Reset",
-        {"name": name, "resetPassword": link},
-        [],  # no bcc
-    )
+        
+    if not_approved_coach == True:
+        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+        link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
+        # send_mail(
+        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
+        # )
+        send_mail_templates(
+            "coach_templates/create_new_password.html",
+            [reset_password_token.user.email],
+            "Meeraq Platform | Create New Password",
+            {"name": name, "createPassword": link},
+            [],  # no bcc
+        )
+    else: 
+        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+        link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
+        # send_mail(
+        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
+        # )
+        send_mail_templates(
+            "hr_emails/forgot_password.html",
+            [reset_password_token.user.email],
+            "Meeraq Platform | Password Reset",
+            {"name": name, "resetPassword": link},
+            [],  # no bcc
+        )
+    
 
 
 class Profile(models.Model):
@@ -109,6 +128,12 @@ class Pmo(models.Model):
         return self.name
 
 
+def validate_pdf_extension(value):
+    ext = os.path.splitext(value.name)[1].lower()
+    if not ext == ".pdf":
+        raise ValidationError("Only PDF files are allowed.")
+
+
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     coach_id = models.CharField(max_length=20, blank=True)
@@ -117,15 +142,15 @@ class Coach(models.Model):
     email = models.EmailField()
     age = models.CharField(max_length=10, default="", blank=True)
     gender = models.CharField(max_length=50, blank=True)
-    domain = models.CharField(max_length=50, blank=True)
+    domain = models.JSONField(default=list, blank=True)
     room_id = models.CharField(max_length=50, blank=True)
     phone = models.CharField(max_length=25)
-    level = models.CharField(max_length=50)
-    rating = models.CharField(max_length=20)
+    level = models.CharField(max_length=50, blank=True)
+    rating = models.CharField(max_length=20, blank=True)
     area_of_expertise = models.JSONField(default=list, blank=True)
     completed_sessions = models.IntegerField(blank=True, default=0)
     profile_pic = models.ImageField(upload_to="post_images", blank=True)
-    education = models.CharField(max_length=200, blank=True)
+    education = models.JSONField(default=list, blank=True)
     corporate_experience = models.TextField(blank=True)
     coaching_experience = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
@@ -145,6 +170,18 @@ class Coach(models.Model):
     other_certification = models.JSONField(default=list, blank=True)
     active_inactive = models.BooleanField(blank=True, default=False)
     currency = models.CharField(max_length=100, blank=True, default="")
+    internal_coach = models.BooleanField(blank=True, default=False)
+    organization_of_coach = models.CharField(max_length=100, blank=True)
+    reason_for_inactive = models.JSONField(default=list, blank=True)
+    client_companies = models.JSONField(default=list, blank=True)
+    education_pic = models.ImageField(upload_to="post_images", blank=True)
+
+    educational_qualification = models.JSONField(default=list, blank=True)
+
+    # education_upload_file = models.ImageField(upload_to="post_images", blank=True)
+    education_upload_file = models.FileField(
+        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+    )
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -201,7 +238,7 @@ class CoachStatus(models.Model):
 
 class Project(models.Model):
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100,unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type = models.CharField(
         max_length=50, choices=project_type_choice, default="cod"
@@ -233,6 +270,7 @@ class Project(models.Model):
     coach_fees_per_hour = models.IntegerField(default=0, blank=True)
     approx_coachee = models.TextField(blank=True)
     frequency_of_session = models.TextField(blank=True)
+    project_description = models.CharField(max_length=255, blank=True) 
 
     class Meta:
         ordering = ["-created_at"]

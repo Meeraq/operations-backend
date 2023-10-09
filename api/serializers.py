@@ -69,10 +69,10 @@ class LearnerSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-# class ProjectSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Project
-#         fields = '__all__'
+class ProjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = "__all__"
 
 
 class ProjectDepthTwoSerializer(serializers.ModelSerializer):
@@ -173,6 +173,13 @@ class EngagementDepthOneSerializer(serializers.ModelSerializer):
         depth = 1
 
 
+class EngagementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Engagement
+        fields = "__all__"
+        depth = 2
+
+
 class GoalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Goal
@@ -203,12 +210,14 @@ class ActionItemSerializer(serializers.ModelSerializer):
         model = ActionItem
         fields = ["id", "name", "status", "competency"]
 
-class PendingActionItemSerializer(serializers.ModelSerializer):    
+
+class PendingActionItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
-        fields='__all__'
-        depth=2
-        
+        fields = "__all__"
+        depth = 2
+
+
 class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
