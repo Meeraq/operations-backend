@@ -18,6 +18,7 @@ from .serializers import (
     ProjectDepthTwoSerializer,
     HrSerializer,
     OrganisationSerializer,
+    ProjectSerializer,
     LearnerDepthOneSerializer,
     HrDepthOneSerializer,
     SessionRequestCaasDepthOneSerializer,
@@ -32,6 +33,7 @@ from .serializers import (
     ActionItemSerializer,
     GetActionItemDepthOneSerializer,
     PendingActionItemSerializer,
+    EngagementSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -85,6 +87,7 @@ from django.db.models import Count, Sum, Case, When, IntegerField
 import io
 from openpyxl import Workbook
 from openpyxl.styles import Font
+from rest_framework import generics
 
 # Create your views here.
 from collections import defaultdict
@@ -3761,6 +3764,7 @@ class SessionCountsForAllLearners(APIView):
 
                 total_sessions_count = SessionRequestCaas.objects.filter(
                     learner__id=learner_id,
+                    # project_id = engagement.project_id
                     billable_session_number__isnull=False,
                     is_archive=False,
                 ).count()
@@ -5312,6 +5316,139 @@ def get_registered_coaches(request):
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
 
+
+# @api_view(["GET"])
+# def pmo_dashboard(request):
+#     try:
+#         organisations = Organisation.objects.all()
+#         serialized_data = []
+
+#         for organisation in organisations:
+#             projects = Project.objects.filter(organisation=organisation)
+#             organisation_data = OrganisationSerializer(organisation).data
+#             organisation_data["projects"] = []
+
+#             for project in projects:
+#                 project_data = ProjectSerializer(project).data
+
+#                 # Get all engagements in the project
+#                 engagements = Engagement.objects.filter(project=project)
+#                 engagement_data = EngagementSerializer(engagements, many=True).data
+
+#                 project_data["engagements"] = engagement_data
+#                 organisation_data["projects"].append(project_data)
+
+#             serialized_data.append(organisation_data)
+
+#         return Response(serialized_data, status=200)
+#     except Exception as e:
+#         return Response({"error": str(e)}, status=500)
+
+
+# @api_view(["GET"])
+# def get_all_engagements(request):
+#     engagements = Engagement.objects.all()
+#     serializer = EngagementSerializer(engagements, many=True)
+#     return Response(serializer.data)
+
+
+# @api_view(["GET"])
+# def get_all_completed_sessions(request):
+#     completed_sessions = SessionRequestCaas.objects.filter(status="completed")
+#     serializer = SessionRequestCaasSerializer(completed_sessions, many=True)
+#     return Response(serializer.data)
+
+
+# @api_view(["GET"])
+# def get_all_engagements(request):
+#     # Get all engagements
+#     engagements = Engagement.objects.all()
+
+#     # Create a list to store engagement data with session counts
+#     engagement_data_list = []
+
+#     for engagement in engagements:
+#         # Get the engagement ID
+#         engagement_id = engagement.id
+
+#         # Count completed sessions for the learner in this engagement
+#         completed_sessions_count = SessionRequestCaas.objects.filter(
+#             status="completed",
+#             billable_session_number__isnull=False,
+#             learner__id=engagement.learner.id,
+#             project__id=engagement.project.id,
+#             is_archive=False,
+#         ).count()
+
+#         # Count total sessions for the learner in this engagement
+#         total_sessions_count = SessionRequestCaas.objects.filter(
+#             learner__id=engagement.learner.id,
+#             billable_session_number__isnull=False,
+#             project__id=engagement.project.id,
+#             is_archive=False,
+#         ).count()
+
+#         # Create a dictionary with session counts for this engagement
+#         engagement_data = {
+#             "completed_sessions_count": completed_sessions_count,
+#             "total_sessions_count": total_sessions_count,
+#         }
+
+#         # Add engagement data to the list
+#         engagement_data_list.append(engagement_data)
+
+#     # Serialize the engagements along with session counts
+#     serialized_engagements = [
+#         {"engagement": engagement, "session_counts": data}
+#         for engagement, data in zip(engagements, engagement_data_list)
+#     ]
+
+#     # Serialize and return the data
+#     serializer = EngagementSerializer(serialized_engagements, many=True)
+#     return Response(serializer.data)
+
+
+@api_view(["GET"])
+def get_all_engagements(request):
+    # Get all engagements
+    engagements = Engagement.objects.all()
+
+    # Create a list to store serialized engagement data with session counts
+    engagement_data_list = []
+
+    for engagement in engagements:
+        # Get the engagement ID
+        engagement_id = engagement.id
+
+        completed_sessions_count = (
+            SessionRequestCaas.objects.filter(
+                status="completed",
+                learner__id=engagement.learner.id,
+                project__id=engagement.project.id,
+                is_archive=False,
+            )
+            .exclude(Q(billable_session_number__isnull=True, session_type="chemistry"))
+            .count()
+        )
+
+        # Count total sessions for the learner in this engagement
+        total_sessions_count = SessionRequestCaas.objects.filter(
+            learner__id=engagement.learner.id,
+            billable_session_number__isnull=False,
+            project__id=engagement.project.id,
+            is_archive=False,
+        ).count()
+
+        # Serialize the engagement along with session counts
+        serialized_engagement = EngagementSerializer(engagement).data
+        serialized_engagement["completed_sessions_count"] = completed_sessions_count
+        serialized_engagement["total_sessions_count"] = total_sessions_count
+
+        # Add serialized engagement data to the list
+        engagement_data_list.append(serialized_engagement)
+
+    # Return the list of serialized engagement data with session counts
+    return Response(engagement_data_list)
 
 @api_view(['PUT'])
 def edit_project_caas(request, project_id):

@@ -258,5 +258,8 @@ urlpatterns = [
     path("add_registered_coach/", AddRegisteredCoach.as_view()),
     path("get-registered-coaches/", views.get_registered_coaches),
     path("edit-project-caas/<int:project_id>/", views.edit_project_caas),
-
+    path(
+        "pmo-dashboard/",
+        views.get_all_engagements,
+    ),
 ]

@@ -64,10 +64,10 @@ class LearnerSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-# class ProjectSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Project
-#         fields = '__all__'
+class ProjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = "__all__"
 
 
 class ProjectDepthTwoSerializer(serializers.ModelSerializer):
@@ -166,6 +166,13 @@ class EngagementDepthOneSerializer(serializers.ModelSerializer):
         model = Engagement
         fields = "__all__"
         depth = 1
+
+
+class EngagementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Engagement
+        fields = "__all__"
+        depth = 2
 
 
 class GoalSerializer(serializers.ModelSerializer):
