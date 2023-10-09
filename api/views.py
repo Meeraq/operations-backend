@@ -5410,14 +5410,16 @@ def get_all_engagements(request):
         # Get the engagement ID
         engagement_id = engagement.id
 
-        # Count completed sessions for the learner in this engagement
-        completed_sessions_count = SessionRequestCaas.objects.filter(
-            status="completed",
-            # billable_session_number__isnull=False,
-            learner__id=engagement.learner.id,
-            project__id=engagement.project.id,
-            is_archive=False,
-        ).count()
+        completed_sessions_count = (
+            SessionRequestCaas.objects.filter(
+                status="completed",
+                learner__id=engagement.learner.id,
+                project__id=engagement.project.id,
+                is_archive=False,
+            )
+            .exclude(Q(billable_session_number__isnull=True, session_type="chemistry"))
+            .count()
+        )
 
         # Count total sessions for the learner in this engagement
         total_sessions_count = SessionRequestCaas.objects.filter(
