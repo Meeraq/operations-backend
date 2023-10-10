@@ -450,6 +450,13 @@ def update_coach_profile(request, id):
 
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
+    
+    user = coach.user.user  
+    new_email = mutable_data.get("email") 
+    if new_email and new_email != user.email:
+        user.email = new_email
+        user.username = new_email
+        user.save()
 
     if internal_coach and not organization_of_coach:
         return Response(
