@@ -255,4 +255,5 @@ urlpatterns = [
         views.coaches_which_are_included_in_projects,
     ),
     path("project-status-changing/<int:project_id>/",views.project_status),
+    path("completed-projects/<int:user_id>/",views.completed_projects),
 ]

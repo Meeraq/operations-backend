@@ -673,6 +673,7 @@ def create_project_cass(request):
             sold=request.data["sold"],
             # updated_to_sold= request.data['updated_to_sold'],
             location=json.loads(request.data["location"]),
+            project_description="hi",
             steps=dict(
                 project_structure={"status": "pending"},
                 coach_list={"status": "pending"},
@@ -5192,3 +5193,17 @@ def project_status(request, project_id):
     except Exception as e:
         # Return a 500 response for other exceptions
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+def completed_projects(request,user_id):
+    projects=Project.objects.filter(coaches_status__coach__id=user_id)
+    completed_project=[]
+    for project in projects:
+        if project.status=="completed":
+            completed_project.append(project)
+
+    print(completed_project)
+    project_serializer = ProjectDepthTwoSerializer(completed_project, many=True)
+    return Response({"completed_project": project_serializer.data})
+    

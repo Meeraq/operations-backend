@@ -257,7 +257,8 @@ class Project(models.Model):
     approx_coachee = models.TextField(blank=True)
     frequency_of_session = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES,blank=True,null=True)
-
+    project_description = models.CharField(max_length=255, blank=True)
+    
     class Meta:
         ordering = ["-created_at"]
 
