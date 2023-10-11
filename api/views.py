@@ -5285,9 +5285,7 @@ class AddRegisteredCoach(APIView):
                         "name": pmo.name,
                         "coachName": f"{coach.first_name} {coach.last_name} ",
                     },
-                    [
-                        # "rajat@meeraq.com","sujata@meeraq.com"
-                        ]
+                    json.loads(env("BCC_EMAIL_RAJAT_SUJATA"))
                 )
                 # Send profile completion tips to the coach
                 send_mail_templates(
