@@ -54,9 +54,9 @@ def password_reset_token_created(
         reverse("password_reset:reset-password-request"), reset_password_token.key
     )
     subject = "Meeraq - Forgot Password"
-    
+
     user_type = reset_password_token.user.profile.type
-    not_approved_coach=False
+    not_approved_coach = False
     if user_type == "pmo":
         user = Pmo.objects.get(email=reset_password_token.user.email)
         name = user.name
@@ -64,7 +64,7 @@ def password_reset_token_created(
         user = Coach.objects.get(email=reset_password_token.user.email)
         name = user.first_name
         if not user.is_approved:
-           not_approved_coach=True 
+            not_approved_coach = True
     elif user_type == "learner":
         user = Learner.objects.get(email=reset_password_token.user.email)
         name = user.name
@@ -73,7 +73,7 @@ def password_reset_token_created(
         name = user.first_name
     else:
         name = "User"
-        
+
     if not_approved_coach == True:
         # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
         link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
@@ -87,7 +87,7 @@ def password_reset_token_created(
             {"name": name, "createPassword": link},
             [],  # no bcc
         )
-    else: 
+    else:
         # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
         link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
         # send_mail(
@@ -100,7 +100,6 @@ def password_reset_token_created(
             {"name": name, "resetPassword": link},
             [],  # no bcc
         )
-    
 
 
 class Profile(models.Model):
@@ -238,7 +237,7 @@ class CoachStatus(models.Model):
 
 class Project(models.Model):
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
-    name = models.CharField(max_length=100,unique=True)
+    name = models.CharField(max_length=100, unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type = models.CharField(
         max_length=50, choices=project_type_choice, default="cod"
@@ -270,7 +269,7 @@ class Project(models.Model):
     coach_fees_per_hour = models.IntegerField(default=0, blank=True)
     approx_coachee = models.TextField(blank=True)
     frequency_of_session = models.TextField(blank=True)
-    project_description = models.CharField(max_length=255, blank=True) 
+    project_description = models.CharField(max_length=255, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -434,3 +433,70 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+
+
+class SchedularProject(models.Model):
+    project_structure = models.JSONField(default=list, blank=True)
+    hr = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(blank=True, null=True, default=None)
+
+
+class SchedularParticipants(models.Model):
+    name = models.CharField(max_length=100)
+    email = models.EmailField()
+    phone = models.CharField(max_length=25)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(blank=True, null=True, default=None)
+
+
+class SchedularBatch(models.Model):
+    project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
+    coaches = models.ManyToManyField(Coach, blank=True)
+    participants = models.ManyToManyField(SchedularParticipants, blank=True)
+    facilitator = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(blank=True, null=True, default=None)
+
+
+class CoachSchedularAvailibilty(models.Model):
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    start_time = models.CharField(max_length=30)
+    end_time = models.CharField(max_length=30)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(blank=True, null=True, default=None)
+
+
+class CoachingSession(models.Model):
+    booking_link = models.CharField(max_length=500)
+    start_date = models.DateField(auto_now_add=True)
+    end_date = models.DateField(blank=True, null=True)
+    expiry_date = models.DateField(blank=True, null=True)
+    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    coaching_session_number = models.IntegerField(blank=True, default=None, null=True)
+    coaching_session_order = models.IntegerField(blank=True, default=None, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(blank=True, null=True, default=None)
+
+
+class SchedularSessions(models.Model):
+    enrolled_participant = models.ForeignKey(
+        SchedularParticipants, on_delete=models.CASCADE
+    )
+    availibility = models.ForeignKey(
+        CoachSchedularAvailibilty, on_delete=models.CASCADE
+    )
+    coaching_session = models.ForeignKey(CoachingSession, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(blank=True, null=True, default=None)
+
+
+class LiveSession(models.Model):
+    date_time = models.DateTimeField(auto_now_add=True)
+    zoom_id = models.CharField(max_length=500)
+    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    live_session_number = models.IntegerField(blank=True, default=None, null=True)
+    live_session_order = models.IntegerField(blank=True, default=None, null=True)
+    attendees = models.CharField(blank=True, max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(blank=True, null=True, default=None)

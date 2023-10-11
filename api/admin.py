@@ -15,6 +15,13 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    SchedularProject,
+    SchedularParticipants,
+    SchedularBatch,
+    CoachSchedularAvailibilty,
+    CoachingSession,
+    SchedularSessions,
+    LiveSession,
 )
 
 # Register your models here.
@@ -36,3 +43,10 @@ admin.site.register(Notification)
 admin.site.register(Goal)
 admin.site.register(Competency)
 admin.site.register(ActionItem)
+admin.site.register(SchedularProject)
+admin.site.register(SchedularParticipants)
+admin.site.register(SchedularBatch)
+admin.site.register(CoachSchedularAvailibilty)
+admin.site.register(CoachingSession)
+admin.site.register(SchedularSessions)
+admin.site.register(LiveSession)
