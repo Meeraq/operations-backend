@@ -423,6 +423,16 @@ def approve_coach(request):
 
         create_notification(coach.user.user, path, message)
         # Return success response
+         # Send approval email to the coach
+        send_mail_templates(
+                "coach_templates/pmo_approves_profile.html",
+                [coach.email],
+                "Congratulations! Your Coach Registration is Approved",
+                {
+                    "name": f"{coach.first_name} {coach.last_name}",
+                },
+                [],
+            )
         return Response({"message": "Coach approved successfully."}, status=200)
 
     except Coach.DoesNotExist:
@@ -5261,13 +5271,36 @@ class AddRegisteredCoach(APIView):
 
                 create_notification(coach.user.user, path, message)
                 pmo_user = User.objects.filter(profile__type="pmo").first()
-
+                pmo = Pmo.objects.get(email=pmo_user.username)
                 create_notification(
                     pmo_user,
                     f"/registeredcoach",
                     f"{coach.first_name} {coach.last_name} has registered as a coach. Please go through his Profile.",
                 )
+                send_mail_templates(
+                    "pmo_emails/coach_register.html",
+                    [pmo_user.username],
+                    f"{coach.first_name} {coach.last_name} has Registered as a Coach",
+                    {
+                        "name": pmo.name,
+                        "coachName": f"{coach.first_name} {coach.last_name} ",
+                    },
+                    [
+                        # "rajat@meeraq.com","sujata@meeraq.com"
+                        ]
+                )
+                # Send profile completion tips to the coach
+                send_mail_templates(
+                    "coach_templates/profile_creation_tips.html",
+                    [coach.email],
+                    "Profile Completion Tips for Success on Meeraq Platform",
+                    {
+                        "name": f"{coach.first_name} {coach.last_name}",
+                    },
+                    [],
+                )
 
+           
             return Response({"coach": coach_serializer.data})
 
         except IntegrityError as e:
