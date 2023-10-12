@@ -463,6 +463,15 @@ def update_coach_profile(request, id):
     
     user = coach.user.user  
     new_email = mutable_data.get("email") 
+
+    if new_email and User.objects.filter(username=new_email).exclude(id=user.id).exists():
+        return Response(
+            {
+                "error": "Email already exists. Please choose a different email."
+            },
+            status=400,
+        )
+    
     if new_email and new_email != user.email:
         user.email = new_email
         user.username = new_email
