@@ -1617,6 +1617,7 @@ def add_coach(request):
     domain = json.loads(request.data["domain"])
     room_id = request.data.get("room_id")
     phone = request.data.get("phone")
+    phone_country_code =request.data.get("phone_country_code")
     level = request.data.get("level")
     currency = request.data.get("currency")
     education = json.loads(request.data["education"])
@@ -1662,6 +1663,7 @@ def add_coach(request):
             email,
             gender,
             phone,
+            phone_country_code,
             level,
             username,
             room_id,
@@ -1702,6 +1704,7 @@ def add_coach(request):
                 last_name=last_name,
                 email=email,
                 phone=phone,
+                phone_country_code=phone_country_code,
                 level=level,
                 currency=currency,
                 education=education,
@@ -3365,6 +3368,7 @@ def add_mulitple_coaches(request):
                 domain = coach_data.get("functional_domain", "")
                 email = coach_data.get("email")
                 phone = coach_data.get("mobile")
+                phone_country_code = coach_data.get("phone_country_code")
                 job_roles = coach_data.get("job_roles", [])
                 companies_worked_in = coach_data.get("companies_worked_in", [])
                 language = coach_data.get("language", [])
@@ -3391,7 +3395,7 @@ def add_mulitple_coaches(request):
 
                 # Perform validation on required fields
                 if not all(
-                    [coach_id, first_name, last_name, gender, level, email, phone]
+                    [coach_id, first_name, last_name, gender, level, email, phone,phone_country_code]
                 ):
                     return Response(
                         {
@@ -3460,6 +3464,7 @@ def add_mulitple_coaches(request):
                     domain=domain,
                     email=email,
                     phone=phone,
+                    phone_country_code=phone_country_code,
                     job_roles=job_roles,
                     companies_worked_in=companies_worked_in,
                     language=language,
@@ -5230,8 +5235,9 @@ class AddRegisteredCoach(APIView):
         email = request.data.get("email")
         phone = request.data.get("phone")
         is_approved = request.data.get("is_approved")
+        phone_country_code = request.data.get("phone_country_code")
 
-        if not all([first_name, last_name, email, phone]):
+        if not all([first_name, last_name, email, phone, phone_country_code]):
             return Response(
                 {"error": "All required fields must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -5266,6 +5272,7 @@ class AddRegisteredCoach(APIView):
                     last_name=last_name,
                     email=email,
                     phone=phone,
+                    phone_country_code=phone_country_code,
                     is_approved=is_approved,
                 )
 
