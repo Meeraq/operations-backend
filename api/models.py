@@ -436,12 +436,18 @@ class ActionItem(models.Model):
 
 
 class SchedularProject(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100, unique=True, default=None)
     project_structure = models.JSONField(default=list, blank=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     hr = models.ManyToManyField(HR, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, null=True, default=None)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
 
 
 class SchedularParticipants(models.Model):

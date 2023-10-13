@@ -14,6 +14,7 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    SchedularProject,
 )
 from django.contrib.auth.models import User
 
@@ -217,3 +218,10 @@ class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
         fields = "__all__"
+
+
+class SchedularProjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularProject
+        fields = "__all__"
+        depth = 1
