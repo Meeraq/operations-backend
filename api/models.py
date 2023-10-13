@@ -443,6 +443,12 @@ class SchedularProject(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, null=True, default=None)
 
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
+
 
 class SchedularParticipants(models.Model):
     name = models.CharField(max_length=100)
