@@ -206,7 +206,7 @@ def generate_otp(request):
             send_mail_templates("hr_emails/login_with_otp.html",[user],subject,{"name": name, "otp": created_otp.otp})
             return Response({"message": f"OTP has been sent to {user.username}!"})
         else:
-            return Response({"error" : "Vendor doesn't exists."})
+            return Response({"error" : "Vendor doesn't exist."},status=400)
 
     except User.DoesNotExist:
         # Handle the case where the user with the given email does not exist
