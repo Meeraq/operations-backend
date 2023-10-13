@@ -8,6 +8,7 @@ from .serializers import (
     QuestionSerializer,
     QuestionnaireSerializer,
     QuestionSerializerDepthOne,
+    QuestionnaireSerializerDepthTwo,
 )
 
 # Create your views here.
@@ -91,13 +92,12 @@ class QuestionView(APIView):
     def get(self, request):
         questions = Question.objects.all()
         serializer = QuestionSerializerDepthOne(questions, many=True)
-        print(serializer)
+
         return Response(serializer.data)
 
     def post(self, request):
-
         serializer = QuestionSerializer(data=request.data)
-    
+
         if serializer.is_valid():
             serializer.save()
             return Response(
@@ -113,21 +113,21 @@ class QuestionView(APIView):
 
     def put(self, request):
         question_id = request.data.get("id")
-        competency=request.data.get("competency")
-        
+        competency = request.data.get("competency")
+
         try:
             question = Question.objects.get(id=question_id)
         except Question.DoesNotExist:
             return Response(
                 {"message": "Question not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        serializer=None
+        serializer = None
         if isinstance(competency, dict):
             serializer = QuestionSerializerDepthOne(question, data=request.data)
         else:
             serializer = QuestionSerializer(question, data=request.data)
 
-        if serializer.is_valid():   
+        if serializer.is_valid():
             serializer.save()
             return Response(
                 {"message": "Question updated successfully"}, status=status.HTTP_200_OK
@@ -172,13 +172,17 @@ class OneQuestionDetail(APIView):
 class QuestionnaireView(APIView):
     def get(self, request):
         questionnaires = Questionnaire.objects.all()
-        serializer = QuestionnaireSerializer(questionnaires, many=True)
+        serializer = QuestionnaireSerializerDepthTwo(questionnaires, many=True)
         return Response(serializer.data)
 
     def post(self, request):
         serializer = QuestionnaireSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            questionnaire = serializer.save()
+
+            question_ids = request.data.get("questions", [])
+            questionnaire.questions.set(question_ids)
+
             return Response(
                 {"message": "Questionnaire created successfully"},
                 status=status.HTTP_201_CREATED,

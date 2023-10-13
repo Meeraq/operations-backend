@@ -21,8 +21,15 @@ class QuestionSerializerDepthOne(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+
 class QuestionnaireSerializer(serializers.ModelSerializer):
     class Meta:
         model = Questionnaire
         fields = "__all__"
-        depth = 1
+        
+
+class QuestionnaireSerializerDepthTwo(serializers.ModelSerializer):
+    class Meta:
+        model = Questionnaire
+        fields = "__all__"
+        depth = 2
