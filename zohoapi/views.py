@@ -124,7 +124,7 @@ def get_organization_data():
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
         headers = {"Authorization": f"Bearer {access_token}"}
-        url = f"${base_url}/organizations/{env('ZOHO_ORGANIZATION_ID')}/"
+        url = f"{base_url}/organizations/{env('ZOHO_ORGANIZATION_ID')}/"
         organization_response = requests.get(
             url,
             headers=headers,
