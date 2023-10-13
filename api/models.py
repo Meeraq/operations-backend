@@ -436,8 +436,10 @@ class ActionItem(models.Model):
 
 
 class SchedularProject(models.Model):
+    name = models.CharField(max_length=100, unique=True)
     project_structure = models.JSONField(default=list, blank=True)
-    hr = models.CharField(max_length=100, blank=True)
+    organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
+    hr = models.ManyToManyField(HR, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, null=True, default=None)
 
