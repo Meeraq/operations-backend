@@ -262,4 +262,5 @@ urlpatterns = [
         "pmo-dashboard/",
         views.get_all_engagements,
     ),
+    path("create-project-schedular/",views.create_project_schedular),
 ]

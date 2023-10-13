@@ -436,7 +436,7 @@ class ActionItem(models.Model):
 
 
 class SchedularProject(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100, unique=True, default=None)
     project_structure = models.JSONField(default=list, blank=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     hr = models.ManyToManyField(HR, blank=True)

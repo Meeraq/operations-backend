@@ -67,6 +67,7 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    SchedularProject
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -5488,3 +5489,60 @@ def edit_project_caas(request, project_id):
     
     except Exception as e:
         return Response({'error': str(e)}, status=500)
+
+
+@api_view(["POST"])
+def create_project_schedular(request):
+    organisation = Organisation.objects.filter(
+        id=request.data["organisation_name"]
+    ).first()
+    if not organisation:
+        organisation = Organisation(
+            name=request.data["organisation_name"], image_url=request.data["image_url"]
+        )
+    organisation.save()
+    try:
+        schedularProject = SchedularProject(
+            # print(organisation.name, organisation.image_url, "details of org")
+            name=request.data["project_name"],
+            organisation=organisation,
+        )
+        schedularProject.save()
+    except IntegrityError:
+        return Response({"error": "Project with this name already exists"}, status=400)
+    except Exception as e:
+        return Response({"error": "Failed to create project."}, status=400)
+    hr_emails = []
+    project_name = schedularProject.name
+    print(request.data["hr"], "HR ID")
+    for hr in request.data["hr"]:
+        single_hr = HR.objects.get(id=hr)
+        # print(single_hr)
+        schedularProject.hr.add(single_hr)
+        # Send email notification to the HR
+        # subject = f'Hey HR! You have been assigned to a project {project_name}'
+        # message = f'Dear {single_hr.first_name},\n\n You can use your email to log-in via OTP.'
+        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [single_hr.email])
+
+    # hrs= create_hr(request.data['hr'])
+    # for hr in hrs:
+    #     project.hr.add(hr)
+
+    # try:
+    #     path = f"/projects/caas/progress/{project.id}"
+    #     message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
+    #     create_notification(project.hr.first().user.user, path, message)
+    # except Exception as e:
+    #     print(f"Error occurred while creating notification: {str(e)}")
+    # return Response({"message": "Project created succesfully"}, status=200)
+    try:
+        path = f"/projects/caas/progress/{schedularProject.id}"
+        message = f"A new project - {schedularProject.name} has been created for the organisation - {schedularProject.organisation.name}"
+        for hr_member in schedularProject.hr.all():
+            create_notification(hr_member.user.user, path, message)
+    except Exception as e:
+        print(f"Error occurred while creating notification: {str(e)}")
+    return Response(
+        {"message": "Project created successfully", "project_id": schedularProject.id},
+        status=200,
+    )
