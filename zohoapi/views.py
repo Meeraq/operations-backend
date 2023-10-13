@@ -241,10 +241,14 @@ def validate_otp(request):
     login(request, user)
     user_data = get_user_data(user)
     if user_data:
+        organization = get_organization_data()
+        zoho_vendor = get_vendor(user_data['vendor_id'])
         return Response(
             {
                 "detail": "Successfully logged in.",
                 "user": {**user_data, "last_login": last_login},
+                "organization" : organization,
+                "zoho_vendor": zoho_vendor
             }
         )
     else:
@@ -259,9 +263,9 @@ def session_view(request):
     user = request.user
     last_login = user.last_login
     user_data = get_user_data(user)
-    organization = get_organization_data()
-    zoho_vendor = get_vendor(user_data['vendor_id'])
     if user_data:
+        organization = get_organization_data()
+        zoho_vendor = get_vendor(user_data['vendor_id'])
         return Response(
             {
                 "isAuthenticated": True,
@@ -290,9 +294,9 @@ def login_view(request):
     last_login = user.last_login
     login(request, user)
     user_data = get_user_data(user)
-    organization = get_organization_data()
-    zoho_vendor = get_vendor(user_data['vendor_id'])
     if user_data:
+        organization = get_organization_data()
+        zoho_vendor = get_vendor(user_data['vendor_id'])
         return Response(
             {
                 "detail": "Successfully logged in.",
