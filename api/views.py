@@ -1922,7 +1922,7 @@ def login_view(request):
         raise AuthenticationFailed({"detail": "Invalid credentials."})
     
     login_timestamp = datetime.now()
-    UserLoginActivity.objects.create(user=user, login_timestamp=login_timestamp)
+    UserLoginActivity.objects.create(user=user, timestamp=login_timestamp)
 
     last_login = user.last_login
     login(request, user)
@@ -2040,7 +2040,7 @@ def validate_otp(request):
 
     user = otp_obj.user
     login_timestamp = datetime.now()
-    UserLoginActivity.objects.create(user=user, login_timestamp=login_timestamp)
+    UserLoginActivity.objects.create(user=user, timestamp=login_timestamp)
     otp_obj.delete()
     last_login = user.last_login
     login(request, user)
