@@ -137,6 +137,7 @@ def validate_pdf_extension(value):
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     coach_id = models.CharField(max_length=20, blank=True)
+    vendor_id = models.CharField(max_length=255, blank=True,default="")
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
@@ -144,6 +145,7 @@ class Coach(models.Model):
     gender = models.CharField(max_length=50, blank=True)
     domain = models.JSONField(default=list, blank=True)
     room_id = models.CharField(max_length=50, blank=True)
+    phone_country_code = models.CharField(max_length=20, default="", blank=True)
     phone = models.CharField(max_length=25)
     level = models.CharField(max_length=50, blank=True)
     rating = models.CharField(max_length=20, blank=True)
