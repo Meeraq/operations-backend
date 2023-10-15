@@ -34,6 +34,7 @@ from .serializers import (
     GetActionItemDepthOneSerializer,
     PendingActionItemSerializer,
     EngagementSerializer,
+    SessionRequestWithEngagementCaasDepthOneSerializer
 )
 
 from django.utils.crypto import get_random_string
@@ -88,7 +89,7 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from rest_framework import generics
-
+from django.db.models import Subquery, OuterRef
 # Create your views here.
 from collections import defaultdict
 import pandas as pd
@@ -3869,7 +3870,16 @@ def get_session_requests_of_user(request, user_type, user_id):
             & Q(project__hr__id=user_id)
             & ~Q(status="pending")
         )
-    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    session_requests = session_requests.annotate(
+        engagement_status=Subquery(
+            Engagement.objects.filter(
+                project=OuterRef('project'),
+                learner=OuterRef('learner'),
+                                                                 
+            ).values('status')[:1]
+        )
+    )
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
 
 
@@ -3973,7 +3983,17 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
-    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+
+    session_requests = session_requests.annotate(
+        engagement_status=Subquery(
+            Engagement.objects.filter(
+                project=OuterRef('project'),
+                learner=OuterRef('learner'),
+                                                                 
+            ).values('status')[:1]
+        )
+    )
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
 
 
@@ -4012,7 +4032,19 @@ def get_past_sessions_of_user(request, user_type, user_id):
             Q(project__hr__id=user_id),
             Q(is_archive=False),
         )
-    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+
+    session_requests = session_requests.annotate(
+        engagement_status=Subquery(
+            Engagement.objects.filter(
+                project=OuterRef('project'),
+                learner=OuterRef('learner'),
+                                                                 
+            ).values('status')[:1]
+        )
+    )
+    for session_request in session_requests:
+        print(session_request.engagement_status)
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(session_requests, many=True)
     return Response(serializer.data, status=200)
 
 
