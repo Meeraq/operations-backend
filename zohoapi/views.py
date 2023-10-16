@@ -1,7 +1,7 @@
 from rest_framework.decorators import api_view, permission_classes
 from datetime import date
 import requests
-from django.shortcuts import  get_object_or_404
+from django.shortcuts import get_object_or_404
 from django.template.loader import render_to_string
 from rest_framework.exceptions import ValidationError
 from operationsBackend import settings
@@ -10,7 +10,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from rest_framework.permissions import  AllowAny
+from rest_framework.permissions import AllowAny
 from api.models import (
     Coach,
     OTP,
@@ -26,7 +26,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from django.http import HttpResponse
 from .serializers import InvoiceDataEditSerializer, InvoiceDataSerializer
-from .models import InvoiceData,AccessToken
+from .models import InvoiceData, AccessToken
 
 
 import environ
@@ -181,8 +181,6 @@ def get_user_data(user):
     return serializer.data
 
 
-
-
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def generate_otp(request):
@@ -202,11 +200,16 @@ def generate_otp(request):
             created_otp = OTP.objects.create(user=user, otp=otp)
             name = user_data.get("name") or user_data.get("first_name") or "User"
             subject = f"Meeraq Login OTP"
-            message = (f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}")
-            send_mail_templates("hr_emails/login_with_otp.html",["pankaj@meeraq.com"],subject,{"name": name, "otp": created_otp.otp})
+            message = f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
+            send_mail_templates(
+                "hr_emails/login_with_otp.html",
+                ["pankaj@meeraq.com"],
+                subject,
+                {"name": name, "otp": created_otp.otp},
+            )
             return Response({"message": f"OTP has been sent to {user.username}!"})
         else:
-            return Response({"error" : "Vendor doesn't exist."},status=400)
+            return Response({"error": "Vendor doesn't exist."}, status=400)
 
     except User.DoesNotExist:
         # Handle the case where the user with the given email does not exist
@@ -242,13 +245,13 @@ def validate_otp(request):
     user_data = get_user_data(user)
     if user_data:
         organization = get_organization_data()
-        zoho_vendor = get_vendor(user_data['vendor_id'])
+        zoho_vendor = get_vendor(user_data["vendor_id"])
         return Response(
             {
                 "detail": "Successfully logged in.",
                 "user": {**user_data, "last_login": last_login},
-                "organization" : organization,
-                "zoho_vendor": zoho_vendor
+                "organization": organization,
+                "zoho_vendor": zoho_vendor,
             }
         )
     else:
@@ -265,13 +268,13 @@ def session_view(request):
     user_data = get_user_data(user)
     if user_data:
         organization = get_organization_data()
-        zoho_vendor = get_vendor(user_data['vendor_id'])
+        zoho_vendor = get_vendor(user_data["vendor_id"])
         return Response(
             {
                 "isAuthenticated": True,
                 "user": {**user_data, "last_login": last_login},
                 "organization": organization,
-                "zoho_vendor" : zoho_vendor
+                "zoho_vendor": zoho_vendor,
             }
         )
     else:
@@ -296,19 +299,18 @@ def login_view(request):
     user_data = get_user_data(user)
     if user_data:
         organization = get_organization_data()
-        zoho_vendor = get_vendor(user_data['vendor_id'])
+        zoho_vendor = get_vendor(user_data["vendor_id"])
         return Response(
             {
                 "detail": "Successfully logged in.",
                 "user": {**user_data, "last_login": last_login},
                 "organization": organization,
-                "zoho_vendor" : zoho_vendor
+                "zoho_vendor": zoho_vendor,
             }
         )
     else:
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
-
 
 
 @api_view(["GET"])
@@ -359,7 +361,8 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
                     (
                         bill
                         for bill in bills
-                        if bill.get(env('INVOICE_FIELD_NAME')) == invoice["invoice_number"]
+                        if bill.get(env("INVOICE_FIELD_NAME"))
+                        == invoice["invoice_number"]
                     ),
                     None,
                 )
@@ -430,13 +433,13 @@ def get_purchase_order_data_pdf(request, purchaseorder_id):
         )
 
 
-
 @api_view(["POST"])
 def add_invoice_data(request):
     invoices = InvoiceData.objects.filter(
-        vendor_id=request.data["vendor_id"], invoice_number=request.data["invoice_number"]
+        vendor_id=request.data["vendor_id"],
+        invoice_number=request.data["invoice_number"],
     )
-    
+
     if invoices.count() > 0:
         return Response({"error": "Invoice number should be unique."}, status=400)
 
@@ -467,7 +470,6 @@ def add_invoice_data(request):
         return Response({"message": "Invoice generated successfully"}, status=201)
     else:
         return Response(serializer.errors, status=400)
-
 
 
 @api_view(["PUT"])
@@ -524,7 +526,6 @@ def delete_invoice(request, invoice_id):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 @api_view(["GET"])
 def get_purchase_order_and_invoices(request, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -552,7 +553,6 @@ def get_purchase_order_and_invoices(request, purchase_order_id):
         )
 
 
-
 @api_view(["GET"])
 def get_bank_account_data(
     request,
@@ -575,64 +575,68 @@ def get_bank_account_data(
         return Response({}, status=400)
 
 
-
-@api_view(['GET'])
+@api_view(["GET"])
 def update_vendor_id(request):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
         headers = {"Authorization": f"Bearer {access_token}"}
-        url =f"{base_url}/contacts?organization_id={env('ZOHO_ORGANIZATION_ID')}&contact_type=vendor"
-        vendor_response = requests.get(url,headers=headers)
+        url = f"{base_url}/contacts?organization_id={env('ZOHO_ORGANIZATION_ID')}&contact_type=vendor"
+        vendor_response = requests.get(url, headers=headers)
         if vendor_response.json()["message"] == "success":
-            for vendor in  vendor_response.json()['contacts']:
-                if vendor['email']:
+            for vendor in vendor_response.json()["contacts"]:
+                if vendor["email"]:
                     try:
-                        coach = Coach.objects.get(email = vendor['email'])
-                        coach.vendor_id = vendor['contact_id']
+                        coach = Coach.objects.get(email=vendor["email"])
+                        coach.vendor_id = vendor["contact_id"]
                         coach.save()
                     except Coach.DoesNotExist:
-                        print(vendor['email'], 'coach doesnt exist')
+                        print(vendor["email"], "coach doesnt exist")
                         pass
             return Response(vendor_response.json())
         else:
-            return Response({"error":"Failed to get vendors."}, status=400)
+            return Response({"error": "Failed to get vendors."}, status=400)
     else:
-        return Response({"error":"Unauthorized	."}, status=400)
-    
+        return Response({"error": "Unauthorized	."}, status=400)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 def get_coach_exists_and_not_existing_emails(request):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
         headers = {"Authorization": f"Bearer {access_token}"}
-        url =f"{base_url}/contacts?organization_id={env('ZOHO_ORGANIZATION_ID')}&contact_type=vendor"
-        vendor_response = requests.get(url,headers=headers)
+        url = f"{base_url}/contacts?organization_id={env('ZOHO_ORGANIZATION_ID')}&contact_type=vendor"
+        vendor_response = requests.get(url, headers=headers)
         if vendor_response.json()["message"] == "success":
             existing_coaches = []
             not_existing_coaches = []
-            for vendor in  vendor_response.json()['contacts']:
-                if vendor['email']:
+            for vendor in vendor_response.json()["contacts"]:
+                if vendor["email"]:
                     try:
-                        coach = Coach.objects.get(email = vendor['email'])
-                        existing_coaches.append(vendor['email'])
+                        coach = Coach.objects.get(email=vendor["email"])
+                        existing_coaches.append(vendor["email"])
                     except Coach.DoesNotExist:
-                        not_existing_coaches.append(vendor['email'])
+                        not_existing_coaches.append(vendor["email"])
                         pass
-            return Response({"vendors" : vendor_response.json()['contacts'],'existing_coaches': existing_coaches, 'not_existing_coaches':not_existing_coaches },status=200)
+            return Response(
+                {
+                    "vendors": vendor_response.json()["contacts"],
+                    "existing_coaches": existing_coaches,
+                    "not_existing_coaches": not_existing_coaches,
+                },
+                status=200,
+            )
         else:
-            return Response({"error":"Failed to get vendors."}, status=400)
+            return Response({"error": "Failed to get vendors."}, status=400)
     else:
-        return Response({"error":"Unauthorized	."}, status=400)
-    
+        return Response({"error": "Unauthorized	."}, status=400)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 def import_invoices_from_zoho(request):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
-        headers =  {"Authorization": f"Bearer {access_token}"}
-        coaches = Coach.objects.exclude(vendor_id__isnull=True).exclude(vendor_id='')
+        headers = {"Authorization": f"Bearer {access_token}"}
+        coaches = Coach.objects.exclude(vendor_id__isnull=True).exclude(vendor_id="")
         res = []
         bill_details_res = []
         for coach in coaches:
@@ -642,49 +646,72 @@ def import_invoices_from_zoho(request):
                 purchase_orders = response.json().get("purchaseorders", [])
                 for purchase_order in purchase_orders:
                     bills_url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&reference_number={purchase_order['purchaseorder_number']}"
-                    bills_response = requests.get(bills_url,headers=headers)
+                    bills_response = requests.get(bills_url, headers=headers)
                     if bills_response.status_code == 200:
                         res.append(bills_response.json().get("bills", []))
                         for bill in bills_response.json().get("bills", []):
                             bill_url = f"{base_url}/bills/{bill['bill_id']}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
                             bill_response = requests.get(bill_url, headers=headers)
                             if bill_response.status_code == 200:
-                                bill_details = bill_response.json().get('bill')
+                                bill_details = bill_response.json().get("bill")
                                 bill_details_res.append(bill_details)
                                 # print(bill_details)
                                 line_items_res = []
-                            
-                                for line_item in bill_details['line_items']:
-                                    if line_item['quantity'] > 0:
-                                        line_items_res.append({**line_item, 'line_item_id': line_item['purchaseorder_item_id'] ,'quantity_input': line_item['quantity'] })
-                                    if InvoiceData.objects.filter(vendor_id = coach.vendor_id,invoice_number = bill[env('INVOICE_FIELD_NAME')]).exists():
-                                         print('invoice already exists',bill[env('INVOICE_FIELD_NAME')])
+
+                                for line_item in bill_details["line_items"]:
+                                    if line_item["quantity"] > 0:
+                                        line_items_res.append(
+                                            {
+                                                **line_item,
+                                                "line_item_id": line_item[
+                                                    "purchaseorder_item_id"
+                                                ],
+                                                "quantity_input": line_item["quantity"],
+                                            }
+                                        )
+                                    if InvoiceData.objects.filter(
+                                        vendor_id=coach.vendor_id,
+                                        invoice_number=bill[env("INVOICE_FIELD_NAME")],
+                                    ).exists():
+                                        print(
+                                            "invoice already exists",
+                                            bill[env("INVOICE_FIELD_NAME")],
+                                        )
                                     else:
-                                         invoice = InvoiceData.objects.create(
-                                            invoice_number=bill[env('INVOICE_FIELD_NAME')],
-                                            vendor_id= coach.vendor_id,
+                                        invoice = InvoiceData.objects.create(
+                                            invoice_number=bill[
+                                                env("INVOICE_FIELD_NAME")
+                                            ],
+                                            vendor_id=coach.vendor_id,
                                             vendor_name=coach.first_name,
-																						vendor_email=coach.email,
-																						vendor_billing_address="",
-																						vendor_gst="",
-																						vendor_phone= coach.phone,
-																						customer_name= "",
-																						customer_gst = "",
-																						customer_notes ="",
-																						is_oversea_account=False,
-																						tin_number="",
-																						invoice_date=bill['date'],
-																						purchase_order_id= purchase_order['purchaseorder_id'],
-																						purchase_order_no= purchase_order['purchaseorder_number'],
-																						line_items=line_items_res,
-																						total=bill['total'])
+                                            vendor_email=coach.email,
+                                            vendor_billing_address="",
+                                            vendor_gst="",
+                                            vendor_phone=coach.phone,
+                                            customer_name="",
+                                            customer_gst="",
+                                            customer_notes="",
+                                            is_oversea_account=False,
+                                            tin_number="",
+                                            invoice_date=bill["date"],
+                                            purchase_order_id=purchase_order[
+                                                "purchaseorder_id"
+                                            ],
+                                            purchase_order_no=purchase_order[
+                                                "purchaseorder_number"
+                                            ],
+                                            line_items=line_items_res,
+                                            total=bill["total"],
+                                        )
                             else:
                                 print("bill details couldn't get")
                     else:
                         print("bills didn't fetched")
-                print(coach.email,purchase_orders)
+                print(coach.email, purchase_orders)
             else:
-                print({"error": "Failed to fetch purchase orders", 'email': coach.email})
-        return Response({'res': res,'bill_details_res':bill_details_res},status = 200)
+                print(
+                    {"error": "Failed to fetch purchase orders", "email": coach.email}
+                )
+        return Response({"res": res, "bill_details_res": bill_details_res}, status=200)
     else:
-        return Response({'error' : "Invalid invoices"}, status=400)
+        return Response({"error": "Invalid invoices"}, status=400)
