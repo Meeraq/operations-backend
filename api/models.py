@@ -54,14 +54,17 @@ def password_reset_token_created(
         reverse("password_reset:reset-password-request"), reset_password_token.key
     )
     subject = "Meeraq - Forgot Password"
-
+    
     user_type = reset_password_token.user.profile.type
+    not_approved_coach=False
     if user_type == "pmo":
         user = Pmo.objects.get(email=reset_password_token.user.email)
         name = user.name
     elif user_type == "coach":
         user = Coach.objects.get(email=reset_password_token.user.email)
         name = user.first_name
+        if not user.is_approved:
+           not_approved_coach=True 
     elif user_type == "learner":
         user = Learner.objects.get(email=reset_password_token.user.email)
         name = user.name
@@ -70,19 +73,34 @@ def password_reset_token_created(
         name = user.first_name
     else:
         name = "User"
-
-    # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
-    link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
-    # send_mail(
-    #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
-    # )
-    send_mail_templates(
-        "hr_emails/forgot_password.html",
-        [reset_password_token.user.email],
-        "Meeraq Platform | Password Reset",
-        {"name": name, "resetPassword": link},
-        [],  # no bcc
-    )
+        
+    if not_approved_coach == True:
+        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+        link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
+        # send_mail(
+        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
+        # )
+        send_mail_templates(
+            "coach_templates/create_new_password.html",
+            [reset_password_token.user.email],
+            "Meeraq Platform | Create New Password",
+            {"name": name, "createPassword": link},
+            [],  # no bcc
+        )
+    else: 
+        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+        link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
+        # send_mail(
+        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
+        # )
+        send_mail_templates(
+            "hr_emails/forgot_password.html",
+            [reset_password_token.user.email],
+            "Meeraq Platform | Password Reset",
+            {"name": name, "resetPassword": link},
+            [],  # no bcc
+        )
+    
 
 
 class Profile(models.Model):
@@ -119,6 +137,7 @@ def validate_pdf_extension(value):
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     coach_id = models.CharField(max_length=20, blank=True)
+    vendor_id = models.CharField(max_length=255, blank=True,default="")
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
@@ -126,9 +145,10 @@ class Coach(models.Model):
     gender = models.CharField(max_length=50, blank=True)
     domain = models.JSONField(default=list, blank=True)
     room_id = models.CharField(max_length=50, blank=True)
+    phone_country_code = models.CharField(max_length=20, default="", blank=True)
     phone = models.CharField(max_length=25)
-    level = models.CharField(max_length=50)
-    rating = models.CharField(max_length=20)
+    level = models.CharField(max_length=50, blank=True)
+    rating = models.CharField(max_length=20, blank=True)
     area_of_expertise = models.JSONField(default=list, blank=True)
     completed_sessions = models.IntegerField(blank=True, default=0)
     profile_pic = models.ImageField(upload_to="post_images", blank=True)
@@ -258,7 +278,7 @@ class Project(models.Model):
     frequency_of_session = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES,blank=True,null=True)
     project_description = models.CharField(max_length=255, blank=True)
-    
+
     class Meta:
         ordering = ["-created_at"]
 

@@ -64,10 +64,10 @@ class LearnerSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-# class ProjectSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Project
-#         fields = '__all__'
+class ProjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = "__all__"
 
 
 class ProjectDepthTwoSerializer(serializers.ModelSerializer):
@@ -146,7 +146,13 @@ class SessionRequestCaasDepthOneSerializer(serializers.ModelSerializer):
         model = SessionRequestCaas
         fields = "__all__"
         depth = 2
+class SessionRequestWithEngagementCaasDepthOneSerializer(serializers.ModelSerializer):
+    engagement_status = serializers.CharField()
 
+    class Meta:
+        model = SessionRequestCaas
+        fields = "__all__"
+        depth = 2
 
 class SessionRequestCaasDepthTwoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -166,6 +172,13 @@ class EngagementDepthOneSerializer(serializers.ModelSerializer):
         model = Engagement
         fields = "__all__"
         depth = 1
+
+
+class EngagementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Engagement
+        fields = "__all__"
+        depth = 2
 
 
 class GoalSerializer(serializers.ModelSerializer):
@@ -198,13 +211,15 @@ class ActionItemSerializer(serializers.ModelSerializer):
         model = ActionItem
         fields = ["id", "name", "status", "competency"]
 
-class PendingActionItemSerializer(serializers.ModelSerializer):    
+
+class PendingActionItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
-        fields='__all__'
-        depth=2
-        
+        fields = "__all__"
+        depth = 2
+
+
 class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
-        fields = '__all__'
+        fields = "__all__"
