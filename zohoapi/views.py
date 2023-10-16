@@ -359,7 +359,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
                     (
                         bill
                         for bill in bills
-                        if bill.get("cf_invocie") == invoice["invoice_number"]
+                        if bill.get(env('INVOICE_FIELD_NAME')) == invoice["invoice_number"]
                     ),
                     None,
                 )
@@ -657,11 +657,11 @@ def import_invoices_from_zoho(request):
                                 for line_item in bill_details['line_items']:
                                     if line_item['quantity'] > 0:
                                         line_items_res.append({**line_item, 'line_item_id': line_item['purchaseorder_item_id'] ,'quantity_input': line_item['quantity'] })
-                                    if InvoiceData.objects.filter(vendor_id = coach.vendor_id,invoice_number = bill['cf_invocie']).exists():
-                                         print('invoice already exists',bill['cf_invocie'])
+                                    if InvoiceData.objects.filter(vendor_id = coach.vendor_id,invoice_number = bill[env('INVOICE_FIELD_NAME')]).exists():
+                                         print('invoice already exists',bill[env('INVOICE_FIELD_NAME')])
                                     else:
                                          invoice = InvoiceData.objects.create(
-                                            invoice_number=bill['cf_invocie'],
+                                            invoice_number=bill[env('INVOICE_FIELD_NAME')],
                                             vendor_id= coach.vendor_id,
                                             vendor_name=coach.first_name,
 																						vendor_email=coach.email,
