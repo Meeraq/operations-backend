@@ -203,7 +203,7 @@ def generate_otp(request):
             name = user_data.get("name") or user_data.get("first_name") or "User"
             subject = f"Meeraq Login OTP"
             message = (f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}")
-            send_mail_templates("hr_emails/login_with_otp.html",[user],subject,{"name": name, "otp": created_otp.otp})
+            send_mail_templates("hr_emails/login_with_otp.html",["pankaj@meeraq.com"],subject,{"name": name, "otp": created_otp.otp})
             return Response({"message": f"OTP has been sent to {user.username}!"})
         else:
             return Response({"error" : "Vendor doesn't exist."},status=400)
@@ -625,3 +625,66 @@ def get_coach_exists_and_not_existing_emails(request):
     else:
         return Response({"error":"Unauthorized	."}, status=400)
     
+
+
+@api_view(['GET'])
+def import_invoices_from_zoho(request):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if access_token:
+        headers =  {"Authorization": f"Bearer {access_token}"}
+        coaches = Coach.objects.exclude(vendor_id__isnull=True).exclude(vendor_id='')
+        res = []
+        bill_details_res = []
+        for coach in coaches:
+            purchase_orders_url = f"{base_url}/purchaseorders/?organization_id={organization_id}&vendor_id={coach.vendor_id}"
+            response = requests.get(purchase_orders_url, headers=headers)
+            if response.status_code == 200:
+                purchase_orders = response.json().get("purchaseorders", [])
+                for purchase_order in purchase_orders:
+                    bills_url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&reference_number={purchase_order['purchaseorder_number']}"
+                    bills_response = requests.get(bills_url,headers=headers)
+                    if bills_response.status_code == 200:
+                        res.append(bills_response.json().get("bills", []))
+                        for bill in bills_response.json().get("bills", []):
+                            bill_url = f"{base_url}/bills/{bill['bill_id']}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
+                            bill_response = requests.get(bill_url, headers=headers)
+                            if bill_response.status_code == 200:
+                                bill_details = bill_response.json().get('bill')
+                                bill_details_res.append(bill_details)
+                                # print(bill_details)
+                                line_items_res = []
+                            
+                                for line_item in bill_details['line_items']:
+                                    if line_item['quantity'] > 0:
+                                        line_items_res.append({**line_item, 'line_item_id': line_item['purchaseorder_item_id'] ,'quantity_input': line_item['quantity'] })
+                                    if InvoiceData.objects.filter(vendor_id = coach.vendor_id,invoice_number = bill['cf_invocie']).exists():
+                                         print('invoice already exists',bill['cf_invocie'])
+                                    else:
+                                         invoice = InvoiceData.objects.create(
+                                            invoice_number=bill['cf_invocie'],
+                                            vendor_id= coach.vendor_id,
+                                            vendor_name=coach.first_name,
+																						vendor_email=coach.email,
+																						vendor_billing_address="",
+																						vendor_gst="",
+																						vendor_phone= coach.phone,
+																						customer_name= "",
+																						customer_gst = "",
+																						customer_notes ="",
+																						is_oversea_account=False,
+																						tin_number="",
+																						invoice_date=bill['date'],
+																						purchase_order_id= purchase_order['purchaseorder_id'],
+																						purchase_order_no= purchase_order['purchaseorder_number'],
+																						line_items=line_items_res,
+																						total=bill['total'])
+                            else:
+                                print("bill details couldn't get")
+                    else:
+                        print("bills didn't fetched")
+                print(coach.email,purchase_orders)
+            else:
+                print({"error": "Failed to fetch purchase orders", 'email': coach.email})
+        return Response({'res': res,'bill_details_res':bill_details_res},status = 200)
+    else:
+        return Response({'error' : "Invalid invoices"}, status=400)
