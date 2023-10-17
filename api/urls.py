@@ -267,5 +267,10 @@ urlpatterns = [
         views.get_all_Schedular_Projects,
         name="get-all-schedular-projects",
     ),
-    path("create-project-schedular/",views.create_project_schedular),
+    path("create-project-schedular/", views.create_project_schedular),
+    path(
+        "schedular-batches/",
+        views.get_schedular_batches,
+        name="schedular-batch-list",
+    ),
 ]

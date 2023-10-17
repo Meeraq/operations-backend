@@ -35,6 +35,7 @@ from .serializers import (
     PendingActionItemSerializer,
     EngagementSerializer,
     SchedularProjectSerializer,
+    SchedularBatchSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -68,7 +69,8 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
-    SchedularProject
+    SchedularProject,
+    SchedularBatch,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -5496,7 +5498,7 @@ def edit_project_caas(request, project_id):
         return Response({"error": "Project not found"}, status=404)
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["POST"])
@@ -5561,3 +5563,13 @@ def get_all_Schedular_Projects(request):
     projects = SchedularProject.objects.all()
     serializer = SchedularProjectSerializer(projects, many=True)
     return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+def get_schedular_batches(request):
+    try:
+        batches = SchedularBatch.objects.all()
+        serializer = SchedularBatchSerializer(batches, many=True)
+        return Response(serializer.data)
+    except SchedularBatch.DoesNotExist:
+        return Response({"message": "No batches found"}, status=404)
