@@ -346,7 +346,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
             url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&vendor_id={vendor_id}"
             bills_response = requests.get(url, headers=headers)
         else:
-            invoices = InvoiceData.objects.filter(vendor_id=purchase_order_id)
+            invoices = InvoiceData.objects.filter(vendor_id=vendor_id)
             url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&purchaseorder_id={purchase_order_id}"
             bills_response = requests.get(
                 url,
@@ -464,7 +464,7 @@ def add_invoice_data(request):
         send_mail_templates(
             "invoice.html",
             [env("FINANCE_EMAIL")],
-            "Invoice rasied by a Vendor.",
+            f"Invoice raised by a Vendor - {invoice_data['vendor_name']} ",
             {"invoice": invoice_data},
         )
         return Response({"message": "Invoice generated successfully"}, status=201)
@@ -506,7 +506,7 @@ def edit_invoice(request, invoice_id):
         send_mail_templates(
             "invoice.html",
             [env("FINANCE_EMAIL")],
-            "Invoice edited by a Vendor.",
+            f"Invoice edited by a Vendor - {invoice_data['vendor_name']}",
             {"invoice": invoice_data},
         )
         return Response({"message": "Invoice edited successfully."}, status=201)
