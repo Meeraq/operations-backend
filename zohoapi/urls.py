@@ -47,4 +47,5 @@ urlpatterns = [
         views.get_coach_exists_and_not_existing_emails,
     ),
     path("import-invoices/", views.import_invoices_from_zoho),
+    path("export-invoice-data/", views.export_invoice_data),
 ]

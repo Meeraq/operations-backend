@@ -18,6 +18,8 @@ from api.models import (
 from api.serializers import (
     CoachDepthOneSerializer,
 )
+from openpyxl import Workbook
+
 
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
@@ -716,3 +718,82 @@ def import_invoices_from_zoho(request):
         return Response({"res": res, "bill_details_res": bill_details_res}, status=200)
     else:
         return Response({"error": "Invalid invoices"}, status=400)
+
+
+@api_view(["GET"])
+def export_invoice_data(request):
+    # Retrieve all InvoiceData objects
+    queryset = InvoiceData.objects.all()
+
+    # Create a new workbook and add a worksheet
+    wb = Workbook()
+    ws = wb.active
+
+    # Write headers to the worksheet
+    headers = [
+        "Vendor ID",
+        "Vendor Name",
+        "Vendor Email",
+        "Vendor Billing Address",
+        "Vendor GST",
+        "Vendor Phone",
+        "Purchase Order ID",
+        "Purchase Order No",
+        "Invoice Number",
+        "Customer Name",
+        "Customer Notes",
+        "Customer GST",
+        "Total",
+        "Is Oversea Account",
+        "TIN Number",
+        "Type of Code",
+        "IBAN",
+        "SWIFT Code",
+        "Invoice Date",
+        "Beneficiary Name",
+        "Bank Name",
+        "Account Number",
+        "IFSC Code",
+    ]
+
+    for col_num, header in enumerate(headers, 1):
+        ws.cell(row=1, column=col_num, value=header)
+
+    # Write data to the worksheet
+    for row_num, invoice_data in enumerate(queryset, 2):
+        ws.append(
+            [
+                invoice_data.vendor_id,
+                invoice_data.vendor_name,
+                invoice_data.vendor_email,
+                invoice_data.vendor_billing_address,
+                invoice_data.vendor_gst,
+                invoice_data.vendor_phone,
+                invoice_data.purchase_order_id,
+                invoice_data.purchase_order_no,
+                invoice_data.invoice_number,
+                invoice_data.customer_name,
+                invoice_data.customer_notes,
+                invoice_data.customer_gst,
+                invoice_data.total,
+                invoice_data.is_oversea_account,
+                invoice_data.tin_number,
+                invoice_data.type_of_code,
+                invoice_data.iban,
+                invoice_data.swift_code,
+                invoice_data.invoice_date,
+                invoice_data.beneficiary_name,
+                invoice_data.bank_name,
+                invoice_data.account_number,
+                invoice_data.ifsc_code,
+            ]
+        )
+
+    # Create a response with the Excel file
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = "attachment; filename=invoice_data.xlsx"
+    wb.save(response)
+
+    return response
