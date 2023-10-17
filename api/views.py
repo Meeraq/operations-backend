@@ -4234,24 +4234,24 @@ def reschedule_session_of_coachee(request, session_id):
 
 @api_view(["POST"])
 def create_goal(request):
-    user_data = request.data.get('user')
+    user_email = request.data.get('email')
     serializer = GoalSerializer(data=request.data)
     goal_name = request.data["name"]
     engagement_id = request.data.get("engagement")
-
+    
     if not Goal.objects.filter(name=goal_name, engagement__id=engagement_id).exists():
         if Goal.objects.filter(engagement__id=engagement_id).count() < 10:
             if serializer.is_valid():
                 serializer.save()
                 try:
-                    user_instance = get_object_or_404(User, email=user_data)
-                except User.DoesNotExist:
-                    return Response({"message": "User not found."}, status=404)
-
-                AddGoalActivity.objects.create(
+                    user_instance = User.objects.get(username=user_email)
+                    AddGoalActivity.objects.create(
                     user=user_instance,  
                     timestamp=timezone.now(),
-                )
+                         )
+                except Exception as e:
+                    print("AddGoalActivity error", str(e))
+
                 return Response({"message": "Goal created successfully."}, status=201)
             return Response(serializer.errors, status=400)
         else:
