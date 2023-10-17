@@ -346,7 +346,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
             url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&vendor_id={vendor_id}"
             bills_response = requests.get(url, headers=headers)
         else:
-            invoices = InvoiceData.objects.filter(vendor_id=vendor_id)
+            invoices = InvoiceData.objects.filter(purchase_order_id=purchase_order_id)
             url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&purchaseorder_id={purchase_order_id}"
             bills_response = requests.get(
                 url,
@@ -652,7 +652,10 @@ def import_invoices_from_zoho(request):
                         for bill in bills_response.json().get("bills", []):
                             bill_url = f"{base_url}/bills/{bill['bill_id']}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
                             bill_response = requests.get(bill_url, headers=headers)
-                            if bill_response.status_code == 200:
+                            if (
+                                env("INVOICE_FIELD_NAME") in bill
+                                and bill_response.status_code == 200
+                            ):
                                 bill_details = bill_response.json().get("bill")
                                 bill_details_res.append(bill_details)
                                 # print(bill_details)
@@ -669,40 +672,38 @@ def import_invoices_from_zoho(request):
                                                 "quantity_input": line_item["quantity"],
                                             }
                                         )
-                                    if InvoiceData.objects.filter(
-                                        vendor_id=coach.vendor_id,
+                                if InvoiceData.objects.filter(
+                                    vendor_id=coach.vendor_id,
+                                    invoice_number=bill[env("INVOICE_FIELD_NAME")],
+                                ).exists():
+                                    print(
+                                        "invoice already exists",
+                                        bill[env("INVOICE_FIELD_NAME")],
+                                    )
+                                else:
+                                    invoice = InvoiceData.objects.create(
                                         invoice_number=bill[env("INVOICE_FIELD_NAME")],
-                                    ).exists():
-                                        print(
-                                            "invoice already exists",
-                                            bill[env("INVOICE_FIELD_NAME")],
-                                        )
-                                    else:
-                                        invoice = InvoiceData.objects.create(
-                                            invoice_number=bill[
-                                                env("INVOICE_FIELD_NAME")
-                                            ],
-                                            vendor_id=coach.vendor_id,
-                                            vendor_name=coach.first_name,
-                                            vendor_email=coach.email,
-                                            vendor_billing_address="",
-                                            vendor_gst="",
-                                            vendor_phone=coach.phone,
-                                            customer_name="",
-                                            customer_gst="",
-                                            customer_notes="",
-                                            is_oversea_account=False,
-                                            tin_number="",
-                                            invoice_date=bill["date"],
-                                            purchase_order_id=purchase_order[
-                                                "purchaseorder_id"
-                                            ],
-                                            purchase_order_no=purchase_order[
-                                                "purchaseorder_number"
-                                            ],
-                                            line_items=line_items_res,
-                                            total=bill["total"],
-                                        )
+                                        vendor_id=coach.vendor_id,
+                                        vendor_name=coach.first_name,
+                                        vendor_email=coach.email,
+                                        vendor_billing_address="",
+                                        vendor_gst="",
+                                        vendor_phone=coach.phone,
+                                        customer_name="",
+                                        customer_gst="",
+                                        customer_notes="",
+                                        is_oversea_account=False,
+                                        tin_number="",
+                                        invoice_date=bill["date"],
+                                        purchase_order_id=purchase_order[
+                                            "purchaseorder_id"
+                                        ],
+                                        purchase_order_no=purchase_order[
+                                            "purchaseorder_number"
+                                        ],
+                                        line_items=line_items_res,
+                                        total=bill["total"],
+                                    )
                             else:
                                 print("bill details couldn't get")
                     else:
