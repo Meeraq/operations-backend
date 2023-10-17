@@ -2,13 +2,15 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Competency, Question, Questionnaire
+from .models import Competency, Question, Questionnaire,Assessment
 from .serializers import (
     CompetencySerializer,
     QuestionSerializer,
     QuestionnaireSerializer,
     QuestionSerializerDepthOne,
     QuestionnaireSerializerDepthTwo,
+    AssessmentSerializer,
+    AssessmentSerializerDepthThree
 )
 
 # Create your views here.
@@ -165,7 +167,7 @@ class OneQuestionDetail(APIView):
                 {"message": "Question not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = QuestionSerializer(question)
+        serializer = QuestionSerializerDepthOne(question)
         return Response(serializer.data)
 
 
@@ -243,5 +245,66 @@ class OneQuestionnaireDetail(APIView):
                 {"message": "Questionnaire not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = QuestionnaireSerializer(questionnaire)
+        serializer = QuestionnaireSerializerDepthTwo(questionnaire)
         return Response(serializer.data)
+
+
+class AssessmentView(APIView):
+    def get(self, request):
+        assessments = Assessment.objects.all()
+        serializer = AssessmentSerializerDepthThree(assessments, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        
+        serializer = AssessmentSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Assessment created successfully"},
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(
+            {
+                "error": f"{serializer.errors}",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def put(self, request):
+        assessment_id = request.data.get("id")
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+        except Assessment.DoesNotExist:
+            return Response(
+                {"message": "Assessment not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        serializer = AssessmentSerializer(assessment, data=request.data)
+        if serializer.isvalid():
+            serializer.save()
+            return Response(
+                {"message": "Assessment updated successfully"},
+                status=status.HTTP_200_OK,
+            )
+        return Response(
+            {
+                "error": f"{serializer.errors}",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def delete(self, request):
+        assessment_id = request.data.get("id")
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+        except Assessment.DoesNotExist:
+            return Response(
+                {"message": "Assessment not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        assessment.delete()
+        return Response(
+            {"message": "Assessment deleted successfully"},
+            status=status.HTTP_204_NO_CONTENT,
+        )
