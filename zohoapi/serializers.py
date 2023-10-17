@@ -19,7 +19,7 @@ class InvoiceDataEditSerializer(serializers.ModelSerializer):
             "customer_notes",
             "total",
             "invoice_date",
-            "signature",
+            # "signature",
             "tin_number",
             "type_of_code",
             "iban",

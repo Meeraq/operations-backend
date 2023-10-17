@@ -27,6 +27,8 @@ from rest_framework import status
 from django.http import HttpResponse
 from .serializers import InvoiceDataEditSerializer, InvoiceDataSerializer
 from .models import InvoiceData, AccessToken
+# import weasyprint
+from django.core.mail import EmailMessage
 
 
 import environ
@@ -36,6 +38,17 @@ env = environ.Env()
 
 base_url = os.environ.get("ZOHO_API_BASE_URL")
 organization_id = os.environ.get("ZOHO_ORGANIZATION_ID")
+
+from django.template.loader import render_to_string
+from django.core.mail import send_mail, EmailMessage
+from django.conf import settings
+from django.template.loader import get_template
+# from weasyprint import HTML
+from xhtml2pdf import pisa
+from io import BytesIO
+
+
+
 
 
 def get_line_items_details(invoices):
@@ -118,7 +131,26 @@ def send_mail_templates(file_name, user_email, email_subject, content):
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
         raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
-
+    
+def send_mail_with_attachment(file_name, user_email, email_subject, content):
+    template = get_template(file_name)
+    html_content = template.render(content)
+    pdf_data = BytesIO()
+    pisa.CreatePDF(html_content, dest=pdf_data)
+    try:
+        # Create an EmailMessage object
+        email = EmailMessage(
+            f"{email_subject}",
+            "Invoice has been raised.",
+            settings.DEFAULT_FROM_EMAIL,
+            user_email,
+        )
+        email.attach("invoice.pdf", pdf_data.getvalue(), "application/pdf")
+        email.send(fail_silently=False)
+    except Exception as e:
+        print(f"Error occurred while sending emails: {str(e)}")
+        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
+    
 
 def get_organization_data():
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -439,6 +471,11 @@ def add_invoice_data(request):
         vendor_id=request.data["vendor_id"],
         invoice_number=request.data["invoice_number"],
     )
+    signature = request.data.get('signature')
+    print(signature)
+    signature_read = signature.read()
+    # print(signature.read())
+    # return Response({},status=400)
 
     if invoices.count() > 0:
         return Response({"error": "Invoice number should be unique."}, status=400)
@@ -456,13 +493,34 @@ def add_invoice_data(request):
                 * line_item["rate"]
                 * (1 + line_item["tax_percentage"] / 100)
             )
+        # signature = request.data.get('signature')
+        # signature_read = signature.read()
         invoice_data = {
             **serializer.data,
             "due_date": add_45_days(serializer.data["invoice_date"]),
             "line_items": line_items,
+            'signature' : signature_read
         }
-        send_mail_templates(
-            "invoice.html",
+        # email_message = render_to_string("invoice.html", {"invoice": invoice_data})
+        # pdf_content = weasyprint.HTML(string=email_message).write_pdf()
+        # try:
+        #     # Create EmailMessage instance
+        #     email = EmailMessage(
+        #         f"{env('EMAIL_SUBJECT_INITIAL', default='')} {'Invoice rasied by a Vendor'}",
+        #         email_message,
+        #         settings.DEFAULT_FROM_EMAIL,
+        #         "pankaj@meeraq.com",
+        #     )
+        #     email.attach(f"invoice.pdf", pdf_content, "application/pdf")
+        #     email.send(fail_silently=False, html_message=email_message)
+        # except Exception as e:
+        #     print(f"Error occurred while sending emails: {str(e)}")
+        #     raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
+        # Attach PDF to the email
+        # Send the email
+
+        send_mail_with_attachment(
+            "invoice_pdf.html",
             [env("FINANCE_EMAIL")],
             "Invoice rasied by a Vendor.",
             {"invoice": invoice_data},
@@ -483,7 +541,11 @@ def edit_invoice(request, invoice_id):
         .exists()
     ):
         return Response({"error": "Invoice already exists with the invoice number"})
+    signature = request.data.get('signature')
+    print(signature)
+    signature_read = signature.read()
     serializer = InvoiceDataEditSerializer(data=request.data, instance=invoice)
+    # image_file = request.FILES.get("signature")
 
     if serializer.is_valid():
         serializer.save()
@@ -502,14 +564,15 @@ def edit_invoice(request, invoice_id):
             **invoice_serializer.data,
             "due_date": add_45_days(serializer.data["invoice_date"]),
             "line_items": line_items,
+            'signature' : signature_read
         }
-        send_mail_templates(
-            "invoice.html",
+        send_mail_with_attachment(
+            "invoice_pdf.html",
             [env("FINANCE_EMAIL")],
             "Invoice edited by a Vendor.",
             {"invoice": invoice_data},
         )
-        return Response({"message": "Invoice edited successfully."}, status=201)
+        return Response({"message": "Invoice edited successfully."}, status=401)
     else:
         return Response({"error": "Invalid data."}, status=400)
 
