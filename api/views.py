@@ -36,6 +36,7 @@ from .serializers import (
     EngagementSerializer,
     SessionRequestWithEngagementCaasDepthOneSerializer,
     SchedularProjectSerializer,
+    SchedularParticipantsSerializer,
     SessionItemSerializer,
 )
 
@@ -70,9 +71,10 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
-    SchedularProject,
     LiveSession,
     CoachingSession,
+    SchedularProject,
+    SchedularParticipants,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -5663,6 +5665,17 @@ def get_all_Schedular_Projects(request):
     projects = SchedularProject.objects.all()
     serializer = SchedularProjectSerializer(projects, many=True)
     return Response(serializer.data, status=200)
+
+
+@api_view(["POST"])
+def create_schedular_participant(request):
+    if request.method == "POST":
+        serializer = SchedularParticipantsSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 # @api_view(["POST"])
