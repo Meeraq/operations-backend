@@ -36,6 +36,7 @@ from .serializers import (
     EngagementSerializer,
     SessionRequestWithEngagementCaasDepthOneSerializer,
     SchedularProjectSerializer,
+    SessionItemSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -70,6 +71,8 @@ from .models import (
     Competency,
     ActionItem,
     SchedularProject,
+    LiveSession,
+    CoachingSession,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -5660,3 +5663,108 @@ def get_all_Schedular_Projects(request):
     projects = SchedularProject.objects.all()
     serializer = SchedularProjectSerializer(projects, many=True)
     return Response(serializer.data, status=200)
+
+
+# @api_view(["POST"])
+# def save_live_session(request):
+#     data = request.data
+
+#     if "requestData" not in data or "otherData" not in data:
+#         return Response(
+#             {"error": "Invalid data format in request"},
+#             status=status.HTTP_400_BAD_REQUEST,
+#         )
+
+#     requestData = data["requestData"]
+
+#     if not requestData:
+#         return Response(
+#             {"error": "requestData is empty"},
+#             status=status.HTTP_400_BAD_REQUEST,
+#         )
+
+#     live_sessions = []
+
+#     for item in requestData:
+#         zoom_id = item.get("zoom_id", None)
+#         batch_id = item.get("batch_id", None)
+#         live_session_number = item.get("live_session_number", None)
+#         live_session_order = item.get("live_session_order", None)
+#         if None in [zoom_id, batch_id]:
+#             return Response(
+#                 {"error": "Missing one or more required fields in request data"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         live_session = LiveSession.objects.create(
+#             zoom_id=zoom_id,
+#             batch_id=batch_id,
+#             live_session_number=live_session_number,
+#             live_session_order=live_session_order,
+#         )
+
+#         live_sessions.append(live_session)
+
+#     return Response(status=status.HTTP_201_CREATED)
+
+
+# @api_view(["POST"])
+# def save_coaching_session(request):
+#     data = request.data
+
+#     try:
+#         requestData = data.get("requestData", [])[0]  # Get the first element of the requestData list
+
+#         coaching_session = CoachingSession.objects.create(
+#             booking_link=requestData["booking_link"],
+#             batch_id=requestData["batch_id"],
+#             coaching_session_number=requestData["coaching_session_number"],
+#             coaching_session_order=requestData["coaching_session_order"],
+#             start_date=datetime.strptime(requestData["start_date"], "%d-%m-%y"),
+#             end_date=datetime.strptime(requestData["end_date"], "%d-%m-%y"),
+#             expiry_date=datetime.strptime(requestData["expiry_date"], "%d-%m-%Y"),
+#         )
+
+#         # Now, let's handle the otherData:
+#         sessions_data = data.get("otherData", {}).get("sessions", {}).get("index", {})
+
+#         session_type = sessions_data.get("sessionType", "")
+#         duration = sessions_data.get("duration", "")
+
+#         # You can add session_type and duration to the coaching_session if needed
+#         coaching_session.session_type = session_type
+#         coaching_session.duration = duration
+
+#         coaching_session.save()
+
+#         return Response(
+#             {"message": "Coaching session created successfully."},
+#             status=200,
+#         )
+
+#     except Exception as e:
+#         return Response(
+#             {"message": f"Failed to create coaching session. Error: {str(e)}"},
+#             status=400,
+#         )
+
+
+@api_view(["POST"])
+def create_project_structure(request):
+    if request.method == "POST":
+        serializer = SessionItemSerializer(data=request.data, many=True)
+
+        # print(request.data)
+
+        print(serializer)
+        if serializer.is_valid():
+            for session_data in serializer.validated_data:
+                session_type = session_data["sessionType"]
+                duration = session_data["duration"]
+                batch_id = session_data["batch_id"]
+                if session_type == "live_session":
+                    LiveSession.objects.create(duration=duration, batch_id=batch_id)
+                elif session_type == "laser_coaching_session":
+                    CoachingSession.objects.create(duration=duration, batch_id=batch_id)
+            return Response({"message": "Data saved successfully."}, status=200)
+        return Response(serializer.errors, status=400)

@@ -15,6 +15,8 @@ from .models import (
     Competency,
     ActionItem,
     SchedularProject,
+    LiveSession,
+    CoachingSession,
 )
 from django.contrib.auth.models import User
 
@@ -231,3 +233,9 @@ class SchedularProjectSerializer(serializers.ModelSerializer):
         model = SchedularProject
         fields = "__all__"
         depth = 1
+
+
+class SessionItemSerializer(serializers.Serializer):
+    sessionType = serializers.CharField()
+    duration = serializers.IntegerField()
+    batch_id = serializers.IntegerField(required=False, allow_null=True)

@@ -487,6 +487,7 @@ class CoachingSession(models.Model):
     coaching_session_order = models.IntegerField(blank=True, default=None, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, null=True, default=None)
+    duration = models.CharField(max_length=50, default=None)
 
 
 class SchedularSessions(models.Model):
@@ -510,3 +511,4 @@ class LiveSession(models.Model):
     attendees = models.CharField(blank=True, max_length=500)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, null=True, default=None)
+    duration = models.CharField(max_length=50, default=None)
