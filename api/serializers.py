@@ -149,7 +149,13 @@ class SessionRequestCaasDepthOneSerializer(serializers.ModelSerializer):
         model = SessionRequestCaas
         fields = "__all__"
         depth = 2
+class SessionRequestWithEngagementCaasDepthOneSerializer(serializers.ModelSerializer):
+    engagement_status = serializers.CharField()
 
+    class Meta:
+        model = SessionRequestCaas
+        fields = "__all__"
+        depth = 2
 
 class SessionRequestCaasDepthTwoSerializer(serializers.ModelSerializer):
     class Meta:
