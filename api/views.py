@@ -34,8 +34,10 @@ from .serializers import (
     GetActionItemDepthOneSerializer,
     PendingActionItemSerializer,
     EngagementSerializer,
+    SessionRequestWithEngagementCaasDepthOneSerializer,
     SchedularProjectSerializer,
     SchedularParticipantsSerializer,
+    SessionItemSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -69,6 +71,8 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    LiveSession,
+    CoachingSession,
     SchedularProject,
     SchedularParticipants,
 )
@@ -92,6 +96,7 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from rest_framework import generics
+from django.db.models import Subquery, OuterRef
 
 # Create your views here.
 from collections import defaultdict
@@ -430,6 +435,16 @@ def approve_coach(request):
 
         create_notification(coach.user.user, path, message)
         # Return success response
+        # Send approval email to the coach
+        send_mail_templates(
+            "coach_templates/pmo_approves_profile.html",
+            [coach.email],
+            "Congratulations! Your Coach Registration is Approved",
+            {
+                "name": f"{coach.first_name} {coach.last_name}",
+            },
+            [],
+        )
         return Response({"message": "Coach approved successfully."}, status=200)
 
     except Coach.DoesNotExist:
@@ -454,6 +469,23 @@ def update_coach_profile(request, id):
 
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
+
+    user = coach.user.user
+    new_email = mutable_data.get("email")
+
+    if (
+        new_email
+        and User.objects.filter(username=new_email).exclude(id=user.id).exists()
+    ):
+        return Response(
+            {"error": "Email already exists. Please choose a different email."},
+            status=400,
+        )
+
+    if new_email and new_email != user.email:
+        user.email = new_email
+        user.username = new_email
+        user.save()
 
     if internal_coach and not organization_of_coach:
         return Response(
@@ -1606,6 +1638,7 @@ def add_coach(request):
     domain = json.loads(request.data["domain"])
     room_id = request.data.get("room_id")
     phone = request.data.get("phone")
+    phone_country_code = request.data.get("phone_country_code")
     level = request.data.get("level")
     currency = request.data.get("currency")
     education = json.loads(request.data["education"])
@@ -1651,6 +1684,7 @@ def add_coach(request):
             email,
             gender,
             phone,
+            phone_country_code,
             level,
             username,
             room_id,
@@ -1691,6 +1725,7 @@ def add_coach(request):
                 last_name=last_name,
                 email=email,
                 phone=phone,
+                phone_country_code=phone_country_code,
                 level=level,
                 currency=currency,
                 education=education,
@@ -3354,6 +3389,7 @@ def add_mulitple_coaches(request):
                 domain = coach_data.get("functional_domain", "")
                 email = coach_data.get("email")
                 phone = coach_data.get("mobile")
+                phone_country_code = coach_data.get("phone_country_code")
                 job_roles = coach_data.get("job_roles", [])
                 companies_worked_in = coach_data.get("companies_worked_in", [])
                 language = coach_data.get("language", [])
@@ -3380,7 +3416,16 @@ def add_mulitple_coaches(request):
 
                 # Perform validation on required fields
                 if not all(
-                    [coach_id, first_name, last_name, gender, level, email, phone]
+                    [
+                        coach_id,
+                        first_name,
+                        last_name,
+                        gender,
+                        level,
+                        email,
+                        phone,
+                        phone_country_code,
+                    ]
                 ):
                     return Response(
                         {
@@ -3449,6 +3494,7 @@ def add_mulitple_coaches(request):
                     domain=domain,
                     email=email,
                     phone=phone,
+                    phone_country_code=phone_country_code,
                     job_roles=job_roles,
                     companies_worked_in=companies_worked_in,
                     language=language,
@@ -3834,7 +3880,17 @@ def get_session_requests_of_user(request, user_type, user_id):
             & Q(project__hr__id=user_id)
             & ~Q(status="pending")
         )
-    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+    session_requests = session_requests.annotate(
+        engagement_status=Subquery(
+            Engagement.objects.filter(
+                project=OuterRef("project"),
+                learner=OuterRef("learner"),
+            ).values("status")[:1]
+        )
+    )
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(
+        session_requests, many=True
+    )
     return Response(serializer.data, status=200)
 
 
@@ -3938,7 +3994,18 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
-    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+
+    session_requests = session_requests.annotate(
+        engagement_status=Subquery(
+            Engagement.objects.filter(
+                project=OuterRef("project"),
+                learner=OuterRef("learner"),
+            ).values("status")[:1]
+        )
+    )
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(
+        session_requests, many=True
+    )
     return Response(serializer.data, status=200)
 
 
@@ -3977,7 +4044,20 @@ def get_past_sessions_of_user(request, user_type, user_id):
             Q(project__hr__id=user_id),
             Q(is_archive=False),
         )
-    serializer = SessionRequestCaasDepthOneSerializer(session_requests, many=True)
+
+    session_requests = session_requests.annotate(
+        engagement_status=Subquery(
+            Engagement.objects.filter(
+                project=OuterRef("project"),
+                learner=OuterRef("learner"),
+            ).values("status")[:1]
+        )
+    )
+    for session_request in session_requests:
+        print(session_request.engagement_status)
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(
+        session_requests, many=True
+    )
     return Response(serializer.data, status=200)
 
 
@@ -5219,8 +5299,9 @@ class AddRegisteredCoach(APIView):
         email = request.data.get("email")
         phone = request.data.get("phone")
         is_approved = request.data.get("is_approved")
+        phone_country_code = request.data.get("phone_country_code")
 
-        if not all([first_name, last_name, email, phone]):
+        if not all([first_name, last_name, email, phone, phone_country_code]):
             return Response(
                 {"error": "All required fields must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -5255,6 +5336,7 @@ class AddRegisteredCoach(APIView):
                     last_name=last_name,
                     email=email,
                     phone=phone,
+                    phone_country_code=phone_country_code,
                     is_approved=is_approved,
                 )
 
@@ -5271,11 +5353,31 @@ class AddRegisteredCoach(APIView):
 
                 create_notification(coach.user.user, path, message)
                 pmo_user = User.objects.filter(profile__type="pmo").first()
-
+                pmo = Pmo.objects.get(email=pmo_user.username)
                 create_notification(
                     pmo_user,
                     f"/registeredcoach",
                     f"{coach.first_name} {coach.last_name} has registered as a coach. Please go through his Profile.",
+                )
+                send_mail_templates(
+                    "pmo_emails/coach_register.html",
+                    [pmo_user.username],
+                    f"{coach.first_name} {coach.last_name} has Registered as a Coach",
+                    {
+                        "name": pmo.name,
+                        "coachName": f"{coach.first_name} {coach.last_name} ",
+                    },
+                    json.loads(env("BCC_EMAIL_RAJAT_SUJATA")),
+                )
+                # Send profile completion tips to the coach
+                send_mail_templates(
+                    "coach_templates/profile_creation_tips.html",
+                    [coach.email],
+                    "Profile Completion Tips for Success on Meeraq Platform",
+                    {
+                        "name": f"{coach.first_name} {coach.last_name}",
+                    },
+                    [],
                 )
 
             return Response({"coach": coach_serializer.data})
@@ -5573,3 +5675,109 @@ def create_schedular_participant(request):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+# @api_view(["POST"])
+# def save_live_session(request):
+#     data = request.data
+
+#     if "requestData" not in data or "otherData" not in data:
+#         return Response(
+#             {"error": "Invalid data format in request"},
+#             status=status.HTTP_400_BAD_REQUEST,
+#         )
+
+#     requestData = data["requestData"]
+
+#     if not requestData:
+#         return Response(
+#             {"error": "requestData is empty"},
+#             status=status.HTTP_400_BAD_REQUEST,
+#         )
+
+#     live_sessions = []
+
+#     for item in requestData:
+#         zoom_id = item.get("zoom_id", None)
+#         batch_id = item.get("batch_id", None)
+#         live_session_number = item.get("live_session_number", None)
+#         live_session_order = item.get("live_session_order", None)
+#         if None in [zoom_id, batch_id]:
+#             return Response(
+#                 {"error": "Missing one or more required fields in request data"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         live_session = LiveSession.objects.create(
+#             zoom_id=zoom_id,
+#             batch_id=batch_id,
+#             live_session_number=live_session_number,
+#             live_session_order=live_session_order,
+#         )
+
+#         live_sessions.append(live_session)
+
+#     return Response(status=status.HTTP_201_CREATED)
+
+
+# @api_view(["POST"])
+# def save_coaching_session(request):
+#     data = request.data
+
+#     try:
+#         requestData = data.get("requestData", [])[0]  # Get the first element of the requestData list
+
+#         coaching_session = CoachingSession.objects.create(
+#             booking_link=requestData["booking_link"],
+#             batch_id=requestData["batch_id"],
+#             coaching_session_number=requestData["coaching_session_number"],
+#             coaching_session_order=requestData["coaching_session_order"],
+#             start_date=datetime.strptime(requestData["start_date"], "%d-%m-%y"),
+#             end_date=datetime.strptime(requestData["end_date"], "%d-%m-%y"),
+#             expiry_date=datetime.strptime(requestData["expiry_date"], "%d-%m-%Y"),
+#         )
+
+#         # Now, let's handle the otherData:
+#         sessions_data = data.get("otherData", {}).get("sessions", {}).get("index", {})
+
+#         session_type = sessions_data.get("sessionType", "")
+#         duration = sessions_data.get("duration", "")
+
+#         # You can add session_type and duration to the coaching_session if needed
+#         coaching_session.session_type = session_type
+#         coaching_session.duration = duration
+
+#         coaching_session.save()
+
+#         return Response(
+#             {"message": "Coaching session created successfully."},
+#             status=200,
+#         )
+
+#     except Exception as e:
+#         return Response(
+#             {"message": f"Failed to create coaching session. Error: {str(e)}"},
+#             status=400,
+#         )
+
+
+@api_view(["POST"])
+def create_project_structure(request):
+    if request.method == "POST":
+        serializer = SessionItemSerializer(data=request.data, many=True)
+
+        # print(request.data)
+
+        print(serializer)
+        if serializer.is_valid():
+            for session_data in serializer.validated_data:
+                session_type = session_data["sessionType"]
+                duration = session_data["duration"]
+                batch_id = session_data["batch_id"]
+                if session_type == "live_session":
+                    LiveSession.objects.create(duration=duration, batch_id=batch_id)
+                elif session_type == "laser_coaching_session":
+                    CoachingSession.objects.create(duration=duration, batch_id=batch_id)
+            return Response({"message": "Data saved successfully."}, status=200)
+        return Response(serializer.errors, status=400)
