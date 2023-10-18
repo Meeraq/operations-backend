@@ -2,7 +2,15 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Competency, Question, Questionnaire,Assessment
+from .models import (
+    Competency,
+    Question,
+    Questionnaire,
+    Assessment,
+    Participant,
+    Observer,
+    ParticipantObserverMapping,
+)
 from .serializers import (
     CompetencySerializer,
     QuestionSerializer,
@@ -10,7 +18,7 @@ from .serializers import (
     QuestionSerializerDepthOne,
     QuestionnaireSerializerDepthTwo,
     AssessmentSerializer,
-    AssessmentSerializerDepthThree
+    AssessmentSerializerDepthThree,
 )
 
 # Create your views here.
@@ -256,7 +264,6 @@ class AssessmentView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        
         serializer = AssessmentSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -281,22 +288,26 @@ class AssessmentView(APIView):
                 {"message": "Assessment not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        
+
         try:
-            
-            questionnaire=Questionnaire.objects.get(id=request.data.get("questionnaire"))
+            questionnaire = Questionnaire.objects.get(
+                id=request.data.get("questionnaire")
+            )
             assessment.name = request.data.get("name")
             assessment.assessment_type = request.data.get("assessment_type")
-            assessment.number_of_observers = request.data.get("number_of_observers")
+            if request.data.get("assessment_type") == "self":
+                assessment.number_of_observers = 0
+            else:
+                assessment.number_of_observers = request.data.get("number_of_observers")
             assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.rating_type = request.data.get("rating_type")
             assessment.questionnaire = questionnaire
             assessment.descriptive_questions = request.data.get("descriptive_questions")
             assessment.save()
             return Response(
-            {"message": "Assessment updated successfully"},
-            status=status.HTTP_200_OK,
-             )
+                {"message": "Assessment updated successfully"},
+                status=status.HTTP_200_OK,
+            )
         except Exception as e:
             return Response(
                 {"error": str(e)},
@@ -317,17 +328,70 @@ class AssessmentView(APIView):
             {"message": "Assessment deleted successfully"},
             status=status.HTTP_204_NO_CONTENT,
         )
-    
-class AssessmentStatusOrTypeOrEndDataChange(APIView):
+
+
+class AssessmentStatusOrEndDataChange(APIView):
     def put(self, request):
         assessment_id = request.data.get("id")
 
         try:
             assessment = Assessment.objects.get(id=assessment_id)
-            assessment.status=request.data.get("status")
-            assessment.assessment_type=request.data.get("assessment_type")
-            assessment.assessment_end_date=request.data.get("assessment_end_date")
+            assessment.status = request.data.get("status")
+            assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
+            serializer = AssessmentSerializerDepthThree(assessment)
+            return Response({"message": "Update successfully.", "assessment_data": serializer.data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+class AddParticipantObserverToAssessment(APIView):
+    def put(self, request):
+        assessment_id = request.data.get("assessment_id")
+
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+        except Assessment.DoesNotExist:
+            return Response(
+                {"error": "Assessment not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            participants = request.data.get("participants", [])
+
+
+            participant, created = Participant.objects.get_or_create(
+                name=participants[0]["participantName"],
+                email=participants[0]["participantEmail"],
+            )
+            if created:
+                participant.save()
+            mapping = ParticipantObserverMapping.objects.create(participant=participant)
+
+            if assessment.assessment_type == "360":
+                observers = request.data.get("observers", [])
+                for observer_data in observers:
+                    observer, created = Observer.objects.get_or_create(
+                        name=observer_data["observerName"],
+                        email=observer_data["observerEmail"],
+                    )
+                    if created:
+                        observer.save()
+                    mapping.observers.add(observer)
+
+           
+            mapping.save() 
+            assessment.participants_observers.add(mapping)
+            assessment.save()
+
+        
+            serializer = AssessmentSerializerDepthThree(assessment)
+            return Response({"message": "Participant added successfully.", "assessment_data": serializer.data}, status=status.HTTP_200_OK)
+
         except Exception as e:
             return Response(
                 {"error": str(e)},
