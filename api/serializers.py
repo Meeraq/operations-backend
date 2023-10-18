@@ -18,6 +18,7 @@ from .models import (
     LiveSession,
     CoachingSession,
     SchedularParticipants,
+    SchedularBatch,
 )
 from django.contrib.auth.models import User
 
@@ -246,3 +247,9 @@ class SchedularParticipantsSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularParticipants
         fields = ["name", "email", "phone"]
+
+
+class SchedularBatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularBatch
+        fields = "__all__"

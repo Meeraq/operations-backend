@@ -36,6 +36,7 @@ from .serializers import (
     EngagementSerializer,
     SessionRequestWithEngagementCaasDepthOneSerializer,
     SchedularProjectSerializer,
+    SchedularBatchSerializer,
     SchedularParticipantsSerializer,
     SessionItemSerializer,
 )
@@ -71,6 +72,7 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    SchedularBatch,
     LiveSession,
     CoachingSession,
     SchedularProject,
@@ -5781,3 +5783,14 @@ def create_project_structure(request):
                     CoachingSession.objects.create(duration=duration, batch_id=batch_id)
             return Response({"message": "Data saved successfully."}, status=200)
         return Response(serializer.errors, status=400)
+
+
+
+@api_view(["GET"])
+def get_schedular_batches(request):
+    try:
+        batches = SchedularBatch.objects.all()
+        serializer = SchedularBatchSerializer(batches, many=True)
+        return Response(serializer.data)
+    except SchedularBatch.DoesNotExist:
+        return Response({"message": "No batches found"}, status=404)

@@ -284,4 +284,9 @@ urlpatterns = [
         views.create_schedular_participant,
         name="create-schedular-participant",
     ),
+        path(
+        "schedular-batches/",
+        views.get_schedular_batches,
+        name="schedular-batch-list",
+    ),
 ]
