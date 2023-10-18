@@ -267,8 +267,24 @@ urlpatterns = [
         views.get_all_Schedular_Projects,
         name="get-all-schedular-projects",
     ),
+    # path("save_live_session/", views.save_live_session, name="save_live_session"),
+    # path(
+    #     "save_coaching_session/",
+    #     views.save_coaching_session,
+    #     name="save_coaching_session",
+    # ),
+    path(
+        "create_project_structure/",
+        views.create_project_structure,
+        name="create_project_structure",
+    ),
     path("create-project-schedular/", views.create_project_schedular),
     path(
+        "create-schedular-participant/",
+        views.create_schedular_participant,
+        name="create-schedular-participant",
+    ),
+        path(
         "schedular-batches/",
         views.get_schedular_batches,
         name="schedular-batch-list",

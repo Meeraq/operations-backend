@@ -15,6 +15,9 @@ from .models import (
     Competency,
     ActionItem,
     SchedularProject,
+    LiveSession,
+    CoachingSession,
+    SchedularParticipants,
     SchedularBatch,
 )
 from django.contrib.auth.models import User
@@ -148,7 +151,13 @@ class SessionRequestCaasDepthOneSerializer(serializers.ModelSerializer):
         model = SessionRequestCaas
         fields = "__all__"
         depth = 2
+class SessionRequestWithEngagementCaasDepthOneSerializer(serializers.ModelSerializer):
+    engagement_status = serializers.CharField()
 
+    class Meta:
+        model = SessionRequestCaas
+        fields = "__all__"
+        depth = 2
 
 class SessionRequestCaasDepthTwoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -226,6 +235,18 @@ class SchedularProjectSerializer(serializers.ModelSerializer):
         model = SchedularProject
         fields = "__all__"
         depth = 1
+
+
+class SessionItemSerializer(serializers.Serializer):
+    sessionType = serializers.CharField()
+    duration = serializers.IntegerField()
+    batch_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class SchedularParticipantsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularParticipants
+        fields = ["name", "email", "phone"]
 
 
 class SchedularBatchSerializer(serializers.ModelSerializer):
