@@ -647,11 +647,12 @@ def import_invoices_from_zoho(request):
             if response.status_code == 200:
                 purchase_orders = response.json().get("purchaseorders", [])
                 for purchase_order in purchase_orders:
-                    bills_url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&reference_number={purchase_order['purchaseorder_number']}"
+                    bills_url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&purchaseorder_id={purchase_order['purchaseorder_id']}"
                     bills_response = requests.get(bills_url, headers=headers)
                     if bills_response.status_code == 200:
+                        bills = bills_response.json().get("bills", [])
                         res.append(bills_response.json().get("bills", []))
-                        for bill in bills_response.json().get("bills", []):
+                        for bill in bills:
                             bill_url = f"{base_url}/bills/{bill['bill_id']}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
                             bill_response = requests.get(bill_url, headers=headers)
                             if (
@@ -660,7 +661,6 @@ def import_invoices_from_zoho(request):
                             ):
                                 bill_details = bill_response.json().get("bill")
                                 bill_details_res.append(bill_details)
-                                # print(bill_details)
                                 line_items_res = []
 
                                 for line_item in bill_details["line_items"]:
