@@ -35,6 +35,7 @@ from .serializers import (
     PendingActionItemSerializer,
     EngagementSerializer,
     SchedularProjectSerializer,
+    LearnerDataUploadSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -68,7 +69,9 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
-    SchedularProject
+    SchedularProject,
+    SentEmail,
+    EmailTemplate,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -5496,7 +5499,7 @@ def edit_project_caas(request, project_id):
         return Response({"error": "Project not found"}, status=404)
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["POST"])
@@ -5561,3 +5564,117 @@ def get_all_Schedular_Projects(request):
     projects = SchedularProject.objects.all()
     serializer = SchedularProjectSerializer(projects, many=True)
     return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def pending_scheduled_mails_exists(request, email_template_id):
+    sent_emails = SentEmail.objects.filter(
+        template__id=email_template_id, status="pending"
+    )
+    return Response({"exists": sent_emails.count() > 0}, status=200)
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny])
+def editEmailTemplate(request, template_id):
+    try:
+        email_template = EmailTemplate.objects.get(pk=template_id)
+    except EmailTemplate.DoesNotExist:
+        return Response(
+            {"success": False, "message": "Template not found."}, status=404
+        )
+
+    if request.method == "PUT":
+        title = request.data.get("title", None)
+        template_data = request.data.get("templatedata", None)
+        print(template_data, "request.data")
+
+        if template_data is not None:
+            try:
+                email_template.title = title
+                email_template.template_data = template_data
+                email_template.save()
+                return Response(
+                    {"success": True, "message": "Template updated successfully."}
+                )
+            except Exception as e:
+                return Response(
+                    {"success": False, "message": "Failed to update template."}
+                )
+
+    return Response({"success": False, "message": "Invalid request."})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def addEmailTemplate(request):
+    if request.method == "POST":
+        title = request.data.get("title", None)
+        template_data = request.data.get("templatedata", None)
+        print(title, "Title")
+        print(template_data, "request.data")
+
+        if template_data is not None:
+            try:
+                email_template = EmailTemplate.objects.create(
+                    title=title, template_data=template_data
+                )
+                # email_template = EmailTemplate.objects.create(title=title, template_data=template_data)
+                # (template_data=template_data,template_title)
+                print(email_template, "email template")
+                return Response(
+                    {"success": True, "message": "Template saved successfully."}
+                )
+            except Exception as e:
+                return Response(
+                    {"success": False, "message": "Failed to save template."}
+                )
+
+    return Response({"success": False, "message": "Invalid request."})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def send_test_mails(request):
+    emails = request.data.get("emails", [])
+    subject = request.data.get("subject")
+    # email_content = request.data.get('email_content', '')  # Assuming you're sending email content too
+    temp1 = request.data.get("htmlContent", "")
+
+    print(emails, "emails")
+
+    # if not subject:
+    #     return Response({'error': "Subject is required."}, status=400)
+
+    if len(emails) > 0:
+        for email in emails:
+            email_message_learner = render_to_string(
+                "default.html",
+                {
+                    "email_content": mark_safe(temp1),
+                    "email_title": "hello",
+                    "subject": subject,
+                },
+            )
+            email = EmailMessage(
+                subject,
+                email_message_learner,
+                settings.DEFAULT_FROM_EMAIL,  # from email address
+                [email],  # to email address
+            )
+            email.content_subtype = "html"
+            email.send()
+            print("Email sent to:", email)
+
+        return Response({"message": "Emails sent successfully"}, status=200)
+    else:
+        return Response({"error": "No email addresses found."}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def getLearnerBatchwise(request, batch_id):
+    learners = Learner.objects.filter(batch=batch_id)
+    serilizer = LearnerDataUploadSerializer(learners, many=True)
+    return Response({"status": "success", "data": serilizer.data}, status=200)

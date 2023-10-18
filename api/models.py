@@ -17,6 +17,7 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
+from django_celery_beat.models import PeriodicTask
 
 
 import environ
@@ -508,3 +509,28 @@ class LiveSession(models.Model):
     attendees = models.CharField(blank=True, max_length=500)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, null=True, default=None)
+
+class EmailTemplate(models.Model):
+    title = models.CharField(max_length=100, default="", blank=True)  # Add title field
+    template_data = models.TextField(max_length=200, default="")
+
+
+class SentEmail(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    recipients = models.JSONField()  # Use a JSONField to store JSON data.
+    created_at = models.DateTimeField(auto_now_add=True)
+    scheduled_for = models.DateTimeField(null=True, blank=True)
+    template = models.ForeignKey(EmailTemplate, null=True, on_delete=models.SET_NULL)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    periodic_task = models.ForeignKey(
+        PeriodicTask, null=True, on_delete=models.SET_NULL
+    )
+    subject = models.CharField(max_length=200)
+
+    def __str__(self):
+        return f"{self.id} Subject: {self.subject}"

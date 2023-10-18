@@ -15,6 +15,7 @@ from .models import (
     Competency,
     ActionItem,
     SchedularProject,
+    SchedularParticipants
 )
 from django.contrib.auth.models import User
 
@@ -225,3 +226,9 @@ class SchedularProjectSerializer(serializers.ModelSerializer):
         model = SchedularProject
         fields = "__all__"
         depth = 1
+
+
+class LearnerDataUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularParticipants
+        fields = "__all__"

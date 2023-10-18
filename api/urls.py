@@ -267,5 +267,13 @@ urlpatterns = [
         views.get_all_Schedular_Projects,
         name="get-all-schedular-projects",
     ),
-    path("create-project-schedular/",views.create_project_schedular),
+    path("create-project-schedular/", views.create_project_schedular),
+    path(
+        "pending-scheduled-mails/<int:email_template_id>/",
+        views.pending_scheduled_mails_exists,
+    ),
+    path("edit_email_template/<int:template_id>/", views.editEmailTemplate),
+    path("save_template/", views.addEmailTemplate),
+    path("send_test_mails/", views.send_test_mails),
+    path("get-learner-by-batch/<str:batch_id>/", views.getLearnerBatchwise),
 ]
