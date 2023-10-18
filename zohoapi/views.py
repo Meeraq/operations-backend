@@ -205,6 +205,47 @@ def generate_otp(request):
             message = f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
             send_mail_templates(
                 "hr_emails/login_with_otp.html",
+                [user],
+                subject,
+                {"name": name, "otp": created_otp.otp},
+            )
+            return Response({"message": f"OTP has been sent to {user.username}!"})
+        else:
+            return Response({"error": "Vendor doesn't exist."}, status=400)
+
+    except User.DoesNotExist:
+        # Handle the case where the user with the given email does not exist
+        return Response(
+            {"error": "User with the given email does not exist."}, status=400
+        )
+
+    except Exception as e:
+        # Handle any other exceptions
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def generate_otp_send_mail_fixed(request, email):
+    try:
+        user = User.objects.get(username=email)
+        try:
+            # Check if OTP already exists for the user
+            otp_obj = OTP.objects.get(user=user)
+            otp_obj.delete()
+        except OTP.DoesNotExist:
+            pass
+
+        # Generate OTP and save it to the database
+        user_data = get_user_data(user)
+        if user_data:
+            otp = get_random_string(length=6, allowed_chars="0123456789")
+            created_otp = OTP.objects.create(user=user, otp=otp)
+            name = user_data.get("name") or user_data.get("first_name") or "User"
+            subject = f"Meeraq Login OTP"
+            message = f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
+            send_mail_templates(
+                "hr_emails/login_with_otp.html",
                 ["pankaj@meeraq.com"],
                 subject,
                 {"name": name, "otp": created_otp.otp},
