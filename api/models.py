@@ -441,8 +441,7 @@ class ActionItem(models.Model):
 class ProfileEditActivity(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
-    time_spent = models.DurationField(null=True, blank=True)
-    save_timestamp = models.DateTimeField(null=True, blank=True)
+   
 
     def __str__(self):
         return f"Profile Edit for {self.user.username}"

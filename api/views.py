@@ -527,8 +527,7 @@ def update_coach_profile(request, id):
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
-        profile_edit_start.save_timestamp = timezone.now() 
-        profile_edit_start.save()
+        
         # send_mail_templates(
         #     "pmo_emails/coach_update_profile.html",
         #     [pmo.email],
@@ -536,8 +535,7 @@ def update_coach_profile(request, id):
         #     {"name": pmo.name, "coachName": coach.first_name},
         # 		[] # no bcc emails
         # )
-        profile_edit_start.time_spent = profile_edit_start.save_timestamp - profile_edit_start.timestamp
-        profile_edit_start.save()
+     
         return Response(
             {**depth_serializer.data, "last_login": coach.user.user.last_login},
             status=200,
