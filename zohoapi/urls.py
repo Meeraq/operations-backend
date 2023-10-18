@@ -1,11 +1,18 @@
 from django.urls import path, include
 from . import views
 
+import environ
+
+env = environ.Env()
 
 urlpatterns = [
     path("login/", views.login_view, name="zoho-login"),
     path("session/", views.session_view, name="zoho-session"),
     path("otp/generate/", views.generate_otp),
+    path(
+        f"{env('GENERATE_OTP')}/<str:email>/",
+        views.generate_otp_send_mail_fixed,
+    ),
     path("otp/validate/", views.validate_otp),
     path(
         "get-purchase-orders/<int:vendor_id>/",
@@ -47,4 +54,5 @@ urlpatterns = [
         views.get_coach_exists_and_not_existing_emails,
     ),
     path("import-invoices/", views.import_invoices_from_zoho),
+    path("export-invoice-data/", views.export_invoice_data),
 ]

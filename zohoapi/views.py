@@ -18,6 +18,8 @@ from api.models import (
 from api.serializers import (
     CoachDepthOneSerializer,
 )
+from openpyxl import Workbook
+
 
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
@@ -203,6 +205,47 @@ def generate_otp(request):
             message = f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
             send_mail_templates(
                 "hr_emails/login_with_otp.html",
+                [user],
+                subject,
+                {"name": name, "otp": created_otp.otp},
+            )
+            return Response({"message": f"OTP has been sent to {user.username}!"})
+        else:
+            return Response({"error": "Vendor doesn't exist."}, status=400)
+
+    except User.DoesNotExist:
+        # Handle the case where the user with the given email does not exist
+        return Response(
+            {"error": "User with the given email does not exist."}, status=400
+        )
+
+    except Exception as e:
+        # Handle any other exceptions
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def generate_otp_send_mail_fixed(request, email):
+    try:
+        user = User.objects.get(username=email)
+        try:
+            # Check if OTP already exists for the user
+            otp_obj = OTP.objects.get(user=user)
+            otp_obj.delete()
+        except OTP.DoesNotExist:
+            pass
+
+        # Generate OTP and save it to the database
+        user_data = get_user_data(user)
+        if user_data:
+            otp = get_random_string(length=6, allowed_chars="0123456789")
+            created_otp = OTP.objects.create(user=user, otp=otp)
+            name = user_data.get("name") or user_data.get("first_name") or "User"
+            subject = f"Meeraq Login OTP"
+            message = f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
+            send_mail_templates(
+                "hr_emails/login_with_otp.html",
                 ["pankaj@meeraq.com"],
                 subject,
                 {"name": name, "otp": created_otp.otp},
@@ -346,7 +389,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
             url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&vendor_id={vendor_id}"
             bills_response = requests.get(url, headers=headers)
         else:
-            invoices = InvoiceData.objects.filter(vendor_id=purchase_order_id)
+            invoices = InvoiceData.objects.filter(purchase_order_id=purchase_order_id)
             url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&purchaseorder_id={purchase_order_id}"
             bills_response = requests.get(
                 url,
@@ -464,7 +507,7 @@ def add_invoice_data(request):
         send_mail_templates(
             "invoice.html",
             [env("FINANCE_EMAIL")],
-            "Invoice rasied by a Vendor.",
+            f"Invoice raised by a Vendor - {invoice_data['vendor_name']} ",
             {"invoice": invoice_data},
         )
         return Response({"message": "Invoice generated successfully"}, status=201)
@@ -506,7 +549,7 @@ def edit_invoice(request, invoice_id):
         send_mail_templates(
             "invoice.html",
             [env("FINANCE_EMAIL")],
-            "Invoice edited by a Vendor.",
+            f"Invoice edited by a Vendor - {invoice_data['vendor_name']}",
             {"invoice": invoice_data},
         )
         return Response({"message": "Invoice edited successfully."}, status=201)
@@ -645,17 +688,20 @@ def import_invoices_from_zoho(request):
             if response.status_code == 200:
                 purchase_orders = response.json().get("purchaseorders", [])
                 for purchase_order in purchase_orders:
-                    bills_url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&reference_number={purchase_order['purchaseorder_number']}"
+                    bills_url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&purchaseorder_id={purchase_order['purchaseorder_id']}"
                     bills_response = requests.get(bills_url, headers=headers)
                     if bills_response.status_code == 200:
+                        bills = bills_response.json().get("bills", [])
                         res.append(bills_response.json().get("bills", []))
-                        for bill in bills_response.json().get("bills", []):
+                        for bill in bills:
                             bill_url = f"{base_url}/bills/{bill['bill_id']}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
                             bill_response = requests.get(bill_url, headers=headers)
-                            if bill_response.status_code == 200:
+                            if (
+                                env("INVOICE_FIELD_NAME") in bill
+                                and bill_response.status_code == 200
+                            ):
                                 bill_details = bill_response.json().get("bill")
                                 bill_details_res.append(bill_details)
-                                # print(bill_details)
                                 line_items_res = []
 
                                 for line_item in bill_details["line_items"]:
@@ -669,40 +715,38 @@ def import_invoices_from_zoho(request):
                                                 "quantity_input": line_item["quantity"],
                                             }
                                         )
-                                    if InvoiceData.objects.filter(
-                                        vendor_id=coach.vendor_id,
+                                if InvoiceData.objects.filter(
+                                    vendor_id=coach.vendor_id,
+                                    invoice_number=bill[env("INVOICE_FIELD_NAME")],
+                                ).exists():
+                                    print(
+                                        "invoice already exists",
+                                        bill[env("INVOICE_FIELD_NAME")],
+                                    )
+                                else:
+                                    invoice = InvoiceData.objects.create(
                                         invoice_number=bill[env("INVOICE_FIELD_NAME")],
-                                    ).exists():
-                                        print(
-                                            "invoice already exists",
-                                            bill[env("INVOICE_FIELD_NAME")],
-                                        )
-                                    else:
-                                        invoice = InvoiceData.objects.create(
-                                            invoice_number=bill[
-                                                env("INVOICE_FIELD_NAME")
-                                            ],
-                                            vendor_id=coach.vendor_id,
-                                            vendor_name=coach.first_name,
-                                            vendor_email=coach.email,
-                                            vendor_billing_address="",
-                                            vendor_gst="",
-                                            vendor_phone=coach.phone,
-                                            customer_name="",
-                                            customer_gst="",
-                                            customer_notes="",
-                                            is_oversea_account=False,
-                                            tin_number="",
-                                            invoice_date=bill["date"],
-                                            purchase_order_id=purchase_order[
-                                                "purchaseorder_id"
-                                            ],
-                                            purchase_order_no=purchase_order[
-                                                "purchaseorder_number"
-                                            ],
-                                            line_items=line_items_res,
-                                            total=bill["total"],
-                                        )
+                                        vendor_id=coach.vendor_id,
+                                        vendor_name=coach.first_name,
+                                        vendor_email=coach.email,
+                                        vendor_billing_address="",
+                                        vendor_gst="",
+                                        vendor_phone=coach.phone,
+                                        customer_name="",
+                                        customer_gst="",
+                                        customer_notes="",
+                                        is_oversea_account=False,
+                                        tin_number="",
+                                        invoice_date=bill["date"],
+                                        purchase_order_id=purchase_order[
+                                            "purchaseorder_id"
+                                        ],
+                                        purchase_order_no=purchase_order[
+                                            "purchaseorder_number"
+                                        ],
+                                        line_items=line_items_res,
+                                        total=bill["total"],
+                                    )
                             else:
                                 print("bill details couldn't get")
                     else:
@@ -715,3 +759,82 @@ def import_invoices_from_zoho(request):
         return Response({"res": res, "bill_details_res": bill_details_res}, status=200)
     else:
         return Response({"error": "Invalid invoices"}, status=400)
+
+
+@api_view(["GET"])
+def export_invoice_data(request):
+    # Retrieve all InvoiceData objects
+    queryset = InvoiceData.objects.all()
+
+    # Create a new workbook and add a worksheet
+    wb = Workbook()
+    ws = wb.active
+
+    # Write headers to the worksheet
+    headers = [
+        "Vendor ID",
+        "Vendor Name",
+        "Vendor Email",
+        "Vendor Billing Address",
+        "Vendor GST",
+        "Vendor Phone",
+        "Purchase Order ID",
+        "Purchase Order No",
+        "Invoice Number",
+        "Customer Name",
+        "Customer Notes",
+        "Customer GST",
+        "Total",
+        "Is Oversea Account",
+        "TIN Number",
+        "Type of Code",
+        "IBAN",
+        "SWIFT Code",
+        "Invoice Date",
+        "Beneficiary Name",
+        "Bank Name",
+        "Account Number",
+        "IFSC Code",
+    ]
+
+    for col_num, header in enumerate(headers, 1):
+        ws.cell(row=1, column=col_num, value=header)
+
+    # Write data to the worksheet
+    for row_num, invoice_data in enumerate(queryset, 2):
+        ws.append(
+            [
+                invoice_data.vendor_id,
+                invoice_data.vendor_name,
+                invoice_data.vendor_email,
+                invoice_data.vendor_billing_address,
+                invoice_data.vendor_gst,
+                invoice_data.vendor_phone,
+                invoice_data.purchase_order_id,
+                invoice_data.purchase_order_no,
+                invoice_data.invoice_number,
+                invoice_data.customer_name,
+                invoice_data.customer_notes,
+                invoice_data.customer_gst,
+                invoice_data.total,
+                invoice_data.is_oversea_account,
+                invoice_data.tin_number,
+                invoice_data.type_of_code,
+                invoice_data.iban,
+                invoice_data.swift_code,
+                invoice_data.invoice_date,
+                invoice_data.beneficiary_name,
+                invoice_data.bank_name,
+                invoice_data.account_number,
+                invoice_data.ifsc_code,
+            ]
+        )
+
+    # Create a response with the Excel file
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = "attachment; filename=invoice_data.xlsx"
+    wb.save(response)
+
+    return response
