@@ -1939,7 +1939,7 @@ def login_view(request):
     login(request, user)
     user_data = get_user_data(user)
     if user_data:
-        login_timestamp = datetime.now()
+        login_timestamp = timezone.now()
         UserLoginActivity.objects.create(user=user, timestamp=login_timestamp)
         return Response(
             {
@@ -2061,7 +2061,7 @@ def validate_otp(request):
     login(request, user)
     user_data = get_user_data(user)
     if user_data:
-        login_timestamp = datetime.now()
+        login_timestamp =timezone.now()
         UserLoginActivity.objects.create(user=user, timestamp=login_timestamp)
         return Response(
             {
