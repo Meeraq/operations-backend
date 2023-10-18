@@ -34,7 +34,7 @@ from .serializers import (
     GetActionItemDepthOneSerializer,
     PendingActionItemSerializer,
     EngagementSerializer,
-    SessionRequestWithEngagementCaasDepthOneSerializer
+    SessionRequestWithEngagementCaasDepthOneSerializer,
     SchedularProjectSerializer,
 )
 
@@ -69,7 +69,7 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
-    SchedularProject
+    SchedularProject,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -92,6 +92,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from rest_framework import generics
 from django.db.models import Subquery, OuterRef
+
 # Create your views here.
 from collections import defaultdict
 import pandas as pd
@@ -429,16 +430,16 @@ def approve_coach(request):
 
         create_notification(coach.user.user, path, message)
         # Return success response
-         # Send approval email to the coach
+        # Send approval email to the coach
         send_mail_templates(
-                "coach_templates/pmo_approves_profile.html",
-                [coach.email],
-                "Congratulations! Your Coach Registration is Approved",
-                {
-                    "name": f"{coach.first_name} {coach.last_name}",
-                },
-                [],
-            )
+            "coach_templates/pmo_approves_profile.html",
+            [coach.email],
+            "Congratulations! Your Coach Registration is Approved",
+            {
+                "name": f"{coach.first_name} {coach.last_name}",
+            },
+            [],
+        )
         return Response({"message": "Coach approved successfully."}, status=200)
 
     except Coach.DoesNotExist:
@@ -463,18 +464,19 @@ def update_coach_profile(request, id):
 
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
-    
-    user = coach.user.user  
-    new_email = mutable_data.get("email") 
 
-    if new_email and User.objects.filter(username=new_email).exclude(id=user.id).exists():
+    user = coach.user.user
+    new_email = mutable_data.get("email")
+
+    if (
+        new_email
+        and User.objects.filter(username=new_email).exclude(id=user.id).exists()
+    ):
         return Response(
-            {
-                "error": "Email already exists. Please choose a different email."
-            },
+            {"error": "Email already exists. Please choose a different email."},
             status=400,
         )
-    
+
     if new_email and new_email != user.email:
         user.email = new_email
         user.username = new_email
@@ -1631,7 +1633,7 @@ def add_coach(request):
     domain = json.loads(request.data["domain"])
     room_id = request.data.get("room_id")
     phone = request.data.get("phone")
-    phone_country_code =request.data.get("phone_country_code")
+    phone_country_code = request.data.get("phone_country_code")
     level = request.data.get("level")
     currency = request.data.get("currency")
     education = json.loads(request.data["education"])
@@ -3409,7 +3411,16 @@ def add_mulitple_coaches(request):
 
                 # Perform validation on required fields
                 if not all(
-                    [coach_id, first_name, last_name, gender, level, email, phone,phone_country_code]
+                    [
+                        coach_id,
+                        first_name,
+                        last_name,
+                        gender,
+                        level,
+                        email,
+                        phone,
+                        phone_country_code,
+                    ]
                 ):
                     return Response(
                         {
@@ -3867,13 +3878,14 @@ def get_session_requests_of_user(request, user_type, user_id):
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
             Engagement.objects.filter(
-                project=OuterRef('project'),
-                learner=OuterRef('learner'),
-                                                                 
-            ).values('status')[:1]
+                project=OuterRef("project"),
+                learner=OuterRef("learner"),
+            ).values("status")[:1]
         )
     )
-    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(session_requests, many=True)
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(
+        session_requests, many=True
+    )
     return Response(serializer.data, status=200)
 
 
@@ -3981,13 +3993,14 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
             Engagement.objects.filter(
-                project=OuterRef('project'),
-                learner=OuterRef('learner'),
-                                                                 
-            ).values('status')[:1]
+                project=OuterRef("project"),
+                learner=OuterRef("learner"),
+            ).values("status")[:1]
         )
     )
-    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(session_requests, many=True)
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(
+        session_requests, many=True
+    )
     return Response(serializer.data, status=200)
 
 
@@ -4030,15 +4043,16 @@ def get_past_sessions_of_user(request, user_type, user_id):
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
             Engagement.objects.filter(
-                project=OuterRef('project'),
-                learner=OuterRef('learner'),
-                                                                 
-            ).values('status')[:1]
+                project=OuterRef("project"),
+                learner=OuterRef("learner"),
+            ).values("status")[:1]
         )
     )
     for session_request in session_requests:
         print(session_request.engagement_status)
-    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(session_requests, many=True)
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(
+        session_requests, many=True
+    )
     return Response(serializer.data, status=200)
 
 
@@ -5348,7 +5362,7 @@ class AddRegisteredCoach(APIView):
                         "name": pmo.name,
                         "coachName": f"{coach.first_name} {coach.last_name} ",
                     },
-                    json.loads(env("BCC_EMAIL_RAJAT_SUJATA"))
+                    json.loads(env("BCC_EMAIL_RAJAT_SUJATA")),
                 )
                 # Send profile completion tips to the coach
                 send_mail_templates(
@@ -5361,7 +5375,6 @@ class AddRegisteredCoach(APIView):
                     [],
                 )
 
-           
             return Response({"coach": coach_serializer.data})
 
         except IntegrityError as e:
@@ -5582,7 +5595,7 @@ def edit_project_caas(request, project_id):
         return Response({"error": "Project not found"}, status=404)
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["POST"])
