@@ -1,6 +1,6 @@
 from django.urls import path, include
 from . import views
-from .views import CompetencyView, QuestionView, QuestionnaireView,AssessmentView
+from .views import CompetencyView, QuestionView, QuestionnaireView,AssessmentView,AssessmentStatusOrTypeOrEndDataChange
 
 urlpatterns = [
     path("create-competency/", CompetencyView.as_view()),
@@ -22,4 +22,5 @@ urlpatterns = [
     path("get-assessments/", AssessmentView.as_view()),  
     path("delete-assessment/", AssessmentView.as_view()),  
     path("edit-assessment/", AssessmentView.as_view()), 
+    path("assessment-status-type-end-data-change/", AssessmentStatusOrTypeOrEndDataChange.as_view()), 
 ]

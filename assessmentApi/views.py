@@ -273,26 +273,35 @@ class AssessmentView(APIView):
 
     def put(self, request):
         assessment_id = request.data.get("id")
+
         try:
             assessment = Assessment.objects.get(id=assessment_id)
         except Assessment.DoesNotExist:
             return Response(
-                {"message": "Assessment not found"}, status=status.HTTP_404_NOT_FOUND
+                {"message": "Assessment not found"},
+                status=status.HTTP_404_NOT_FOUND,
             )
-
-        serializer = AssessmentSerializer(assessment, data=request.data)
-        if serializer.isvalid():
-            serializer.save()
+        
+        try:
+            
+            questionnaire=Questionnaire.objects.get(id=request.data.get("questionnaire"))
+            assessment.name = request.data.get("name")
+            assessment.assessment_type = request.data.get("assessment_type")
+            assessment.number_of_observers = request.data.get("number_of_observers")
+            assessment.assessment_end_date = request.data.get("assessment_end_date")
+            assessment.rating_type = request.data.get("rating_type")
+            assessment.questionnaire = questionnaire
+            assessment.descriptive_questions = request.data.get("descriptive_questions")
+            assessment.save()
             return Response(
-                {"message": "Assessment updated successfully"},
-                status=status.HTTP_200_OK,
+            {"message": "Assessment updated successfully"},
+            status=status.HTTP_200_OK,
+             )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        return Response(
-            {
-                "error": f"{serializer.errors}",
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
 
     def delete(self, request):
         assessment_id = request.data.get("id")
@@ -308,3 +317,19 @@ class AssessmentView(APIView):
             {"message": "Assessment deleted successfully"},
             status=status.HTTP_204_NO_CONTENT,
         )
+    
+class AssessmentStatusOrTypeOrEndDataChange(APIView):
+    def put(self, request):
+        assessment_id = request.data.get("id")
+
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+            assessment.status=request.data.get("status")
+            assessment.assessment_type=request.data.get("assessment_type")
+            assessment.assessment_end_date=request.data.get("assessment_end_date")
+            assessment.save()
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
