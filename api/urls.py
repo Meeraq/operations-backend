@@ -274,7 +274,7 @@ urlpatterns = [
     #     name="save_coaching_session",
     # ),
     path(
-        "create_project_structure/",
+        "create_project_structure/<int:project_id>/",
         views.create_project_structure,
         name="create_project_structure",
     ),
@@ -284,9 +284,14 @@ urlpatterns = [
         views.create_schedular_participant,
         name="create-schedular-participant",
     ),
-        path(
+    path(
         "schedular-batches/",
         views.get_schedular_batches,
+        name="schedular-batch-list",
+    ),
+    path(
+        "schedular-project/<int:project_id>/",
+        views.get_schedular_project,
         name="schedular-batch-list",
     ),
 ]

@@ -151,6 +151,8 @@ class SessionRequestCaasDepthOneSerializer(serializers.ModelSerializer):
         model = SessionRequestCaas
         fields = "__all__"
         depth = 2
+
+
 class SessionRequestWithEngagementCaasDepthOneSerializer(serializers.ModelSerializer):
     engagement_status = serializers.CharField()
 
@@ -158,6 +160,7 @@ class SessionRequestWithEngagementCaasDepthOneSerializer(serializers.ModelSerial
         model = SessionRequestCaas
         fields = "__all__"
         depth = 2
+
 
 class SessionRequestCaasDepthTwoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -238,9 +241,9 @@ class SchedularProjectSerializer(serializers.ModelSerializer):
 
 
 class SessionItemSerializer(serializers.Serializer):
-    sessionType = serializers.CharField()
+    session_type = serializers.CharField()
     duration = serializers.IntegerField()
-    batch_id = serializers.IntegerField(required=False, allow_null=True)
+    order = serializers.IntegerField(required=False, allow_null=True)
 
 
 class SchedularParticipantsSerializer(serializers.ModelSerializer):

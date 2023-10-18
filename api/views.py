@@ -5617,7 +5617,6 @@ def create_project_schedular(request):
     organisation.save()
     try:
         schedularProject = SchedularProject(
-            # print(organisation.name, organisation.image_url, "details of org")
             name=request.data["project_name"],
             organisation=organisation,
         )
@@ -5677,7 +5676,6 @@ def create_schedular_participant(request):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 # @api_view(["POST"])
@@ -5765,25 +5763,21 @@ def create_schedular_participant(request):
 
 
 @api_view(["POST"])
-def create_project_structure(request):
-    if request.method == "POST":
+def create_project_structure(request, project_id):
+    try:
+        project = get_object_or_404(SchedularProject, id=project_id)
         serializer = SessionItemSerializer(data=request.data, many=True)
-
-        # print(request.data)
-
-        print(serializer)
         if serializer.is_valid():
-            for session_data in serializer.validated_data:
-                session_type = session_data["sessionType"]
-                duration = session_data["duration"]
-                batch_id = session_data["batch_id"]
-                if session_type == "live_session":
-                    LiveSession.objects.create(duration=duration, batch_id=batch_id)
-                elif session_type == "laser_coaching_session":
-                    CoachingSession.objects.create(duration=duration, batch_id=batch_id)
-            return Response({"message": "Data saved successfully."}, status=200)
-        return Response(serializer.errors, status=400)
-
+            project.project_structure = serializer.data
+            project.save()
+            return Response(
+                {"message": "Project structure added successfully."}, status=200
+            )
+        return Response({"error": "Invalid sessions found."}, status=400)
+    except SchedularProject.DoesNotExist:
+        return Response(
+            {"error": "Couldn't find project to add project structure."}, status=400
+        )
 
 
 @api_view(["GET"])
@@ -5794,3 +5788,15 @@ def get_schedular_batches(request):
         return Response(serializer.data)
     except SchedularBatch.DoesNotExist:
         return Response({"message": "No batches found"}, status=404)
+
+
+@api_view(["GET"])
+def get_schedular_project(request, project_id):
+    try:
+        project = get_object_or_404(SchedularProject, id=project_id)
+        serializer = SchedularProjectSerializer(project)
+        return Response(serializer.data)
+    except SchedularProject.DoesNotExist:
+        return Response(
+            {"error": "Couldn't find project to add project structure."}, status=400
+        )
