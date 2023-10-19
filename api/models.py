@@ -460,6 +460,7 @@ class SchedularParticipants(models.Model):
 
 
 class SchedularBatch(models.Model):
+    name = models.CharField(max_length=100,  default=None)
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
     coaches = models.ManyToManyField(Coach, blank=True)
     participants = models.ManyToManyField(SchedularParticipants, blank=True)

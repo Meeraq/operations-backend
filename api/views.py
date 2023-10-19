@@ -3,6 +3,8 @@ import requests
 from os import name
 from django.shortcuts import render, get_object_or_404
 from django.template.loader import render_to_string
+from django.utils.safestring import mark_safe
+from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.db import transaction, IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
@@ -36,6 +38,10 @@ from .serializers import (
     EngagementSerializer,
     SchedularProjectSerializer,
     LearnerDataUploadSerializer,
+    EmailTemplateSerializer,
+    BatchSerializer,
+    SchedularParticipantsSerializer,
+    SentEmailDepthOneSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -72,6 +78,7 @@ from .models import (
     SchedularProject,
     SentEmail,
     EmailTemplate,
+    SchedularBatch,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -5673,8 +5680,90 @@ def send_test_mails(request):
 
 
 @api_view(["GET"])
+def participants_list(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"detail": "Batch not found"}, status=404)
+
+    participants = batch.participants.all()
+    serializer = SchedularParticipantsSerializer(participants, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
 @permission_classes([AllowAny])
-def getLearnerBatchwise(request, batch_id):
-    learners = Learner.objects.filter(batch=batch_id)
-    serilizer = LearnerDataUploadSerializer(learners, many=True)
+def getSavedTemplates(request):
+    emailTemplate = EmailTemplate.objects.all()
+    serilizer = EmailTemplateSerializer(emailTemplate, many=True)
     return Response({"status": "success", "data": serilizer.data}, status=200)
+
+
+@api_view(["GET"])
+def get_batches(request):
+    batches = SchedularBatch.objects.all()
+    serializer = BatchSerializer(batches, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def send_mails(request):
+    subject = request.data.get("subject")
+    scheduled_for = request.data.get("scheduledFor", "")
+    recipients_data = request.data.get("recipients_data", [])
+    try:
+        template = EmailTemplate.objects.get(id=request.data.get("template_id", ""))
+        if len(recipients_data) > 0:
+            sent_email_instance = SentEmail(
+                recipients=recipients_data,
+                subject=subject,
+                template=template,
+                status="pending",
+                scheduled_for=scheduled_for,
+            )
+            sent_email_instance.save()
+            clocked = ClockedSchedule.objects.create(
+                clocked_time=scheduled_for
+            )  # time is utc one here
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="base.tasks.send_email_to_recipients",
+                args=[sent_email_instance.id],
+                clocked=clocked,
+                one_off=True,
+            )
+            sent_email_instance.periodic_task = periodic_task
+            sent_email_instance.save()
+            return Response({"message": "Emails sent successfully"}, status=200)
+        else:
+            return Response({"error": "No email addresses found."}, status=400)
+    except EmailTemplate.DoesNotExist:
+        return Response({"error": "Failed to schedule emails"}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_mail_data(request):
+    sent_emails = SentEmail.objects.all()
+    serializer = SentEmailDepthOneSerializer(sent_emails, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["DELETE"])
+@permission_classes([AllowAny])
+def cancel_scheduled_mail(request, sent_mail_id):
+    try:
+        sent_email = SentEmail.objects.get(id=sent_mail_id)
+    except SentEmail.DoesNotExist:
+        return Response({"error": "Scheduled email not found."}, status=404)
+
+    if sent_email.status == "cancelled":
+        return Response({"error": "Email is already cancelled."}, status=400)
+    if sent_email.status == "completed":
+        return Response({"error": "Email is already sent."}, status=400)
+
+    sent_email.status = "cancelled"
+    sent_email.save()
+
+    return Response({"message": "Email has been successfully cancelled."})

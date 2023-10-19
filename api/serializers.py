@@ -15,7 +15,10 @@ from .models import (
     Competency,
     ActionItem,
     SchedularProject,
-    SchedularParticipants
+    SchedularParticipants,
+    EmailTemplate,
+    SchedularBatch,
+    SentEmail
 )
 from django.contrib.auth.models import User
 
@@ -230,5 +233,30 @@ class SchedularProjectSerializer(serializers.ModelSerializer):
 
 class LearnerDataUploadSerializer(serializers.ModelSerializer):
     class Meta:
-        model = SchedularParticipants
+        model = SchedularBatch
         fields = "__all__"
+
+
+class EmailTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmailTemplate
+        fields = "__all__"
+
+
+class BatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularBatch
+        fields = "__all__"
+
+
+class SchedularParticipantsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularParticipants
+        fields = ("id", "name", "email", "phone")
+
+
+class SentEmailDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SentEmail
+        fields = "__all__"
+        depth = 1

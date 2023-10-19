@@ -275,5 +275,10 @@ urlpatterns = [
     path("edit_email_template/<int:template_id>/", views.editEmailTemplate),
     path("save_template/", views.addEmailTemplate),
     path("send_test_mails/", views.send_test_mails),
-    path("get-learner-by-batch/<str:batch_id>/", views.getLearnerBatchwise),
+    path("get-learner-by-batch/<str:batch_id>/", views.participants_list),
+    path("saved_emailsTemplates/", views.getSavedTemplates),
+    path("all_batches/", views.get_batches, name="batch-list"),
+    path("send_mails/", views.send_mails),
+    path("emails-data/", views.get_mail_data),
+    path("cancel-schedule-email/<int:sent_mail_id>/", views.cancel_scheduled_mail),
 ]

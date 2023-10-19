@@ -22,6 +22,8 @@ from .models import (
     CoachingSession,
     SchedularSessions,
     LiveSession,
+    EmailTemplate,
+    SentEmail,
 )
 
 # Register your models here.
@@ -50,3 +52,5 @@ admin.site.register(CoachSchedularAvailibilty)
 admin.site.register(CoachingSession)
 admin.site.register(SchedularSessions)
 admin.site.register(LiveSession)
+admin.site.register(EmailTemplate)
+admin.site.register(SentEmail)
