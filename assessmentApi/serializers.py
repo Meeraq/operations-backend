@@ -45,3 +45,10 @@ class AssessmentSerializerDepthThree(serializers.ModelSerializer):
         model = Assessment
         fields = "__all__"
         depth = 3
+
+class AssessmentAnsweredSerializerDepthThree(serializers.ModelSerializer):
+    assessment_answered = serializers.BooleanField()
+    class Meta:
+        model = Assessment
+        fields = "__all__"
+        depth = 3

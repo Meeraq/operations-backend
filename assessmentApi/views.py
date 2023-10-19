@@ -9,6 +9,7 @@ from .models import (
     Assessment,
     Observer,
     ParticipantObserverMapping,
+    ParticipantResponse,
 )
 from .serializers import (
     CompetencySerializer,
@@ -18,6 +19,7 @@ from .serializers import (
     QuestionnaireSerializerDepthTwo,
     AssessmentSerializer,
     AssessmentSerializerDepthThree,
+    AssessmentAnsweredSerializerDepthThree
 )
 from django.db import transaction, IntegrityError
 import json
@@ -27,6 +29,7 @@ from django.contrib.auth.models import User
 from api.models import Profile, Learner
 from api.serializers import LearnerSerializer
 from collections import defaultdict
+from django.db.models import BooleanField, F, Exists, OuterRef
 
 def create_learner(learner_name,learner_email):
     try:
@@ -451,15 +454,22 @@ class AddParticipantObserverToAssessment(APIView):
 class AssessmentsOfParticipant(APIView):
     def get(self, request, participant_email):
         try:
-        
             participant = Learner.objects.get(email=participant_email)
 
             assessments = Assessment.objects.filter(
                 participants_observers__participant=participant
             )
-            
-            serializer = AssessmentSerializerDepthThree(assessments, many=True)
 
+            assessments = assessments.annotate(
+                assessment_answered=Exists(
+                    ParticipantResponse.objects.filter(
+                        assessment=OuterRef("id"), participant=participant
+                    )
+                )
+            )
+
+            serializer = AssessmentAnsweredSerializerDepthThree(assessments, many=True)
+            
             return Response(serializer.data)
 
         except Learner.DoesNotExist:
@@ -471,6 +481,7 @@ class AssessmentsOfParticipant(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class QuestionsForAssessment(APIView):
     def get(self, request, assessment_id):
@@ -497,12 +508,48 @@ class QuestionsForAssessment(APIView):
 
         except Assessment.DoesNotExist:
             return Response(
-                {"error": "Assessment not found"},
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "Assessment not found"}, status=status.HTTP_404_NOT_FOUND
             )
-    
+
         except Exception as e:
             return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class CreateParticipantResponseView(APIView):
+    def post(self, request):
+
+        try:
+            assessment_id = request.data.get("assessment_id")
+            participant_email = request.data.get("participant_email")
+            response = request.data.get("response")
+
+            assessment = Assessment.objects.get(id=assessment_id)
+
+            participant = Learner.objects.get(email=participant_email)
+
+            existing_response = ParticipantResponse.objects.filter(
+                participant=participant, assessment=assessment
+            ).first()
+
+            if existing_response:
+                return Response(
+                    {"message": "Response already submitted for this assessment."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            
+            participant_response = ParticipantResponse.objects.create(
+                participant=participant,
+                assessment=assessment,
+                participant_response=response,
+            )
+            return Response(
+                {"message": "Submit Successfully."},
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

@@ -6,6 +6,8 @@ from .models import (
     Assessment,
     ParticipantObserverMapping,
     Observer,
+    ParticipantResponse,
+    ObserverResponse
 )
 
 # Register your models here.
@@ -17,3 +19,5 @@ admin.site.register(Questionnaire)
 admin.site.register(Assessment)
 admin.site.register(Observer)
 admin.site.register(ParticipantObserverMapping)
+admin.site.register(ParticipantResponse)
+admin.site.register(ObserverResponse)
