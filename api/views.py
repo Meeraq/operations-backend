@@ -35,6 +35,7 @@ from .serializers import (
     PendingActionItemSerializer,
     EngagementSerializer,
     SchedularProjectSerializer,
+    CoachSchedularAvailibiltySerializer
 )
 
 from django.utils.crypto import get_random_string
@@ -68,7 +69,8 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
-    SchedularProject
+    SchedularProject,
+    CoachSchedularAvailibilty,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -5561,3 +5563,14 @@ def get_all_Schedular_Projects(request):
     projects = SchedularProject.objects.all()
     serializer = SchedularProjectSerializer(projects, many=True)
     return Response(serializer.data, status=200)
+
+@api_view(['POST'])
+def create_coach_schedular_availibilty(request):
+    if request.method == 'POST':
+        print(request.data)
+        
+        serializer = CoachSchedularAvailibiltySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

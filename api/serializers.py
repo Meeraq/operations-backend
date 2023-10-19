@@ -15,6 +15,7 @@ from .models import (
     Competency,
     ActionItem,
     SchedularProject,
+    CoachSchedularAvailibilty
 )
 from django.contrib.auth.models import User
 
@@ -225,3 +226,8 @@ class SchedularProjectSerializer(serializers.ModelSerializer):
         model = SchedularProject
         fields = "__all__"
         depth = 1
+
+class CoachSchedularAvailibiltySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachSchedularAvailibilty
+        fields = '__all__'

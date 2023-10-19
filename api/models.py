@@ -468,9 +468,10 @@ class SchedularBatch(models.Model):
 
 
 class CoachSchedularAvailibilty(models.Model):
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-    start_time = models.CharField(max_length=30)
-    end_time = models.CharField(max_length=30)
+    request_name = models.CharField(max_length=100, blank=True)
+    coach = models.ManyToManyField(Coach, blank=True)
+    expiry_date = models.DateField(blank=True, null=True)
+    availability = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, null=True, default=None)
 

@@ -268,4 +268,5 @@ urlpatterns = [
         name="get-all-schedular-projects",
     ),
     path("create-project-schedular/",views.create_project_schedular),
+    path('create-coach-availibilty/', views.create_coach_schedular_availibilty, name='create-coach-availibilty'),
 ]
