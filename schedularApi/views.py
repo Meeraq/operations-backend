@@ -461,3 +461,18 @@ def cancel_scheduled_mail(request, sent_mail_id):
     sent_email.save()
 
     return Response({"message": "Email has been successfully cancelled."})
+
+
+@api_view(["DELETE"])
+@permission_classes([AllowAny])
+def deleteEmailTemplate(request, template_id):
+    try:
+        delete_template = EmailTemplate.objects.get(pk=template_id)
+        delete_template.delete()
+        return Response({"success": True, "message": "Template deleted successfully."})
+    except EmailTemplate.DoesNotExist:
+        return Response(
+            {"success": False, "message": "Template not found."}, status=404
+        )
+    except Exception as e:
+        return Response({"success": False, "message": "Failed to delete template."})
