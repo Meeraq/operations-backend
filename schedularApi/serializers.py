@@ -64,3 +64,9 @@ class SentEmailDepthOneSerializer(serializers.ModelSerializer):
         model = SentEmail
         fields = "__all__"
         depth = 1
+
+
+class BatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularBatch
+        fields = "__all__"
