@@ -35,7 +35,8 @@ from .serializers import (
     PendingActionItemSerializer,
     EngagementSerializer,
     SchedularProjectSerializer,
-    CoachSchedularAvailibiltySerializer
+    CoachSchedularAvailibiltySerializer,
+    CoachSchedularAvailibiltySerializer2,
 )
 
 from django.utils.crypto import get_random_string
@@ -5498,7 +5499,7 @@ def edit_project_caas(request, project_id):
         return Response({"error": "Project not found"}, status=404)
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["POST"])
@@ -5564,13 +5565,19 @@ def get_all_Schedular_Projects(request):
     serializer = SchedularProjectSerializer(projects, many=True)
     return Response(serializer.data, status=200)
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 def create_coach_schedular_availibilty(request):
-    if request.method == 'POST':
-        print(request.data)
-        
+    if request.method == "POST":
         serializer = CoachSchedularAvailibiltySerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+def get_all_schedular_availabilities(request):
+    availabilities = CoachSchedularAvailibilty.objects.all()
+    serializer = CoachSchedularAvailibiltySerializer2(availabilities, many=True)
+    return Response(serializer.data)
