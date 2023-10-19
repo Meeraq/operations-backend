@@ -14,11 +14,6 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
-    SchedularProject,
-    LiveSession,
-    CoachingSession,
-    SchedularParticipants,
-    SchedularBatch,
 )
 from django.contrib.auth.models import User
 
@@ -230,29 +225,4 @@ class PendingActionItemSerializer(serializers.ModelSerializer):
 class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
-        fields = "__all__"
-
-
-class SchedularProjectSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SchedularProject
-        fields = "__all__"
-        depth = 1
-
-
-class SessionItemSerializer(serializers.Serializer):
-    session_type = serializers.CharField()
-    duration = serializers.IntegerField()
-    order = serializers.IntegerField(required=False, allow_null=True)
-
-
-class SchedularParticipantsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SchedularParticipants
-        fields = ["name", "email", "phone"]
-
-
-class SchedularBatchSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SchedularBatch
         fields = "__all__"

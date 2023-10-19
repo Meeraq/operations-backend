@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "api",
     "zohoapi",
+    "schedularApi",
     "rest_framework.authtoken",
     "django_rest_passwordreset",
     "corsheaders",
@@ -61,7 +62,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 EMAIL_HOST = env("EMAIL_HOST")
 EMAIL_PORT = env("EMAIL_PORT")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
@@ -74,7 +75,7 @@ ROOT_URLCONF = "operationsBackend.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        'DIRS': [os.path.join(BASE_DIR, 'templates')],        
+        "DIRS": [os.path.join(BASE_DIR, "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -160,8 +161,8 @@ SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SECURE = True
 
-CORS_ALLOWED_ORIGINS=json.loads(env("CORS_ALLOWED_ORIGINS"))
-CSRF_TRUSTED_ORIGINS= json.loads(env("CSRF_TRUSTED_ORIGINS"))
+CORS_ALLOWED_ORIGINS = json.loads(env("CORS_ALLOWED_ORIGINS"))
+CSRF_TRUSTED_ORIGINS = json.loads(env("CSRF_TRUSTED_ORIGINS"))
 
 CORS_EXPOSE_HEADERS = ["Content-Type", "X-CSRFToken"]
 CORS_ALLOW_CREDENTIALS = True
@@ -186,4 +187,4 @@ AWS_S3_FILE_OVERWRITE = False
 AWS_DEFAULT_ACL = None
 AWS_S3_VERIFY = True
 
-SESSION_COOKIE_DOMAIN=env("SESSION_COOKIE_DOMAIN")
+SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN")
