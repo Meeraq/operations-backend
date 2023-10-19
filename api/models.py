@@ -436,3 +436,42 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+
+
+class ProfileEditActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+   
+
+    def __str__(self):
+        return f"Profile Edit for {self.user.username}"
+
+class UserLoginActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"User Login Activity for {self.user.username}"
+
+class SentEmailActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    email_subject = models.CharField(max_length=500)  
+    timestamp = models.DateTimeField() 
+
+    def __str__(self):
+        return f"Sent Email - {self.user.username}"
+
+
+class AddCoachActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"Coach Added - {self.user.username}"
+
+class AddGoalActivity(models.Model):
+    user=models.ForeignKey(User,on_delete=models.CASCADE)
+    timestamp=models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user} added a goal."

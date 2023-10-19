@@ -34,7 +34,12 @@ from .serializers import (
     GetActionItemDepthOneSerializer,
     PendingActionItemSerializer,
     EngagementSerializer,
-    SessionRequestWithEngagementCaasDepthOneSerializer
+    SessionRequestWithEngagementCaasDepthOneSerializer,
+    ProfileEditActivitySerializer,
+    UserLoginActivitySerializer,
+    AddGoalActivitySerializer,
+    AddCoachActivitySerializer,
+    SentEmailActivitySerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -68,6 +73,11 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    ProfileEditActivity,
+    UserLoginActivity,
+    AddGoalActivity,
+    AddCoachActivity,
+    SentEmailActivity,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -103,6 +113,18 @@ class EmailSendingError(Exception):
     pass
 
 
+def create_send_email(user_email,file_name):
+
+    user =User.objects.get(username=user_email)
+
+    sent_email = SentEmailActivity.objects.create(
+            user=user,
+            email_subject=file_name,
+            timestamp=timezone.now(),
+            )
+    sent_email.save()
+
+
 def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
     email_message = render_to_string(file_name, content)
 
@@ -117,6 +139,8 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
 
     try:
         email.send(fail_silently=False)
+        for email in user_email:
+            create_send_email(email,file_name)
     except BadHeaderError as e:
         print(f"Error occurred while sending emails: {str(e)}")
         raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
@@ -487,7 +511,7 @@ def update_coach_profile(request, id):
         )
     pmo_user = User.objects.filter(profile__type="pmo").first()
     pmo = Pmo.objects.get(email=pmo_user.username)
-
+    profile_edit_start = ProfileEditActivity.objects.create(user=coach.user.user,timestamp=timezone.now(),)
     serializer = CoachSerializer(coach, data=mutable_data, partial=True)
 
     coach_id = request.data.get("coach_id")
@@ -503,7 +527,7 @@ def update_coach_profile(request, id):
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
-
+        
         # send_mail_templates(
         #     "pmo_emails/coach_update_profile.html",
         #     [pmo.email],
@@ -511,7 +535,7 @@ def update_coach_profile(request, id):
         #     {"name": pmo.name, "coachName": coach.first_name},
         # 		[] # no bcc emails
         # )
-
+     
         return Response(
             {**depth_serializer.data, "last_login": coach.user.user.last_login},
             status=200,
@@ -1763,6 +1787,8 @@ def add_coach(request):
             # Change the is_approved field to True
             coach.is_approved = True
             coach.save()
+            coach_add = AddCoachActivity.objects.create(user=user, timestamp=timezone.now())
+            coach_add.save()
 
             full_name = coach_user.first_name + " " + coach_user.last_name
             # send_mail_templates(
@@ -1913,6 +1939,8 @@ def login_view(request):
     login(request, user)
     user_data = get_user_data(user)
     if user_data:
+        login_timestamp = timezone.now()
+        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp)
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -2033,6 +2061,8 @@ def validate_otp(request):
     login(request, user)
     user_data = get_user_data(user)
     if user_data:
+        login_timestamp =timezone.now()
+        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp)
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -4202,14 +4232,24 @@ def reschedule_session_of_coachee(request, session_id):
 
 @api_view(["POST"])
 def create_goal(request):
+    user_email = request.data.get('email')
     serializer = GoalSerializer(data=request.data)
     goal_name = request.data["name"]
     engagement_id = request.data.get("engagement")
-
+    
     if not Goal.objects.filter(name=goal_name, engagement__id=engagement_id).exists():
         if Goal.objects.filter(engagement__id=engagement_id).count() < 10:
             if serializer.is_valid():
                 serializer.save()
+                try:
+                    user_instance = User.objects.get(username=user_email)
+                    AddGoalActivity.objects.create(
+                    user=user_instance,  
+                    timestamp=timezone.now(),
+                         )
+                except Exception as e:
+                    print("AddGoalActivity error", str(e))
+
                 return Response({"message": "Goal created successfully."}, status=201)
             return Response(serializer.errors, status=400)
         else:
@@ -5574,3 +5614,72 @@ def edit_project_caas(request, project_id):
     
     except Exception as e:
         return Response({'error': str(e)}, status=500)
+
+
+
+class ActivitySummary(APIView):
+    def get(self, request):
+        try:
+            user_login_activities = UserLoginActivity.objects.all()
+            total_login_count = user_login_activities.count()
+            user_login_serializer = UserLoginActivitySerializer(user_login_activities, many=True)
+        except Exception as e:
+            print("user_login_activities", str(e))
+            user_login_serializer = []
+
+        try:
+            profile_edit_activities = ProfileEditActivity.objects.all()
+            total_profile_edit_count = profile_edit_activities.count()
+            profile_edit_serializer = ProfileEditActivitySerializer(profile_edit_activities, many=True)
+        except Exception as e:
+            print("profile_edit_activities", str(e))
+            profile_edit_serializer = []
+
+        try:
+            goal_add_activities = AddGoalActivity.objects.all()
+            total_goal_add_count = goal_add_activities.count()
+            goal_add_serializer = AddGoalActivitySerializer(goal_add_activities, many=True)
+        except Exception as e:
+            print("goal_add_activities", str(e))
+            goal_add_serializer = []
+
+        try:
+            coach_add_activities = AddCoachActivity.objects.all()
+            total_coach_add_count = coach_add_activities.count()
+            coach_add_serializer = AddCoachActivitySerializer(coach_add_activities, many=True)
+        except Exception as e:
+            print("coach_add_activities", str(e))
+            coach_add_serializer = []
+
+        try:
+            sent_email_activities = SentEmailActivity.objects.all()
+            total_sent_email_count = sent_email_activities.count()
+            sent_email_serializer = SentEmailActivitySerializer(sent_email_activities, many=True)
+        except Exception as e:
+            print("sent_email_activities", str(e))
+            sent_email_serializer = []
+
+        response_data = {
+            "user_login": {
+                "total_count": total_login_count,
+                "activity": user_login_serializer.data,
+            },
+            "profile_edit": {
+                "total_count": total_profile_edit_count,
+                "activity": profile_edit_serializer.data,
+            },
+            "goal_add": {
+                "total_count": total_goal_add_count,
+                "activity": goal_add_serializer.data,
+            },
+            "coach_add": {
+                "total_count": total_coach_add_count,
+                "activity": coach_add_serializer.data,
+            },
+            "sent_email": {
+                "total_count": total_sent_email_count,
+                "activity": sent_email_serializer.data,
+            },
+        }
+
+        return Response(response_data)
