@@ -1,5 +1,5 @@
 from django.db import models
-from api.models import Learner
+from api.models import Learner,Profile
 # Create your models here.
 
 class Competency(models.Model):
@@ -41,17 +41,18 @@ class Observer(models.Model):
         return self.name
 
     
-class Participant(models.Model):
-    name = models.CharField(max_length=255,blank=True)
-    email = models.CharField(max_length=255,blank=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+# class Participant(models.Model):
+#     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True,null=True)
+#     name = models.CharField(max_length=255,blank=True)
+#     email = models.CharField(max_length=255,blank=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+#     created_at = models.DateTimeField(auto_now_add=True)
 
-    def __str__(self):
-        return self.name
+#     def __str__(self):
+#         return self.name
 
 class ParticipantObserverMapping(models.Model):
-    participant = models.ForeignKey(Participant, on_delete=models.CASCADE,blank=True)
+    participant = models.ForeignKey(Learner, on_delete=models.CASCADE,blank=True)
     observers = models.ManyToManyField(Observer,blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)

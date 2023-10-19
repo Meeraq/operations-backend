@@ -4,7 +4,6 @@ from .models import (
     Question,
     Questionnaire,
     Assessment,
-    Participant,
     ParticipantObserverMapping,
     Observer,
 )
@@ -17,5 +16,4 @@ admin.site.register(Question)
 admin.site.register(Questionnaire)
 admin.site.register(Assessment)
 admin.site.register(Observer)
-admin.site.register(Participant)
 admin.site.register(ParticipantObserverMapping)
