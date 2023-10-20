@@ -10,6 +10,8 @@ from .models import (
     LiveSession,
     EmailTemplate,
     SentEmail,
+    RequestAvailibilty,
+    
 )
 
 # Register your models here.
@@ -24,3 +26,4 @@ admin.site.register(SchedularSessions)
 admin.site.register(LiveSession)
 admin.site.register(EmailTemplate)
 admin.site.register(SentEmail)
+admin.site.register(RequestAvailibilty)

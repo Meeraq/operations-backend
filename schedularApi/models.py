@@ -37,6 +37,15 @@ class SchedularBatch(models.Model):
     updated_at = models.DateTimeField(auto_now_add=True)
 
 
+class RequestAvailibilty(models.Model):
+    request_name = models.CharField(max_length=100, blank=True)
+    coach = models.ManyToManyField(Coach, blank=True)
+    expiry_date = models.DateField(blank=True, null=True)
+    availability = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(blank=True, null=True, default=None)
+
+
 class CoachSchedularAvailibilty(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     start_time = models.CharField(max_length=30)
@@ -109,7 +118,7 @@ class CoachSchedularRequestAvailibilty(models.Model):
 
 class LiveSession(models.Model):
     date_time = models.DateTimeField(auto_now_add=True)
-    zoom_id = models.CharField(max_length=500)
+    zoom_id = models.CharField(max_length=500, default=None)
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
     live_session_number = models.IntegerField(blank=True, default=None, null=True)
     live_session_order = models.IntegerField(blank=True, default=None, null=True)
