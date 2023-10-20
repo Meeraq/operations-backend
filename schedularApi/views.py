@@ -68,6 +68,9 @@ def create_project_schedular(request):
             name=request.data["organisation_name"], image_url=request.data["image_url"]
         )
     organisation.save()
+    existing_projects_with_same_name = SchedularProject.objects.filter(name=request.data["project_name"])
+    if existing_projects_with_same_name.exists():
+        return Response({"error": "Project with same name already exists."},status=400)
     try:
         schedularProject = SchedularProject(
             name=request.data["project_name"],
@@ -560,7 +563,7 @@ def add_batch(request,project_id):
          # Assuming 'project_id' is in your request data
         
         # Check if batch with the same name exists
-        batch = SchedularBatch.objects.filter(name=batch_name).first()
+        batch = SchedularBatch.objects.filter(name=batch_name, project=project).first()
 
         if not batch:
             # If batch does not exist, create a new batch
