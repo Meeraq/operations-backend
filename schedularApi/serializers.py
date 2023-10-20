@@ -27,6 +27,12 @@ class SchedularParticipantsSerializer(serializers.ModelSerializer):
         fields = ["name", "email", "phone"]
 
 
+class GetSchedularParticipantsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularParticipants
+        fields = "__all__"
+
+
 class SchedularBatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularBatch
