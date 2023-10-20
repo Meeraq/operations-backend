@@ -31,6 +31,8 @@ from .serializers import (
     LiveSessionSerializer,
     CoachingSessionSerializer,
     GetSchedularParticipantsSerializer,
+    CoachSchedularAvailibiltySerializer,
+    CoachSchedularAvailibiltySerializer2,
     CoachBasicDetailsSerializer
 )
 from .models import (
@@ -41,6 +43,8 @@ from .models import (
     SchedularParticipants,
     SentEmail,
     EmailTemplate,
+    CoachSchedularAvailibilty,
+    RequestAvailibilty
 )
 
 
@@ -524,6 +528,23 @@ def deleteEmailTemplate(request, template_id):
         )
     except Exception as e:
         return Response({"success": False, "message": "Failed to delete template."})
+
+
+@api_view(["GET"])
+def get_all_schedular_availabilities(request):
+    availabilities = RequestAvailibilty.objects.all()
+    serializer = CoachSchedularAvailibiltySerializer2(availabilities, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+def create_coach_schedular_availibilty(request):
+    if request.method == "POST":
+        serializer = CoachSchedularAvailibiltySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])

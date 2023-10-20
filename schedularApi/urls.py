@@ -57,4 +57,12 @@ urlpatterns = [
     path('add_learner_to_batch/<int:project_id>/', views.add_batch, name='add_learner_to_batch'),
     path("coaches/", views.get_coaches),
     path("batch/<int:batch_id>/",views.update_batch)
+    path(
+        "create-coach-availibilty/",
+        views.create_coach_schedular_availibilty,
+    ),
+    path(
+        "schedular-availabilities/",
+        views.get_all_schedular_availabilities,
+    ),
 ]

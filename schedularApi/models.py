@@ -24,7 +24,7 @@ class SchedularParticipants(models.Model):
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=25)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    updated_at = models.DateTimeField(auto_now=True, blank=True)
 
 
 class SchedularBatch(models.Model):
@@ -34,6 +34,15 @@ class SchedularBatch(models.Model):
     participants = models.ManyToManyField(SchedularParticipants, blank=True)
     facilitator = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True, blank=True)
+
+
+class RequestAvailibilty(models.Model):
+    request_name = models.CharField(max_length=100, blank=True)
+    coach = models.ManyToManyField(Coach, blank=True)
+    expiry_date = models.DateField(blank=True, null=True)
+    availability = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, null=True, default=None)
 
 
@@ -42,7 +51,7 @@ class CoachSchedularAvailibilty(models.Model):
     start_time = models.CharField(max_length=30)
     end_time = models.CharField(max_length=30)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(blank=True, null=True, default=None)
+    updated_at = models.DateTimeField(blank=True, auto_now=True)
 
 
 class CoachingSession(models.Model):
@@ -67,7 +76,7 @@ class SchedularSessions(models.Model):
     )
     coaching_session = models.ForeignKey(CoachingSession, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(blank=True, null=True, default=None)
+    updated_at = models.DateTimeField(auto_now=True, blank=True)
 
 
 class LiveSession(models.Model):
@@ -107,3 +116,5 @@ class SentEmail(models.Model):
 
     def __str__(self):
         return f"{self.id} Subject: {self.subject}"
+
+
