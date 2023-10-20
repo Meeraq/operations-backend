@@ -1,4 +1,5 @@
 from django.db import models
+from django_celery_beat.models import PeriodicTask
 from api.models import Organisation, HR, Coach
 
 
@@ -80,3 +81,29 @@ class LiveSession(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     duration = models.CharField(max_length=50, default=None)
+
+
+class EmailTemplate(models.Model):
+    title = models.CharField(max_length=100, default="", blank=True)  # Add title field
+    template_data = models.TextField(max_length=200, default="")
+
+
+class SentEmail(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    recipients = models.JSONField()  # Use a JSONField to store JSON data.
+    created_at = models.DateTimeField(auto_now_add=True)
+    scheduled_for = models.DateTimeField(null=True, blank=True)
+    template = models.ForeignKey(EmailTemplate, null=True, on_delete=models.SET_NULL)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    periodic_task = models.ForeignKey(
+        PeriodicTask, null=True, on_delete=models.SET_NULL
+    )
+    subject = models.CharField(max_length=200)
+
+    def __str__(self):
+        return f"{self.id} Subject: {self.subject}"

@@ -3,8 +3,10 @@ from .models import (
     SchedularProject,
     LiveSession,
     CoachingSession,
-    SchedularParticipants,
     SchedularBatch,
+    SchedularParticipants,
+    EmailTemplate,
+    SentEmail,
 )
 
 
@@ -48,4 +50,29 @@ class LiveSessionSerializer(serializers.ModelSerializer):
 class CoachingSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = CoachingSession
+        fields = "__all__"
+
+
+class LearnerDataUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularBatch
+        fields = "__all__"
+
+
+class EmailTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmailTemplate
+        fields = "__all__"
+
+
+class SentEmailDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SentEmail
+        fields = "__all__"
+        depth = 1
+
+
+class BatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularBatch
         fields = "__all__"

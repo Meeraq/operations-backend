@@ -3,6 +3,8 @@ import requests
 from os import name
 from django.shortcuts import render, get_object_or_404
 from django.template.loader import render_to_string
+from django.utils.safestring import mark_safe
+from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.db import transaction, IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
