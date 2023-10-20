@@ -26,8 +26,6 @@ from .serializers import (
     LearnerDataUploadSerializer,
     EmailTemplateSerializer,
     SentEmailDepthOneSerializer,
-    CoachSchedularAvailibiltySerializer2,
-    CoachSchedularAvailibiltySerializer,
     BatchSerializer,
     LiveSessionSerializer,
     CoachingSessionSerializer,
