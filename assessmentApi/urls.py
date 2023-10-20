@@ -1,6 +1,6 @@
 from django.urls import path, include
 from . import views
-from .views import CompetencyView, QuestionView, QuestionnaireView,AssessmentView,QuestionsForAssessment,CreateParticipantResponseView,AssessmentStatusOrEndDataChange,AssessmentsOfParticipant,AddParticipantObserverToAssessment
+from .views import CompetencyView, QuestionView, QuestionnaireView,AssessmentView,QuestionsForAssessment,GetParticipantResponseFormAssessment,GetParticipantResponseForParticipant,CreateParticipantResponseView,AssessmentStatusOrEndDataChange,AssessmentsOfParticipant,AddParticipantObserverToAssessment
 
 urlpatterns = [
     path("create-competency/", CompetencyView.as_view()),
@@ -27,5 +27,6 @@ urlpatterns = [
     path("assessments-of-participant/<str:participant_email>/", AssessmentsOfParticipant.as_view()), 
     path("questions-for-assessment/<int:assessment_id>/", QuestionsForAssessment.as_view()), 
     path("create-response/", CreateParticipantResponseView.as_view()),
-    
+    path("get-response-result/<str:participant_email>/", GetParticipantResponseForParticipant.as_view()), 
+    path("get-participants-response-result/<str:assessment_id>/", GetParticipantResponseFormAssessment.as_view()), 
 ]
