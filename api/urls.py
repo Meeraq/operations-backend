@@ -262,20 +262,4 @@ urlpatterns = [
         "pmo-dashboard/",
         views.get_all_engagements,
     ),
-    path(
-        "schedular-projects/",
-        views.get_all_Schedular_Projects,
-        name="get-all-schedular-projects",
-    ),
-    path("create-project-schedular/", views.create_project_schedular),
-    path(
-        "create-coach-availibilty/",
-        views.create_coach_schedular_availibilty,
-        name="create-coach-availibilty",
-    ),
-    path(
-        "schedular-availabilities/",
-        views.get_all_schedular_availabilities,
-        name="get_all_schedular_availabilities",
-    ),
 ]

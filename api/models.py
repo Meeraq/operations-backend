@@ -17,6 +17,7 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
+from django_celery_beat.models import PeriodicTask
 
 
 import environ
@@ -136,6 +137,7 @@ def validate_pdf_extension(value):
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     coach_id = models.CharField(max_length=20, blank=True)
+    vendor_id = models.CharField(max_length=255, blank=True, default="")
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
@@ -143,6 +145,7 @@ class Coach(models.Model):
     gender = models.CharField(max_length=50, blank=True)
     domain = models.JSONField(default=list, blank=True)
     room_id = models.CharField(max_length=50, blank=True)
+    phone_country_code = models.CharField(max_length=20, default="", blank=True)
     phone = models.CharField(max_length=25)
     level = models.CharField(max_length=50, blank=True)
     rating = models.CharField(max_length=20, blank=True)
@@ -433,79 +436,3 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
-
-
-class SchedularProject(models.Model):
-    name = models.CharField(max_length=100, unique=True, default=None)
-    project_structure = models.JSONField(default=list, blank=True)
-    organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
-    hr = models.ManyToManyField(HR, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(blank=True, null=True, default=None)
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return self.name
-
-
-class SchedularParticipants(models.Model):
-    name = models.CharField(max_length=100)
-    email = models.EmailField()
-    phone = models.CharField(max_length=25)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(blank=True, null=True, default=None)
-
-
-class SchedularBatch(models.Model):
-    project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
-    coaches = models.ManyToManyField(Coach, blank=True)
-    participants = models.ManyToManyField(SchedularParticipants, blank=True)
-    facilitator = models.CharField(max_length=100, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(blank=True, null=True, default=None)
-
-
-class CoachSchedularAvailibilty(models.Model):
-    request_name = models.CharField(max_length=100, blank=True)
-    coach = models.ManyToManyField(Coach, blank=True)
-    expiry_date = models.DateField(blank=True, null=True)
-    availability = models.JSONField(default=dict, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(blank=True, null=True, default=None)
-
-
-class CoachingSession(models.Model):
-    booking_link = models.CharField(max_length=500)
-    start_date = models.DateField(auto_now_add=True)
-    end_date = models.DateField(blank=True, null=True)
-    expiry_date = models.DateField(blank=True, null=True)
-    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
-    coaching_session_number = models.IntegerField(blank=True, default=None, null=True)
-    coaching_session_order = models.IntegerField(blank=True, default=None, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(blank=True, null=True, default=None)
-
-
-class SchedularSessions(models.Model):
-    enrolled_participant = models.ForeignKey(
-        SchedularParticipants, on_delete=models.CASCADE
-    )
-    availibility = models.ForeignKey(
-        CoachSchedularAvailibilty, on_delete=models.CASCADE
-    )
-    coaching_session = models.ForeignKey(CoachingSession, on_delete=models.CASCADE)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(blank=True, null=True, default=None)
-
-
-class LiveSession(models.Model):
-    date_time = models.DateTimeField(auto_now_add=True)
-    zoom_id = models.CharField(max_length=500)
-    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
-    live_session_number = models.IntegerField(blank=True, default=None, null=True)
-    live_session_order = models.IntegerField(blank=True, default=None, null=True)
-    attendees = models.CharField(blank=True, max_length=500)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(blank=True, null=True, default=None)
