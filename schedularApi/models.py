@@ -46,8 +46,8 @@ class CoachSchedularAvailibilty(models.Model):
 
 
 class CoachingSession(models.Model):
-    booking_link = models.CharField(max_length=500)
-    start_date = models.DateField(auto_now_add=True)
+    booking_link = models.CharField(max_length=500, blank=True, default="")
+    start_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
     expiry_date = models.DateField(blank=True, null=True)
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
@@ -56,6 +56,8 @@ class CoachingSession(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now_add=True)
     duration = models.CharField(max_length=50, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class SchedularSessions(models.Model):
