@@ -7,6 +7,8 @@ from .models import (
     SchedularParticipants,
     EmailTemplate,
     SentEmail,
+    CoachSchedularAvailibilty,
+    RequestAvailibilty,
 )
 
 
@@ -68,6 +70,25 @@ class EmailTemplateSerializer(serializers.ModelSerializer):
 class SentEmailDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = SentEmail
+        fields = "__all__"
+        depth = 1
+
+
+class CoachSchedularAvailibiltySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachSchedularAvailibilty
+        fields = "__all__"
+
+
+class CoachSchedularAvailibiltySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RequestAvailibilty
+        fields = "__all__"
+
+
+class CoachSchedularAvailibiltySerializer2(serializers.ModelSerializer):
+    class Meta:
+        model = RequestAvailibilty
         fields = "__all__"
         depth = 1
 

@@ -54,4 +54,12 @@ urlpatterns = [
     path("emails-data/", views.get_mail_data),
     path("cancel-schedule-email/<int:sent_mail_id>/", views.cancel_scheduled_mail),
     path("delete_email_template/<int:template_id>/", views.deleteEmailTemplate),
+    path(
+        "create-coach-availibilty/",
+        views.create_coach_schedular_availibilty,
+    ),
+    path(
+        "schedular-availabilities/",
+        views.get_all_schedular_availabilities,
+    ),
 ]
