@@ -54,4 +54,7 @@ urlpatterns = [
     path("emails-data/", views.get_mail_data),
     path("cancel-schedule-email/<int:sent_mail_id>/", views.cancel_scheduled_mail),
     path("delete_email_template/<int:template_id>/", views.deleteEmailTemplate),
+    path('add_learner_to_batch/<int:project_id>/', views.add_batch, name='add_learner_to_batch'),
+    path("coaches/", views.get_coaches),
+    path("batch/<int:batch_id>/",views.update_batch)
 ]

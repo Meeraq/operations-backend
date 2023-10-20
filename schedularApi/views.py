@@ -1,6 +1,7 @@
 from datetime import date
 import uuid
 import requests
+import uuid
 from os import name
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError
@@ -17,7 +18,7 @@ from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 
 from django.shortcuts import render
-from api.models import Organisation, HR
+from api.models import Organisation, HR,Coach
 from .serializers import (
     SchedularProjectSerializer,
     SchedularBatchSerializer,
@@ -30,6 +31,7 @@ from .serializers import (
     LiveSessionSerializer,
     CoachingSessionSerializer,
     GetSchedularParticipantsSerializer,
+    CoachBasicDetailsSerializer
 )
 from .models import (
     SchedularBatch,
@@ -266,10 +268,12 @@ def get_batch_calendar(request, batch_id):
         participants_serializer = GetSchedularParticipantsSerializer(
             participants, many=True
         )
+        coaches = Coach.objects.filter(schedularbatch__id=batch_id)
+        coaches_serializer = CoachBasicDetailsSerializer(coaches, many=True)
         sessions = [*live_sessions_serializer.data, *coaching_sessions_serializer.data]
         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
         return Response(
-            {"sessions": sorted_sessions, "participants": participants_serializer.data}
+            {"sessions": sorted_sessions, "participants": participants_serializer.data, "coaches" : coaches_serializer.data}
         )
     except SchedularProject.DoesNotExist:
         return Response(
@@ -520,3 +524,85 @@ def deleteEmailTemplate(request, template_id):
         )
     except Exception as e:
         return Response({"success": False, "message": "Failed to delete template."})
+
+
+@api_view(['POST'])
+def add_batch(request,project_id):
+    participants_data = request.data.get('participants', [])
+    project = SchedularProject.objects.get(id=project_id)
+
+    for participant_data in participants_data:
+        name = participant_data.get('name')
+        email = participant_data.get('email').strip()
+        phone = participant_data.get('phone')
+        batch_name = participant_data.get('batch').strip().upper()
+         # Assuming 'project_id' is in your request data
+        
+        # Check if batch with the same name exists
+        batch = SchedularBatch.objects.filter(name=batch_name).first()
+
+        if not batch:
+            # If batch does not exist, create a new batch
+            batch = SchedularBatch.objects.create(name=batch_name, project=project)
+
+            # Create Live Sessions and Coaching Sessions based on project structure
+            for session_data in project.project_structure:
+                order = session_data.get('order')
+                duration = session_data.get('duration')
+                session_type = session_data.get('session_type')
+
+                if session_type == 'live_session':
+                    live_session_number = LiveSession.objects.filter(batch=batch).count() + 1
+                    live_session = LiveSession.objects.create(
+                        batch=batch,
+                        live_session_number=live_session_number,
+                        order=order,
+                        duration=duration,
+                    )
+                elif session_type == 'laser_coaching_session':
+                    coaching_session_number = CoachingSession.objects.filter(batch=batch).count() + 1
+                    booking_link = str(uuid.uuid4())  # Generate a unique UUID for the booking link
+                    coaching_session = CoachingSession.objects.create(
+                        batch=batch,
+                        coaching_session_number=coaching_session_number,
+                        order=order,
+                        duration=duration,
+                        booking_link=booking_link,
+                    )
+
+        # Check if participant with the same email exists
+        participant, participant_created = SchedularParticipants.objects.get_or_create(
+            email=email,
+            defaults={'name': name, 'phone': phone}
+        )
+
+        # Add participant to the batch if not already added
+        if participant not in batch.participants.all():
+            batch.participants.add(participant)
+
+    return Response({'message': 'Batch created successfully.'}, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+def get_coaches(request):
+    coaches = Coach.objects.all()
+    serializer = CoachBasicDetailsSerializer(coaches,many=True)
+    return Response(serializer.data)
+
+
+@api_view(["PUT"])
+def update_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response(
+            {"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    serializer = SchedularBatchSerializer(
+        batch, data=request.data, partial=True
+    )
+    
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
