@@ -21,14 +21,14 @@ class SchedularProject(models.Model):
 
 class SchedularParticipants(models.Model):
     name = models.CharField(max_length=100)
-    email = models.EmailField()
+    email = models.EmailField(unique=True)
     phone = models.CharField(max_length=25)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
 
 
 class SchedularBatch(models.Model):
-    name = models.CharField(max_length=100, blank=True)
+    name = models.CharField(unique=True, max_length=100, blank=True)
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
     coaches = models.ManyToManyField(Coach, blank=True)
     participants = models.ManyToManyField(SchedularParticipants, blank=True)

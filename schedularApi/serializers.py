@@ -10,7 +10,7 @@ from .models import (
     CoachSchedularAvailibilty,
     RequestAvailibilty,
 )
-
+from api.models import Coach
 
 class SchedularProjectSerializer(serializers.ModelSerializer):
     class Meta:
@@ -97,3 +97,8 @@ class BatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularBatch
         fields = "__all__"
+
+class CoachBasicDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Coach
+        fields =['id', 'first_name' , 'last_name' , 'email', 'phone']
