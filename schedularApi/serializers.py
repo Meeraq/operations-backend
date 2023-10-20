@@ -67,6 +67,12 @@ class SentEmailDepthOneSerializer(serializers.ModelSerializer):
         depth = 1
 
 
+class CoachSchedularAvailibiltySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachSchedularAvailibilty
+        fields = "__all__"
+
+
 class CoachSchedularAvailibiltySerializer2(serializers.ModelSerializer):
     class Meta:
         model = CoachSchedularAvailibilty

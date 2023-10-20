@@ -26,9 +26,8 @@ from .serializers import (
     LearnerDataUploadSerializer,
     EmailTemplateSerializer,
     SentEmailDepthOneSerializer,
-    BatchSerializer,
-    CoachSchedularAvailibiltySerializer,
     CoachSchedularAvailibiltySerializer2,
+    CoachSchedularAvailibiltySerializer,
 )
 from .models import (
     SchedularBatch,
