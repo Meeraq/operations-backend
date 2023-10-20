@@ -585,7 +585,7 @@ def add_batch(request,project_id):
                     )
                 elif session_type == 'laser_coaching_session':
                     coaching_session_number = CoachingSession.objects.filter(batch=batch).count() + 1
-                    booking_link = str(uuid.uuid4())  # Generate a unique UUID for the booking link
+                    booking_link =  f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"    # Generate a unique UUID for the booking link
                     coaching_session = CoachingSession.objects.create(
                         batch=batch,
                         coaching_session_number=coaching_session_number,
