@@ -497,12 +497,37 @@ class QuestionsForAssessment(APIView):
 
         except Assessment.DoesNotExist:
             return Response(
-                {"error": "Assessment not found"},
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "Assessment not found"}, status=status.HTTP_404_NOT_FOUND
             )
-    
+
         except Exception as e:
             return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class ObserverView(APIView):
+    def post(self, request):
+        try:
+            request_email = request.data.get("email")
+            observer = Observer.objects.get(email=request_email)
+            return Response(
+                {"message": "Verification successful."},
+                status=status.HTTP_200_OK,
+            )
+        except Observer.DoesNotExist:
+            return Response(
+                {"message": "Verification failed. Observer not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+class ObserverAssessment(APIView):
+    def get(self,request, email):
+        try:
+            assessments = Assessment.objects.filter(participants_observers__observers__email=email)
+            serializer = AssessmentSerializerDepthThree(assessments, many=True)
+            return Response(serializer.data)
+        except Assessment.DoesNotExist:
+            return Response({"error": "Assessments not found for the provided observer's email."}, status=404)
