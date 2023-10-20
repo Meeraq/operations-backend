@@ -609,7 +609,7 @@ def add_batch(request,project_id):
 
 @api_view(['GET'])
 def get_coaches(request):
-    coaches = Coach.objects.all()
+    coaches = Coach.objects.filter(is_approved=True)
     serializer = CoachBasicDetailsSerializer(coaches,many=True)
     return Response(serializer.data)
 
