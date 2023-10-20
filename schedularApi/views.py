@@ -27,6 +27,9 @@ from .serializers import (
     EmailTemplateSerializer,
     SentEmailDepthOneSerializer,
     BatchSerializer,
+    LiveSessionSerializer,
+    CoachingSessionSerializer,
+    GetSchedularParticipantsSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -227,7 +230,11 @@ def create_project_structure(request, project_id):
 @api_view(["GET"])
 def get_schedular_batches(request):
     try:
-        batches = SchedularBatch.objects.all()
+        project_id = request.GET.get("project_id")
+        if not project_id:
+            batches = SchedularBatch.objects.all()
+        else:
+            batches = SchedularBatch.objects.filter(project__id=project_id)
         serializer = SchedularBatchSerializer(batches, many=True)
         return Response(serializer.data)
     except SchedularBatch.DoesNotExist:
@@ -255,16 +262,53 @@ def get_batch_calendar(request, batch_id):
         coaching_sessions_serializer = CoachingSessionSerializer(
             coaching_sessions, many=True
         )
+        participants = SchedularParticipants.objects.filter(schedularbatch__id=batch_id)
+        participants_serializer = GetSchedularParticipantsSerializer(
+            participants, many=True
+        )
+        sessions = [*live_sessions_serializer.data, *coaching_sessions_serializer.data]
+        sorted_sessions = sorted(sessions, key=lambda x: x["order"])
         return Response(
-            {
-                "live_sessions": live_sessions_serializer.data,
-                "coaching_sessions": coaching_sessions_serializer.data,
-            }
+            {"sessions": sorted_sessions, "participants": participants_serializer.data}
         )
     except SchedularProject.DoesNotExist:
         return Response(
             {"error": "Couldn't find project to add project structure."}, status=400
         )
+
+
+@api_view(["PUT"])
+def update_live_session(request, live_session_id):
+    try:
+        live_session = LiveSession.objects.get(id=live_session_id)
+    except LiveSession.DoesNotExist:
+        return Response(
+            {"error": "LiveSession not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    serializer = LiveSessionSerializer(live_session, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+def update_coaching_session(request, coaching_session_id):
+    try:
+        coaching_session = CoachingSession.objects.get(id=coaching_session_id)
+    except CoachingSession.DoesNotExist:
+        return Response(
+            {"error": "Coaching session not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    serializer = CoachingSessionSerializer(
+        coaching_session, data=request.data, partial=True
+    )
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["GET"])

@@ -46,16 +46,16 @@ class CoachSchedularAvailibilty(models.Model):
 
 
 class CoachingSession(models.Model):
-    booking_link = models.CharField(max_length=500)
-    start_date = models.DateField(auto_now_add=True)
+    booking_link = models.CharField(max_length=500, blank=True, default="")
+    start_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
     expiry_date = models.DateField(blank=True, null=True)
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
     coaching_session_number = models.IntegerField(blank=True, default=None, null=True)
-    coaching_session_order = models.IntegerField(blank=True, default=None, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(blank=True, null=True, default=None)
+    order = models.IntegerField(blank=True, default=None, null=True)
     duration = models.CharField(max_length=50, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class SchedularSessions(models.Model):
@@ -71,14 +71,15 @@ class SchedularSessions(models.Model):
 
 
 class LiveSession(models.Model):
-    date_time = models.DateTimeField(auto_now_add=True)
-    zoom_id = models.CharField(max_length=500)
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
     live_session_number = models.IntegerField(blank=True, default=None, null=True)
-    live_session_order = models.IntegerField(blank=True, default=None, null=True)
-    attendees = models.CharField(blank=True, max_length=500)
+    order = models.IntegerField(blank=True, default=None, null=True)
+    date_time = models.DateTimeField(blank=True, null=True)
+    attendees = models.JSONField(blank=True, default=list)
+    description = models.TextField(default="", blank=True)
+    status = models.CharField(blank=True, default="pending", max_length=50)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(blank=True, null=True, default=None)
+    updated_at = models.DateTimeField(auto_now=True)
     duration = models.CharField(max_length=50, default=None)
 
 
