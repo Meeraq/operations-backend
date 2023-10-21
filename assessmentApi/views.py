@@ -10,6 +10,7 @@ from .models import (
     Observer,
     ParticipantObserverMapping,
     ParticipantResponse,
+    ObserverResponse,
 )
 from .serializers import (
     CompetencySerializer,
@@ -21,6 +22,7 @@ from .serializers import (
     AssessmentSerializerDepthThree,
     AssessmentAnsweredSerializerDepthThree,
     ParticipantResponseSerializer,
+    ObserverResponseSerializer,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -455,12 +457,11 @@ class AddParticipantObserverToAssessment(APIView):
                 observers = request.data.get("observers", [])
                 for observer_data in observers:
                     observer, created = Observer.objects.get_or_create(
-                        name=observer_data["observerName"],
                         email=observer_data["observerEmail"],
-                        type=observer_data["observerType"],
                     )
-                    if created:
-                        observer.save()
+                    observer.name = observer_data["observerName"]
+                    observer.type = observer_data["observerType"]
+                    observer.save()
                     mapping.observers.add(observer)
 
             mapping.save()
@@ -552,31 +553,77 @@ class QuestionsForAssessment(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
+class QuestionsForObserverAssessment(APIView):
+    def get(self, request, assessment_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+            questionnaire = assessment.questionnaire
+
+            competency_questions = {}
+
+            for question in questionnaire.questions.all():
+                competency_name = question.competency.name
+                full_question = {
+                    "id": question.id,
+                    "observer_question": question.observer_question,
+                }
+
+                if competency_name in competency_questions:
+                    competency_questions[competency_name].append(full_question)
+                else:
+                    competency_questions[competency_name] = [full_question]
+
+            return Response(competency_questions, status=status.HTTP_200_OK)
+
+        except Assessment.DoesNotExist:
+            return Response(
+                {"error": "Assessment not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
 class ObserverView(APIView):
     def post(self, request):
         try:
             request_email = request.data.get("email")
             observer = Observer.objects.get(email=request_email)
-            return Response(
-                {"message": "Verification successful."},
-                status=status.HTTP_200_OK,
-            )
+            if observer:
+                return Response(
+                    {"message": "Verification successful."},
+                    status=status.HTTP_200_OK,
+                )
         except Observer.DoesNotExist:
             return Response(
                 {"message": "Verification failed. Observer not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
+            print(str(e))
+            return Response(
+                {"error": " Verification failed."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+
 class ObserverAssessment(APIView):
-    def get(self,request, email):
+    def get(self, request, email):
         try:
-            assessments = Assessment.objects.filter(participants_observers__observers__email=email)
+            assessments = Assessment.objects.filter(
+                participants_observers__observers__email=email, status="ongoing"
+            ).distinct()
+
             serializer = AssessmentSerializerDepthThree(assessments, many=True)
             return Response(serializer.data)
         except Assessment.DoesNotExist:
-            return Response({"error": "Assessments not found for the provided observer's email."}, status=404)
+            return Response(
+                {"error": "Assessments not found for the provided observer's email."},
+                status=404,
+            )
+
 
 class CreateParticipantResponseView(APIView):
     def post(self, request):
@@ -603,6 +650,50 @@ class CreateParticipantResponseView(APIView):
                 participant=participant,
                 assessment=assessment,
                 participant_response=response,
+            )
+            return Response(
+                {"message": "Submit Successfully."},
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": "Failed to Submit."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class CreateObserverResponseView(APIView):
+    def post(self, request):
+        try:
+            assessment_id = request.data.get("assessment_id")
+            observer_email = request.data.get("observer_email")
+            response = request.data.get("response")
+            participant_id = request.data.get("participant_id")
+
+            assessment = Assessment.objects.get(id=assessment_id)
+
+            observer = Observer.objects.get(email=observer_email)
+
+            participant = Learner.objects.get(id=participant_id)
+            assessments = Assessment.objects.filter(
+                participants_observers__observers__email=observer_email
+            )
+
+            existing_response = ObserverResponse.objects.filter(
+                observer=observer, assessment=assessment, participant=participant
+            ).first()
+
+            if existing_response:
+                return Response(
+                    {"message": "Response already submitted for this assessment."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            observer_response = ObserverResponse.objects.create(
+                participant=participant,
+                observer=observer,
+                assessment=assessment,
+                observer_response=response,
             )
             return Response(
                 {"message": "Submit Successfully."},
@@ -650,3 +741,20 @@ class GetParticipantResponseFormAssessment(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
+class GetObserverResponseForObserver(APIView):
+    def get(self, request, observer_email):
+        try:
+            observer = Observer.objects.get(email=observer_email)
+
+            observer_responses = ObserverResponse.objects.filter(
+                observer=observer,
+            )
+
+            serializer = ObserverResponseSerializer(observer_responses, many=True)
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
