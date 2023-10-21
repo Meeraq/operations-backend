@@ -758,3 +758,21 @@ class GetObserverResponseForObserver(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class GetObserverResponseFormAssessment(APIView):
+    def get(self, request, assessment_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+
+            observer_responses = ObserverResponse.objects.filter(
+                assessment=assessment,
+            )
+
+            serializer = ObserverResponseSerializer(observer_responses, many=True)
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

@@ -1,6 +1,6 @@
 from django.urls import path, include
 
-from .views import CompetencyView, QuestionView, QuestionnaireView,AssessmentView,GetObserverResponseForObserver,CreateObserverResponseView,QuestionsForAssessment,QuestionsForObserverAssessment,GetParticipantResponseFormAssessment,GetParticipantResponseForParticipant,CreateParticipantResponseView,AssessmentStatusOrEndDataChange,ObserverView,ObserverAssessment,AssessmentsOfParticipant,AddParticipantObserverToAssessment
+from .views import CompetencyView, QuestionView, QuestionnaireView,AssessmentView,GetObserverResponseFormAssessment,GetObserverResponseForObserver,CreateObserverResponseView,QuestionsForAssessment,QuestionsForObserverAssessment,GetParticipantResponseFormAssessment,GetParticipantResponseForParticipant,CreateParticipantResponseView,AssessmentStatusOrEndDataChange,ObserverView,ObserverAssessment,AssessmentsOfParticipant,AddParticipantObserverToAssessment
 
 
 urlpatterns = [
@@ -33,7 +33,8 @@ urlpatterns = [
     path("create-response/", CreateParticipantResponseView.as_view()),
     path("create-observer-response/", CreateObserverResponseView.as_view()),
     path("get-response-result/<str:participant_email>/", GetParticipantResponseForParticipant.as_view()), 
-    path("get-participants-response-result/<str:assessment_id>/", GetParticipantResponseFormAssessment.as_view()), 
+    path("get-participants-response-result/<int:assessment_id>/", GetParticipantResponseFormAssessment.as_view()), 
     path("get-observer-response-result/<str:observer_email>/", GetObserverResponseForObserver.as_view()), 
+    path("get-observer-assessment-response-result/<int:assessment_id>/", GetObserverResponseFormAssessment.as_view()), 
 
 ]
