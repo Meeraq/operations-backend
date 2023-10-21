@@ -9,6 +9,7 @@ from .models import (
     Assessment,
     Observer,
     ParticipantObserverMapping,
+    ParticipantResponse,
 )
 from .serializers import (
     CompetencySerializer,
@@ -18,6 +19,8 @@ from .serializers import (
     QuestionnaireSerializerDepthTwo,
     AssessmentSerializer,
     AssessmentSerializerDepthThree,
+    AssessmentAnsweredSerializerDepthThree,
+    ParticipantResponseSerializer,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -27,20 +30,23 @@ from django.contrib.auth.models import User
 from api.models import Profile, Learner
 from api.serializers import LearnerSerializer
 from collections import defaultdict
+from django.db.models import BooleanField, F, Exists, OuterRef
+from django.db.models import Q
 
-def create_learner(learner_name,learner_email):
+
+def create_learner(learner_name, learner_email):
     try:
         with transaction.atomic():
             if not learner_email:
                 raise ValueError("Username field is required")
 
             user = User.objects.filter(username=learner_email).first()
-            learner_profile = None
+            learner = None
             if user:
                 learner_profile = Profile.objects.filter(
                     user=user, type="learner"
                 ).first()
-
+                learner = Learner.objects.get(email=learner_email)
             else:
                 temp_password = "".join(
                     random.choices(
@@ -59,10 +65,10 @@ def create_learner(learner_name,learner_email):
                 learner_profile = Profile.objects.create(user=user, type="learner")
 
                 learner = Learner.objects.create(
-                        user=learner_profile,
-                        name=learner_name,
-                        email=learner_email,
-                    )
+                    user=learner_profile,
+                    name=learner_name,
+                    email=learner_email,
+                )
             return learner
     except ValueError as e:
         raise ValueError(str(e))
@@ -87,7 +93,7 @@ class CompetencyView(APIView):
             )
         return Response(
             {
-                "error": f"{serializer.errors}",
+                "error": "Failed to create Competency.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
@@ -110,7 +116,7 @@ class CompetencyView(APIView):
             )
         return Response(
             {
-                "error": f"{serializer.errors}",
+                "error": "Failed to update Competency.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
@@ -163,7 +169,7 @@ class QuestionView(APIView):
             )
         return Response(
             {
-                "error": f"{serializer.errors}",
+                "error": "Failed to create Question.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
@@ -191,7 +197,7 @@ class QuestionView(APIView):
             )
         return Response(
             {
-                "error": f"{serializer.errors}",
+                "error": "Failed to update Question.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
@@ -246,7 +252,7 @@ class QuestionnaireView(APIView):
             )
         return Response(
             {
-                "error": f"{serializer.errors}",
+                "error": "Failed to create Questionnaire.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
@@ -269,7 +275,7 @@ class QuestionnaireView(APIView):
             )
         return Response(
             {
-                "error": f"{serializer.errors}",
+                "error": "Failed to update Questionnaire.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
@@ -315,12 +321,12 @@ class AssessmentView(APIView):
         if serializer.is_valid():
             serializer.save()
             return Response(
-                {"message": "Assessment created successfully"},
+                {"message": "Assessment created successfully."},
                 status=status.HTTP_201_CREATED,
             )
         return Response(
             {
-                "error": f"{serializer.errors}",
+                "error": "Failed to create Assessment.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
@@ -356,8 +362,11 @@ class AssessmentView(APIView):
                 status=status.HTTP_200_OK,
             )
         except Exception as e:
+            print(str(e))
             return Response(
-                {"error": str(e)},
+                {
+                    "error": "Failed to Update Assessment.",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -393,8 +402,11 @@ class AssessmentStatusOrEndDataChange(APIView):
             )
 
         except Exception as e:
+            print(str(e))
             return Response(
-                {"error": str(e)},
+                {
+                    "error": "Failed to Update Status.",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -413,7 +425,29 @@ class AddParticipantObserverToAssessment(APIView):
 
         try:
             participants = request.data.get("participants", [])
-            participant=create_learner(participants[0]["participantName"],participants[0]["participantEmail"])
+
+            user = User.objects.filter(
+                username=participants[0]["participantEmail"]
+            ).first()
+
+            if user:
+                user_profile = Profile.objects.filter(user=user).first()
+
+                if (
+                    user_profile.type == "hr"
+                    or user_profile.type == "pmo"
+                    or user_profile.type == "coach"
+                ):
+                    return Response(
+                        {
+                            "error": "Email Already exist. Please try using another email.",
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+            participant = create_learner(
+                participants[0]["participantName"], participants[0]["participantEmail"]
+            )
 
             mapping = ParticipantObserverMapping.objects.create(participant=participant)
 
@@ -423,6 +457,7 @@ class AddParticipantObserverToAssessment(APIView):
                     observer, created = Observer.objects.get_or_create(
                         name=observer_data["observerName"],
                         email=observer_data["observerEmail"],
+                        type=observer_data["observerType"],
                     )
                     if created:
                         observer.save()
@@ -442,8 +477,11 @@ class AddParticipantObserverToAssessment(APIView):
             )
 
         except Exception as e:
+            print(str(e))
             return Response(
-                {"error": str(e)},
+                {
+                    "error": "Failed to add participant.",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -451,14 +489,22 @@ class AddParticipantObserverToAssessment(APIView):
 class AssessmentsOfParticipant(APIView):
     def get(self, request, participant_email):
         try:
-        
             participant = Learner.objects.get(email=participant_email)
 
             assessments = Assessment.objects.filter(
-                participants_observers__participant=participant
+                Q(participants_observers__participant=participant)
+                & (Q(status="ongoing") | Q(status="completed"))
             )
-            
-            serializer = AssessmentSerializerDepthThree(assessments, many=True)
+
+            assessments = assessments.annotate(
+                assessment_answered=Exists(
+                    ParticipantResponse.objects.filter(
+                        assessment=OuterRef("id"), participant=participant
+                    )
+                )
+            )
+
+            serializer = AssessmentAnsweredSerializerDepthThree(assessments, many=True)
 
             return Response(serializer.data)
 
@@ -471,6 +517,7 @@ class AssessmentsOfParticipant(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class QuestionsForAssessment(APIView):
     def get(self, request, assessment_id):
@@ -505,7 +552,6 @@ class QuestionsForAssessment(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
 class ObserverView(APIView):
     def post(self, request):
         try:
@@ -531,3 +577,76 @@ class ObserverAssessment(APIView):
             return Response(serializer.data)
         except Assessment.DoesNotExist:
             return Response({"error": "Assessments not found for the provided observer's email."}, status=404)
+
+class CreateParticipantResponseView(APIView):
+    def post(self, request):
+        try:
+            assessment_id = request.data.get("assessment_id")
+            participant_email = request.data.get("participant_email")
+            response = request.data.get("response")
+
+            assessment = Assessment.objects.get(id=assessment_id)
+
+            participant = Learner.objects.get(email=participant_email)
+
+            existing_response = ParticipantResponse.objects.filter(
+                participant=participant, assessment=assessment
+            ).first()
+
+            if existing_response:
+                return Response(
+                    {"message": "Response already submitted for this assessment."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            participant_response = ParticipantResponse.objects.create(
+                participant=participant,
+                assessment=assessment,
+                participant_response=response,
+            )
+            return Response(
+                {"message": "Submit Successfully."},
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": "Failed to Submit."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class GetParticipantResponseForParticipant(APIView):
+    def get(self, request, participant_email):
+        try:
+            participant = Learner.objects.get(email=participant_email)
+
+            participant_responses = ParticipantResponse.objects.filter(
+                participant=participant,
+            )
+
+            serializer = ParticipantResponseSerializer(participant_responses, many=True)
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetParticipantResponseFormAssessment(APIView):
+    def get(self, request, assessment_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+
+            participant_responses = ParticipantResponse.objects.filter(
+                assessment=assessment,
+            )
+
+            serializer = ParticipantResponseSerializer(participant_responses, many=True)
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+

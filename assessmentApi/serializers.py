@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Competency, Question, Questionnaire,Assessment
+from .models import Competency, Question, Questionnaire,Assessment,ParticipantResponse
 
 
 class CompetencySerializer(serializers.ModelSerializer):
@@ -45,3 +45,19 @@ class AssessmentSerializerDepthThree(serializers.ModelSerializer):
         model = Assessment
         fields = "__all__"
         depth = 3
+
+class AssessmentAnsweredSerializerDepthThree(serializers.ModelSerializer):
+    assessment_answered = serializers.BooleanField()
+    class Meta:
+        model = Assessment
+        fields = "__all__"
+        depth = 3
+
+
+class ParticipantResponseSerializer(serializers.ModelSerializer):
+   
+    class Meta:
+        model = ParticipantResponse
+        fields = "__all__"
+        depth=4
+   
