@@ -477,7 +477,7 @@ class AddParticipantObserverToAssessment(APIView):
                         created1,
                     ) = ParticipantObserverType.objects.get_or_create(
                         participant=participant,
-                        observer=observer,
+                        observers=observer,
                     )
                     participant_observer_type.type = observer_data["observerType"]
                     participant_observer_type.save()
