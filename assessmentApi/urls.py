@@ -1,6 +1,6 @@
 from django.urls import path, include
 
-from .views import CompetencyView, QuestionView, QuestionnaireView,AssessmentView,GetObserverResponseFormAssessment,GetObserverResponseForObserver,CreateObserverResponseView,QuestionsForAssessment,QuestionsForObserverAssessment,GetParticipantResponseFormAssessment,GetParticipantResponseForParticipant,CreateParticipantResponseView,AssessmentStatusOrEndDataChange,ObserverView,ObserverAssessment,AssessmentsOfParticipant,AddParticipantObserverToAssessment
+from .views import CompetencyView, QuestionView, QuestionnaireView,AssessmentView,ParticipantObserverTypeList,GetObserverResponseFormAssessment,GetObserverResponseForObserver,CreateObserverResponseView,QuestionsForAssessment,QuestionsForObserverAssessment,GetParticipantResponseFormAssessment,GetParticipantResponseForParticipant,CreateParticipantResponseView,AssessmentStatusOrEndDataChange,ObserverView,ObserverAssessment,AssessmentsOfParticipant,AddParticipantObserverToAssessment
 
 
 urlpatterns = [
@@ -36,5 +36,6 @@ urlpatterns = [
     path("get-participants-response-result/<int:assessment_id>/", GetParticipantResponseFormAssessment.as_view()), 
     path("get-observer-response-result/<str:observer_email>/", GetObserverResponseForObserver.as_view()), 
     path("get-observer-assessment-response-result/<int:assessment_id>/", GetObserverResponseFormAssessment.as_view()), 
+    path('participant-observer-types/', ParticipantObserverTypeList.as_view()),
 
 ]

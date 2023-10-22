@@ -32,13 +32,8 @@ class Questionnaire(models.Model):
     
     
 class Observer(models.Model):
-    OBSERVER_TYPES = [
-        ('manager', 'Manager'),
-        ('reportee', 'Reportee'),
-        ('peer', 'Peer'),
-    ]
+   
     name = models.CharField(max_length=255,blank=True)
-    type=  models.CharField(max_length=10, choices=OBSERVER_TYPES,blank=True)
     email = models.CharField(max_length=255,blank=True)
     phone = models.CharField(max_length=25,blank=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -66,6 +61,21 @@ class ParticipantObserverMapping(models.Model):
 
     def __str__(self):
         return f"Mapping for {self.participant}"
+    
+class ParticipantObserverType(models.Model):
+    OBSERVER_TYPES = [
+        ('manager', 'Manager'),
+        ('reportee', 'Reportee'),
+        ('peer', 'Peer'),
+    ]
+    participant = models.ForeignKey(Learner, on_delete=models.CASCADE,blank=True)
+    observers = models.ForeignKey(Observer, on_delete=models.CASCADE,blank=True)
+    type=  models.CharField(max_length=10, choices=OBSERVER_TYPES,blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Type of {self.observers.name} for {self.participant.name} is {self.type}"
 
 class Assessment(models.Model):
     ASSESSMENT_TYPES = [

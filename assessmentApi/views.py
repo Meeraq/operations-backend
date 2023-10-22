@@ -11,6 +11,7 @@ from .models import (
     ParticipantObserverMapping,
     ParticipantResponse,
     ObserverResponse,
+    ParticipantObserverType,
 )
 from .serializers import (
     CompetencySerializer,
@@ -23,6 +24,7 @@ from .serializers import (
     AssessmentAnsweredSerializerDepthThree,
     ParticipantResponseSerializer,
     ObserverResponseSerializer,
+    ParticipantObserverTypeSerializer,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -428,6 +430,14 @@ class AddParticipantObserverToAssessment(APIView):
         try:
             participants = request.data.get("participants", [])
 
+            if assessment.participants_observers.filter(
+                participant__email=participants[0]["participantEmail"]
+            ).exists():
+                return Response(
+                    {"error": "Participant already exists in the assessment."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             user = User.objects.filter(
                 username=participants[0]["participantEmail"]
             ).first()
@@ -460,8 +470,17 @@ class AddParticipantObserverToAssessment(APIView):
                         email=observer_data["observerEmail"],
                     )
                     observer.name = observer_data["observerName"]
-                    observer.type = observer_data["observerType"]
                     observer.save()
+
+                    (
+                        participant_observer_type,
+                        created1,
+                    ) = ParticipantObserverType.objects.get_or_create(
+                        participant=participant,
+                        observer=observer,
+                    )
+                    participant_observer_type.type = observer_data["observerType"]
+                    participant_observer_type.save()
                     mapping.observers.add(observer)
 
             mapping.save()
@@ -591,7 +610,10 @@ class ObserverView(APIView):
     def post(self, request):
         try:
             request_email = request.data.get("email")
+            phone = request.data.get("phone")
             observer = Observer.objects.get(email=request_email)
+            observer.phone = phone
+            observer.save()
             if observer:
                 return Response(
                     {"message": "Verification successful."},
@@ -685,7 +707,7 @@ class CreateObserverResponseView(APIView):
 
             if existing_response:
                 return Response(
-                    {"message": "Response already submitted for this assessment."},
+                    {"error": "Response already submitted for this assessment."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -776,3 +798,12 @@ class GetObserverResponseFormAssessment(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class ParticipantObserverTypeList(APIView):
+    def get(self, request):
+        participant_observer_types = ParticipantObserverType.objects.all()
+        serializer = ParticipantObserverTypeSerializer(
+            participant_observer_types, many=True
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
