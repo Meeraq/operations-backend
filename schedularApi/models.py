@@ -50,6 +50,7 @@ class CoachSchedularAvailibilty(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     start_time = models.CharField(max_length=30)
     end_time = models.CharField(max_length=30)
+    is_confirmed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
 
@@ -116,5 +117,3 @@ class SentEmail(models.Model):
 
     def __str__(self):
         return f"{self.id} Subject: {self.subject}"
-
-

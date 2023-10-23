@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 import uuid
 import requests
 import uuid
@@ -15,10 +15,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
+from django.utils import timezone
 
 
 from django.shortcuts import render
-from api.models import Organisation, HR,Coach
+from api.models import Organisation, HR, Coach
 from .serializers import (
     SchedularProjectSerializer,
     SchedularBatchSerializer,
@@ -33,7 +34,9 @@ from .serializers import (
     GetSchedularParticipantsSerializer,
     CoachSchedularAvailibiltySerializer,
     CoachSchedularAvailibiltySerializer2,
-    CoachBasicDetailsSerializer
+    CoachBasicDetailsSerializer,
+    AvailabilitySerializer,
+    SchedularSessionsSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -44,7 +47,8 @@ from .models import (
     SentEmail,
     EmailTemplate,
     CoachSchedularAvailibilty,
-    RequestAvailibilty
+    RequestAvailibilty,
+    SchedularSessions,
 )
 
 
@@ -68,9 +72,11 @@ def create_project_schedular(request):
             name=request.data["organisation_name"], image_url=request.data["image_url"]
         )
     organisation.save()
-    existing_projects_with_same_name = SchedularProject.objects.filter(name=request.data["project_name"])
+    existing_projects_with_same_name = SchedularProject.objects.filter(
+        name=request.data["project_name"]
+    )
     if existing_projects_with_same_name.exists():
-        return Response({"error": "Project with same name already exists."},status=400)
+        return Response({"error": "Project with same name already exists."}, status=400)
     try:
         schedularProject = SchedularProject(
             name=request.data["project_name"],
@@ -280,7 +286,11 @@ def get_batch_calendar(request, batch_id):
         sessions = [*live_sessions_serializer.data, *coaching_sessions_serializer.data]
         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
         return Response(
-            {"sessions": sorted_sessions, "participants": participants_serializer.data, "coaches" : coaches_serializer.data}
+            {
+                "sessions": sorted_sessions,
+                "participants": participants_serializer.data,
+                "coaches": coaches_serializer.data,
+            }
         )
     except SchedularProject.DoesNotExist:
         return Response(
@@ -550,18 +560,18 @@ def create_coach_schedular_availibilty(request):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['POST'])
-def add_batch(request,project_id):
-    participants_data = request.data.get('participants', [])
+@api_view(["POST"])
+def add_batch(request, project_id):
+    participants_data = request.data.get("participants", [])
     project = SchedularProject.objects.get(id=project_id)
 
     for participant_data in participants_data:
-        name = participant_data.get('name')
-        email = participant_data.get('email').strip()
-        phone = participant_data.get('phone')
-        batch_name = participant_data.get('batch').strip().upper()
-         # Assuming 'project_id' is in your request data
-        
+        name = participant_data.get("name")
+        email = participant_data.get("email").strip()
+        phone = participant_data.get("phone")
+        batch_name = participant_data.get("batch").strip().upper()
+        # Assuming 'project_id' is in your request data
+
         # Check if batch with the same name exists
         batch = SchedularBatch.objects.filter(name=batch_name, project=project).first()
 
@@ -571,21 +581,25 @@ def add_batch(request,project_id):
 
             # Create Live Sessions and Coaching Sessions based on project structure
             for session_data in project.project_structure:
-                order = session_data.get('order')
-                duration = session_data.get('duration')
-                session_type = session_data.get('session_type')
+                order = session_data.get("order")
+                duration = session_data.get("duration")
+                session_type = session_data.get("session_type")
 
-                if session_type == 'live_session':
-                    live_session_number = LiveSession.objects.filter(batch=batch).count() + 1
+                if session_type == "live_session":
+                    live_session_number = (
+                        LiveSession.objects.filter(batch=batch).count() + 1
+                    )
                     live_session = LiveSession.objects.create(
                         batch=batch,
                         live_session_number=live_session_number,
                         order=order,
                         duration=duration,
                     )
-                elif session_type == 'laser_coaching_session':
-                    coaching_session_number = CoachingSession.objects.filter(batch=batch).count() + 1
-                    booking_link =  f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"    # Generate a unique UUID for the booking link
+                elif session_type == "laser_coaching_session":
+                    coaching_session_number = (
+                        CoachingSession.objects.filter(batch=batch).count() + 1
+                    )
+                    booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                     coaching_session = CoachingSession.objects.create(
                         batch=batch,
                         coaching_session_number=coaching_session_number,
@@ -596,21 +610,22 @@ def add_batch(request,project_id):
 
         # Check if participant with the same email exists
         participant, participant_created = SchedularParticipants.objects.get_or_create(
-            email=email,
-            defaults={'name': name, 'phone': phone}
+            email=email, defaults={"name": name, "phone": phone}
         )
 
         # Add participant to the batch if not already added
         if participant not in batch.participants.all():
             batch.participants.add(participant)
 
-    return Response({'message': 'Batch created successfully.'}, status=status.HTTP_201_CREATED)
+    return Response(
+        {"message": "Batch created successfully."}, status=status.HTTP_201_CREATED
+    )
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 def get_coaches(request):
     coaches = Coach.objects.filter(is_approved=True)
-    serializer = CoachBasicDetailsSerializer(coaches,many=True)
+    serializer = CoachBasicDetailsSerializer(coaches, many=True)
     return Response(serializer.data)
 
 
@@ -619,14 +634,131 @@ def update_batch(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
     except SchedularBatch.DoesNotExist:
-        return Response(
-            {"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND
-        )
-    serializer = SchedularBatchSerializer(
-        batch, data=request.data, partial=True
-    )
-    
+        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = SchedularBatchSerializer(batch, data=request.data, partial=True)
+
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+def get_coach_availabilities(request):
+    booking_link_id = request.GET.get("booking_link_id")
+
+    if booking_link_id:
+        booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+        try:
+            coaching_session = CoachingSession.objects.get(booking_link=booking_link)
+            current_date = datetime.now().date()
+            if (
+                coaching_session.expiry_date
+                and coaching_session.expiry_date < current_date
+            ):
+                return Response({"error": "The booking link has expired."})
+            coaches_in_batch = coaching_session.batch.coaches.all()
+            start_date = datetime.combine(
+                coaching_session.start_date, datetime.min.time()
+            )
+            end_date = (
+                datetime.combine(coaching_session.end_date, datetime.min.time())
+                + timedelta(days=1)
+                - timedelta(milliseconds=1)
+            )
+            start_timestamp = str(int(start_date.timestamp() * 1000))
+            end_timestamp = str(int(end_date.timestamp() * 1000))
+
+            coach_availabilities = CoachSchedularAvailibilty.objects.filter(
+                coach__in=coaches_in_batch,
+                start_time__gte=start_timestamp,
+                end_time__lte=end_timestamp,
+                is_confirmed=False,
+            )
+            serializer = AvailabilitySerializer(coach_availabilities, many=True)
+            return Response({"slots": serializer.data})
+        except Exception as e:
+            return Response({"error": "Unable to get slots"}, status=400)
+    else:
+        return Response({"error": "Booking link is not available"})
+
+
+@api_view(["POST"])
+def schedule_session(request):
+    try:
+        booking_link_id = request.data.get("booking_link_id", "")
+        booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+        participant_email = request.data.get("participant_email", "")
+        coach_availability_id = request.data.get("availability_id", "")
+
+        # Retrieve coaching session using the provided booking link
+        coaching_session = get_object_or_404(CoachingSession, booking_link=booking_link)
+        # Retrieve batch from the coaching session
+        batch = coaching_session.batch
+
+        # Check if the participant is in the batch
+        participant = get_object_or_404(SchedularParticipants, email=participant_email)
+        if participant not in batch.participants.all():
+            return Response(
+                {"error": "Email not found. Please use the registered Email"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check if the participant has already booked the session for the same coaching session
+        existing_session = SchedularSessions.objects.filter(
+            enrolled_participant=participant, coaching_session=coaching_session
+        ).first()
+
+        if existing_session:
+            return Response(
+                {
+                    "error": "You have already booked the session for the same coaching session"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Retrieve coach availability
+        coach_availability = get_object_or_404(
+            CoachSchedularAvailibilty, id=coach_availability_id
+        )
+        # Check if the coaching session has expired
+        if (
+            coaching_session.expiry_date
+            and coaching_session.expiry_date < timezone.now().date()
+        ):
+            return Response(
+                {"error": "Coaching session has expired"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Check if the coach availability is confirmed
+        if coach_availability.is_confirmed:
+            return Response(
+                {"error": "This slot is already booked. Please try again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create session
+        session_data = {
+            "enrolled_participant": participant.id,
+            "availibility": coach_availability.id,
+            "coaching_session": coaching_session.id,
+        }
+
+        serializer = SchedularSessionsSerializer(data=session_data)
+        if serializer.is_valid():
+            serializer.save()
+            coach_availability.is_confirmed = True
+            coach_availability.save()
+            return Response(
+                {"message": "Session scheduled successfully."},
+                status=status.HTTP_201_CREATED,
+            )
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to book the session."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
