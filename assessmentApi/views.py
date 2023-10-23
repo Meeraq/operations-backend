@@ -807,3 +807,68 @@ class ParticipantObserverTypeList(APIView):
             participant_observer_types, many=True
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class DeleteParticipantFromAssessment(APIView):
+    def delete(self, request):
+        try:
+            assessment_id = request.data.get("assessment_id")
+            participant_observers = request.data.get("participant_observers")
+
+            assessment = Assessment.objects.get(id=assessment_id)
+
+            assessment.participants_observers.filter(
+                participant__id=participant_observers["participant"]["id"]
+            ).delete()
+
+            serializer = AssessmentSerializerDepthThree(assessment)
+            return Response(
+                {
+                    "message": "Successfully removed participant from assessment.",
+                    "assessment_data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Assessment.DoesNotExist:
+            return Response(
+                {"error": "Assessment not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to Remove Participant"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class DeleteObserverFromAssessment(APIView):
+    def delete(self, request):
+        try:
+            assessment_id = request.data.get("assessment_id")
+            participant_observers_id = request.data.get("participant_observers_id")
+            observer_id = request.data.get("observer_id")
+
+            assessment = Assessment.objects.get(id=assessment_id)
+            participants_observer = ParticipantObserverMapping.objects.get(
+                id=participant_observers_id
+            )
+            observer_to_remove = Observer.objects.get(id=observer_id)
+
+            participants_observer.observers.remove(observer_to_remove)
+
+            serializer = AssessmentSerializerDepthThree(assessment)
+
+            return Response(
+                {
+                    "message": "Successfully removed observer.",
+                    "assessment_data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to remove observer."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )   
