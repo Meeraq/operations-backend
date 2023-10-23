@@ -62,4 +62,12 @@ urlpatterns = [
         "schedular-availabilities/",
         views.get_all_schedular_availabilities,
     ),
+    path(
+        "give_availibilty/",
+        views.create_coach_availabilities,
+    ),
+    path(
+        "get-availibilty/",
+        views.get_coach_availabilities,
+    ),
 ]
