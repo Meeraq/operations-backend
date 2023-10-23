@@ -40,6 +40,9 @@ class SchedularBatch(models.Model):
 class RequestAvailibilty(models.Model):
     request_name = models.CharField(max_length=100, blank=True)
     coach = models.ManyToManyField(Coach, blank=True)
+    provided_by = models.JSONField(
+        default=list
+    )  # used to store coach ids who already provided the slots
     expiry_date = models.DateField(blank=True, null=True)
     availability = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -47,7 +50,7 @@ class RequestAvailibilty(models.Model):
 
 
 class CoachSchedularAvailibilty(models.Model):
-    request_name = models.ForeignKey(
+    request = models.ForeignKey(
         RequestAvailibilty, on_delete=models.CASCADE, default=""
     )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)

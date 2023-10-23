@@ -772,14 +772,22 @@ def schedule_session(request):
 
 @api_view(["POST"])
 def create_coach_availabilities(request):
-    slots_data = request.data.get("slots", [])
-
-    serializer = CoachSchedularGiveAvailibiltySerializer(data=slots_data, many=True)
-
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        slots_data = request.data.get("slots", [])
+        request_id = request.data.get("request_id", [])
+        coach_id = request.data.get("coach_id", [])
+        request = RequestAvailibilty.objects.get(id=request_id)
+        serializer = CoachSchedularGiveAvailibiltySerializer(data=slots_data, many=True)
+        if serializer.is_valid():
+            serializer.save()
+            request.provided_by.append(int(coach_id))
+            request.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        print(serializer.errors)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(e)
+        return Response({"error": "Failed to confirm the availability"})
 
 
 @api_view(["GET"])
