@@ -650,7 +650,7 @@ def update_batch(request, batch_id):
 
 
 @api_view(["GET"])
-def get_coach_availabilities(request):
+def get_coach_availabilities_booking_link(request):
     booking_link_id = request.GET.get("booking_link_id")
 
     if booking_link_id:
