@@ -55,6 +55,13 @@ urlpatterns = [
     path("cancel-schedule-email/<int:sent_mail_id>/", views.cancel_scheduled_mail),
     path("delete_email_template/<int:template_id>/", views.deleteEmailTemplate),
     path(
+        "add_learner_to_batch/<int:project_id>/",
+        views.add_batch,
+        name="add_learner_to_batch",
+    ),
+    path("coaches/", views.get_coaches),
+    path("batch/<int:batch_id>/", views.update_batch),
+    path(
         "create-coach-availibilty/",
         views.create_coach_schedular_availibilty,
     ),
@@ -62,6 +69,8 @@ urlpatterns = [
         "schedular-availabilities/",
         views.get_all_schedular_availabilities,
     ),
+    path("coach-availability/", views.get_coach_availabilities),
+    path("schedule-session/", views.schedule_session),
     path(
         "give_availibilty/",
         views.create_coach_availabilities,
