@@ -117,3 +117,16 @@ class SchedularSessionsSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularSessions
         fields = "__all__"
+
+
+class CoachSchedularGiveAvailibiltySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachSchedularAvailibilty
+        fields = "__all__"
+
+
+class CoachSchedularGiveAvailibiltySerializer2(serializers.ModelSerializer):
+    class Meta:
+        model = CoachSchedularAvailibilty
+        fields = "__all__"
+        depth = 1

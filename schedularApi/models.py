@@ -47,6 +47,9 @@ class RequestAvailibilty(models.Model):
 
 
 class CoachSchedularAvailibilty(models.Model):
+    request_name = models.ForeignKey(
+        RequestAvailibilty, on_delete=models.CASCADE, default=""
+    )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     start_time = models.CharField(max_length=30)
     end_time = models.CharField(max_length=30)

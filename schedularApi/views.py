@@ -37,6 +37,8 @@ from .serializers import (
     CoachBasicDetailsSerializer,
     AvailabilitySerializer,
     SchedularSessionsSerializer,
+    CoachSchedularGiveAvailibiltySerializer,
+    CoachSchedularGiveAvailibiltySerializer2,
 )
 from .models import (
     SchedularBatch,
@@ -545,7 +547,11 @@ def deleteEmailTemplate(request, template_id):
 
 @api_view(["GET"])
 def get_all_schedular_availabilities(request):
-    availabilities = RequestAvailibilty.objects.all()
+    coach_id = request.GET.get("coach_id")
+    if coach_id:
+        availabilities = RequestAvailibilty.objects.filter(coach__id=coach_id)
+    else:
+        availabilities = RequestAvailibilty.objects.all()
     serializer = CoachSchedularAvailibiltySerializer2(availabilities, many=True)
     return Response(serializer.data)
 
@@ -644,7 +650,7 @@ def update_batch(request, batch_id):
 
 
 @api_view(["GET"])
-def get_coach_availabilities(request):
+def get_coach_availabilities_booking_link(request):
     booking_link_id = request.GET.get("booking_link_id")
 
     if booking_link_id:
@@ -762,3 +768,30 @@ def schedule_session(request):
             {"error": "Failed to book the session."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["POST"])
+def create_coach_availabilities(request):
+    slots_data = request.data.get("slots", [])
+
+    serializer = CoachSchedularGiveAvailibiltySerializer(data=slots_data, many=True)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+def get_coach_availabilities(request):
+    coach_id = request.GET.get("coach_id")
+    if coach_id:
+        coach_schedular_availabilities = CoachSchedularAvailibilty.objects.filter(
+            coach__id=coach_id
+        )
+    else:
+        coach_schedular_availabilities = CoachSchedularAvailibilty.objects.all()
+    serializer = CoachSchedularGiveAvailibiltySerializer2(
+        coach_schedular_availabilities, many=True
+    )
+    return Response(serializer.data)
