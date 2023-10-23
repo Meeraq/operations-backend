@@ -795,3 +795,75 @@ def get_coach_availabilities(request):
         coach_schedular_availabilities, many=True
     )
     return Response(serializer.data)
+
+
+@api_view(["GET"])
+def get_sessions(request):
+    coach_id = request.query_params.get("coach_id")
+    if coach_id:
+        # Get sessions based on coach ID
+        sessions = SchedularSessions.objects.filter(availibility__coach__id=coach_id)
+    else:
+        # Get all sessions
+        sessions = SchedularSessions.objects.all()
+    session_details = []
+    for session in sessions:
+        session_detail = {
+            "batch_name": session.coaching_session.batch.name,
+            "coach_name": session.availibility.coach.first_name
+            + " "
+            + session.availibility.coach.last_name,
+            "participant_name": session.enrolled_participant.name,
+            "coaching_session_number": session.coaching_session.coaching_session_number,
+            "participant_email": session.enrolled_participant.email,
+            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "start_time": session.availibility.start_time,
+        }
+        session_details.append(session_detail)
+    return Response(session_details, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+def get_current_session(request, user_type, room_id, user_id):
+    five_minutes_in_milliseconds = 300000
+    current_time = int(timezone.now().timestamp() * 1000)
+    five_minutes_plus_current_time = str(current_time + five_minutes_in_milliseconds)
+    if user_type == "coach":
+        sessions = SchedularSessions.objects.filter(
+            availibility__start_time__lt=five_minutes_plus_current_time,
+            availibility__end_time__gt=current_time,
+            availibility__coach__id=user_id,
+        )
+    if len(sessions) == 0:
+        return Response({"error": "You don't have any sessions right now."}, status=404)
+    return Response({"message": "success"}, status=200)
+
+
+@api_view(["POST"])
+def get_current_session_of_learner(request, room_id):
+    five_minutes_in_milliseconds = 300000
+    current_time = int(timezone.now().timestamp() * 1000)
+    five_minutes_plus_current_time = str(current_time + five_minutes_in_milliseconds)
+    participant_email = request.data.get("email", "")
+    if participant_email:
+        sessions = SchedularSessions.objects.filter(
+            availibility__start_time__lt=five_minutes_plus_current_time,
+            availibility__end_time__gt=current_time,
+            enrolled_participant__email=participant_email,
+            availibility__coach__room_id=room_id,
+        )
+        if len(sessions) == 0:
+            return Response(
+                {"error": "You don't have any sessions right now."}, status=404
+            )
+        participant = SchedularParticipants.objects.get(email=participant_email)
+        return Response(
+            {
+                "message": "success",
+                "name": participant.name,
+                "email": participant.email,
+            },
+            status=200,
+        )
+    else:
+        return Response({"error": "Please input your email"}, status=500)

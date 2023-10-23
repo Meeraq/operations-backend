@@ -79,4 +79,12 @@ urlpatterns = [
         "get-availibilty/",
         views.get_coach_availabilities,
     ),
+    path("sessions/", views.get_sessions),
+    path(
+        "current-session/<str:user_type>/<str:room_id>/<int:user_id>/",
+        views.get_current_session,
+    ),
+    path(
+        "learner-current-session/<str:room_id>/", views.get_current_session_of_learner
+    ),
 ]
