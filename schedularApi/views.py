@@ -39,6 +39,7 @@ from .serializers import (
     SchedularSessionsSerializer,
     CoachSchedularGiveAvailibiltySerializer,
     CoachSchedularGiveAvailibiltySerializer2,
+    RequestAvailibiltySerializerDepthOne,
 )
 from .models import (
     SchedularBatch,
@@ -875,3 +876,50 @@ def get_current_session_of_learner(request, room_id):
         )
     else:
         return Response({"error": "Please input your email"}, status=500)
+
+
+@api_view(["GET"])
+def get_requests_of_coach(request, coach_id):
+    try:
+        coach = get_object_or_404(Coach, id=coach_id)
+    except Coach.DoesNotExist:
+        return Response({"error": "Coach not found"}, status=status.HTTP_404_NOT_FOUND)
+    current_date = date.today()
+    # Get New requests where coach ID is not in provided_by
+    new_requests = RequestAvailibilty.objects.filter(
+        coach=coach, expiry_date__gt=current_date
+    ).exclude(provided_by__contains=coach_id)
+    # Get Active requests where coach ID exists in provided_by
+    active_requests = RequestAvailibilty.objects.filter(
+        coach=coach, provided_by__contains=coach_id, expiry_date__gt=current_date
+    )
+    new_requests_serializer = RequestAvailibiltySerializerDepthOne(
+        new_requests, many=True
+    )
+    active_requests_serializer = RequestAvailibiltySerializerDepthOne(
+        active_requests, many=True
+    )
+    # Serialize and return the requests
+    return Response(
+        {
+            "new": new_requests_serializer.data,
+            "active": active_requests_serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+def get_slots_of_request(request, request_id):
+    coach_id = request.GET.get("coach_id")
+    if coach_id:
+        print("inside", coach_id)
+        availabilities = CoachSchedularAvailibilty.objects.filter(
+            request__id=request_id, coach__id=coach_id
+        )
+    else:
+        availabilities = CoachSchedularAvailibilty.objects.filter(
+            request__id=request_id
+        )
+    serializer = CoachSchedularAvailibiltySerializer(availabilities, many=True)
+    return Response(serializer.data)

@@ -82,12 +82,6 @@ class CoachSchedularAvailibiltySerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class CoachSchedularAvailibiltySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = RequestAvailibilty
-        fields = "__all__"
-
-
 class CoachSchedularAvailibiltySerializer2(serializers.ModelSerializer):
     class Meta:
         model = RequestAvailibilty
@@ -128,5 +122,12 @@ class CoachSchedularGiveAvailibiltySerializer(serializers.ModelSerializer):
 class CoachSchedularGiveAvailibiltySerializer2(serializers.ModelSerializer):
     class Meta:
         model = CoachSchedularAvailibilty
+        fields = "__all__"
+        depth = 1
+
+
+class RequestAvailibiltySerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = RequestAvailibilty
         fields = "__all__"
         depth = 1

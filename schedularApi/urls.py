@@ -87,4 +87,12 @@ urlpatterns = [
     path(
         "learner-current-session/<str:room_id>/", views.get_current_session_of_learner
     ),
+    path(
+        "requests/<int:coach_id>/",
+        views.get_requests_of_coach,
+    ),
+    path(
+        "request/<int:request_id>/slots/",
+        views.get_slots_of_request,
+    ),
 ]
