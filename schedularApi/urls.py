@@ -95,4 +95,9 @@ urlpatterns = [
         "request/<int:request_id>/slots/",
         views.get_slots_of_request,
     ),
+    path(
+        "slots/upcoming/<int:coach_id>/",
+        views.get_upcoming_slots_of_coach,
+    ),
+    path("slots/delete/", views.delete_slots),
 ]

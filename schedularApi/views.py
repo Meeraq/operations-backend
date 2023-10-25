@@ -40,7 +40,7 @@ from .serializers import (
     CoachSchedularGiveAvailibiltySerializer,
     CoachSchedularGiveAvailibiltySerializer2,
     RequestAvailibiltySerializerDepthOne,
-    RequestAvailibiltySerializer
+    RequestAvailibiltySerializer,
 )
 from .models import (
     SchedularBatch,
@@ -924,3 +924,27 @@ def get_slots_of_request(request, request_id):
         )
     serializer = CoachSchedularAvailibiltySerializer(availabilities, many=True)
     return Response(serializer.data)
+
+
+@api_view(["GET"])
+def get_upcoming_slots_of_coach(request, coach_id):
+    current_time = timezone.now()
+    timestamp_milliseconds = str(int(current_time.timestamp() * 1000))
+    availabilities = CoachSchedularAvailibilty.objects.filter(
+        coach__id=coach_id, start_time__gt=timestamp_milliseconds
+    )
+    serializer = CoachSchedularAvailibiltySerializer(availabilities, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["DELETE"])
+def delete_slots(request):
+    slot_ids = request.data.get("slot_ids", [])
+    print(slot_ids)
+    # Assuming slot_ids is a list of integers
+    slots_to_delete = CoachSchedularAvailibilty.objects.filter(id__in=slot_ids)
+    if not slots_to_delete.exists():
+        return Response({"error": "No matching slots found."}, status=404)
+
+    slots_to_delete.delete()
+    return Response({"detail": "Slots deleted successfully."})
