@@ -907,6 +907,7 @@ def get_sessions_by_type(request, sessions_type):
             "batch_name": session.coaching_session.batch.name
             if coach_id is None
             else None,
+            "project_name": session.coaching_session.batch.project.name if coach_id is None else None,
             "coach_name": session.availibility.coach.first_name
             + " "
             + session.availibility.coach.last_name,
