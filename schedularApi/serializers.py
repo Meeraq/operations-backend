@@ -131,3 +131,9 @@ class RequestAvailibiltySerializerDepthOne(serializers.ModelSerializer):
         model = RequestAvailibilty
         fields = "__all__"
         depth = 1
+
+
+class RequestAvailibiltySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RequestAvailibilty
+        fields = "__all__"

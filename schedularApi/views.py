@@ -40,6 +40,7 @@ from .serializers import (
     CoachSchedularGiveAvailibiltySerializer,
     CoachSchedularGiveAvailibiltySerializer2,
     RequestAvailibiltySerializerDepthOne,
+    RequestAvailibiltySerializer
 )
 from .models import (
     SchedularBatch,
@@ -560,7 +561,7 @@ def get_all_schedular_availabilities(request):
 @api_view(["POST"])
 def create_coach_schedular_availibilty(request):
     if request.method == "POST":
-        serializer = CoachSchedularAvailibiltySerializer(data=request.data)
+        serializer = RequestAvailibiltySerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
