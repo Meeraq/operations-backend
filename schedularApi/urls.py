@@ -80,6 +80,7 @@ urlpatterns = [
         views.get_coach_availabilities,
     ),
     path("sessions/", views.get_sessions),
+    path("sessions/<str:sessions_type>/", views.get_sessions_by_type),
     path(
         "current-session/<str:user_type>/<str:room_id>/<int:user_id>/",
         views.get_current_session,
@@ -100,4 +101,5 @@ urlpatterns = [
         views.get_upcoming_slots_of_coach,
     ),
     path("slots/delete/", views.delete_slots),
+    path("participants/", views.get_participants),
 ]

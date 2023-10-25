@@ -66,6 +66,38 @@ import environ
 env = environ.Env()
 
 
+def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
+    coaching_session = CoachingSession.objects.get(id=coaching_session_id)
+    if (
+        not coaching_session.start_date
+        or not coaching_session.end_date
+        or not coaching_session.end_date
+    ):
+        return None
+    coaches_in_batch = coaching_session.batch.coaches.all()
+    start_date = datetime.combine(coaching_session.start_date, datetime.min.time())
+    end_date = (
+        datetime.combine(coaching_session.end_date, datetime.min.time())
+        + timedelta(days=1)
+        - timedelta(milliseconds=1)
+    )
+    start_timestamp = str(int(start_date.timestamp() * 1000))
+    end_timestamp = str(int(end_date.timestamp() * 1000))
+    coach_availabilities = CoachSchedularAvailibilty.objects.filter(
+        coach__in=coaches_in_batch,
+        start_time__gte=start_timestamp,
+        end_time__lte=end_timestamp,
+        is_confirmed=False,
+    )
+    current_time = timezone.now()
+    timestamp_milliseconds = str(int(current_time.timestamp() * 1000))
+    upcoming_availabilities = coach_availabilities.filter(
+        start_time__gt=timestamp_milliseconds
+    )
+    serializer = AvailabilitySerializer(upcoming_availabilities, many=True)
+    return serializer.data
+
+
 @api_view(["POST"])
 def create_project_schedular(request):
     organisation = Organisation.objects.filter(
@@ -281,13 +313,30 @@ def get_batch_calendar(request, batch_id):
         coaching_sessions_serializer = CoachingSessionSerializer(
             coaching_sessions, many=True
         )
+        coaching_sessions_result = []
+        for coaching_session in coaching_sessions_serializer.data:
+            booked_session_count = SchedularSessions.objects.filter(
+                coaching_session__id=coaching_session["id"]
+            ).count()
+            availabilities = get_upcoming_availabilities_of_coaching_session(
+                coaching_session["id"]
+            )
+            coaching_sessions_result.append(
+                {
+                    **coaching_session,
+                    "available_slots_count": len(availabilities)
+                    if availabilities
+                    else None,
+                    "booked_session_count": booked_session_count,
+                }
+            )
         participants = SchedularParticipants.objects.filter(schedularbatch__id=batch_id)
         participants_serializer = GetSchedularParticipantsSerializer(
             participants, many=True
         )
         coaches = Coach.objects.filter(schedularbatch__id=batch_id)
         coaches_serializer = CoachBasicDetailsSerializer(coaches, many=True)
-        sessions = [*live_sessions_serializer.data, *coaching_sessions_serializer.data]
+        sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
         return Response(
             {
@@ -834,6 +883,51 @@ def get_sessions(request):
 
 
 @api_view(["GET"])
+def get_sessions_by_type(request, sessions_type):
+    coach_id = request.query_params.get("coach_id")
+    current_time = timezone.now()
+    timestamp_milliseconds = str(int(current_time.timestamp() * 1000))
+    if coach_id:
+        # Get sessions based on coach ID
+        sessions = SchedularSessions.objects.filter(availibility__coach__id=coach_id)
+    else:
+        # Get all sessions
+        sessions = SchedularSessions.objects.all()
+    # filtering based on upcoming or past sessions
+    if sessions_type == "upcoming":
+        sessions = sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
+    elif sessions_type == "past":
+        sessions = sessions.filter(availibility__start_time__lt=timestamp_milliseconds)
+    else:
+        sessions = []
+
+    session_details = []
+    for session in sessions:
+        session_detail = {
+            "batch_name": session.coaching_session.batch.name
+            if coach_id is None
+            else None,
+            "coach_name": session.availibility.coach.first_name
+            + " "
+            + session.availibility.coach.last_name,
+            "coach_email": session.availibility.coach.email,
+            "coach_phone": "+"
+            + session.availibility.coach.phone_country_code
+            + session.availibility.coach.phone,
+            "participant_name": session.enrolled_participant.name,
+            "participant_email": session.enrolled_participant.email,
+            "participant_phone": session.enrolled_participant.phone,
+            "coaching_session_number": session.coaching_session.coaching_session_number
+            if coach_id is None
+            else None,
+            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "start_time": session.availibility.start_time,
+        }
+        session_details.append(session_detail)
+    return Response(session_details, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
 def get_current_session(request, user_type, room_id, user_id):
     five_minutes_in_milliseconds = 300000
     current_time = int(timezone.now().timestamp() * 1000)
@@ -948,3 +1042,10 @@ def delete_slots(request):
 
     slots_to_delete.delete()
     return Response({"detail": "Slots deleted successfully."})
+
+
+@api_view(["GET"])
+def get_participants(request):
+    participants = SchedularParticipants.objects.all()
+    participants_serializer = SchedularParticipantsSerializer(participants, many=True)
+    return Response(participants_serializer.data)
