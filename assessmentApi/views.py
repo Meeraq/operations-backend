@@ -872,3 +872,48 @@ class DeleteObserverFromAssessment(APIView):
                 {"error": "Failed to remove observer."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )   
+
+class AddObserverToParticipant(APIView):
+    def put(self, request):
+        try:
+            assessment_id = request.data.get("assessment_id")
+            participant_observers_id = request.data.get("participant_observers_id")
+            participants_observer = ParticipantObserverMapping.objects.get(
+                    id=participant_observers_id
+                )
+            observerName = request.data.get("observerName")
+            observerEmail = request.data.get("observerEmail")
+            observerType = request.data.get("observerType")
+            assessment = Assessment.objects.get(id=assessment_id)
+            
+            observer, created = Observer.objects.get_or_create(
+                        email=observerEmail,
+                    )
+            observer.name=observerName
+            observer.save()
+            (
+                participant_observer_type,
+                created1,
+            ) = ParticipantObserverType.objects.get_or_create(
+                        participant=participants_observer.participant,
+                        observers=observer,
+                )
+            participant_observer_type.type = observerType
+            participant_observer_type.save()
+            participants_observer.observers.add(observer)
+            participants_observer.save()
+
+            serializer = AssessmentSerializerDepthThree(assessment)
+            return Response(
+                {
+                    "message": "Observer added successfully.",
+                    "assessment_data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to remove observer."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )  

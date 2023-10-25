@@ -1,6 +1,6 @@
 from django.urls import path, include
 
-from .views import CompetencyView, QuestionView, QuestionnaireView,AssessmentView,ParticipantObserverTypeList,DeleteObserverFromAssessment,DeleteParticipantFromAssessment,GetObserverResponseFormAssessment,GetObserverResponseForObserver,CreateObserverResponseView,QuestionsForAssessment,QuestionsForObserverAssessment,GetParticipantResponseFormAssessment,GetParticipantResponseForParticipant,CreateParticipantResponseView,AssessmentStatusOrEndDataChange,ObserverView,ObserverAssessment,AssessmentsOfParticipant,AddParticipantObserverToAssessment
+from .views import CompetencyView, QuestionView, QuestionnaireView,AssessmentView,ParticipantObserverTypeList,AddObserverToParticipant,DeleteObserverFromAssessment,DeleteParticipantFromAssessment,GetObserverResponseFormAssessment,GetObserverResponseForObserver,CreateObserverResponseView,QuestionsForAssessment,QuestionsForObserverAssessment,GetParticipantResponseFormAssessment,GetParticipantResponseForParticipant,CreateParticipantResponseView,AssessmentStatusOrEndDataChange,ObserverView,ObserverAssessment,AssessmentsOfParticipant,AddParticipantObserverToAssessment
 
 
 urlpatterns = [
@@ -39,5 +39,6 @@ urlpatterns = [
     path('participant-observer-types/', ParticipantObserverTypeList.as_view()),
     path('delete-participant-from-assessment/', DeleteParticipantFromAssessment.as_view()),
     path('delete-observer-from-assessment/', DeleteObserverFromAssessment.as_view()),
+    path('add-observer-to-participant/', AddObserverToParticipant.as_view()),
 
 ]
