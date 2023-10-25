@@ -871,7 +871,8 @@ class DeleteObserverFromAssessment(APIView):
             return Response(
                 {"error": "Failed to remove observer."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )   
+            )
+
 
 class AddObserverToParticipant(APIView):
     def put(self, request):
@@ -879,25 +880,25 @@ class AddObserverToParticipant(APIView):
             assessment_id = request.data.get("assessment_id")
             participant_observers_id = request.data.get("participant_observers_id")
             participants_observer = ParticipantObserverMapping.objects.get(
-                    id=participant_observers_id
-                )
+                id=participant_observers_id
+            )
             observerName = request.data.get("observerName")
             observerEmail = request.data.get("observerEmail")
             observerType = request.data.get("observerType")
             assessment = Assessment.objects.get(id=assessment_id)
-            
+
             observer, created = Observer.objects.get_or_create(
-                        email=observerEmail,
-                    )
-            observer.name=observerName
+                email=observerEmail,
+            )
+            observer.name = observerName
             observer.save()
             (
                 participant_observer_type,
                 created1,
             ) = ParticipantObserverType.objects.get_or_create(
-                        participant=participants_observer.participant,
-                        observers=observer,
-                )
+                participant=participants_observer.participant,
+                observers=observer,
+            )
             participant_observer_type.type = observerType
             participant_observer_type.save()
             participants_observer.observers.add(observer)
@@ -916,4 +917,65 @@ class AddObserverToParticipant(APIView):
             return Response(
                 {"error": "Failed to remove observer."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )  
+            )
+
+
+class CompetencyIdsInOngoingAndCompletedAssessments(APIView):
+    def get(self, request):
+        try:
+            assessments = Assessment.objects.filter(status__in=["completed", "ongoing"])
+            competency_ids = []
+            for assessment in assessments:
+                questions = assessment.questionnaire.questions.all()
+                for question in questions:
+                    competency_ids.append(question.competency.id)
+
+            competency_ids = list(set(competency_ids))
+
+            return Response(competency_ids)
+
+        except Exception as e:
+            return Response(
+                {"error": "Failed to retrieve competency IDs"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class QuestionIdsInOngoingAndCompletedAssessments(APIView):
+    def get(self, request):
+        try:
+            assessments = Assessment.objects.filter(status__in=["completed", "ongoing"])
+            questions_ids = []
+            for assessment in assessments:
+                questions = assessment.questionnaire.questions.all()
+                for question in questions:
+                    questions_ids.append(question.id)
+
+            questions_ids = list(set(questions_ids))
+
+            return Response(questions_ids)
+
+        except Exception as e:
+            return Response(
+                {"error": "Failed to retrieve question IDs"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class QuestionnaireIdsInOngoingAndCompletedAssessments(APIView):
+    def get(self, request):
+        try:
+            assessments = Assessment.objects.filter(status__in=["completed", "ongoing"])
+            questionnaires_ids = []
+            for assessment in assessments:
+                questionnaires_ids.append(assessment.questionnaire.id)
+
+            questionnaires_ids = list(set(questionnaires_ids))
+
+            return Response(questionnaires_ids)
+
+        except Exception as e:
+            return Response(
+                {"error": "Failed to retrieve questionnaire IDs"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
