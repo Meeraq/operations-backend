@@ -10,9 +10,14 @@ class Competency(models.Model):
         return self.name
     
 class Question(models.Model):
+    QUESTION_TYPES = [
+        ('self', 'Self'),
+        ('360', '360'),
+    ]
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+    type=models.CharField(max_length=10, choices=QUESTION_TYPES,blank=True)
     self_question = models.TextField()
-    observer_question = models.TextField()
+    observer_question = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -22,7 +27,12 @@ class Question(models.Model):
     
 
 class Questionnaire(models.Model):
+    QUESTIONNAIRE_TYPES = [
+        ('self', 'Self'),
+        ('360', '360'),
+    ]
     name = models.CharField(max_length=255,blank=True,null=True)
+    type=models.CharField(max_length=10, choices=QUESTIONNAIRE_TYPES,blank=True)
     questions = models.ManyToManyField(Question,blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
