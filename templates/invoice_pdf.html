@@ -128,10 +128,11 @@
 								<div id="billto-section">
                   <div style="font-size: 15pt; color: #333333;">Invoice to:</div>
                   <div style="font-size: 16px;">
-                    <strong>
-                      <div id="customer-name">{{ invoice.customer_name }}</div>
-                      GSTIN {{ invoice.customer_gst }}
-                    </strong>
+                      <div  style="margin: 0pt; padding: 0pt;" id="customer-name">{{ invoice.customer_name }}</div>
+											<div style="margin: 0pt; padding: 0pt;" >
+												GSTIN {{ invoice.customer_gst }}
+											</div>
+											<div style="margin: 0pt; padding: 0pt;" >{{invoice.customer_address}}</div>
                   </div>
                 </div>
               </td>
@@ -179,14 +180,46 @@
           <table style="width: 100%; margin-top: 20px; border: 1px solid gray;" border="1" cellspacing="0" cellpadding="0">
             <thead>
               <tr style="height: 32px;">
-                <td style="font-size: 12pt; min-width: fit-content;">S. No.</td>
-                <td style="font-size: 12pt; min-width: fit-content;">Item & Description</td>
-                <td style="font-size: 12pt; min-width: fit-content;">Qty</td>
-                <td style="font-size: 12pt; min-width: fit-content;">Rate</td>
-                <td style="font-size: 12pt; min-width: fit-content;">Amount</td>
-                <td style="font-size: 12pt; min-width: fit-content;">Tax</td>
-                <td style="font-size: 12pt; min-width: fit-content;">HSN/SAC</td>
-                <td style="font-size: 12pt; min-width: fit-content;">Amount (Including tax)</td>
+                <td >
+									<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word">
+										S. No.
+									</div>
+								</td>
+                <td>
+									<div  style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+										Item & Description
+									</div>
+								</td>
+                <td>
+									<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+										Qty
+									</div>
+								</td>
+                <td>
+									<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+										Rate
+									</div>
+								</td>
+                <td>
+									<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+										Amount
+									</div>
+								</td>
+                <td>
+									<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+										Tax
+									</div>
+								</td>
+                <td>
+									<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+										HSN/SAC
+									</div>
+								</td>
+                <td>
+									<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+										Amount (Including tax)
+									</div>
+								</td>
               </tr>
             </thead>
 
