@@ -997,12 +997,17 @@ class ParticipantAddsObserverToAssessment(APIView):
                 id=get_participants_observer.id
             )
             observers = request.data.get("observers", [])
-            print(observers)
+            
             for observer_data in observers:
                 observerName = observer_data["observerName"]
                 observerEmail = observer_data["observerEmail"]
                 observerType = observer_data["observerType"]
-
+                if participants_observer.observers.filter(email=observerEmail).exists():
+                    return Response(
+                        {"error": f"Observer with email '{observerEmail}' already exists."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            
                 observer, created = Observer.objects.get_or_create(
                     email=observerEmail,
                 )
@@ -1021,6 +1026,7 @@ class ParticipantAddsObserverToAssessment(APIView):
                 participants_observer.save()
 
             
+                
             return Response(
                 {
                     "message": "Observer added successfully.",
