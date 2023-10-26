@@ -49,7 +49,8 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "django_rest_passwordreset",
     "corsheaders",
-    "django_celery_beat"
+    "django_celery_beat",
+    "django_celery_results",
 ]
 
 MIDDLEWARE = [
@@ -189,3 +190,6 @@ AWS_DEFAULT_ACL = None
 AWS_S3_VERIFY = True
 
 SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN")
+
+CELERY_BROKER_URL = env("CELERY_BROKER_URL")
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")

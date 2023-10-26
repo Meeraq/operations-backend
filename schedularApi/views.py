@@ -540,7 +540,7 @@ def send_mails(request):
             )  # time is utc one here
             periodic_task = PeriodicTask.objects.create(
                 name=uuid.uuid1(),
-                task="base.tasks.send_email_to_recipients",
+                task="schedularApi.tasks.send_email_to_recipients",
                 args=[sent_email_instance.id],
                 clocked=clocked,
                 one_off=True,
@@ -907,7 +907,9 @@ def get_sessions_by_type(request, sessions_type):
             "batch_name": session.coaching_session.batch.name
             if coach_id is None
             else None,
-            "project_name": session.coaching_session.batch.project.name if coach_id is None else None,
+            "project_name": session.coaching_session.batch.project.name
+            if coach_id is None
+            else None,
             "coach_name": session.availibility.coach.first_name
             + " "
             + session.availibility.coach.last_name,
