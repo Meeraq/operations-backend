@@ -531,9 +531,17 @@ def add_invoice_data(request):
                 * line_item["rate"]
                 * (1 + line_item["tax_percentage"] / 100)
             )
+        invoice_date = datetime.strptime(
+            serializer.data["invoice_date"], "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
+        due_date = datetime.strptime(
+            add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
+
         invoice_data = {
             **serializer.data,
-            "due_date": add_45_days(serializer.data["invoice_date"]),
+            "invoice_date": invoice_date,
+            "due_date": due_date,
             "line_items": line_items,
         }
         send_mail_templates_with_attachment(
@@ -574,9 +582,16 @@ def edit_invoice(request, invoice_id):
                 * (1 + line_item["tax_percentage"] / 100)
             )
         invoice_serializer = InvoiceDataSerializer(invoice)
+        invoice_date = datetime.strptime(
+            serializer.data["invoice_date"], "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
+        due_date = datetime.strptime(
+            add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
         invoice_data = {
             **invoice_serializer.data,
-            "due_date": add_45_days(serializer.data["invoice_date"]),
+            "invoice_date": invoice_date,
+            "due_date": due_date,
             "line_items": line_items,
         }
         send_mail_templates_with_attachment(
