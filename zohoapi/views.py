@@ -29,7 +29,10 @@ from rest_framework import status
 from django.http import HttpResponse
 from .serializers import InvoiceDataEditSerializer, InvoiceDataSerializer
 from .models import InvoiceData, AccessToken
-
+import base64
+from django.core.mail import EmailMessage
+from io import BytesIO
+from xhtml2pdf import pisa
 
 import environ
 import os
@@ -120,6 +123,35 @@ def send_mail_templates(file_name, user_email, email_subject, content):
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
         raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
+
+
+def send_mail_templates_with_attachment(
+    file_name, user_email, email_subject, content, body_message
+):
+    image_url = f"{content['invoice']['signature']}"
+    try:
+        # Attempt to send the email
+        image_response = requests.get(image_url)
+        image_response.raise_for_status()
+
+        # Convert the downloaded image to base64
+        image_base64 = base64.b64encode(image_response.content).decode("utf-8")
+        content["image_base64"] = image_base64
+        email_message = render_to_string(file_name, content)
+        result = BytesIO()
+        pdf = pisa.pisaDocument(BytesIO(email_message.encode("ISO-8859-1")), result)
+        email = EmailMessage(
+            subject=f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
+            body=body_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=user_email,
+        )
+        # Attach the PDF to the email
+        email.attach("invoice.pdf", result.getvalue(), "application/pdf")
+        email.send()
+
+    except Exception as e:
+        print(str(e))
 
 
 def get_organization_data():
@@ -499,16 +531,25 @@ def add_invoice_data(request):
                 * line_item["rate"]
                 * (1 + line_item["tax_percentage"] / 100)
             )
+        invoice_date = datetime.strptime(
+            serializer.data["invoice_date"], "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
+        due_date = datetime.strptime(
+            add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
+
         invoice_data = {
             **serializer.data,
-            "due_date": add_45_days(serializer.data["invoice_date"]),
+            "invoice_date": invoice_date,
+            "due_date": due_date,
             "line_items": line_items,
         }
-        send_mail_templates(
-            "invoice.html",
+        send_mail_templates_with_attachment(
+            "invoice_pdf.html",
             [env("FINANCE_EMAIL")],
             f"Invoice raised by a Vendor - {invoice_data['vendor_name']} ",
             {"invoice": invoice_data},
+            f"A new invoice: {invoice_data['invoice_number']} is raised by the vendor: {invoice_data['vendor_name']}",
         )
         return Response({"message": "Invoice generated successfully"}, status=201)
     else:
@@ -541,16 +582,24 @@ def edit_invoice(request, invoice_id):
                 * (1 + line_item["tax_percentage"] / 100)
             )
         invoice_serializer = InvoiceDataSerializer(invoice)
+        invoice_date = datetime.strptime(
+            serializer.data["invoice_date"], "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
+        due_date = datetime.strptime(
+            add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
         invoice_data = {
             **invoice_serializer.data,
-            "due_date": add_45_days(serializer.data["invoice_date"]),
+            "invoice_date": invoice_date,
+            "due_date": due_date,
             "line_items": line_items,
         }
-        send_mail_templates(
-            "invoice.html",
+        send_mail_templates_with_attachment(
+            "invoice_pdf.html",
             [env("FINANCE_EMAIL")],
             f"Invoice edited by a Vendor - {invoice_data['vendor_name']}",
             {"invoice": invoice_data},
+            f"Invoice: {invoice_data['invoice_number']} has been edited by the vendor: {invoice_data['vendor_name']}",
         )
         return Response({"message": "Invoice edited successfully."}, status=201)
     else:
