@@ -325,8 +325,8 @@ def get_batch_calendar(request, batch_id):
                 {
                     **coaching_session,
                     "available_slots_count": len(availabilities)
-                    if availabilities
-                    else None,
+                    if availabilities is not None
+                    else 0,
                     "booked_session_count": booked_session_count,
                 }
             )
