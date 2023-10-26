@@ -463,7 +463,8 @@ class AddParticipantObserverToAssessment(APIView):
 
             mapping = ParticipantObserverMapping.objects.create(participant=participant)
 
-            if assessment.assessment_type == "360":
+            # if assessment.assessment_type == "360":
+            if False:
                 observers = request.data.get("observers", [])
                 for observer_data in observers:
                     observer, created = Observer.objects.get_or_create(
@@ -915,7 +916,7 @@ class AddObserverToParticipant(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Failed to remove observer."},
+                {"error": "Failed to add observer."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -977,5 +978,58 @@ class QuestionnaireIdsInOngoingAndCompletedAssessments(APIView):
         except Exception as e:
             return Response(
                 {"error": "Failed to retrieve questionnaire IDs"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class ParticipantAddsObserverToAssessment(APIView):
+    def post(self, request):
+        try:
+            assessment_id = request.data.get("assessment_id")
+            participant_email = request.data.get("participant_email")
+
+            assessment = Assessment.objects.get(id=assessment_id)
+
+            get_participants_observer = assessment.participants_observers.filter(
+                participant__email=participant_email
+            ).first()
+            participants_observer = ParticipantObserverMapping.objects.get(
+                id=get_participants_observer.id
+            )
+            observers = request.data.get("observers", [])
+            print(observers)
+            for observer_data in observers:
+                observerName = observer_data["observerName"]
+                observerEmail = observer_data["observerEmail"]
+                observerType = observer_data["observerType"]
+
+                observer, created = Observer.objects.get_or_create(
+                    email=observerEmail,
+                )
+                observer.name = observerName
+                observer.save()
+                (
+                    participant_observer_type,
+                    created1,
+                ) = ParticipantObserverType.objects.get_or_create(
+                    participant=participants_observer.participant,
+                    observers=observer,
+                )
+                participant_observer_type.type = observerType
+                participant_observer_type.save()
+                participants_observer.observers.add(observer)
+                participants_observer.save()
+
+            
+            return Response(
+                {
+                    "message": "Observer added successfully.",
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to add observer."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

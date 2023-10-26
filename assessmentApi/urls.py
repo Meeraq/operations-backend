@@ -25,6 +25,7 @@ from .views import (
     ObserverAssessment,
     AssessmentsOfParticipant,
     AddParticipantObserverToAssessment,
+    ParticipantAddsObserverToAssessment
 )
 
 
@@ -101,5 +102,9 @@ urlpatterns = [
     path(
         "questionnaire-ids-in-ongoing-and-completed-assessments/",
         QuestionnaireIdsInOngoingAndCompletedAssessments.as_view(),
+    ),
+    path(
+        "participant-adds-observer-to-assessment/",
+        ParticipantAddsObserverToAssessment.as_view(),
     ),
 ]
