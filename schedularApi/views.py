@@ -1011,7 +1011,6 @@ def get_requests_of_coach(request, coach_id):
 def get_slots_of_request(request, request_id):
     coach_id = request.GET.get("coach_id")
     if coach_id:
-        print("inside", coach_id)
         availabilities = CoachSchedularAvailibilty.objects.filter(
             request__id=request_id, coach__id=coach_id
         )
@@ -1037,7 +1036,6 @@ def get_upcoming_slots_of_coach(request, coach_id):
 @api_view(["DELETE"])
 def delete_slots(request):
     slot_ids = request.data.get("slot_ids", [])
-    print(slot_ids)
     # Assuming slot_ids is a list of integers
     slots_to_delete = CoachSchedularAvailibilty.objects.filter(id__in=slot_ids)
     if not slots_to_delete.exists():
@@ -1052,3 +1050,42 @@ def get_participants(request):
     participants = SchedularParticipants.objects.all()
     participants_serializer = SchedularParticipantsSerializer(participants, many=True)
     return Response(participants_serializer.data)
+
+
+@api_view(["GET"])
+def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
+    try:
+        request_availability = RequestAvailibilty.objects.get(id=request_id)
+    except RequestAvailibilty.DoesNotExist:
+        return Response(
+            {"error": "Request availability not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    availability = request_availability.availability
+    dates = list(availability.keys())
+    coach_availabilities_date_wise = {}
+    for date in dates:
+        date_format = datetime.strptime(date, "%Y-%m-%d")
+        start_date = datetime.combine(date_format, datetime.min.time())
+        end_date = (
+            datetime.combine(date_format, datetime.min.time())
+            + timedelta(days=1)
+            - timedelta(milliseconds=1)
+        )
+        start_timestamp = str(int(start_date.timestamp() * 1000))
+        end_timestamp = str(int(end_date.timestamp() * 1000))
+        coach_availabilities = CoachSchedularAvailibilty.objects.filter(
+            coach__id=coach_id,
+            start_time__gte=start_timestamp,
+            end_time__lte=end_timestamp,
+            is_confirmed=False,
+        )
+        coach_availabilities_date_wise[date] = CoachSchedularAvailibiltySerializer(
+            coach_availabilities, many=True
+        ).data
+
+    return Response(
+        {"coach_availabilities_date_wise": coach_availabilities_date_wise},
+        status=status.HTTP_200_OK,
+    )

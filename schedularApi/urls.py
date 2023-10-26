@@ -102,4 +102,8 @@ urlpatterns = [
     ),
     path("slots/delete/", views.delete_slots),
     path("participants/", views.get_participants),
+    path(
+        "existing_slots_of_coach/<int:request_id>/<int:coach_id>/",
+        views.get_existing_slots_of_coach_on_request_dates,
+    ),
 ]
