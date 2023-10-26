@@ -106,4 +106,5 @@ urlpatterns = [
         "existing_slots_of_coach/<int:request_id>/<int:coach_id>/",
         views.get_existing_slots_of_coach_on_request_dates,
     ),
+    path("send_coaching_session_mail/", views.send_unbooked_coaching_session_mail),
 ]

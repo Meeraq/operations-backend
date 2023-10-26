@@ -304,6 +304,53 @@ def get_schedular_project(request, project_id):
         )
 
 
+# @api_view(["GET"])
+# def get_batch_calendar(request, batch_id):
+#     try:
+#         live_sessions = LiveSession.objects.filter(batch__id=batch_id)
+#         coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
+#         live_sessions_serializer = LiveSessionSerializer(live_sessions, many=True)
+#         coaching_sessions_serializer = CoachingSessionSerializer(
+#             coaching_sessions, many=True
+#         )
+#         coaching_sessions_result = []
+#         for coaching_session in coaching_sessions_serializer.data:
+#             booked_session_count = SchedularSessions.objects.filter(
+#                 coaching_session__id=coaching_session["id"]
+#             ).count()
+#             availabilities = get_upcoming_availabilities_of_coaching_session(
+#                 coaching_session["id"]
+#             )
+#             coaching_sessions_result.append(
+#                 {
+#                     **coaching_session,
+#                     "available_slots_count": len(availabilities)
+#                     if availabilities
+#                     else None,
+#                     "booked_session_count": booked_session_count,
+#                 }
+#             )
+#         participants = SchedularParticipants.objects.filter(schedularbatch__id=batch_id)
+#         participants_serializer = GetSchedularParticipantsSerializer(
+#             participants, many=True
+#         )
+#         coaches = Coach.objects.filter(schedularbatch__id=batch_id)
+#         coaches_serializer = CoachBasicDetailsSerializer(coaches, many=True)
+#         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
+#         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
+#         return Response(
+#             {
+#                 "sessions": sorted_sessions,
+#                 "participants": participants_serializer.data,
+#                 "coaches": coaches_serializer.data,
+#             }
+#         )
+#     except SchedularProject.DoesNotExist:
+#         return Response(
+#             {"error": "Couldn't find project to add project structure."}, status=400
+#         )
+
+
 @api_view(["GET"])
 def get_batch_calendar(request, batch_id):
     try:
@@ -321,6 +368,12 @@ def get_batch_calendar(request, batch_id):
             availabilities = get_upcoming_availabilities_of_coaching_session(
                 coaching_session["id"]
             )
+
+            # Retrieve participants who have not booked this session
+            participants = SchedularParticipants.objects.filter(
+                schedularbatch__id=batch_id
+            ).exclude(schedularsessions__coaching_session__id=coaching_session["id"])
+
             coaching_sessions_result.append(
                 {
                     **coaching_session,
@@ -328,8 +381,12 @@ def get_batch_calendar(request, batch_id):
                     if availabilities is not None
                     else 0,
                     "booked_session_count": booked_session_count,
+                    "participants_not_booked": GetSchedularParticipantsSerializer(
+                        participants, many=True
+                    ).data,
                 }
             )
+
         participants = SchedularParticipants.objects.filter(schedularbatch__id=batch_id)
         participants_serializer = GetSchedularParticipantsSerializer(
             participants, many=True
@@ -1050,6 +1107,54 @@ def get_participants(request):
     participants = SchedularParticipants.objects.all()
     participants_serializer = SchedularParticipantsSerializer(participants, many=True)
     return Response(participants_serializer.data)
+
+
+# @api_view(["POST"])
+# def send_unbooked_coaching_session_mail(request):
+#     batch_name = request.data.get("batchName", "")
+#     participants = request.data.get("participants", [])
+#     booking_link = request.data.get("bookingLink", "")
+
+#     for participant in participants:
+#         subject = f"Coaching Session Invitation for {participant}"
+#         message = f"Hello {participant},\n\nYou are invited to the coaching session for batch {batch_name}.\n\nBooking Link: {booking_link}"
+
+#         email = EmailMessage(subject, message, to=[participant])
+#         email.send()
+
+#     return Response("Emails sent to participants.")
+
+
+# from django.core.mail import EmailMessage
+# from django.template.loader import render_to_string
+# from rest_framework.decorators import api_view
+# from rest_framework.response import Response
+
+
+@api_view(["POST"])
+def send_unbooked_coaching_session_mail(request):
+    batch_name = request.data.get("batchName", "")
+    participants = request.data.get("participants", [])
+    booking_link = request.data.get("bookingLink", "")
+
+    for participant in participants:
+        subject = f"Coaching Session Invitation for {participant}"
+
+        # Load the HTML template
+        html_message = render_to_string(
+            "seteventlink.html", {"event_link": booking_link}
+        )
+
+        email = EmailMessage(
+            subject=subject,
+            body=html_message,  
+            from_email=settings.DEFAULT_FROM_EMAIL, 
+            to=[participant],
+        )
+        email.content_subtype = "html"
+        email.send()
+
+    return Response("Emails sent to participants.")
 
 
 @api_view(["GET"])
