@@ -1109,28 +1109,6 @@ def get_participants(request):
     return Response(participants_serializer.data)
 
 
-# @api_view(["POST"])
-# def send_unbooked_coaching_session_mail(request):
-#     batch_name = request.data.get("batchName", "")
-#     participants = request.data.get("participants", [])
-#     booking_link = request.data.get("bookingLink", "")
-
-#     for participant in participants:
-#         subject = f"Coaching Session Invitation for {participant}"
-#         message = f"Hello {participant},\n\nYou are invited to the coaching session for batch {batch_name}.\n\nBooking Link: {booking_link}"
-
-#         email = EmailMessage(subject, message, to=[participant])
-#         email.send()
-
-#     return Response("Emails sent to participants.")
-
-
-# from django.core.mail import EmailMessage
-# from django.template.loader import render_to_string
-# from rest_framework.decorators import api_view
-# from rest_framework.response import Response
-
-
 @api_view(["POST"])
 def send_unbooked_coaching_session_mail(request):
     batch_name = request.data.get("batchName", "")
@@ -1147,8 +1125,8 @@ def send_unbooked_coaching_session_mail(request):
 
         email = EmailMessage(
             subject=subject,
-            body=html_message,  
-            from_email=settings.DEFAULT_FROM_EMAIL, 
+            body=html_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
             to=[participant],
         )
         email.content_subtype = "html"
