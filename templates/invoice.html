@@ -184,7 +184,7 @@
               </td>
 							<td style="width: 50%; text-align: right; vertical-align: top;">
                 <div id="entity-title">TAX INVOICE</div><br />
-                <div id="entity-number" style="font-size: 12pt;"><b>{{ invoice.invoice_number }}</b></div>
+                <div id="entity-number" style="font-size: 12pt;">Invoice No.<b>{{ invoice.invoice_number }}</b></div>
               </td>
             </tr>
           </tbody>
@@ -297,7 +297,7 @@
 							<tr>
 								<td style="text-align: right; width: 100%;">
 									Signature:
-									<img style="width: 100px; height: auto; display: inline-block;" alt="signature" src="{{invoice.signature}}" />
+									<img style="width: 100px; height: auto; display: inline-block;" alt="signature"  src="data:image/png;base64, {{image_base64}}"  />
 								</td>
 							</tr>
 						</thead>
