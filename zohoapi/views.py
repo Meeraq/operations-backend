@@ -29,7 +29,10 @@ from rest_framework import status
 from django.http import HttpResponse
 from .serializers import InvoiceDataEditSerializer, InvoiceDataSerializer
 from .models import InvoiceData, AccessToken
-
+import base64
+from django.core.mail import EmailMessage
+from io import BytesIO
+from xhtml2pdf import pisa
 
 import environ
 import os
@@ -121,6 +124,39 @@ def send_mail_templates(file_name, user_email, email_subject, content):
         print(f"Error occurred while sending emails: {str(e)}")
         raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
+
+
+def send_mail_templates_with_attachment(file_name, user_email, email_subject, content):
+    
+    
+    image_url = f"https://meeraq.s3.amazonaws.com/{content['invoice.signature']}?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVKI2ZWHZSBVNUIXH%2F20231026%2Fap-south-1%2Fs3%2Faws4_request&X-Amz-Date=20231026T071948Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=5bfe9ef2ea71d673d2ce4e67b8e354e27fc6aee05e872368c0b9324422d36fef"
+    try:
+        # Attempt to send the email
+        image_response = requests.get(image_url)
+        image_response.raise_for_status()
+       
+            # Convert the downloaded image to base64
+        image_base64 = base64.b64encode(image_response.content).decode("utf-8")
+        content["image_base64"] = image_base64
+        email_message = render_to_string(file_name, content)
+        result = BytesIO()
+        pdf = pisa.pisaDocument(BytesIO(email_message.encode("ISO-8859-1")), result)
+
+        email = EmailMessage(
+                subject= f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
+                body=email_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=user_email,
+            )
+
+            # Attach the PDF to the email
+        email.attach("invoice.pdf", result.getvalue(), "application/pdf")
+       
+        email.send()
+        
+    except Exception as e:
+        print(str(e))
+    
 
 def get_organization_data():
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -504,7 +540,7 @@ def add_invoice_data(request):
             "due_date": add_45_days(serializer.data["invoice_date"]),
             "line_items": line_items,
         }
-        send_mail_templates(
+        send_mail_templates_with_attachment(
             "invoice.html",
             [env("FINANCE_EMAIL")],
             f"Invoice raised by a Vendor - {invoice_data['vendor_name']} ",
@@ -546,7 +582,7 @@ def edit_invoice(request, invoice_id):
             "due_date": add_45_days(serializer.data["invoice_date"]),
             "line_items": line_items,
         }
-        send_mail_templates(
+        send_mail_templates_with_attachment(
             "invoice.html",
             [env("FINANCE_EMAIL")],
             f"Invoice edited by a Vendor - {invoice_data['vendor_name']}",
