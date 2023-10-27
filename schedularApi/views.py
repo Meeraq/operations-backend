@@ -267,10 +267,16 @@ def create_project_structure(request, project_id):
         project = get_object_or_404(SchedularProject, id=project_id)
         serializer = SessionItemSerializer(data=request.data, many=True)
         if serializer.is_valid():
+            is_editing = len(project.project_structure) > 0
             project.project_structure = serializer.data
             project.save()
             return Response(
-                {"message": "Project structure added successfully."}, status=200
+                {
+                    "message": "Project structure edited successfully."
+                    if is_editing
+                    else "Project structure added successfully."
+                },
+                status=200,
             )
         return Response({"error": "Invalid sessions found."}, status=400)
     except SchedularProject.DoesNotExist:
