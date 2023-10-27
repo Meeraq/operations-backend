@@ -107,4 +107,5 @@ urlpatterns = [
         views.get_existing_slots_of_coach_on_request_dates,
     ),
     path("send_coaching_session_mail/", views.send_unbooked_coaching_session_mail),
+    path("download_report/", views.export_available_slot),
 ]

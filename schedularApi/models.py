@@ -59,6 +59,9 @@ class CoachSchedularAvailibilty(models.Model):
     is_confirmed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, auto_now=True)
+    
+    def __str__(self):
+        return self.coach.first_name
 
 
 class CoachingSession(models.Model):

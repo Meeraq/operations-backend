@@ -1,7 +1,6 @@
 from datetime import date, datetime, timedelta
 import uuid
 import requests
-import uuid
 from os import name
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError
@@ -16,6 +15,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.utils import timezone
+from openpyxl import Workbook
 
 
 from django.shortcuts import render
@@ -1172,3 +1172,133 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
         {"coach_availabilities_date_wise": coach_availabilities_date_wise},
         status=status.HTTP_200_OK,
     )
+
+
+# from django.http import HttpResponse
+# from openpyxl import Workbook
+# from datetime import datetime
+
+
+# @api_view(["GET"])
+# def export_available_slot(request):
+#     # Retrieve all InvoiceData objects
+#     queryset = CoachSchedularAvailibilty.objects.all()
+#     # Create a new workbook and add a worksheet
+#     wb = Workbook()
+#     ws = wb.active
+
+#     # Write headers to the worksheet
+#     headers = ["Coach Name", "Date", "Availability"]
+
+#     for col_num, header in enumerate(headers, 1):
+#         ws.cell(row=1, column=col_num, value=header)
+
+#     # Write data to the worksheet
+#     for row_num, availabilities in enumerate(queryset, 2):
+#         start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
+#         end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
+      
+#         ws.append(
+#             [
+#                 availabilities.coach.first_name + " " + availabilities.coach.last_name,
+#                 start_time.strftime("%d %B %Y"),
+#                 start_time.strftime("%I:%M %p") + " - " + end_time.strftime("%I:%M %p"),
+#             ]
+#         )
+
+#     # Create a response with the Excel file
+#     response = HttpResponse(
+#         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+#     )
+#     response["Content-Disposition"] = "attachment; filename=invoice_data.xlsx"
+#     wb.save(response)
+
+#     return response
+# ................
+
+# from django.utils import timezone
+# from django.http import HttpResponse
+
+# @api_view(["GET"])
+# def export_available_slot(request):
+#     current_timestamp = int(timezone.now().timestamp() * 1000)  # Current day's timestamp
+
+#     # Retrieve all InvoiceData objects with availabilities greater than the current timestamp
+#     queryset = CoachSchedularAvailibilty.objects.filter(start_time__gt=current_timestamp)
+
+#     # Create a new workbook and add a worksheet
+#     wb = Workbook()
+#     ws = wb.active
+
+#     # Write headers to the worksheet
+#     headers = ["Coach Name", "Date", "Availability"]
+
+#     for col_num, header in enumerate(headers, 1):
+#         ws.cell(row=1, column=col_num, value=header)
+
+#     # Write data to the worksheet
+#     for row_num, availabilities in enumerate(queryset, 2):
+#         start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
+#         end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
+      
+#         ws.append(
+#             [
+#                 availabilities.coach.first_name + " " + availabilities.coach.last_name,
+#                 start_time.strftime("%d %B %Y"),
+#                 start_time.strftime("%I:%M %p") + " - " + end_time.strftime("%I:%M %p"),
+#             ]
+#         )
+
+#     # Create a response with the Excel file
+#     response = HttpResponse(
+#         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+#     )
+#     response["Content-Disposition"] = "attachment; filename=invoice_data.xlsx"
+#     wb.save(response)
+
+#     return response
+
+
+from django.utils import timezone
+from datetime import datetime
+from django.http import HttpResponse
+
+@api_view(["GET"])
+def export_available_slot(request):
+    current_datetime = timezone.now()
+    current_timestamp = int(current_datetime.timestamp() * 1000)  # Current date and time timestamp
+
+    # Retrieve all InvoiceData objects with availabilities greater than the current timestamp
+    queryset = CoachSchedularAvailibilty.objects.filter(start_time__gt=current_timestamp, is_confirmed=False)
+
+    # Create a new workbook and add a worksheet
+    wb = Workbook()
+    ws = wb.active
+
+    # Write headers to the worksheet
+    headers = ["Coach Name", "Date", "Availability"]
+
+    for col_num, header in enumerate(headers, 1):
+        ws.cell(row=1, column=col_num, value=header)
+
+    # Write data to the worksheet
+    for row_num, availabilities in enumerate(queryset, 2):
+        start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
+        end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
+      
+        ws.append(
+            [
+                availabilities.coach.first_name + " " + availabilities.coach.last_name,
+                start_time.strftime("%d %B %Y"),
+                start_time.strftime("%I:%M %p") + " - " + end_time.strftime("%I:%M %p"),
+            ]
+        )
+
+    # Create a response with the Excel file
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = "attachment; filename=Available Slot.xlsx"
+    wb.save(response)
+
+    return response
