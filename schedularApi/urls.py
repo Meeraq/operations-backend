@@ -111,4 +111,9 @@ urlpatterns = [
     path(
         "create-schedular-participant/<int:batch_id>/", views.add_participant_to_batch
     ),
+    path(
+        "finalize-project-structure/<int:project_id>/",
+        views.finalize_project_structure,
+        name="finalize_project_structure",
+    ),
 ]

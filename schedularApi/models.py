@@ -11,6 +11,7 @@ class SchedularProject(models.Model):
     hr = models.ManyToManyField(HR, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
+    is_project_structure_finalized = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_at"]

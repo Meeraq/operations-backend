@@ -1260,9 +1260,6 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
 #     return response
 
 
-
-
-
 @api_view(["GET"])
 def export_available_slot(request):
     current_datetime = timezone.now()
@@ -1312,9 +1309,8 @@ def export_available_slot(request):
 def add_participant_to_batch(request, batch_id):
     # batch_id = request.data.get("batch_id")
     name = request.data.get("name")
-    email = request.data.get("email")
+    email = request.data.get("email").strip()
     phone = request.data.get("phone")
-
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
     except SchedularBatch.DoesNotExist:
@@ -1322,6 +1318,13 @@ def add_participant_to_batch(request, batch_id):
 
     try:
         participant = SchedularParticipants.objects.get(email=email)
+        # Check if participant is already in the batch
+        if participant in batch.participants.all():
+            return Response(
+                {"error": "Participant already exists in the batch"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
     except SchedularParticipants.DoesNotExist:
         # Participant doesn't exist, create a new one
         participant = SchedularParticipants(name=name, email=email, phone=phone)
@@ -1334,4 +1337,21 @@ def add_participant_to_batch(request, batch_id):
     return Response(
         {"message": "Participant added to the batch successfully"},
         status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["POST"])
+def finalize_project_structure(request, project_id):
+    try:
+        project = get_object_or_404(SchedularProject, id=project_id)
+    except SchedularProject.DoesNotExist:
+        return Response(
+            {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    # Update is_project_structure_finalized to True
+    project.is_project_structure_finalized = True
+    project.save()
+    return Response(
+        {"message": "Project structure finalized successfully"},
+        status=status.HTTP_200_OK,
     )
