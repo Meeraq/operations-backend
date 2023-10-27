@@ -137,3 +137,9 @@ class RequestAvailibiltySerializer(serializers.ModelSerializer):
     class Meta:
         model = RequestAvailibilty
         fields = "__all__"
+
+
+class SchedularParticipantsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularParticipants
+        fields = "__all__"

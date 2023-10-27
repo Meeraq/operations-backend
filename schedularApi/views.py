@@ -16,6 +16,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.utils import timezone
 from openpyxl import Workbook
+from django.http import HttpResponse
 
 
 from django.shortcuts import render
@@ -1197,7 +1198,7 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
 #     for row_num, availabilities in enumerate(queryset, 2):
 #         start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
 #         end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
-      
+
 #         ws.append(
 #             [
 #                 availabilities.coach.first_name + " " + availabilities.coach.last_name,
@@ -1240,7 +1241,7 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
 #     for row_num, availabilities in enumerate(queryset, 2):
 #         start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
 #         end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
-      
+
 #         ws.append(
 #             [
 #                 availabilities.coach.first_name + " " + availabilities.coach.last_name,
@@ -1259,17 +1260,20 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
 #     return response
 
 
-from django.utils import timezone
-from datetime import datetime
-from django.http import HttpResponse
+
+
 
 @api_view(["GET"])
 def export_available_slot(request):
     current_datetime = timezone.now()
-    current_timestamp = int(current_datetime.timestamp() * 1000)  # Current date and time timestamp
+    current_timestamp = int(
+        current_datetime.timestamp() * 1000
+    )  # Current date and time timestamp
 
     # Retrieve all InvoiceData objects with availabilities greater than the current timestamp
-    queryset = CoachSchedularAvailibilty.objects.filter(start_time__gt=current_timestamp, is_confirmed=False)
+    queryset = CoachSchedularAvailibilty.objects.filter(
+        start_time__gt=current_timestamp, is_confirmed=False
+    )
 
     # Create a new workbook and add a worksheet
     wb = Workbook()
@@ -1285,7 +1289,7 @@ def export_available_slot(request):
     for row_num, availabilities in enumerate(queryset, 2):
         start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
         end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
-      
+
         ws.append(
             [
                 availabilities.coach.first_name + " " + availabilities.coach.last_name,
@@ -1302,3 +1306,32 @@ def export_available_slot(request):
     wb.save(response)
 
     return response
+
+
+@api_view(["POST"])
+def add_participant_to_batch(request, batch_id):
+    # batch_id = request.data.get("batch_id")
+    name = request.data.get("name")
+    email = request.data.get("email")
+    phone = request.data.get("phone")
+
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        participant = SchedularParticipants.objects.get(email=email)
+    except SchedularParticipants.DoesNotExist:
+        # Participant doesn't exist, create a new one
+        participant = SchedularParticipants(name=name, email=email, phone=phone)
+        participant.save()
+
+    # Add the participant to the batch
+    batch.participants.add(participant)
+    batch.save()
+
+    return Response(
+        {"message": "Participant added to the batch successfully"},
+        status=status.HTTP_201_CREATED,
+    )

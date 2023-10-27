@@ -108,4 +108,7 @@ urlpatterns = [
     ),
     path("send_coaching_session_mail/", views.send_unbooked_coaching_session_mail),
     path("download_report/", views.export_available_slot),
+    path(
+        "create-schedular-participant/<int:batch_id>/", views.add_participant_to_batch
+    ),
 ]
