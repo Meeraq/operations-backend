@@ -14,6 +14,11 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    ProfileEditActivity,
+    UserLoginActivity,
+    AddGoalActivity,
+    AddCoachActivity,
+    SentEmailActivity,
 )
 from django.contrib.auth.models import User
 
@@ -226,3 +231,34 @@ class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
         fields = "__all__"
+
+class ProfileEditActivitySerializer(serializers.ModelSerializer):
+    user =UserSerializer()
+    class Meta:
+        model = ProfileEditActivity
+        fields = '__all__'  
+
+class UserLoginActivitySerializer(serializers.ModelSerializer):
+    user =UserSerializer()
+    class Meta:
+        model = UserLoginActivity
+        fields = '__all__'
+
+class AddGoalActivitySerializer(serializers.ModelSerializer):
+    user=UserSerializer()
+    class Meta:
+        model = AddGoalActivity
+        fields = '__all__'
+
+
+class AddCoachActivitySerializer(serializers.ModelSerializer):
+    user=UserSerializer()
+    class Meta:
+        model = AddCoachActivity
+        fields = '__all__'
+
+class SentEmailActivitySerializer(serializers.ModelSerializer):
+    user=UserSerializer()
+    class Meta:
+        model = SentEmailActivity
+        fields = '__all__'

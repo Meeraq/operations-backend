@@ -29,7 +29,10 @@ from rest_framework import status
 from django.http import HttpResponse
 from .serializers import InvoiceDataEditSerializer, InvoiceDataSerializer
 from .models import InvoiceData, AccessToken
-
+import base64
+from django.core.mail import EmailMessage
+from io import BytesIO
+from xhtml2pdf import pisa
 
 import environ
 import os
@@ -122,6 +125,35 @@ def send_mail_templates(file_name, user_email, email_subject, content):
         raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
 
+def send_mail_templates_with_attachment(
+    file_name, user_email, email_subject, content, body_message
+):
+    image_url = f"{content['invoice']['signature']}"
+    try:
+        # Attempt to send the email
+        image_response = requests.get(image_url)
+        image_response.raise_for_status()
+
+        # Convert the downloaded image to base64
+        image_base64 = base64.b64encode(image_response.content).decode("utf-8")
+        content["image_base64"] = image_base64
+        email_message = render_to_string(file_name, content)
+        result = BytesIO()
+        pdf = pisa.pisaDocument(BytesIO(email_message.encode("ISO-8859-1")), result)
+        email = EmailMessage(
+            subject=f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
+            body=body_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=user_email,
+        )
+        # Attach the PDF to the email
+        email.attach("invoice.pdf", result.getvalue(), "application/pdf")
+        email.send()
+
+    except Exception as e:
+        print(str(e))
+
+
 def get_organization_data():
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -188,6 +220,47 @@ def get_user_data(user):
 def generate_otp(request):
     try:
         user = User.objects.get(username=request.data["email"])
+        try:
+            # Check if OTP already exists for the user
+            otp_obj = OTP.objects.get(user=user)
+            otp_obj.delete()
+        except OTP.DoesNotExist:
+            pass
+
+        # Generate OTP and save it to the database
+        user_data = get_user_data(user)
+        if user_data:
+            otp = get_random_string(length=6, allowed_chars="0123456789")
+            created_otp = OTP.objects.create(user=user, otp=otp)
+            name = user_data.get("name") or user_data.get("first_name") or "User"
+            subject = f"Meeraq Login OTP"
+            message = f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
+            send_mail_templates(
+                "hr_emails/login_with_otp.html",
+                [user],
+                subject,
+                {"name": name, "otp": created_otp.otp},
+            )
+            return Response({"message": f"OTP has been sent to {user.username}!"})
+        else:
+            return Response({"error": "Vendor doesn't exist."}, status=400)
+
+    except User.DoesNotExist:
+        # Handle the case where the user with the given email does not exist
+        return Response(
+            {"error": "User with the given email does not exist."}, status=400
+        )
+
+    except Exception as e:
+        # Handle any other exceptions
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def generate_otp_send_mail_fixed(request, email):
+    try:
+        user = User.objects.get(username=email)
         try:
             # Check if OTP already exists for the user
             otp_obj = OTP.objects.get(user=user)
@@ -458,16 +531,25 @@ def add_invoice_data(request):
                 * line_item["rate"]
                 * (1 + line_item["tax_percentage"] / 100)
             )
+        invoice_date = datetime.strptime(
+            serializer.data["invoice_date"], "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
+        due_date = datetime.strptime(
+            add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
+
         invoice_data = {
             **serializer.data,
-            "due_date": add_45_days(serializer.data["invoice_date"]),
+            "invoice_date": invoice_date,
+            "due_date": due_date,
             "line_items": line_items,
         }
-        send_mail_templates(
-            "invoice.html",
+        send_mail_templates_with_attachment(
+            "invoice_pdf.html",
             [env("FINANCE_EMAIL")],
             f"Invoice raised by a Vendor - {invoice_data['vendor_name']} ",
             {"invoice": invoice_data},
+            f"A new invoice: {invoice_data['invoice_number']} is raised by the vendor: {invoice_data['vendor_name']}",
         )
         return Response({"message": "Invoice generated successfully"}, status=201)
     else:
@@ -500,16 +582,24 @@ def edit_invoice(request, invoice_id):
                 * (1 + line_item["tax_percentage"] / 100)
             )
         invoice_serializer = InvoiceDataSerializer(invoice)
+        invoice_date = datetime.strptime(
+            serializer.data["invoice_date"], "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
+        due_date = datetime.strptime(
+            add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
+        ).strftime("%d-%m-%Y")
         invoice_data = {
             **invoice_serializer.data,
-            "due_date": add_45_days(serializer.data["invoice_date"]),
+            "invoice_date": invoice_date,
+            "due_date": due_date,
             "line_items": line_items,
         }
-        send_mail_templates(
-            "invoice.html",
+        send_mail_templates_with_attachment(
+            "invoice_pdf.html",
             [env("FINANCE_EMAIL")],
             f"Invoice edited by a Vendor - {invoice_data['vendor_name']}",
             {"invoice": invoice_data},
+            f"Invoice: {invoice_data['invoice_number']} has been edited by the vendor: {invoice_data['vendor_name']}",
         )
         return Response({"message": "Invoice edited successfully."}, status=201)
     else:
