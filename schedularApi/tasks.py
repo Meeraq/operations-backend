@@ -1,10 +1,15 @@
 import string
 from celery import shared_task
-from .models import SentEmail
+from .models import SentEmail, SchedularSessions
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
 from django.conf import settings
+from api.models import Coach
+from django.utils import timezone
+from datetime import datetime
+from api.views import send_mail_templates
+
 
 # from api.views import refresh_microsoft_access_token
 import environ
@@ -15,6 +20,18 @@ from time import sleep
 
 env = environ.Env()
 environ.Env.read_env()
+
+
+def get_current_date_timestamps():
+    now = timezone.now()
+    current_date = now.date()
+    start_timestamp = str(
+        int(datetime.combine(current_date, datetime.min.time()).timestamp() * 1000)
+    )
+    end_timestamp = str(
+        int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
+    )
+    return start_timestamp, end_timestamp
 
 
 @shared_task
@@ -166,3 +183,70 @@ def send_email_to_recipients(id):
 #         except Exception as e:
 #             print(f"Failed to send reminder for session {str(e)}", learner_slot.id)
 #         sleep(6)
+@shared_task
+def send_coach_morning_reminder_email():
+    start_timestamp, end_timestamp = get_current_date_timestamps()
+    today_sessions = SchedularSessions.objects.filter(
+        availibility__start_time__lte=end_timestamp,
+        availibility__end_time__gte=start_timestamp,
+    )
+    # Format sessions coach-wise
+    coach_sessions = {}
+    for session in today_sessions:
+        coach_id = session.availibility.coach.id
+        if coach_id not in coach_sessions:
+            coach_sessions[coach_id] = []
+        coach_sessions[coach_id].append(session)
+    # Create time slots for each coach
+    coach_time_slots = {}
+    for coach_id, sessions in coach_sessions.items():
+        slots = []
+        for session in sessions:
+            start_time_for_mail = datetime.fromtimestamp(
+                (int(session.availibility.start_time) / 1000) + 19800
+            ).strftime("%I:%M %p")
+            # start_time = int(session.availibility.start_time)
+            # end_time = int(session.availibility.end_time)
+            slots.append(f"{start_time_for_mail}")
+        coach_time_slots[coach_id] = slots
+
+    # Send email to each coach
+    for coach_id, slots in coach_time_slots.items():
+        coach = Coach.objects.get(id=coach_id)
+        coach_name = (
+            coach.first_name + " " + coach.last_name
+        )  # Replace with actual field name
+        content = {"name": coach_name, "session_count": len(slots), "slots": slots}
+        send_mail_templates(
+            "coach_templates/session_reminder.html",
+            [coach.email],
+            "Meeraq - Coaching Session Reminder",
+            content,
+            [],  # bcc
+        )
+        sleep(5)
+
+
+@shared_task
+def send_participant_morning_reminder_email():
+    start_timestamp, end_timestamp = get_current_date_timestamps()
+    today_sessions = SchedularSessions.objects.filter(
+        availibility__start_time__lte=end_timestamp,
+        availibility__end_time__gte=start_timestamp,
+    )
+    for session in today_sessions:
+        name = session.enrolled_participant.name
+        meeting_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
+        time = datetime.fromtimestamp(
+            (int(session.availibility.start_time) / 1000) + 19800
+        ).strftime("%I:%M %p")
+        print(time)
+        content = {"time": time, "meeting_link": meeting_link, "name": name}
+        send_mail_templates(
+            "coachee_emails/session_reminder.html",
+            [session.enrolled_participant.email],
+            "Meeraq - Coaching Session Reminder",
+            content,
+            [],  # bcc
+        )
+        sleep(5)

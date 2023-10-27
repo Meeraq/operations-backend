@@ -14,6 +14,7 @@ from pathlib import Path
 import environ
 import os
 import json
+from celery.schedules import crontab
 
 env = environ.Env()
 environ.Env.read_env()
@@ -193,3 +194,14 @@ SESSION_COOKIE_DOMAIN = env("SESSION_COOKIE_DOMAIN")
 
 CELERY_BROKER_URL = env("CELERY_BROKER_URL")
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND")
+
+CELERY_BEAT_SCHEDULE = {
+    "coach_laser_coaching_session_reminder": {
+        "task": "schedularApi.tasks.send_coach_morning_reminder_email",
+        "schedule": crontab(hour=3, minute=30, day_of_week="*"),
+    },
+    "participant_laser_coaching_session_reminder": {
+        "task": "schedularApi.tasks.send_participant_morning_reminder_email",
+        "schedule": crontab(hour=3, minute=15, day_of_week="*"),
+    },
+}

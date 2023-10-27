@@ -117,14 +117,16 @@ class EmailSendingError(Exception):
 
 
 def create_send_email(user_email, file_name):
-    user = User.objects.get(username=user_email)
-
-    sent_email = SentEmailActivity.objects.create(
-        user=user,
-        email_subject=file_name,
-        timestamp=timezone.now(),
-    )
-    sent_email.save()
+    try:
+        user = User.objects.get(username=user_email)
+        sent_email = SentEmailActivity.objects.create(
+            user=user,
+            email_subject=file_name,
+            timestamp=timezone.now(),
+        )
+        sent_email.save()
+    except Exception as e:
+        pass
 
 
 def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
