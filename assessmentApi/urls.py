@@ -25,7 +25,10 @@ from .views import (
     ObserverAssessment,
     AssessmentsOfParticipant,
     AddParticipantObserverToAssessment,
-    ParticipantAddsObserverToAssessment
+    ParticipantAddsObserverToAssessment,
+    StartAssessmentDataForObserver,
+    GetObserversUniqueIds,
+    GetParticipantObserversUniqueIds,
 )
 
 
@@ -106,5 +109,17 @@ urlpatterns = [
     path(
         "participant-adds-observer-to-assessment/",
         ParticipantAddsObserverToAssessment.as_view(),
+    ),
+    path(
+        "get-start-assessment-data-for-observer/<str:unique_id>/",
+        StartAssessmentDataForObserver.as_view(),
+    ),
+    path(
+        "get-observers-unique-id/<int:assessment_id>/",
+        GetObserversUniqueIds.as_view(),
+    ),
+    path(
+        "get-participant-observers-unique-id/<str:participant_email>/",
+        GetParticipantObserversUniqueIds.as_view(),
     ),
 ]

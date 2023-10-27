@@ -12,6 +12,7 @@ from .models import (
     ParticipantResponse,
     ObserverResponse,
     ParticipantObserverType,
+    ObserverUniqueId,
 )
 from .serializers import (
     CompetencySerializer,
@@ -25,6 +26,7 @@ from .serializers import (
     ParticipantResponseSerializer,
     ObserverResponseSerializer,
     ParticipantObserverTypeSerializer,
+    ObserverUniqueIdSerializerDepthOne,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -36,6 +38,7 @@ from api.serializers import LearnerSerializer
 from collections import defaultdict
 from django.db.models import BooleanField, F, Exists, OuterRef
 from django.db.models import Q
+import uuid
 
 
 def create_learner(learner_name, learner_email):
@@ -416,6 +419,7 @@ class AssessmentStatusOrEndDataChange(APIView):
 
 
 class AddParticipantObserverToAssessment(APIView):
+    @transaction.atomic
     def put(self, request):
         assessment_id = request.data.get("assessment_id")
 
@@ -649,6 +653,7 @@ class ObserverAssessment(APIView):
 
 
 class CreateParticipantResponseView(APIView):
+    @transaction.atomic
     def post(self, request):
         try:
             assessment_id = request.data.get("assessment_id")
@@ -686,6 +691,7 @@ class CreateParticipantResponseView(APIView):
 
 
 class CreateObserverResponseView(APIView):
+    @transaction.atomic
     def post(self, request):
         try:
             assessment_id = request.data.get("assessment_id")
@@ -811,6 +817,7 @@ class ParticipantObserverTypeList(APIView):
 
 
 class DeleteParticipantFromAssessment(APIView):
+    @transaction.atomic
     def delete(self, request):
         try:
             assessment_id = request.data.get("assessment_id")
@@ -844,6 +851,7 @@ class DeleteParticipantFromAssessment(APIView):
 
 
 class DeleteObserverFromAssessment(APIView):
+    @transaction.atomic
     def delete(self, request):
         try:
             assessment_id = request.data.get("assessment_id")
@@ -876,6 +884,7 @@ class DeleteObserverFromAssessment(APIView):
 
 
 class AddObserverToParticipant(APIView):
+    @transaction.atomic
     def put(self, request):
         try:
             assessment_id = request.data.get("assessment_id")
@@ -887,6 +896,12 @@ class AddObserverToParticipant(APIView):
             observerEmail = request.data.get("observerEmail")
             observerType = request.data.get("observerType")
             assessment = Assessment.objects.get(id=assessment_id)
+
+            if participants_observer.observers.filter(email=observerEmail).exists():
+                return Response(
+                    {"error": f"Observer with email '{observerEmail}' already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             observer, created = Observer.objects.get_or_create(
                 email=observerEmail,
@@ -904,6 +919,14 @@ class AddObserverToParticipant(APIView):
             participant_observer_type.save()
             participants_observer.observers.add(observer)
             participants_observer.save()
+
+            observer_unique_id, created2 = ObserverUniqueId.objects.get_or_create(
+                participant=participants_observer.participant,
+                observer=observer,
+                assessment=assessment,
+            )
+            observer_unique_id.unique_id = str(uuid.uuid4())
+            observer_unique_id.save()
 
             serializer = AssessmentSerializerDepthThree(assessment)
             return Response(
@@ -983,6 +1006,7 @@ class QuestionnaireIdsInOngoingAndCompletedAssessments(APIView):
 
 
 class ParticipantAddsObserverToAssessment(APIView):
+    @transaction.atomic
     def post(self, request):
         try:
             assessment_id = request.data.get("assessment_id")
@@ -997,17 +1021,19 @@ class ParticipantAddsObserverToAssessment(APIView):
                 id=get_participants_observer.id
             )
             observers = request.data.get("observers", [])
-            
+
             for observer_data in observers:
                 observerName = observer_data["observerName"]
                 observerEmail = observer_data["observerEmail"]
                 observerType = observer_data["observerType"]
                 if participants_observer.observers.filter(email=observerEmail).exists():
                     return Response(
-                        {"error": f"Observer with email '{observerEmail}' already exists."},
+                        {
+                            "error": f"Observer with email '{observerEmail}' already exists."
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-            
+
                 observer, created = Observer.objects.get_or_create(
                     email=observerEmail,
                 )
@@ -1025,8 +1051,14 @@ class ParticipantAddsObserverToAssessment(APIView):
                 participants_observer.observers.add(observer)
                 participants_observer.save()
 
-            
-                
+                observer_unique_id, created2 = ObserverUniqueId.objects.get_or_create(
+                    participant=participants_observer.participant,
+                    observer=observer,
+                    assessment=assessment,
+                )
+                observer_unique_id.unique_id = str(uuid.uuid4())
+                observer_unique_id.save()
+
             return Response(
                 {
                     "message": "Observer added successfully.",
@@ -1037,5 +1069,62 @@ class ParticipantAddsObserverToAssessment(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to add observer."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class StartAssessmentDataForObserver(APIView):
+    def get(self, request, unique_id):
+        try:
+            observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
+
+            serializer=AssessmentSerializerDepthThree(observer_unique_id.assessment)
+
+            return Response(
+                {
+                    "assessment_data": serializer.data,
+                    "observer_email":observer_unique_id.observer.email,
+                    "participant_id":observer_unique_id.participant.id,
+                },
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to retrieve Start Assessment Data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+class GetObserversUniqueIds(APIView):
+    def get(self, request,assessment_id):
+        try:
+
+            
+            observers_unique_id = ObserverUniqueId.objects.filter(assessment__id=assessment_id)
+
+            serializer = ObserverUniqueIdSerializerDepthOne(observers_unique_id, many=True)
+
+            return Response(serializer.data)
+        
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to retrieve Observer Unique Id"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+class GetParticipantObserversUniqueIds(APIView):
+    def get(self, request,participant_email):
+        try:
+            observers_unique_id = ObserverUniqueId.objects.filter(participant__email=participant_email)
+
+            serializer = ObserverUniqueIdSerializerDepthOne(observers_unique_id, many=True)
+
+            return Response(serializer.data)
+        
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to retrieve Observer Unique Id"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

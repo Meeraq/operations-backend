@@ -140,3 +140,15 @@ class ObserverResponse(models.Model):
 
     def __str__(self):
         return f"Response for Observer {self.observer.name} in Assessment {self.assessment.name} participant is {self.participant.name}"
+    
+
+class ObserverUniqueId(models.Model):
+    participant = models.ForeignKey(Learner, on_delete=models.CASCADE,blank=True)
+    observer =  models.ForeignKey(Observer, on_delete=models.CASCADE,blank=True)
+    assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE,blank=True)
+    unique_id = models.CharField(max_length=225,unique=True,blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Unique Id for Observer {self.observer.name} in Assessment {self.assessment.name} participant is {self.participant.name}"
