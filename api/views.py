@@ -3,6 +3,8 @@ import requests
 from os import name
 from django.shortcuts import render, get_object_or_404
 from django.template.loader import render_to_string
+from django.utils.safestring import mark_safe
+from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.db import transaction, IntegrityError
 from django.core.mail import EmailMessage
 from rest_framework.exceptions import ParseError, ValidationError
@@ -100,6 +102,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from rest_framework import generics
 from django.db.models import Subquery, OuterRef
+
 # Create your views here.
 from collections import defaultdict
 import pandas as pd
@@ -113,16 +116,17 @@ class EmailSendingError(Exception):
     pass
 
 
-def create_send_email(user_email,file_name):
-
-    user =User.objects.get(username=user_email)
-
-    sent_email = SentEmailActivity.objects.create(
+def create_send_email(user_email, file_name):
+    try:
+        user = User.objects.get(username=user_email)
+        sent_email = SentEmailActivity.objects.create(
             user=user,
             email_subject=file_name,
             timestamp=timezone.now(),
-            )
-    sent_email.save()
+        )
+        sent_email.save()
+    except Exception as e:
+        pass
 
 
 def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
@@ -140,7 +144,7 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
     try:
         email.send(fail_silently=False)
         for email in user_email:
-            create_send_email(email,file_name)
+            create_send_email(email, file_name)
     except BadHeaderError as e:
         print(f"Error occurred while sending emails: {str(e)}")
         raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
@@ -451,16 +455,16 @@ def approve_coach(request):
 
         create_notification(coach.user.user, path, message)
         # Return success response
-         # Send approval email to the coach
+        # Send approval email to the coach
         send_mail_templates(
-                "coach_templates/pmo_approves_profile.html",
-                [coach.email],
-                "Congratulations! Your Coach Registration is Approved",
-                {
-                    "name": f"{coach.first_name} {coach.last_name}",
-                },
-                [],
-            )
+            "coach_templates/pmo_approves_profile.html",
+            [coach.email],
+            "Congratulations! Your Coach Registration is Approved",
+            {
+                "name": f"{coach.first_name} {coach.last_name}",
+            },
+            [],
+        )
         return Response({"message": "Coach approved successfully."}, status=200)
 
     except Coach.DoesNotExist:
@@ -485,18 +489,19 @@ def update_coach_profile(request, id):
 
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
-    
-    user = coach.user.user  
-    new_email = mutable_data.get("email") 
 
-    if new_email and User.objects.filter(username=new_email).exclude(id=user.id).exists():
+    user = coach.user.user
+    new_email = mutable_data.get("email")
+
+    if (
+        new_email
+        and User.objects.filter(username=new_email).exclude(id=user.id).exists()
+    ):
         return Response(
-            {
-                "error": "Email already exists. Please choose a different email."
-            },
+            {"error": "Email already exists. Please choose a different email."},
             status=400,
         )
-    
+
     if new_email and new_email != user.email:
         user.email = new_email
         user.username = new_email
@@ -511,7 +516,10 @@ def update_coach_profile(request, id):
         )
     pmo_user = User.objects.filter(profile__type="pmo").first()
     pmo = Pmo.objects.get(email=pmo_user.username)
-    profile_edit_start = ProfileEditActivity.objects.create(user=coach.user.user,timestamp=timezone.now(),)
+    profile_edit_start = ProfileEditActivity.objects.create(
+        user=coach.user.user,
+        timestamp=timezone.now(),
+    )
     serializer = CoachSerializer(coach, data=mutable_data, partial=True)
 
     coach_id = request.data.get("coach_id")
@@ -527,7 +535,7 @@ def update_coach_profile(request, id):
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
-        
+
         # send_mail_templates(
         #     "pmo_emails/coach_update_profile.html",
         #     [pmo.email],
@@ -535,7 +543,7 @@ def update_coach_profile(request, id):
         #     {"name": pmo.name, "coachName": coach.first_name},
         # 		[] # no bcc emails
         # )
-     
+
         return Response(
             {**depth_serializer.data, "last_login": coach.user.user.last_login},
             status=200,
@@ -746,7 +754,6 @@ def create_project_cass(request):
             mode=request.data["mode"],
             sold=request.data["sold"],
             project_description=desc,
-
             # updated_to_sold= request.data['updated_to_sold'],
             location=json.loads(request.data["location"]),
             steps=dict(
@@ -1516,9 +1523,6 @@ def get_projects_and_sessions_by_coach(request, coach_id):
     return Response({"projects": project_serializer.data})
 
 
-
-
-
 # @api_view(["GET"])
 # def coach_session_list(request, coach_id):
 #     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
@@ -1548,9 +1552,6 @@ def get_projects_and_sessions_by_coach(request, coach_id):
 #     return Response({"projects": project_serializer.data})
 
 
-
-
-
 @api_view(["GET"])
 def coach_session_list(request, coach_id):
     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
@@ -1563,7 +1564,7 @@ def coach_session_list(request, coach_id):
     # Group sessions by project ID
     sessions_dict = {}
     for session in session_serializer.data:
-        project_id = session['project']
+        project_id = session["project"]
         if project_id in sessions_dict:
             sessions_dict[project_id].append(session)
         else:
@@ -1571,14 +1572,13 @@ def coach_session_list(request, coach_id):
 
     # Add the session data to the projects
     for project_data in project_serializer.data:
-        project_id = project_data['id']
+        project_id = project_data["id"]
         if project_id in sessions_dict:
-            project_data['sessions'] = sessions_dict[project_id]
+            project_data["sessions"] = sessions_dict[project_id]
         else:
-            project_data['sessions'] = []
+            project_data["sessions"] = []
 
     return Response({"projects": project_serializer.data})
-
 
 
 # @api_view(['POST'])
@@ -1661,7 +1661,7 @@ def add_coach(request):
     domain = json.loads(request.data["domain"])
     room_id = request.data.get("room_id")
     phone = request.data.get("phone")
-    phone_country_code =request.data.get("phone_country_code")
+    phone_country_code = request.data.get("phone_country_code")
     level = request.data.get("level")
     currency = request.data.get("currency")
     education = json.loads(request.data["education"])
@@ -1787,7 +1787,9 @@ def add_coach(request):
             # Change the is_approved field to True
             coach.is_approved = True
             coach.save()
-            coach_add = AddCoachActivity.objects.create(user=user, timestamp=timezone.now())
+            coach_add = AddCoachActivity.objects.create(
+                user=user, timestamp=timezone.now()
+            )
             coach_add.save()
 
             full_name = coach_user.first_name + " " + coach_user.last_name
@@ -2061,7 +2063,7 @@ def validate_otp(request):
     login(request, user)
     user_data = get_user_data(user)
     if user_data:
-        login_timestamp =timezone.now()
+        login_timestamp = timezone.now()
         UserLoginActivity.objects.create(user=user, timestamp=login_timestamp)
         return Response(
             {
@@ -3445,7 +3447,16 @@ def add_mulitple_coaches(request):
 
                 # Perform validation on required fields
                 if not all(
-                    [coach_id, first_name, last_name, gender, level, email, phone,phone_country_code]
+                    [
+                        coach_id,
+                        first_name,
+                        last_name,
+                        gender,
+                        level,
+                        email,
+                        phone,
+                        phone_country_code,
+                    ]
                 ):
                     return Response(
                         {
@@ -3903,13 +3914,14 @@ def get_session_requests_of_user(request, user_type, user_id):
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
             Engagement.objects.filter(
-                project=OuterRef('project'),
-                learner=OuterRef('learner'),
-                                                                 
-            ).values('status')[:1]
+                project=OuterRef("project"),
+                learner=OuterRef("learner"),
+            ).values("status")[:1]
         )
     )
-    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(session_requests, many=True)
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(
+        session_requests, many=True
+    )
     return Response(serializer.data, status=200)
 
 
@@ -4017,13 +4029,14 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
             Engagement.objects.filter(
-                project=OuterRef('project'),
-                learner=OuterRef('learner'),
-                                                                 
-            ).values('status')[:1]
+                project=OuterRef("project"),
+                learner=OuterRef("learner"),
+            ).values("status")[:1]
         )
     )
-    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(session_requests, many=True)
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(
+        session_requests, many=True
+    )
     return Response(serializer.data, status=200)
 
 
@@ -4066,15 +4079,16 @@ def get_past_sessions_of_user(request, user_type, user_id):
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
             Engagement.objects.filter(
-                project=OuterRef('project'),
-                learner=OuterRef('learner'),
-                                                                 
-            ).values('status')[:1]
+                project=OuterRef("project"),
+                learner=OuterRef("learner"),
+            ).values("status")[:1]
         )
     )
     for session_request in session_requests:
         print(session_request.engagement_status)
-    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(session_requests, many=True)
+    serializer = SessionRequestWithEngagementCaasDepthOneSerializer(
+        session_requests, many=True
+    )
     return Response(serializer.data, status=200)
 
 
@@ -4232,11 +4246,11 @@ def reschedule_session_of_coachee(request, session_id):
 
 @api_view(["POST"])
 def create_goal(request):
-    user_email = request.data.get('email')
+    user_email = request.data.get("email")
     serializer = GoalSerializer(data=request.data)
     goal_name = request.data["name"]
     engagement_id = request.data.get("engagement")
-    
+
     if not Goal.objects.filter(name=goal_name, engagement__id=engagement_id).exists():
         if Goal.objects.filter(engagement__id=engagement_id).count() < 10:
             if serializer.is_valid():
@@ -4244,9 +4258,9 @@ def create_goal(request):
                 try:
                     user_instance = User.objects.get(username=user_email)
                     AddGoalActivity.objects.create(
-                    user=user_instance,  
-                    timestamp=timezone.now(),
-                         )
+                        user=user_instance,
+                        timestamp=timezone.now(),
+                    )
                 except Exception as e:
                     print("AddGoalActivity error", str(e))
 
@@ -5394,7 +5408,7 @@ class AddRegisteredCoach(APIView):
                         "name": pmo.name,
                         "coachName": f"{coach.first_name} {coach.last_name} ",
                     },
-                    json.loads(env("BCC_EMAIL_RAJAT_SUJATA"))
+                    json.loads(env("BCC_EMAIL_RAJAT_SUJATA")),
                 )
                 # Send profile completion tips to the coach
                 send_mail_templates(
@@ -5407,7 +5421,6 @@ class AddRegisteredCoach(APIView):
                     [],
                 )
 
-           
             return Response({"coach": coach_serializer.data})
 
         except IntegrityError as e:
@@ -5576,45 +5589,59 @@ def get_all_engagements(request):
     # Return the list of serialized engagement data with session counts
     return Response(engagement_data_list)
 
-@api_view(['PUT'])
+
+@api_view(["PUT"])
 def edit_project_caas(request, project_id):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_id"]
     ).first()
-    
+
     try:
         # Retrieve the existing project from the database
         project = get_object_or_404(Project, pk=project_id)
         # Update project attributes based on the data in the PUT request
-        project.name = request.data.get('project_name', project.name)
-        project.approx_coachee = request.data.get('approx_coachee', project.approx_coachee)
-        project.organisation=organisation
-        project.frequency_of_session = request.data.get('frequency_of_session', project.frequency_of_session)
-        project.interview_allowed = request.data.get('interview_allowed', project.interview_allowed)
-        project.specific_coach = request.data.get('specific_coach', project.specific_coach)
-        project.empanelment = request.data.get('empanelment', project.empanelment)
-        project.tentative_start_date = request.data.get('tentative_start_date', project.tentative_start_date)
-        project.mode = request.data.get('mode', project.mode)
-        project.sold = request.data.get('sold', project.sold)
-        project.location = json.loads(request.data.get('location', '[]'))
-        project.project_description = request.data.get('project_description', project.project_description)
+        project.name = request.data.get("project_name", project.name)
+        project.approx_coachee = request.data.get(
+            "approx_coachee", project.approx_coachee
+        )
+        project.organisation = organisation
+        project.frequency_of_session = request.data.get(
+            "frequency_of_session", project.frequency_of_session
+        )
+        project.interview_allowed = request.data.get(
+            "interview_allowed", project.interview_allowed
+        )
+        project.specific_coach = request.data.get(
+            "specific_coach", project.specific_coach
+        )
+        project.empanelment = request.data.get("empanelment", project.empanelment)
+        project.tentative_start_date = request.data.get(
+            "tentative_start_date", project.tentative_start_date
+        )
+        project.mode = request.data.get("mode", project.mode)
+        project.sold = request.data.get("sold", project.sold)
+        project.location = json.loads(request.data.get("location", "[]"))
+        project.project_description = request.data.get(
+            "project_description", project.project_description
+        )
         project.hr.clear()
         for hr in request.data["hr"]:
             single_hr = HR.objects.get(id=hr)
             project.hr.add(single_hr)
-        
+
         # Save the updated project
         project.save()
-        
-        # You can return a success response with the updated project details
-        return Response({'message': 'Project updated successfully', 'project_id': project.id})
-    
-    except Project.DoesNotExist:
-        return Response({'error': 'Project not found'}, status=404)
-    
-    except Exception as e:
-        return Response({'error': str(e)}, status=500)
 
+        # You can return a success response with the updated project details
+        return Response(
+            {"message": "Project updated successfully", "project_id": project.id}
+        )
+
+    except Project.DoesNotExist:
+        return Response({"error": "Project not found"}, status=404)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 
 
 class ActivitySummary(APIView):
@@ -5622,7 +5649,9 @@ class ActivitySummary(APIView):
         try:
             user_login_activities = UserLoginActivity.objects.all()
             total_login_count = user_login_activities.count()
-            user_login_serializer = UserLoginActivitySerializer(user_login_activities, many=True)
+            user_login_serializer = UserLoginActivitySerializer(
+                user_login_activities, many=True
+            )
         except Exception as e:
             print("user_login_activities", str(e))
             user_login_serializer = []
@@ -5630,7 +5659,9 @@ class ActivitySummary(APIView):
         try:
             profile_edit_activities = ProfileEditActivity.objects.all()
             total_profile_edit_count = profile_edit_activities.count()
-            profile_edit_serializer = ProfileEditActivitySerializer(profile_edit_activities, many=True)
+            profile_edit_serializer = ProfileEditActivitySerializer(
+                profile_edit_activities, many=True
+            )
         except Exception as e:
             print("profile_edit_activities", str(e))
             profile_edit_serializer = []
@@ -5638,7 +5669,9 @@ class ActivitySummary(APIView):
         try:
             goal_add_activities = AddGoalActivity.objects.all()
             total_goal_add_count = goal_add_activities.count()
-            goal_add_serializer = AddGoalActivitySerializer(goal_add_activities, many=True)
+            goal_add_serializer = AddGoalActivitySerializer(
+                goal_add_activities, many=True
+            )
         except Exception as e:
             print("goal_add_activities", str(e))
             goal_add_serializer = []
@@ -5646,7 +5679,9 @@ class ActivitySummary(APIView):
         try:
             coach_add_activities = AddCoachActivity.objects.all()
             total_coach_add_count = coach_add_activities.count()
-            coach_add_serializer = AddCoachActivitySerializer(coach_add_activities, many=True)
+            coach_add_serializer = AddCoachActivitySerializer(
+                coach_add_activities, many=True
+            )
         except Exception as e:
             print("coach_add_activities", str(e))
             coach_add_serializer = []
@@ -5654,7 +5689,9 @@ class ActivitySummary(APIView):
         try:
             sent_email_activities = SentEmailActivity.objects.all()
             total_sent_email_count = sent_email_activities.count()
-            sent_email_serializer = SentEmailActivitySerializer(sent_email_activities, many=True)
+            sent_email_serializer = SentEmailActivitySerializer(
+                sent_email_activities, many=True
+            )
         except Exception as e:
             print("sent_email_activities", str(e))
             sent_email_serializer = []

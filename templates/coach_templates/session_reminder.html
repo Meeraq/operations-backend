@@ -1,0 +1,29 @@
+{% extends "parent_template.html" %} {% block title %}Meeraq Coaching{%endblock%} {% block heading %}
+<div>
+	<b>
+		<span class="heading-container">
+			Dear <span class="heading-container-span">{{name}}</span>,
+		</span>
+	</b>
+</div>
+{% endblock %} {% block content %}
+<p class="child-para" style="color: #333; font-size: 18px; font-weight: bold">
+	Greetings from Meeraq!!
+</p>
+<p class="child-para">This is a reminder mail from Meeraq</p>
+<p>
+	You have {{ session_count }} coaching sessions booked for <strong>today</strong> at the following times:
+</p>
+<div>
+	{% for slot in slots %}
+	<p>{{ slot }} IST</p>
+	{% endfor %}
+</div>
+<p class="child-para">You can join the session on our SEEQ platform.</p>
+<p class="child-para">Please block your calendars for the same.</p>
+<p class="child-para">
+	Click
+	<a href="https://caas.meeraq.com/" style="color: #007bff; text-decoration: underline">here</a>
+	to login to the Meeraq Platform.
+</p>
+{% endblock %}
