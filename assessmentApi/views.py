@@ -33,7 +33,7 @@ import json
 import string
 import random
 from django.contrib.auth.models import User
-from api.models import Profile, Learner
+from api.models import Profile, Learner, Organisation, HR
 from api.serializers import LearnerSerializer
 from collections import defaultdict
 from django.db.models import BooleanField, F, Exists, OuterRef
@@ -353,6 +353,12 @@ class AssessmentView(APIView):
             questionnaire = Questionnaire.objects.get(
                 id=request.data.get("questionnaire")
             )
+            
+            organisation = Organisation.objects.get(id=request.data.get("organisation"))
+            hr = []
+            for hr_id in request.data.get("hr"):
+                one_hr = HR.objects.get(id=hr_id)
+                hr.append(one_hr)
             assessment.name = request.data.get("name")
             assessment.assessment_type = request.data.get("assessment_type")
             if request.data.get("assessment_type") == "self":
@@ -363,9 +369,16 @@ class AssessmentView(APIView):
             assessment.rating_type = request.data.get("rating_type")
             assessment.questionnaire = questionnaire
             assessment.descriptive_questions = request.data.get("descriptive_questions")
+            assessment.organisation = organisation
+            assessment.hr.set(hr)
             assessment.save()
+
+            serializer = AssessmentSerializerDepthThree(assessment)
             return Response(
-                {"message": "Assessment updated successfully"},
+                {
+                    "message": "Assessment updated successfully",
+                    "assessment_data": serializer.data,
+                },
                 status=status.HTTP_200_OK,
             )
         except Exception as e:
@@ -1078,13 +1091,13 @@ class StartAssessmentDataForObserver(APIView):
         try:
             observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
 
-            serializer=AssessmentSerializerDepthThree(observer_unique_id.assessment)
+            serializer = AssessmentSerializerDepthThree(observer_unique_id.assessment)
 
             return Response(
                 {
                     "assessment_data": serializer.data,
-                    "observer_email":observer_unique_id.observer.email,
-                    "participant_id":observer_unique_id.participant.id,
+                    "observer_email": observer_unique_id.observer.email,
+                    "participant_id": observer_unique_id.participant.id,
                 },
             )
 
@@ -1095,17 +1108,20 @@ class StartAssessmentDataForObserver(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+
 class GetObserversUniqueIds(APIView):
-    def get(self, request,assessment_id):
+    def get(self, request, assessment_id):
         try:
+            observers_unique_id = ObserverUniqueId.objects.filter(
+                assessment__id=assessment_id
+            )
 
-            
-            observers_unique_id = ObserverUniqueId.objects.filter(assessment__id=assessment_id)
-
-            serializer = ObserverUniqueIdSerializerDepthOne(observers_unique_id, many=True)
+            serializer = ObserverUniqueIdSerializerDepthOne(
+                observers_unique_id, many=True
+            )
 
             return Response(serializer.data)
-        
+
         except Exception as e:
             print(str(e))
             return Response(
@@ -1113,15 +1129,20 @@ class GetObserversUniqueIds(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-class GetParticipantObserversUniqueIds(APIView):
-    def get(self, request,participant_email):
-        try:
-            observers_unique_id = ObserverUniqueId.objects.filter(participant__email=participant_email)
 
-            serializer = ObserverUniqueIdSerializerDepthOne(observers_unique_id, many=True)
+class GetParticipantObserversUniqueIds(APIView):
+    def get(self, request, participant_email):
+        try:
+            observers_unique_id = ObserverUniqueId.objects.filter(
+                participant__email=participant_email
+            )
+
+            serializer = ObserverUniqueIdSerializerDepthOne(
+                observers_unique_id, many=True
+            )
 
             return Response(serializer.data)
-        
+
         except Exception as e:
             print(str(e))
             return Response(
