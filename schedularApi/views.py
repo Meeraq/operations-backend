@@ -688,7 +688,7 @@ def add_batch(request, project_id):
 
     for participant_data in participants_data:
         name = participant_data.get("name")
-        email = participant_data.get("email").strip()
+        email = participant_data.get("email","").strip().lower()
         phone = participant_data.get("phone")
         batch_name = participant_data.get("batch").strip().upper()
         # Assuming 'project_id' is in your request data
@@ -1315,7 +1315,7 @@ def export_available_slot(request):
 def add_participant_to_batch(request, batch_id):
     # batch_id = request.data.get("batch_id")
     name = request.data.get("name")
-    email = request.data.get("email").strip()
+    email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
