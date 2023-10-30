@@ -116,4 +116,6 @@ urlpatterns = [
         views.finalize_project_structure,
         name="finalize_project_structure",
     ),
+    path("send_live_session_link/", views.send_live_session_link),
+
 ]

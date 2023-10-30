@@ -1,6 +1,8 @@
 from datetime import date, datetime, timedelta
 import uuid
 import requests
+from django.core.mail import send_mail
+from django.template.loader import get_template
 from os import name
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError
@@ -309,53 +311,6 @@ def get_schedular_project(request, project_id):
         return Response(
             {"error": "Couldn't find project to add project structure."}, status=400
         )
-
-
-# @api_view(["GET"])
-# def get_batch_calendar(request, batch_id):
-#     try:
-#         live_sessions = LiveSession.objects.filter(batch__id=batch_id)
-#         coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
-#         live_sessions_serializer = LiveSessionSerializer(live_sessions, many=True)
-#         coaching_sessions_serializer = CoachingSessionSerializer(
-#             coaching_sessions, many=True
-#         )
-#         coaching_sessions_result = []
-#         for coaching_session in coaching_sessions_serializer.data:
-#             booked_session_count = SchedularSessions.objects.filter(
-#                 coaching_session__id=coaching_session["id"]
-#             ).count()
-#             availabilities = get_upcoming_availabilities_of_coaching_session(
-#                 coaching_session["id"]
-#             )
-#             coaching_sessions_result.append(
-#                 {
-#                     **coaching_session,
-#                     "available_slots_count": len(availabilities)
-#                     if availabilities
-#                     else None,
-#                     "booked_session_count": booked_session_count,
-#                 }
-#             )
-#         participants = SchedularParticipants.objects.filter(schedularbatch__id=batch_id)
-#         participants_serializer = GetSchedularParticipantsSerializer(
-#             participants, many=True
-#         )
-#         coaches = Coach.objects.filter(schedularbatch__id=batch_id)
-#         coaches_serializer = CoachBasicDetailsSerializer(coaches, many=True)
-#         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
-#         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
-#         return Response(
-#             {
-#                 "sessions": sorted_sessions,
-#                 "participants": participants_serializer.data,
-#                 "coaches": coaches_serializer.data,
-#             }
-#         )
-#     except SchedularProject.DoesNotExist:
-#         return Response(
-#             {"error": "Couldn't find project to add project structure."}, status=400
-#         )
 
 
 @api_view(["GET"])
@@ -676,7 +631,36 @@ def create_coach_schedular_availibilty(request):
     if request.method == "POST":
         serializer = RequestAvailibiltySerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            request_availability = serializer.save()
+
+            # Get the list of selected coaches from the serializer data
+            selected_coaches = serializer.validated_data.get("coach")
+
+            for coach in selected_coaches:
+                subject = "Please Respond to the Request"
+
+                # Render the email content using the template
+                email_content = render_to_string(
+                    "create_coach_schedular_availibilty.html",
+                    {
+                        "coach": coach,
+                        "request_availability": request_availability,
+                    },
+                )
+
+                from_email = settings.DEFAULT_FROM_EMAIL
+                recipient_list = [coach.email]
+
+                # Send the email with the HTML content
+                send_mail(
+                    subject,
+                    "",  # Empty message, as the content is in the template
+                    from_email,
+                    recipient_list,
+                    fail_silently=False,
+                    html_message=email_content,
+                )
+
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -870,6 +854,35 @@ def schedule_session(request):
             serializer.save()
             coach_availability.is_confirmed = True
             coach_availability.save()
+
+            # Send an email notification to the coach with BCC
+            coach_name = f"{coach_availability.coach.first_name} {coach_availability.coach.last_name}"
+            participant_name = participant.name
+            subject = f"Your slot has been booked"
+            from_email = settings.DEFAULT_FROM_EMAIL
+            recipient_list = [coach_availability.coach.email]
+            bcc = ["pmo@meeraq.com"]
+
+            # Load the email template
+            email_template = get_template("schedule_session.html")
+            context = {
+                "coach_name": coach_name,
+                "participant_name": participant_name,
+                # "booking_date": coach_availability.date,
+                # Add more context data as needed
+            }
+            email_content = email_template.render(context)
+
+            # Send the email
+            send_mail(
+                subject,
+                email_content,
+                from_email,
+                recipient_list,
+                fail_silently=False,
+                html_message=email_content,  # Set the email content as HTML
+            )
+
             return Response(
                 {"message": "Session scheduled successfully."},
                 status=status.HTTP_201_CREATED,
@@ -893,16 +906,54 @@ def create_coach_availabilities(request):
         coach_id = request.data.get("coach_id", [])
         request = RequestAvailibilty.objects.get(id=request_id)
         serializer = CoachSchedularGiveAvailibiltySerializer(data=slots_data, many=True)
+
         if serializer.is_valid():
             serializer.save()
             request.provided_by.append(int(coach_id))
             request.save()
+
+            # Send email to pmo@meeraq.com
+            coach = Coach.objects.get(id=coach_id)
+            availabilities = CoachSchedularAvailibilty.objects.filter(
+                request=request, coach=coach
+            )
+
+            subject = "Coach Availabilities"
+            message = f"Coach Name: {coach.first_name} {coach.last_name}\n"
+
+            for availability in availabilities:
+                start_time = datetime.fromtimestamp(int(availability.start_time) / 1000)
+                end_time = datetime.fromtimestamp(int(availability.end_time) / 1000)
+
+                message += f"{start_time.strftime('%d %B %Y')}, {start_time.strftime('%I:%M %p')}, {end_time.strftime('%I:%M %p')}\n"
+
+            # Render the email content using the template
+            email_content = render_to_string(
+                "create_coach_availibilities.html",
+                {"subject": subject, "message": message},
+            )
+
+            from_email = settings.DEFAULT_FROM_EMAIL
+            recipient_list = ["pmo@meeraq.com"]
+
+            send_mail(
+                subject,  # Subject
+                "",  # Message (empty string)
+                from_email,  # From email
+                recipient_list,  # Recipient list
+                fail_silently=False,
+                html_message=email_content,  # HTML message content
+            )
+
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         print(serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         print(e)
-        return Response({"error": "Failed to confirm the availability"})
+        return Response(
+            {"error": "Failed to confirm the availability"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["GET"])
@@ -1181,91 +1232,6 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
     )
 
 
-# from django.http import HttpResponse
-# from openpyxl import Workbook
-# from datetime import datetime
-
-
-# @api_view(["GET"])
-# def export_available_slot(request):
-#     # Retrieve all InvoiceData objects
-#     queryset = CoachSchedularAvailibilty.objects.all()
-#     # Create a new workbook and add a worksheet
-#     wb = Workbook()
-#     ws = wb.active
-
-#     # Write headers to the worksheet
-#     headers = ["Coach Name", "Date", "Availability"]
-
-#     for col_num, header in enumerate(headers, 1):
-#         ws.cell(row=1, column=col_num, value=header)
-
-#     # Write data to the worksheet
-#     for row_num, availabilities in enumerate(queryset, 2):
-#         start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
-#         end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
-
-#         ws.append(
-#             [
-#                 availabilities.coach.first_name + " " + availabilities.coach.last_name,
-#                 start_time.strftime("%d %B %Y"),
-#                 start_time.strftime("%I:%M %p") + " - " + end_time.strftime("%I:%M %p"),
-#             ]
-#         )
-
-#     # Create a response with the Excel file
-#     response = HttpResponse(
-#         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-#     )
-#     response["Content-Disposition"] = "attachment; filename=invoice_data.xlsx"
-#     wb.save(response)
-
-#     return response
-# ................
-
-# from django.utils import timezone
-# from django.http import HttpResponse
-
-# @api_view(["GET"])
-# def export_available_slot(request):
-#     current_timestamp = int(timezone.now().timestamp() * 1000)  # Current day's timestamp
-
-#     # Retrieve all InvoiceData objects with availabilities greater than the current timestamp
-#     queryset = CoachSchedularAvailibilty.objects.filter(start_time__gt=current_timestamp)
-
-#     # Create a new workbook and add a worksheet
-#     wb = Workbook()
-#     ws = wb.active
-
-#     # Write headers to the worksheet
-#     headers = ["Coach Name", "Date", "Availability"]
-
-#     for col_num, header in enumerate(headers, 1):
-#         ws.cell(row=1, column=col_num, value=header)
-
-#     # Write data to the worksheet
-#     for row_num, availabilities in enumerate(queryset, 2):
-#         start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
-#         end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
-
-#         ws.append(
-#             [
-#                 availabilities.coach.first_name + " " + availabilities.coach.last_name,
-#                 start_time.strftime("%d %B %Y"),
-#                 start_time.strftime("%I:%M %p") + " - " + end_time.strftime("%I:%M %p"),
-#             ]
-#         )
-
-#     # Create a response with the Excel file
-#     response = HttpResponse(
-#         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-#     )
-#     response["Content-Disposition"] = "attachment; filename=invoice_data.xlsx"
-#     wb.save(response)
-
-#     return response
-
-
 @api_view(["GET"])
 def export_available_slot(request):
     current_datetime = timezone.now()
@@ -1361,3 +1327,47 @@ def finalize_project_structure(request, project_id):
         {"message": "Project structure finalized successfully"},
         status=status.HTTP_200_OK,
     )
+
+
+@api_view(["POST"])
+def send_live_session_link(request):
+    data = request.data
+
+    # Define the subject for the email template
+    subject = "Live Session Link"
+
+    # Send emails to participants
+    participants = data["participant"]
+    for participant in participants:
+        print("1234567890", participant)
+        context = {
+            "link": data["description"],
+            "participant_name": participant["name"],
+        }
+        email_content = render_to_string("send_live_session_link.html", context)
+        email = EmailMessage(
+            subject,
+            email_content,
+            settings.DEFAULT_FROM_EMAIL,  # Use the sender's email address from settings
+            [participant["email"]],
+        )
+        email.content_subtype = "html"  # Set the content type to HTML
+        email.send()
+
+    # Send an email to the facilitator if specified
+    facilitator_email = "jatin@meeraq.com"  # Replace with data["facilitator"] if needed
+    if facilitator_email:
+        facilitator_context = {"link": data["description"]}
+        facilitator_message = render_to_string(
+            "send_live_session_link.html", facilitator_context
+        )
+        facilitator_email = EmailMessage(
+            "Live Session Link for Facilitator",
+            facilitator_message,
+            settings.DEFAULT_FROM_EMAIL,  # Use the sender's email address from settings
+            [facilitator_email],
+        )
+        facilitator_email.content_subtype = "html"  # Set the content type to HTML
+        facilitator_email.send()
+
+    return Response({"message": "Emails sent successfully"})

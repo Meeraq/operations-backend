@@ -49,6 +49,7 @@ class LiveSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = LiveSession
         fields = "__all__"
+        depth = 1
 
 
 class CoachingSessionSerializer(serializers.ModelSerializer):
