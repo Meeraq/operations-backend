@@ -688,7 +688,7 @@ def add_batch(request, project_id):
 
     for participant_data in participants_data:
         name = participant_data.get("name")
-        email = participant_data.get("email","").strip().lower()
+        email = participant_data.get("email", "").strip().lower()
         phone = participant_data.get("phone")
         batch_name = participant_data.get("batch").strip().upper()
         # Assuming 'project_id' is in your request data
@@ -863,6 +863,7 @@ def schedule_session(request):
             "enrolled_participant": participant.id,
             "availibility": coach_availability.id,
             "coaching_session": coaching_session.id,
+            "status": "pending",
         }
 
         serializer = SchedularSessionsSerializer(data=session_data)
@@ -940,6 +941,7 @@ def get_sessions(request):
             "coaching_session_number": session.coaching_session.coaching_session_number,
             "participant_email": session.enrolled_participant.email,
             "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "room_id": f"{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
         }
         session_details.append(session_detail)
@@ -968,6 +970,7 @@ def get_sessions_by_type(request, sessions_type):
     session_details = []
     for session in sessions:
         session_detail = {
+            "id": session.id,
             "batch_name": session.coaching_session.batch.name
             if coach_id is None
             else None,
@@ -990,6 +993,8 @@ def get_sessions_by_type(request, sessions_type):
             else None,
             "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
+            "room_id": f"{session.availibility.coach.room_id}",
+            "status": session.status,
         }
         session_details.append(session_detail)
     return Response(session_details, status=status.HTTP_200_OK)
@@ -1362,3 +1367,22 @@ def finalize_project_structure(request, project_id):
         {"message": "Project structure finalized successfully"},
         status=status.HTTP_200_OK,
     )
+
+
+@api_view(["PUT"])
+def update_session_status(request, session_id):
+    status = request.data.get("status")
+    if not session_id or not status:
+        return Response(
+            {"error": "Failed to update status"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    try:
+        session = get_object_or_404(SchedularSessions, id=session_id)
+    except SchedularSessions.DoesNotExist:
+        return Response(
+            {"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    # Update the session status
+    session.status = status
+    session.save()
+    return Response({"message": "Session status updated successfully"}, status=201)

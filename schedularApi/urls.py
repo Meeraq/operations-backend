@@ -116,4 +116,9 @@ urlpatterns = [
         views.finalize_project_structure,
         name="finalize_project_structure",
     ),
+    path(
+        "update-session-status/<int:session_id>/",
+        views.update_session_status,
+        name="update_session_status",
+    ),
 ]
