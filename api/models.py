@@ -17,6 +17,7 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
+from django_celery_beat.models import PeriodicTask
 
 
 import environ
@@ -54,9 +55,9 @@ def password_reset_token_created(
         reverse("password_reset:reset-password-request"), reset_password_token.key
     )
     subject = "Meeraq - Forgot Password"
-    
+
     user_type = reset_password_token.user.profile.type
-    not_approved_coach=False
+    not_approved_coach = False
     if user_type == "pmo":
         user = Pmo.objects.get(email=reset_password_token.user.email)
         name = user.name
@@ -64,7 +65,7 @@ def password_reset_token_created(
         user = Coach.objects.get(email=reset_password_token.user.email)
         name = user.first_name
         if not user.is_approved:
-           not_approved_coach=True 
+            not_approved_coach = True
     elif user_type == "learner":
         user = Learner.objects.get(email=reset_password_token.user.email)
         name = user.name
@@ -73,7 +74,7 @@ def password_reset_token_created(
         name = user.first_name
     else:
         name = "User"
-        
+
     if not_approved_coach == True:
         # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
         link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
@@ -87,7 +88,7 @@ def password_reset_token_created(
             {"name": name, "createPassword": link},
             [],  # no bcc
         )
-    else: 
+    else:
         # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
         link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
         # send_mail(
@@ -100,7 +101,6 @@ def password_reset_token_created(
             {"name": name, "resetPassword": link},
             [],  # no bcc
         )
-    
 
 
 class Profile(models.Model):
@@ -137,7 +137,7 @@ def validate_pdf_extension(value):
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     coach_id = models.CharField(max_length=20, blank=True)
-    vendor_id = models.CharField(max_length=255, blank=True,default="")
+    vendor_id = models.CharField(max_length=255, blank=True, default="")
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
@@ -240,7 +240,7 @@ class CoachStatus(models.Model):
 
 class Project(models.Model):
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
-    name = models.CharField(max_length=100,unique=True)
+    name = models.CharField(max_length=100, unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type = models.CharField(
         max_length=50, choices=project_type_choice, default="cod"
@@ -441,10 +441,10 @@ class ActionItem(models.Model):
 class ProfileEditActivity(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
-   
 
     def __str__(self):
         return f"Profile Edit for {self.user.username}"
+
 
 class UserLoginActivity(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -453,10 +453,11 @@ class UserLoginActivity(models.Model):
     def __str__(self):
         return f"User Login Activity for {self.user.username}"
 
+
 class SentEmailActivity(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    email_subject = models.CharField(max_length=500)  
-    timestamp = models.DateTimeField() 
+    email_subject = models.CharField(max_length=500)
+    timestamp = models.DateTimeField()
 
     def __str__(self):
         return f"Sent Email - {self.user.username}"
@@ -469,9 +470,10 @@ class AddCoachActivity(models.Model):
     def __str__(self):
         return f"Coach Added - {self.user.username}"
 
+
 class AddGoalActivity(models.Model):
-    user=models.ForeignKey(User,on_delete=models.CASCADE)
-    timestamp=models.DateTimeField()
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
 
     def __str__(self):
         return f"{self.user} added a goal."
