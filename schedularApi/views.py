@@ -961,7 +961,7 @@ def get_sessions_by_type(request, sessions_type):
     if sessions_type == "upcoming":
         sessions = sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
     elif sessions_type == "past":
-        sessions = sessions.filter(availibility__start_time__lt=timestamp_milliseconds)
+        sessions = sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
     else:
         sessions = []
 
