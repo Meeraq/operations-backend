@@ -1,7 +1,6 @@
 from datetime import date, datetime, timedelta
 import uuid
 import requests
-import uuid
 from os import name
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError
@@ -16,6 +15,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.utils import timezone
+from openpyxl import Workbook
+from django.http import HttpResponse
 
 
 from django.shortcuts import render
@@ -266,10 +267,16 @@ def create_project_structure(request, project_id):
         project = get_object_or_404(SchedularProject, id=project_id)
         serializer = SessionItemSerializer(data=request.data, many=True)
         if serializer.is_valid():
+            is_editing = len(project.project_structure) > 0
             project.project_structure = serializer.data
             project.save()
             return Response(
-                {"message": "Project structure added successfully."}, status=200
+                {
+                    "message": "Project structure edited successfully."
+                    if is_editing
+                    else "Project structure added successfully."
+                },
+                status=200,
             )
         return Response({"error": "Invalid sessions found."}, status=400)
     except SchedularProject.DoesNotExist:
@@ -681,7 +688,7 @@ def add_batch(request, project_id):
 
     for participant_data in participants_data:
         name = participant_data.get("name")
-        email = participant_data.get("email").strip()
+        email = participant_data.get("email","").strip().lower()
         phone = participant_data.get("phone")
         batch_name = participant_data.get("batch").strip().upper()
         # Assuming 'project_id' is in your request data
@@ -954,7 +961,7 @@ def get_sessions_by_type(request, sessions_type):
     if sessions_type == "upcoming":
         sessions = sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
     elif sessions_type == "past":
-        sessions = sessions.filter(availibility__start_time__lt=timestamp_milliseconds)
+        sessions = sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
     else:
         sessions = []
 
@@ -1170,5 +1177,187 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
 
     return Response(
         {"coach_availabilities_date_wise": coach_availabilities_date_wise},
+        status=status.HTTP_200_OK,
+    )
+
+
+# from django.http import HttpResponse
+# from openpyxl import Workbook
+# from datetime import datetime
+
+
+# @api_view(["GET"])
+# def export_available_slot(request):
+#     # Retrieve all InvoiceData objects
+#     queryset = CoachSchedularAvailibilty.objects.all()
+#     # Create a new workbook and add a worksheet
+#     wb = Workbook()
+#     ws = wb.active
+
+#     # Write headers to the worksheet
+#     headers = ["Coach Name", "Date", "Availability"]
+
+#     for col_num, header in enumerate(headers, 1):
+#         ws.cell(row=1, column=col_num, value=header)
+
+#     # Write data to the worksheet
+#     for row_num, availabilities in enumerate(queryset, 2):
+#         start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
+#         end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
+
+#         ws.append(
+#             [
+#                 availabilities.coach.first_name + " " + availabilities.coach.last_name,
+#                 start_time.strftime("%d %B %Y"),
+#                 start_time.strftime("%I:%M %p") + " - " + end_time.strftime("%I:%M %p"),
+#             ]
+#         )
+
+#     # Create a response with the Excel file
+#     response = HttpResponse(
+#         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+#     )
+#     response["Content-Disposition"] = "attachment; filename=invoice_data.xlsx"
+#     wb.save(response)
+
+#     return response
+# ................
+
+# from django.utils import timezone
+# from django.http import HttpResponse
+
+# @api_view(["GET"])
+# def export_available_slot(request):
+#     current_timestamp = int(timezone.now().timestamp() * 1000)  # Current day's timestamp
+
+#     # Retrieve all InvoiceData objects with availabilities greater than the current timestamp
+#     queryset = CoachSchedularAvailibilty.objects.filter(start_time__gt=current_timestamp)
+
+#     # Create a new workbook and add a worksheet
+#     wb = Workbook()
+#     ws = wb.active
+
+#     # Write headers to the worksheet
+#     headers = ["Coach Name", "Date", "Availability"]
+
+#     for col_num, header in enumerate(headers, 1):
+#         ws.cell(row=1, column=col_num, value=header)
+
+#     # Write data to the worksheet
+#     for row_num, availabilities in enumerate(queryset, 2):
+#         start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
+#         end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
+
+#         ws.append(
+#             [
+#                 availabilities.coach.first_name + " " + availabilities.coach.last_name,
+#                 start_time.strftime("%d %B %Y"),
+#                 start_time.strftime("%I:%M %p") + " - " + end_time.strftime("%I:%M %p"),
+#             ]
+#         )
+
+#     # Create a response with the Excel file
+#     response = HttpResponse(
+#         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+#     )
+#     response["Content-Disposition"] = "attachment; filename=invoice_data.xlsx"
+#     wb.save(response)
+
+#     return response
+
+
+@api_view(["GET"])
+def export_available_slot(request):
+    current_datetime = timezone.now()
+    current_timestamp = int(
+        current_datetime.timestamp() * 1000
+    )  # Current date and time timestamp
+
+    # Retrieve all InvoiceData objects with availabilities greater than the current timestamp
+    queryset = CoachSchedularAvailibilty.objects.filter(
+        start_time__gt=current_timestamp, is_confirmed=False
+    )
+
+    # Create a new workbook and add a worksheet
+    wb = Workbook()
+    ws = wb.active
+
+    # Write headers to the worksheet
+    headers = ["Coach Name", "Date", "Availability"]
+
+    for col_num, header in enumerate(headers, 1):
+        ws.cell(row=1, column=col_num, value=header)
+
+    # Write data to the worksheet
+    for row_num, availabilities in enumerate(queryset, 2):
+        start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
+        end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
+
+        ws.append(
+            [
+                availabilities.coach.first_name + " " + availabilities.coach.last_name,
+                start_time.strftime("%d %B %Y"),
+                start_time.strftime("%I:%M %p") + " - " + end_time.strftime("%I:%M %p"),
+            ]
+        )
+
+    # Create a response with the Excel file
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = "attachment; filename=Available Slot.xlsx"
+    wb.save(response)
+
+    return response
+
+
+@api_view(["POST"])
+def add_participant_to_batch(request, batch_id):
+    # batch_id = request.data.get("batch_id")
+    name = request.data.get("name")
+    email = request.data.get("email", "").strip().lower()
+    phone = request.data.get("phone")
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        participant = SchedularParticipants.objects.get(email=email)
+        # Check if participant is already in the batch
+        if participant in batch.participants.all():
+            return Response(
+                {"error": "Participant already exists in the batch"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    except SchedularParticipants.DoesNotExist:
+        # Participant doesn't exist, create a new one
+        participant = SchedularParticipants(name=name, email=email, phone=phone)
+        participant.save()
+
+    # Add the participant to the batch
+    batch.participants.add(participant)
+    batch.save()
+
+    return Response(
+        {"message": "Participant added to the batch successfully"},
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["POST"])
+def finalize_project_structure(request, project_id):
+    try:
+        project = get_object_or_404(SchedularProject, id=project_id)
+    except SchedularProject.DoesNotExist:
+        return Response(
+            {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    # Update is_project_structure_finalized to True
+    project.is_project_structure_finalized = True
+    project.save()
+    return Response(
+        {"message": "Project structure finalized successfully"},
         status=status.HTTP_200_OK,
     )
