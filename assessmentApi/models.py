@@ -6,6 +6,8 @@ from api.models import Learner, Profile, Organisation, HR
 
 class Competency(models.Model):
     name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    behaviors = models.JSONField(default=list, blank=True)
     created_on = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -17,10 +19,16 @@ class Question(models.Model):
         ("self", "Self"),
         ("360", "360"),
     ]
+    RATING_CHOICES = [
+        ("1-5", "1-5"),
+        ("1-10", "1-10"),
+    ]
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
     type = models.CharField(max_length=10, choices=QUESTION_TYPES, blank=True)
     self_question = models.TextField()
     observer_question = models.TextField(blank=True, null=True)
+    behavior= models.CharField(max_length=225,blank=True)
+    rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
