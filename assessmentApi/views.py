@@ -1149,3 +1149,34 @@ class GetParticipantObserversUniqueIds(APIView):
                 {"error": "Failed to retrieve Observer Unique Id"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+class StartAssessmentDisabled(APIView):
+    def get(self, request,unique_id):
+        try:
+            observers_unique_id = ObserverUniqueId.objects.filter(
+                unique_id=unique_id
+            ).first()
+
+            observer_response_data=ObserverResponse.objects.filter(
+                participant=observers_unique_id.participant,
+                observer=observers_unique_id.observer,
+                assessment=observers_unique_id.assessment,
+            )
+            if(observer_response_data):
+                return Response(
+                    {
+                        "observer_response":True
+                    }
+                )
+            else:
+                return Response(
+                    {
+                        "observer_response":False
+                    }
+                )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to retrieve Observer Response Data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
