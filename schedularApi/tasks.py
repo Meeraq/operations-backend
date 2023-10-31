@@ -267,24 +267,23 @@ def send_upcoming_session_pmo_at_10am():
         sessions_list = []
         for session in today_sessions:
             start_time = datetime.fromtimestamp(
-                int(session.availibility.start_time) / 1000
-            )
-            end_time = datetime.fromtimestamp(int(session.availibility.end_time) / 1000)
-
-            session_details = {
-                # "Session ID":,
-                "coach": session.availibility.coach.first_name
-                + " "
-                + session.availibility.coach.last_name,
-                "participant": session.enrolled_participant.name,
-                "batch_name": session.coaching_session.batch.name,
-                "status": session.status,
-                # "session_date": start_time.strftime("%d %B %Y"),
-                "session_time": start_time.strftime("%I:%M %p")
-                + " - "
-                + end_time.strftime("%I:%M %p"),
-            }
-            sessions_list.append(session_details)
+                (int(session.availibility.start_time) / 1000) + 19800
+            ).strftime("%I:%M %p")
+        end_time = datetime.fromtimestamp(
+            (int(session.availibility.start_time) / 1000) + 19800
+        ).strftime("%I:%M %p")
+        session_details = {
+            # "Session ID":,
+            "coach": session.availibility.coach.first_name
+            + " "
+            + session.availibility.coach.last_name,
+            "participant": session.enrolled_participant.name,
+            "batch_name": session.coaching_session.batch.name,
+            "status": session.status,
+            # "session_date": start_time.strftime("%d %B %Y"),
+            "session_time": start_time + " - " + end_time,
+        }
+        sessions_list.append(session_details)
         pmo_user = User.objects.filter(profile__type="pmo").first()
         send_mail_templates(
             "pmo_emails/daily_session.html",

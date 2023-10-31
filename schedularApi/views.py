@@ -645,18 +645,21 @@ def create_coach_schedular_availibilty(request):
             date_str_arr = []
             for date in dates:
                 formatted_date = datetime.strptime(date, "%Y-%m-%d").strftime(
-                    "%d-%m-%Y"
+                    "%d-%B-%Y"
                 )
                 date_str_arr.append(formatted_date)
+            exp=datetime.strptime(str(request_availability.expiry_date), "%Y-%m-%d").strftime(
+                    "%d-%B-%Y"
+                )
             for coach in selected_coaches:
                 send_mail_templates(
                     "create_coach_schedular_availibilty.html",
                     [coach.email],
-                    "Meeraq -Book Coacing Session",
+                    "Meeraq -Book Coaching Session",
                     {
                         "name": coach.first_name + " " + coach.last_name,
                         "dates": date_str_arr,
-                        "expiry_date": request_availability.expiry_date,
+                        "expiry_date": exp,
                     },
                     [],
                 )
@@ -801,8 +804,13 @@ def schedule_session(request):
 
         new_timestamp = int(timestamp) / 1000
         date_obj = datetime.fromtimestamp(new_timestamp)
-        date_str = date_obj.strftime("%d-%m-%Y")
-        time_str = date_obj.strftime("%I:%M:%S %p")
+        date_str = date_obj.strftime("%Y-%m-%d")
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+        formatted_date = date_obj.strftime("%d %B %Y")
+
+        start_time_for_mail = datetime.fromtimestamp(
+            (int(timestamp) / 1000) + 19800
+        ).strftime("%I:%M %p")
 
         # Retrieve coaching session using the provided booking link
         coaching_session = get_object_or_404(CoachingSession, booking_link=booking_link)
@@ -869,18 +877,22 @@ def schedule_session(request):
                 "schedule_session.html",
                 [coach_availability.coach.email],
                 "Meeraq - Participant booked session",
-                {"name": coach_name, "date": date_str, "time": time_str},
+                {
+                    "name": coach_name,
+                    "date": formatted_date,
+                    "time": start_time_for_mail,
+                },
                 [],
             )
 
             send_mail_templates(
-                "coaching_email_template.html",
+                "coach_templates/coaching_email_template.html",
                 [participant_email],
                 "Meeraq - Laser Coaching Session Booked",
                 {
                     "name": coach_name,
-                    "date": date_str,
-                    "time": time_str,
+                    "date": formatted_date,
+                    "time": start_time_for_mail,
                     "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
                 },
                 [],
@@ -1178,6 +1190,8 @@ def send_unbooked_coaching_session_mail(request):
     participants = request.data.get("participants", [])
     booking_link = request.data.get("bookingLink", "")
     expiry_date = request.data.get("expiry_date", "")
+    date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
+    formatted_date = date_obj.strftime("%d %B %Y")
 
     for participant in participants:
         try:
@@ -1193,7 +1207,7 @@ def send_unbooked_coaching_session_mail(request):
             {
                 "name": participant_name,
                 "event_link": booking_link,
-                "expiry_date": expiry_date,
+                "expiry_date": formatted_date,
             },
             [],
         )
