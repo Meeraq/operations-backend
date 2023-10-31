@@ -2,7 +2,7 @@
 <div>
     <b>
         <span class="heading-container">
-            <!-- Dear <span class="heading-container-span">{{ participant_name }}</span>, -->
+            Dear <span class="heading-container-span">{{ name }}</span>,
         </span>
     </b>
 </div>
@@ -12,29 +12,26 @@
 </p>
 <p>
 <h1>{{ subject }}</h1>
-<p>
-    Dear {{name}},
-</p>
-<p>
 <p>Admin has asked your availability for below dates:</p>
-
 <p>
-{% for date in dates %}
+    {% for date in dates %}
 <p>{{ date }}</p>
 {% endfor %}
 </p>
-Expiry Date: {{ expiry_date }}
+
+<p class="child-para">
+<p>
+    Request will expire at: {{expiry_date}}.
 </p>
 <p>
-    Please respond to the request by giving availabilities.
+    Login here to give your availibility.
+</p>
 </p>
 
 </p>
-<!-- <p class="child-para">You can join the session on our SEEQ platform.</p> -->
-<!-- <p class="child-para">Please block your calendars for the same.</p> -->
 <p class="child-para">
     Click
-    <a href="https://caas.meeraq.com/" style="color: #007bff; text-decoration: underline">here</a>
+    <a href="https://seeq.meeraq.com/" style="color: #007bff; text-decoration: underline">here</a>
     to login to the Meeraq Platform.
 </p>
 {% endblock %}
