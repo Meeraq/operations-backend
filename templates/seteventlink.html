@@ -1,43 +1,29 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <style>
+{% extends "parent_template.html" %} {% block title %}Meeraq Coaching{%endblock%} {% block heading %}
+<div>
+  <b>
+    <span class="heading-container">
+      Dear <span class="heading-container-span">{{name}}</span>,
+    </span>
+  </b>
+</div>
+{% endblock %} {% block content %}
+<p class="child-para" style="color: #333; font-size: 18px; font-weight: bold">
+  Greetings from Meeraq!!
+</p>
+<p class="child-para">Coaches have given their available slots for coaching sessions.</p>
+<p class="child-para">
+  Please click on the link below to book your slot.
+<p class="child-para">
+  <a href="{{ event_link }}">{{ event_link }}</a><br />
+</p>
+</p>
+<p class="child-para">
+  This link will be expired on {{expiry_date}}.<br /> Please make sure you book the coaching session before this date.
+</p>
+<p class="child-para">
+  If you still face issues or have any doubts, please reach out at
+  <a href="mailto:pmo@meeraq.com">pmo@meeraq.com</a>.
+</p>
+{% endblock %}
 
-      a {
-        text-decoration: none;
-        color: blue;
-      }
 
-      img {
-        height: auto;
-        width: 8rem;
-        position: absolute;
-        left: 0;
-      }
-    </style>
-  </head>
-  <body>
-    <div><b>Coaches have cleared their calendar. You can now book your Meeraq Laser Coaching sessions!! </b></div>
-    <br />
-    <div>
-      Please click on the link below to book the session.<br />
-
-      <br />
-
-      <a href="{{ event_link }}">{{ event_link }}</a><br />
-      <br /><br />
-      If clicking the link doesn't work, copy and paste the above URL in your
-      browser.
-      <br /><br />
-      If you still face issues or have any doubts, please reach out at
-      <a href="mailto:pmo@meeraq.com">pmo@meeraq.com</a>.
-      <br />
-      <br />
-      Regards, <br />
-      <p>Meeraq</p>
-    </div>
-  </body>
-</html>

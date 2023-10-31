@@ -250,3 +250,73 @@ def send_participant_morning_reminder_email():
             [],  # bcc
         )
         sleep(5)
+
+
+@shared_task
+def send_upcoming_session_pmo_at_10am():
+    start_timestamp, end_timestamp = get_current_date_timestamps()
+    today_sessions = SchedularSessions.objects.filter(
+        availibility__start_time__lte=end_timestamp,
+        availibility__end_time__gte=start_timestamp,
+    )
+    if today_sessions:
+        # Compose the email message with session information
+        subject = "Daily Sessions"
+        message = "List of sessions scheduled for today:\n"
+
+        sessions_list = []
+        for session in today_sessions:
+            start_time = datetime.fromtimestamp(
+                int(session.availibility.start_time) / 1000
+            )
+            end_time = datetime.fromtimestamp(int(session.availibility.end_time) / 1000)
+
+            session_details = {
+                # "Session ID":,
+                "coach": session.availibility.coach.first_name
+                + " "
+                + session.availibility.coach.last_name,
+                "participant": session.enrolled_participant.name,
+                "batch_name": session.coaching_session.batch.name,
+                "status": session.status,
+                # "session_date": start_time.strftime("%d %B %Y"),
+                "session_time": start_time.strftime("%I:%M %p")
+                + " - "
+                + end_time.strftime("%I:%M %p"),
+            }
+            sessions_list.append(session_details)
+
+        send_mail_templates(
+            "pmo_emails/daily_session.html",
+            ["jatin@meeraq.com"],
+            subject,
+            {"sessions": sessions_list},
+            [],
+        )
+
+
+@shared_task
+def send_participant_morning_reminder_one_day_before_email():
+    start_timestamp, end_timestamp = get_current_date_timestamps()
+    one_day_in_miliseconds = 86400000
+    start_timestamp_one_day_ahead = str(int(start_timestamp) + one_day_in_miliseconds)
+    end_timestamp_one_day_ahead = str(int(end_timestamp) + one_day_in_miliseconds)
+    tomorrow_sessions = SchedularSessions.objects.filter(
+        availibility__start_time__lte=end_timestamp_one_day_ahead,
+        availibility__end_time__gte=start_timestamp_one_day_ahead,
+    )
+    for session in tomorrow_sessions:
+        name = session.enrolled_participant.name
+        meeting_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
+        time = datetime.fromtimestamp(
+            (int(session.availibility.start_time) / 1000) + 19800
+        ).strftime("%I:%M %p")
+        content = {"time": time, "meeting_link": meeting_link, "name": name}
+        send_mail_templates(
+            "coachee_emails/one_day_before_remailder.html",
+            [session.enrolled_participant.email],
+            "Meeraq - Coaching Session Reminder",
+            content,
+            [],  # bcc
+        )
+        sleep(5)

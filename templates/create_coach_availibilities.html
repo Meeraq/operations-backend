@@ -2,7 +2,7 @@
 <div>
     <b>
         <span class="heading-container">
-            <!-- Dear <span class="heading-container-span">{{ participant_name }}</span>, -->
+            Dear <span class="heading-container-span">PMO</span>,
         </span>
     </b>
 </div>
@@ -11,8 +11,12 @@
     Greetings from Meeraq!!
 </p>
 <p>
-<h1>{{ subject }}</h1>
-<p>{{ message }}</p>
+<p>{{name}} has given total {{total_slots}} availibilties for the below dates:</p>
+<p>
+{% for date in dates %}
+<p>{{ date }}</p>
+{% endfor %}
+</p>
 </p>
 <!-- <p class="child-para">You can join the session on our SEEQ platform.</p> -->
 <!-- <p class="child-para">Please block your calendars for the same.</p> -->

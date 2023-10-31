@@ -13,11 +13,17 @@
 <p>
 <h1>{{ subject }}</h1>
 <p>
-    Hi {{ coach.first_name }} {{ coach.last_name }},
+    Dear {{name}},
 </p>
 <p>
-    Request: {{ request_availability.request_name }}<br>
-    Expiry Date: {{ request_availability.expiry_date }}
+<p>Admin has asked your availability for below dates:</p>
+
+<p>
+{% for date in dates %}
+<p>{{ date }}</p>
+{% endfor %}
+</p>
+Expiry Date: {{ expiry_date }}
 </p>
 <p>
     Please respond to the request by giving availabilities.

@@ -59,7 +59,7 @@ from .models import (
 )
 
 
-from api.views import create_notification
+from api.views import create_notification, send_mail_templates
 
 
 # Create your views here.
@@ -635,32 +635,29 @@ def create_coach_schedular_availibilty(request):
 
             # Get the list of selected coaches from the serializer data
             selected_coaches = serializer.validated_data.get("coach")
-
+            availability_data = request_availability.availability
+            dates = list(availability_data.keys())
+            date_str_arr = []
+            for date in dates:
+                formatted_date = datetime.strptime(date, "%Y-%m-%d").strftime(
+                    "%d-%m-%Y"
+                )
+                date_str_arr.append(formatted_date)
             for coach in selected_coaches:
-                subject = "Please Respond to the Request"
-
-                # Render the email content using the template
-                email_content = render_to_string(
+                send_mail_templates(
                     "create_coach_schedular_availibilty.html",
+                    [coach.email],
+                    "Meeraq -Book Coacing Session",
                     {
-                        "coach": coach,
-                        "request_availability": request_availability,
+                        "name": coach.first_name + " " + coach.last_name,
+                        "dates": date_str_arr,
+                        "expiry_date": request_availability.expiry_date,
                     },
+                    [],
                 )
 
                 from_email = settings.DEFAULT_FROM_EMAIL
                 recipient_list = [coach.email]
-
-                # Send the email with the HTML content
-                send_mail(
-                    subject,
-                    "",  # Empty message, as the content is in the template
-                    from_email,
-                    recipient_list,
-                    fail_silently=False,
-                    html_message=email_content,
-                )
-
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -795,6 +792,12 @@ def schedule_session(request):
         booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
         participant_email = request.data.get("participant_email", "")
         coach_availability_id = request.data.get("availability_id", "")
+        timestamp = request.data.get("timestamp", "")
+
+        new_timestamp = int(timestamp) / 1000
+        date_obj = datetime.fromtimestamp(new_timestamp)
+        date_str = date_obj.strftime("%d-%m-%Y")
+        time_str = date_obj.strftime("%I:%M:%S %p")
 
         # Retrieve coaching session using the provided booking link
         coaching_session = get_object_or_404(CoachingSession, booking_link=booking_link)
@@ -854,33 +857,14 @@ def schedule_session(request):
             serializer.save()
             coach_availability.is_confirmed = True
             coach_availability.save()
-
-            # Send an email notification to the coach with BCC
             coach_name = f"{coach_availability.coach.first_name} {coach_availability.coach.last_name}"
-            participant_name = participant.name
-            subject = f"Your slot has been booked"
-            from_email = settings.DEFAULT_FROM_EMAIL
-            recipient_list = [coach_availability.coach.email]
-            bcc = ["pmo@meeraq.com"]
 
-            # Load the email template
-            email_template = get_template("schedule_session.html")
-            context = {
-                "coach_name": coach_name,
-                "participant_name": participant_name,
-                # "booking_date": coach_availability.date,
-                # Add more context data as needed
-            }
-            email_content = email_template.render(context)
-
-            # Send the email
-            send_mail(
-                subject,
-                email_content,
-                from_email,
-                recipient_list,
-                fail_silently=False,
-                html_message=email_content,  # Set the email content as HTML
+            send_mail_templates(
+                "schedule_session.html",
+                [coach_availability.coach.email],
+                "Meeraq - Participant booked session",
+                {"name": coach_name, "date": date_str, "time": time_str},
+                [],
             )
 
             return Response(
@@ -902,48 +886,46 @@ def schedule_session(request):
 def create_coach_availabilities(request):
     try:
         slots_data = request.data.get("slots", [])
+        slots_length = request.data.get("slots_length")
         request_id = request.data.get("request_id", [])
         coach_id = request.data.get("coach_id", [])
         request = RequestAvailibilty.objects.get(id=request_id)
         serializer = CoachSchedularGiveAvailibiltySerializer(data=slots_data, many=True)
+
+        unique_dates = set()
+        for date in slots_data:
+            slot_id = date["id"]
+            parts = slot_id.split("_")
+            slot_date = parts[0]
+            unique_dates.add(slot_date)
+
+        coach = Coach.objects.get(id=coach_id)
+        coach_name = f"{coach.first_name} {coach.last_name}"
 
         if serializer.is_valid():
             serializer.save()
             request.provided_by.append(int(coach_id))
             request.save()
 
-            # Send email to pmo@meeraq.com
-            coach = Coach.objects.get(id=coach_id)
-            availabilities = CoachSchedularAvailibilty.objects.filter(
-                request=request, coach=coach
-            )
+            # Convert dates from 'YYYY-MM-DD' to 'DD-MM-YYYY' format
+            formatted_dates = []
+            for date in unique_dates:
+                datetime_obj = datetime.strptime(date, "%Y-%m-%d")
+                formatted_date = datetime_obj.strftime("%d-%m-%Y")
+                formatted_dates.append(formatted_date)
 
-            subject = "Coach Availabilities"
-            message = f"Coach Name: {coach.first_name} {coach.last_name}\n"
-
-            for availability in availabilities:
-                start_time = datetime.fromtimestamp(int(availability.start_time) / 1000)
-                end_time = datetime.fromtimestamp(int(availability.end_time) / 1000)
-
-                message += f"{start_time.strftime('%d %B %Y')}, {start_time.strftime('%I:%M %p')}, {end_time.strftime('%I:%M %p')}\n"
-
-            # Render the email content using the template
-            email_content = render_to_string(
+            send_mail_templates(
                 "create_coach_availibilities.html",
-                {"subject": subject, "message": message},
+                ["pmo@meeraq.com"],
+                "Meeraq - Availability given by coach",
+                {
+                    "name": coach_name,
+                    "total_slots": slots_length,
+                    "dates": formatted_dates,
+                },
+                [],
             )
 
-            from_email = settings.DEFAULT_FROM_EMAIL
-            recipient_list = ["pmo@meeraq.com"]
-
-            send_mail(
-                subject,  # Subject
-                "",  # Message (empty string)
-                from_email,  # From email
-                recipient_list,  # Recipient list
-                fail_silently=False,
-                html_message=email_content,  # HTML message content
-            )
 
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         print(serializer.errors)
@@ -1172,23 +1154,26 @@ def send_unbooked_coaching_session_mail(request):
     batch_name = request.data.get("batchName", "")
     participants = request.data.get("participants", [])
     booking_link = request.data.get("bookingLink", "")
+    expiry_date = request.data.get("expiry_date", "")
 
     for participant in participants:
-        subject = f"Coaching Session Invitation for {participant}"
-
+        try:
+            participant_name = SchedularParticipants.objects.get(email=participant).name
+        except:
+            continue
+            # Handle the case when "name" is not in participant
         # Load the HTML template
-        html_message = render_to_string(
-            "seteventlink.html", {"event_link": booking_link}
+        send_mail_templates(
+            "seteventlink.html",
+            [participant],
+            "Meeraq -Book Coacing Session",
+            {
+                "name": participant_name,
+                "event_link": booking_link,
+                "expiry_date": expiry_date,
+            },
+            [],
         )
-
-        email = EmailMessage(
-            subject=subject,
-            body=html_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[participant],
-        )
-        email.content_subtype = "html"
-        email.send()
 
     return Response("Emails sent to participants.")
 

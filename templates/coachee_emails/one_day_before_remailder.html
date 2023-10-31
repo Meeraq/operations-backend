@@ -1,0 +1,23 @@
+{% extends "parent_template.html" %} {% block title %}Meeraq Coaching{%endblock%} {% block heading %}
+<div>
+    <b>
+        <span class="heading-container">
+            Dear <span class="heading-container-span">{{name}}</span>,
+        </span>
+    </b>
+</div>
+{% endblock %} {% block content %}
+<p class="child-para" style="color: #333; font-size: 18px; font-weight: bold">
+    Greetings from Meeraq!!
+</p>
+<p class="child-para">This is a reminder mail from Meeraq</p>
+<p>
+    You have booked your coaching session at <strong>{{time}} IST Tomorrow</strong> .You can access your coaching
+    session
+    using the given link.
+</p>
+<p class="child-para">
+    {{meeting_link}}
+</p>
+<p class="child-para">Please block your calendars for the same.</p>
+{% endblock %}
