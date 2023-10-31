@@ -19,6 +19,7 @@ from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.utils import timezone
 from openpyxl import Workbook
 from django.http import HttpResponse
+import pandas as pd
 
 
 from django.shortcuts import render
@@ -60,6 +61,7 @@ from .models import (
 
 
 from api.views import create_notification, send_mail_templates
+import io
 
 
 # Create your views here.
@@ -669,7 +671,7 @@ def add_batch(request, project_id):
 
     for participant_data in participants_data:
         name = participant_data.get("name")
-        email = participant_data.get("email").strip()
+        email = participant_data.get("email", "").strip().lower()
         phone = participant_data.get("phone")
         batch_name = participant_data.get("batch").strip().upper()
         # Assuming 'project_id' is in your request data
@@ -850,6 +852,7 @@ def schedule_session(request):
             "enrolled_participant": participant.id,
             "availibility": coach_availability.id,
             "coaching_session": coaching_session.id,
+            "status": "pending",
         }
 
         serializer = SchedularSessionsSerializer(data=session_data)
@@ -926,7 +929,6 @@ def create_coach_availabilities(request):
                 [],
             )
 
-
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         print(serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -973,6 +975,7 @@ def get_sessions(request):
             "coaching_session_number": session.coaching_session.coaching_session_number,
             "participant_email": session.enrolled_participant.email,
             "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "room_id": f"{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
         }
         session_details.append(session_detail)
@@ -994,17 +997,19 @@ def get_sessions_by_type(request, sessions_type):
     if sessions_type == "upcoming":
         sessions = sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
     elif sessions_type == "past":
-        sessions = sessions.filter(availibility__start_time__lt=timestamp_milliseconds)
+        sessions = sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
     else:
         sessions = []
 
     session_details = []
     for session in sessions:
         session_detail = {
+            "id": session.id,
             "batch_name": session.coaching_session.batch.name
             if coach_id is None
             else None,
-            "project_name": session.coaching_session.batch.project.name
+            "project_name": session.coaching_session.batch.project.name,
+            "project_id": session.coaching_session.batch.project.id
             if coach_id is None
             else None,
             "coach_name": session.availibility.coach.first_name
@@ -1022,6 +1027,8 @@ def get_sessions_by_type(request, sessions_type):
             else None,
             "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
+            "room_id": f"{session.availibility.coach.room_id}",
+            "status": session.status,
         }
         session_details.append(session_detail)
     return Response(session_details, status=status.HTTP_200_OK)
@@ -1266,7 +1273,7 @@ def export_available_slot(request):
 def add_participant_to_batch(request, batch_id):
     # batch_id = request.data.get("batch_id")
     name = request.data.get("name")
-    email = request.data.get("email").strip()
+    email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
@@ -1356,3 +1363,85 @@ def send_live_session_link(request):
         facilitator_email.send()
 
     return Response({"message": "Emails sent successfully"})
+
+
+@api_view(["PUT"])
+def update_session_status(request, session_id):
+    status = request.data.get("status")
+    if not session_id or not status:
+        return Response(
+            {"error": "Failed to update status"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    try:
+        session = get_object_or_404(SchedularSessions, id=session_id)
+    except SchedularSessions.DoesNotExist:
+        return Response(
+            {"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    # Update the session status
+    session.status = status
+    session.save()
+    return Response({"message": "Session status updated successfully"}, status=201)
+
+
+@api_view(["GET"])
+def project_report_download(request, project_id):
+    project = get_object_or_404(SchedularProject, pk=project_id)
+    batches = SchedularBatch.objects.filter(project=project)
+    # Create a Pandas DataFrame for each batch
+    dfs = []
+    for batch in batches:
+        data = {
+            "Session name": [],
+            "Attendance": [],
+            "Total Participants": [],
+            "Percentage": [],
+            "Date": [],
+        }
+        live_sessions = LiveSession.objects.filter(batch=batch)
+        coaching_sessions = CoachingSession.objects.filter(batch=batch)
+        sessions = list(live_sessions) + list(coaching_sessions)
+        sorted_sessions = sorted(sessions, key=lambda x: x.order)
+        for session in sorted_sessions:
+            if isinstance(session, LiveSession):
+                session_name = f"Live Session {session.live_session_number}"
+                attendance = len(session.attendees)
+                if session.date_time:
+                    adjusted_date_time = session.date_time + timedelta(
+                        hours=5, minutes=30
+                    )
+                    date = adjusted_date_time.strftime("%d-%m-%Y %I:%M %p") + " IST"
+                else:
+                    date = "Not added"
+            elif isinstance(session, CoachingSession):
+                session_name = f"Coaching Session {session.coaching_session_number}"
+                attendance = SchedularSessions.objects.filter(
+                    coaching_session=session
+                ).count()
+                date = ""
+            else:
+                session_name = "Unknown Session"
+                attendance = ""
+                date = ""
+            total_participants = batch.participants.count()
+            percentage = str(int((attendance / total_participants) * 100)) + " %"
+            data["Session name"].append(session_name)
+            data["Attendance"].append(attendance)
+            data["Total Participants"].append(total_participants)
+            data["Percentage"].append(percentage)
+            data["Date"].append(date)
+
+        df = pd.DataFrame(data)
+        dfs.append((batch.name, df))
+
+    # Create an Excel file with multiple sheets
+    response = HttpResponse(content_type="application/ms-excel")
+    response[
+        "Content-Disposition"
+    ] = f'attachment; filename="{project.name}_batches.xlsx"'
+
+    with pd.ExcelWriter(response, engine="openpyxl") as writer:
+        for batch_name, df in dfs:
+            df.to_excel(writer, sheet_name=batch_name, index=False)
+
+    return response
