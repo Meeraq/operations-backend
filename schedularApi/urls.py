@@ -107,4 +107,24 @@ urlpatterns = [
         views.get_existing_slots_of_coach_on_request_dates,
     ),
     path("send_coaching_session_mail/", views.send_unbooked_coaching_session_mail),
+    path("download_report/", views.export_available_slot),
+    path(
+        "create-schedular-participant/<int:batch_id>/", views.add_participant_to_batch
+    ),
+    path(
+        "finalize-project-structure/<int:project_id>/",
+        views.finalize_project_structure,
+        name="finalize_project_structure",
+    ),
+    path("send_live_session_link/", views.send_live_session_link),
+    path(
+        "update-session-status/<int:session_id>/",
+        views.update_session_status,
+        name="update_session_status",
+    ),
+    path(
+        "project-report-download/<int:project_id>/",
+        views.project_report_download,
+        name="project_report_download",
+    ),
 ]

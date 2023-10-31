@@ -204,4 +204,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_participant_morning_reminder_email",
         "schedule": crontab(hour=3, minute=15, day_of_week="*"),
     },
+    "send_upcoming_session_pmo_at_10am": {
+        "task": "your_app.tasks.send_upcoming_session_pmo_at_10am",
+        "schedule": crontab(hour=4, minute=30, day_of_week="*"),
+    },
+    "send_participant_morning_reminder_one_day_before_email": {
+        "task": "schedularApi.tasks.send_participant_morning_reminder_one_day_before_email",
+        "schedule": crontab(hour=3, minute=0, day_of_week="*"),
+    },
 }

@@ -1,7 +1,8 @@
 from datetime import date, datetime, timedelta
 import uuid
 import requests
-import uuid
+from django.core.mail import send_mail
+from django.template.loader import get_template
 from os import name
 from django.shortcuts import get_object_or_404
 from django.db import IntegrityError
@@ -16,16 +17,20 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.utils import timezone
+from openpyxl import Workbook
+from django.http import HttpResponse
+import pandas as pd
 
 
 from django.shortcuts import render
-from api.models import Organisation, HR, Coach
+from api.models import Organisation, HR, Coach, User
 from .serializers import (
     SchedularProjectSerializer,
     SchedularBatchSerializer,
     SchedularParticipantsSerializer,
     SessionItemSerializer,
     LearnerDataUploadSerializer,
+    LiveSessionSerializerDepthOne,
     EmailTemplateSerializer,
     SentEmailDepthOneSerializer,
     BatchSerializer,
@@ -56,7 +61,8 @@ from .models import (
 )
 
 
-from api.views import create_notification
+from api.views import create_notification, send_mail_templates
+import io
 
 
 # Create your views here.
@@ -266,10 +272,16 @@ def create_project_structure(request, project_id):
         project = get_object_or_404(SchedularProject, id=project_id)
         serializer = SessionItemSerializer(data=request.data, many=True)
         if serializer.is_valid():
+            is_editing = len(project.project_structure) > 0
             project.project_structure = serializer.data
             project.save()
             return Response(
-                {"message": "Project structure added successfully."}, status=200
+                {
+                    "message": "Project structure edited successfully."
+                    if is_editing
+                    else "Project structure added successfully."
+                },
+                status=200,
             )
         return Response({"error": "Invalid sessions found."}, status=400)
     except SchedularProject.DoesNotExist:
@@ -304,59 +316,14 @@ def get_schedular_project(request, project_id):
         )
 
 
-# @api_view(["GET"])
-# def get_batch_calendar(request, batch_id):
-#     try:
-#         live_sessions = LiveSession.objects.filter(batch__id=batch_id)
-#         coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
-#         live_sessions_serializer = LiveSessionSerializer(live_sessions, many=True)
-#         coaching_sessions_serializer = CoachingSessionSerializer(
-#             coaching_sessions, many=True
-#         )
-#         coaching_sessions_result = []
-#         for coaching_session in coaching_sessions_serializer.data:
-#             booked_session_count = SchedularSessions.objects.filter(
-#                 coaching_session__id=coaching_session["id"]
-#             ).count()
-#             availabilities = get_upcoming_availabilities_of_coaching_session(
-#                 coaching_session["id"]
-#             )
-#             coaching_sessions_result.append(
-#                 {
-#                     **coaching_session,
-#                     "available_slots_count": len(availabilities)
-#                     if availabilities
-#                     else None,
-#                     "booked_session_count": booked_session_count,
-#                 }
-#             )
-#         participants = SchedularParticipants.objects.filter(schedularbatch__id=batch_id)
-#         participants_serializer = GetSchedularParticipantsSerializer(
-#             participants, many=True
-#         )
-#         coaches = Coach.objects.filter(schedularbatch__id=batch_id)
-#         coaches_serializer = CoachBasicDetailsSerializer(coaches, many=True)
-#         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
-#         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
-#         return Response(
-#             {
-#                 "sessions": sorted_sessions,
-#                 "participants": participants_serializer.data,
-#                 "coaches": coaches_serializer.data,
-#             }
-#         )
-#     except SchedularProject.DoesNotExist:
-#         return Response(
-#             {"error": "Couldn't find project to add project structure."}, status=400
-#         )
-
-
 @api_view(["GET"])
 def get_batch_calendar(request, batch_id):
     try:
         live_sessions = LiveSession.objects.filter(batch__id=batch_id)
         coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
-        live_sessions_serializer = LiveSessionSerializer(live_sessions, many=True)
+        live_sessions_serializer = LiveSessionSerializerDepthOne(
+            live_sessions, many=True
+        )
         coaching_sessions_serializer = CoachingSessionSerializer(
             coaching_sessions, many=True
         )
@@ -669,7 +636,36 @@ def create_coach_schedular_availibilty(request):
     if request.method == "POST":
         serializer = RequestAvailibiltySerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            request_availability = serializer.save()
+
+            # Get the list of selected coaches from the serializer data
+            selected_coaches = serializer.validated_data.get("coach")
+            availability_data = request_availability.availability
+            dates = list(availability_data.keys())
+            date_str_arr = []
+            for date in dates:
+                formatted_date = datetime.strptime(date, "%Y-%m-%d").strftime(
+                    "%d-%B-%Y"
+                )
+                date_str_arr.append(formatted_date)
+            exp = datetime.strptime(
+                str(request_availability.expiry_date), "%Y-%m-%d"
+            ).strftime("%d-%B-%Y")
+            for coach in selected_coaches:
+                send_mail_templates(
+                    "create_coach_schedular_availibilty.html",
+                    [coach.email],
+                    "Meeraq -Book Coaching Session",
+                    {
+                        "name": coach.first_name + " " + coach.last_name,
+                        "dates": date_str_arr,
+                        "expiry_date": exp,
+                    },
+                    [],
+                )
+
+                from_email = settings.DEFAULT_FROM_EMAIL
+                recipient_list = [coach.email]
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -681,7 +677,7 @@ def add_batch(request, project_id):
 
     for participant_data in participants_data:
         name = participant_data.get("name")
-        email = participant_data.get("email").strip()
+        email = participant_data.get("email", "").strip().lower()
         phone = participant_data.get("phone")
         batch_name = participant_data.get("batch").strip().upper()
         # Assuming 'project_id' is in your request data
@@ -804,6 +800,17 @@ def schedule_session(request):
         booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
         participant_email = request.data.get("participant_email", "")
         coach_availability_id = request.data.get("availability_id", "")
+        timestamp = request.data.get("timestamp", "")
+
+        new_timestamp = int(timestamp) / 1000
+        date_obj = datetime.fromtimestamp(new_timestamp)
+        date_str = date_obj.strftime("%Y-%m-%d")
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+        formatted_date = date_obj.strftime("%d %B %Y")
+
+        start_time_for_mail = datetime.fromtimestamp(
+            (int(timestamp) / 1000) + 19800
+        ).strftime("%I:%M %p")
 
         # Retrieve coaching session using the provided booking link
         coaching_session = get_object_or_404(CoachingSession, booking_link=booking_link)
@@ -856,6 +863,7 @@ def schedule_session(request):
             "enrolled_participant": participant.id,
             "availibility": coach_availability.id,
             "coaching_session": coaching_session.id,
+            "status": "pending",
         }
 
         serializer = SchedularSessionsSerializer(data=session_data)
@@ -863,6 +871,33 @@ def schedule_session(request):
             serializer.save()
             coach_availability.is_confirmed = True
             coach_availability.save()
+            coach_name = f"{coach_availability.coach.first_name} {coach_availability.coach.last_name}"
+
+            send_mail_templates(
+                "schedule_session.html",
+                [coach_availability.coach.email],
+                "Meeraq - Participant booked session",
+                {
+                    "name": coach_name,
+                    "date": formatted_date,
+                    "time": start_time_for_mail,
+                },
+                [],
+            )
+
+            send_mail_templates(
+                "coach_templates/coaching_email_template.html",
+                [participant_email],
+                "Meeraq - Laser Coaching Session Booked",
+                {
+                    "name": coach_name,
+                    "date": formatted_date,
+                    "time": start_time_for_mail,
+                    "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                },
+                [],
+            )
+
             return Response(
                 {"message": "Session scheduled successfully."},
                 status=status.HTTP_201_CREATED,
@@ -882,20 +917,55 @@ def schedule_session(request):
 def create_coach_availabilities(request):
     try:
         slots_data = request.data.get("slots", [])
+        slots_length = request.data.get("slots_length")
         request_id = request.data.get("request_id", [])
         coach_id = request.data.get("coach_id", [])
         request = RequestAvailibilty.objects.get(id=request_id)
         serializer = CoachSchedularGiveAvailibiltySerializer(data=slots_data, many=True)
+
+        unique_dates = set()
+        for date in slots_data:
+            slot_id = date["id"]
+            parts = slot_id.split("_")
+            slot_date = parts[0]
+            unique_dates.add(slot_date)
+
+        coach = Coach.objects.get(id=coach_id)
+        coach_name = f"{coach.first_name} {coach.last_name}"
+
         if serializer.is_valid():
             serializer.save()
             request.provided_by.append(int(coach_id))
             request.save()
+
+            # Convert dates from 'YYYY-MM-DD' to 'DD-MM-YYYY' format
+            formatted_dates = []
+            for date in unique_dates:
+                datetime_obj = datetime.strptime(date, "%Y-%m-%d")
+                formatted_date = datetime_obj.strftime("%d-%m-%Y")
+                formatted_dates.append(formatted_date)
+            pmo_user = User.objects.filter(profile__type="pmo").first()
+            send_mail_templates(
+                "create_coach_availibilities.html",
+                [pmo_user.email],
+                "Meeraq - Availability given by coach",
+                {
+                    "name": coach_name,
+                    "total_slots": slots_length,
+                    "dates": formatted_dates,
+                },
+                [],
+            )
+
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         print(serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         print(e)
-        return Response({"error": "Failed to confirm the availability"})
+        return Response(
+            {"error": "Failed to confirm the availability"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["GET"])
@@ -933,6 +1003,7 @@ def get_sessions(request):
             "coaching_session_number": session.coaching_session.coaching_session_number,
             "participant_email": session.enrolled_participant.email,
             "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "room_id": f"{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
         }
         session_details.append(session_detail)
@@ -954,17 +1025,19 @@ def get_sessions_by_type(request, sessions_type):
     if sessions_type == "upcoming":
         sessions = sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
     elif sessions_type == "past":
-        sessions = sessions.filter(availibility__start_time__lt=timestamp_milliseconds)
+        sessions = sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
     else:
         sessions = []
 
     session_details = []
     for session in sessions:
         session_detail = {
+            "id": session.id,
             "batch_name": session.coaching_session.batch.name
             if coach_id is None
             else None,
-            "project_name": session.coaching_session.batch.project.name
+            "project_name": session.coaching_session.batch.project.name,
+            "project_id": session.coaching_session.batch.project.id
             if coach_id is None
             else None,
             "coach_name": session.availibility.coach.first_name
@@ -982,6 +1055,8 @@ def get_sessions_by_type(request, sessions_type):
             else None,
             "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
+            "room_id": f"{session.availibility.coach.room_id}",
+            "status": session.status,
         }
         session_details.append(session_detail)
     return Response(session_details, status=status.HTTP_200_OK)
@@ -1114,23 +1189,28 @@ def send_unbooked_coaching_session_mail(request):
     batch_name = request.data.get("batchName", "")
     participants = request.data.get("participants", [])
     booking_link = request.data.get("bookingLink", "")
+    expiry_date = request.data.get("expiry_date", "")
+    date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
+    formatted_date = date_obj.strftime("%d %B %Y")
 
     for participant in participants:
-        subject = f"Coaching Session Invitation for {participant}"
-
+        try:
+            participant_name = SchedularParticipants.objects.get(email=participant).name
+        except:
+            continue
+            # Handle the case when "name" is not in participant
         # Load the HTML template
-        html_message = render_to_string(
-            "seteventlink.html", {"event_link": booking_link}
+        send_mail_templates(
+            "seteventlink.html",
+            [participant],
+            "Meeraq -Book Coacing Session",
+            {
+                "name": participant_name,
+                "event_link": booking_link,
+                "expiry_date": formatted_date,
+            },
+            [],
         )
-
-        email = EmailMessage(
-            subject=subject,
-            body=html_message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[participant],
-        )
-        email.content_subtype = "html"
-        email.send()
 
     return Response("Emails sent to participants.")
 
@@ -1172,3 +1252,201 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
         {"coach_availabilities_date_wise": coach_availabilities_date_wise},
         status=status.HTTP_200_OK,
     )
+
+
+@api_view(["GET"])
+def export_available_slot(request):
+    current_datetime = timezone.now()
+    current_timestamp = int(
+        current_datetime.timestamp() * 1000
+    )  # Current date and time timestamp
+
+    # Retrieve all InvoiceData objects with availabilities greater than the current timestamp
+    queryset = CoachSchedularAvailibilty.objects.filter(
+        start_time__gt=current_timestamp, is_confirmed=False
+    )
+
+    # Create a new workbook and add a worksheet
+    wb = Workbook()
+    ws = wb.active
+
+    # Write headers to the worksheet
+    headers = ["Coach Name", "Date", "Availability"]
+
+    for col_num, header in enumerate(headers, 1):
+        ws.cell(row=1, column=col_num, value=header)
+
+    # Write data to the worksheet
+    for row_num, availabilities in enumerate(queryset, 2):
+        start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
+        end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
+
+        ws.append(
+            [
+                availabilities.coach.first_name + " " + availabilities.coach.last_name,
+                start_time.strftime("%d %B %Y"),
+                start_time.strftime("%I:%M %p") + " - " + end_time.strftime("%I:%M %p"),
+            ]
+        )
+
+    # Create a response with the Excel file
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = "attachment; filename=Available Slot.xlsx"
+    wb.save(response)
+
+    return response
+
+
+@api_view(["POST"])
+def add_participant_to_batch(request, batch_id):
+    # batch_id = request.data.get("batch_id")
+    name = request.data.get("name")
+    email = request.data.get("email", "").strip().lower()
+    phone = request.data.get("phone")
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        participant = SchedularParticipants.objects.get(email=email)
+        # Check if participant is already in the batch
+        if participant in batch.participants.all():
+            return Response(
+                {"error": "Participant already exists in the batch"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    except SchedularParticipants.DoesNotExist:
+        # Participant doesn't exist, create a new one
+        participant = SchedularParticipants(name=name, email=email, phone=phone)
+        participant.save()
+
+    # Add the participant to the batch
+    batch.participants.add(participant)
+    batch.save()
+
+    return Response(
+        {"message": "Participant added to the batch successfully"},
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["POST"])
+def finalize_project_structure(request, project_id):
+    try:
+        project = get_object_or_404(SchedularProject, id=project_id)
+    except SchedularProject.DoesNotExist:
+        return Response(
+            {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    # Update is_project_structure_finalized to True
+    project.is_project_structure_finalized = True
+    project.save()
+    return Response(
+        {"message": "Project structure finalized successfully"},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+def send_live_session_link(request):
+    data = request.data
+    participants = data["participant"]
+    for participant in participants:
+        content = {
+            "description": data["description"],
+            "participant_name": participant["name"],
+        }
+        send_mail_templates(
+            "send_live_session_link.html",
+            [participant["email"]],
+            "Meeraq - Live Session",
+            content,
+            [],
+        )
+    return Response({"message": "Emails sent successfully"})
+
+
+@api_view(["PUT"])
+def update_session_status(request, session_id):
+    status = request.data.get("status")
+    if not session_id or not status:
+        return Response(
+            {"error": "Failed to update status"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    try:
+        session = get_object_or_404(SchedularSessions, id=session_id)
+    except SchedularSessions.DoesNotExist:
+        return Response(
+            {"error": "Session not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    # Update the session status
+    session.status = status
+    session.save()
+    return Response({"message": "Session status updated successfully"}, status=201)
+
+
+@api_view(["GET"])
+def project_report_download(request, project_id):
+    project = get_object_or_404(SchedularProject, pk=project_id)
+    batches = SchedularBatch.objects.filter(project=project)
+    # Create a Pandas DataFrame for each batch
+    dfs = []
+    for batch in batches:
+        data = {
+            "Session name": [],
+            "Attendance": [],
+            "Total Participants": [],
+            "Percentage": [],
+            "Date": [],
+        }
+        live_sessions = LiveSession.objects.filter(batch=batch)
+        coaching_sessions = CoachingSession.objects.filter(batch=batch)
+        sessions = list(live_sessions) + list(coaching_sessions)
+        sorted_sessions = sorted(sessions, key=lambda x: x.order)
+        for session in sorted_sessions:
+            if isinstance(session, LiveSession):
+                session_name = f"Live Session {session.live_session_number}"
+                attendance = len(session.attendees)
+                if session.date_time:
+                    adjusted_date_time = session.date_time + timedelta(
+                        hours=5, minutes=30
+                    )
+                    date = adjusted_date_time.strftime("%d-%m-%Y %I:%M %p") + " IST"
+                else:
+                    date = "Not added"
+            elif isinstance(session, CoachingSession):
+                session_name = f"Coaching Session {session.coaching_session_number}"
+                attendance = SchedularSessions.objects.filter(
+                    coaching_session=session, status="completed"
+                ).count()
+                date = ""
+            else:
+                session_name = "Unknown Session"
+                attendance = ""
+                date = ""
+            total_participants = batch.participants.count()
+            percentage = str(int((attendance / total_participants) * 100)) + " %"
+            data["Session name"].append(session_name)
+            data["Attendance"].append(attendance)
+            data["Total Participants"].append(total_participants)
+            data["Percentage"].append(percentage)
+            data["Date"].append(date)
+
+        df = pd.DataFrame(data)
+        dfs.append((batch.name, df))
+
+    # Create an Excel file with multiple sheets
+    response = HttpResponse(content_type="application/ms-excel")
+    response[
+        "Content-Disposition"
+    ] = f'attachment; filename="{project.name}_batches.xlsx"'
+
+    with pd.ExcelWriter(response, engine="openpyxl") as writer:
+        for batch_name, df in dfs:
+            df.to_excel(writer, sheet_name=batch_name, index=False)
+
+    return response

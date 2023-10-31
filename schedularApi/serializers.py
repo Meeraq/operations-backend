@@ -45,6 +45,13 @@ class SchedularBatchSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class LiveSessionSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = LiveSession
+        fields = "__all__"
+        depth = 1
+
+
 class LiveSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = LiveSession
@@ -136,4 +143,10 @@ class RequestAvailibiltySerializerDepthOne(serializers.ModelSerializer):
 class RequestAvailibiltySerializer(serializers.ModelSerializer):
     class Meta:
         model = RequestAvailibilty
+        fields = "__all__"
+
+
+class SchedularParticipantsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularParticipants
         fields = "__all__"
