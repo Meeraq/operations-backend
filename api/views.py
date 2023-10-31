@@ -102,7 +102,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from rest_framework import generics
 from django.db.models import Subquery, OuterRef
-from schedularApi.models import SchedularProject
+from schedularApi.models import SchedularBatch
 
 # Create your views here.
 from collections import defaultdict
@@ -1989,7 +1989,7 @@ def get_user_data(user):
     elif user.profile.type == "coach":
         serializer = CoachDepthOneSerializer(user.profile.coach)
         is_caas_allowed = Project.objects.filter(coaches_status__coach = user.profile.coach).exists()
-        is_seeq_allowed = SchedularProject.objects.filter(coach=user.profile.coach).exists()
+        is_seeq_allowed = SchedularBatch.objects.filter(coaches=user.profile.coach).exists()
         return {**serializer.data, "is_caas_allowed": is_caas_allowed,"is_seeq_allowed": is_seeq_allowed }
     elif user.profile.type == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
