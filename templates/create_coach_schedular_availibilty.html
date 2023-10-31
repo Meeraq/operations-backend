@@ -1,0 +1,37 @@
+{% extends "parent_template.html" %} {% block title %}Meeraq Coaching{%endblock%} {% block heading %}
+<div>
+    <b>
+        <span class="heading-container">
+            Dear <span class="heading-container-span">{{ name }}</span>,
+        </span>
+    </b>
+</div>
+{% endblock %} {% block content %}
+<p class="child-para" style="color: #333; font-size: 18px; font-weight: bold">
+    Greetings from Meeraq!!
+</p>
+<p>
+<h1>{{ subject }}</h1>
+<p>Admin has asked your availability for below dates:</p>
+<p>
+    {% for date in dates %}
+<p>{{ date }}</p>
+{% endfor %}
+</p>
+
+<p class="child-para">
+<p>
+    Request will expire at: {{expiry_date}}.
+</p>
+<p>
+    Login here to give your availibility.
+</p>
+</p>
+
+</p>
+<p class="child-para">
+    Click
+    <a href="https://seeq.meeraq.com/" style="color: #007bff; text-decoration: underline">here</a>
+    to login to the Meeraq Platform.
+</p>
+{% endblock %}
