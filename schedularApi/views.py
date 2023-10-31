@@ -648,9 +648,9 @@ def create_coach_schedular_availibilty(request):
                     "%d-%B-%Y"
                 )
                 date_str_arr.append(formatted_date)
-            exp=datetime.strptime(str(request_availability.expiry_date), "%Y-%m-%d").strftime(
-                    "%d-%B-%Y"
-                )
+            exp = datetime.strptime(
+                str(request_availability.expiry_date), "%Y-%m-%d"
+            ).strftime("%d-%B-%Y")
             for coach in selected_coaches:
                 send_mail_templates(
                     "create_coach_schedular_availibilty.html",
@@ -1421,7 +1421,7 @@ def project_report_download(request, project_id):
             elif isinstance(session, CoachingSession):
                 session_name = f"Coaching Session {session.coaching_session_number}"
                 attendance = SchedularSessions.objects.filter(
-                    coaching_session=session
+                    coaching_session=session, status="completed"
                 ).count()
                 date = ""
             else:
