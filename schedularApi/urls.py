@@ -121,4 +121,9 @@ urlpatterns = [
         views.update_session_status,
         name="update_session_status",
     ),
+    path(
+        "project-report-download/<int:project_id>/",
+        views.project_report_download,
+        name="project_report_download",
+    ),
 ]
