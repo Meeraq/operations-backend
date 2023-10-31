@@ -1340,44 +1340,19 @@ def finalize_project_structure(request, project_id):
 @api_view(["POST"])
 def send_live_session_link(request):
     data = request.data
-
-    # Define the subject for the email template
-    subject = "Live Session Link"
-
-    # Send emails to participants
     participants = data["participant"]
     for participant in participants:
-        print("1234567890", participant)
-        context = {
-            "link": data["description"],
+        content = {
+            "description": data["description"],
             "participant_name": participant["name"],
         }
-        email_content = render_to_string("send_live_session_link.html", context)
-        email = EmailMessage(
-            subject,
-            email_content,
-            settings.DEFAULT_FROM_EMAIL,  # Use the sender's email address from settings
+        send_mail_templates(
+            "send_live_session_link.html",
             [participant["email"]],
+            "Meeraq - Live Session",
+            content,
+            [],
         )
-        email.content_subtype = "html"  # Set the content type to HTML
-        email.send()
-
-    # Send an email to the facilitator if specified
-    facilitator_email = "jatin@meeraq.com"  # Replace with data["facilitator"] if needed
-    if facilitator_email:
-        facilitator_context = {"link": data["description"]}
-        facilitator_message = render_to_string(
-            "send_live_session_link.html", facilitator_context
-        )
-        facilitator_email = EmailMessage(
-            "Live Session Link for Facilitator",
-            facilitator_message,
-            settings.DEFAULT_FROM_EMAIL,  # Use the sender's email address from settings
-            [facilitator_email],
-        )
-        facilitator_email.content_subtype = "html"  # Set the content type to HTML
-        facilitator_email.send()
-
     return Response({"message": "Emails sent successfully"})
 
 
