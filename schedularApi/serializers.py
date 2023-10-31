@@ -45,11 +45,17 @@ class SchedularBatchSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class LiveSessionSerializer(serializers.ModelSerializer):
+class LiveSessionSerializerDepthOne(serializers.ModelSerializer):
     class Meta:
         model = LiveSession
         fields = "__all__"
         depth = 1
+
+
+class LiveSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LiveSession
+        fields = "__all__"
 
 
 class CoachingSessionSerializer(serializers.ModelSerializer):

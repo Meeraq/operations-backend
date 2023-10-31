@@ -30,6 +30,7 @@ from .serializers import (
     SchedularParticipantsSerializer,
     SessionItemSerializer,
     LearnerDataUploadSerializer,
+    LiveSessionSerializerDepthOne,
     EmailTemplateSerializer,
     SentEmailDepthOneSerializer,
     BatchSerializer,
@@ -320,7 +321,7 @@ def get_batch_calendar(request, batch_id):
     try:
         live_sessions = LiveSession.objects.filter(batch__id=batch_id)
         coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
-        live_sessions_serializer = LiveSessionSerializer(live_sessions, many=True)
+        live_sessions_serializer = LiveSessionSerializerDepthOne(live_sessions, many=True)
         coaching_sessions_serializer = CoachingSessionSerializer(
             coaching_sessions, many=True
         )
