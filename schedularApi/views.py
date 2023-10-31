@@ -1333,7 +1333,13 @@ def send_live_session_link(request):
             "description": data["description"],
             "participant_name": participant["name"],
         }
-        send_mail_templates("send_live_session_link.html",[participant["email"]],"Meeraq - Live Session", content,[])
+        send_mail_templates(
+            "send_live_session_link.html",
+            [participant["email"]],
+            "Meeraq - Live Session",
+            content,
+            [],
+        )
     return Response({"message": "Emails sent successfully"})
 
 
