@@ -23,7 +23,7 @@ import pandas as pd
 
 
 from django.shortcuts import render
-from api.models import Organisation, HR, Coach
+from api.models import Organisation, HR, Coach, User
 from .serializers import (
     SchedularProjectSerializer,
     SchedularBatchSerializer,
@@ -321,7 +321,9 @@ def get_batch_calendar(request, batch_id):
     try:
         live_sessions = LiveSession.objects.filter(batch__id=batch_id)
         coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
-        live_sessions_serializer = LiveSessionSerializerDepthOne(live_sessions, many=True)
+        live_sessions_serializer = LiveSessionSerializerDepthOne(
+            live_sessions, many=True
+        )
         coaching_sessions_serializer = CoachingSessionSerializer(
             coaching_sessions, many=True
         )
@@ -871,6 +873,19 @@ def schedule_session(request):
                 [],
             )
 
+            send_mail_templates(
+                "coaching_email_template.html",
+                [participant_email],
+                "Meeraq - Laser Coaching Session Booked",
+                {
+                    "name": coach_name,
+                    "date": date_str,
+                    "time": time_str,
+                    "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                },
+                [],
+            )
+
             return Response(
                 {"message": "Session scheduled successfully."},
                 status=status.HTTP_201_CREATED,
@@ -917,10 +932,10 @@ def create_coach_availabilities(request):
                 datetime_obj = datetime.strptime(date, "%Y-%m-%d")
                 formatted_date = datetime_obj.strftime("%d-%m-%Y")
                 formatted_dates.append(formatted_date)
-
+            pmo_user = User.objects.filter(profile__type="pmo").first()
             send_mail_templates(
                 "create_coach_availibilities.html",
-                ["pmo@meeraq.com"],
+                [pmo_user.email],
                 "Meeraq - Availability given by coach",
                 {
                     "name": coach_name,

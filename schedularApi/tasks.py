@@ -5,7 +5,7 @@ from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
 from django.conf import settings
-from api.models import Coach
+from api.models import Coach, User
 from django.utils import timezone
 from datetime import datetime
 from api.views import send_mail_templates
@@ -285,10 +285,10 @@ def send_upcoming_session_pmo_at_10am():
                 + end_time.strftime("%I:%M %p"),
             }
             sessions_list.append(session_details)
-
+        pmo_user = User.objects.filter(profile__type="pmo").first()
         send_mail_templates(
             "pmo_emails/daily_session.html",
-            ["jatin@meeraq.com"],
+            [pmo_user.email],
             subject,
             {"sessions": sessions_list},
             [],
