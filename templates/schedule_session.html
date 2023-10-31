@@ -1,0 +1,21 @@
+{% extends "parent_template.html" %} {% block title %}Meeraq Coaching{%endblock%} {% block heading %}
+<div>
+    <b>
+        <span class="heading-container">
+            Dear <span class="heading-container-span">{{ name }}</span>,
+        </span>
+    </b>
+</div>
+{% endblock %} {% block content %}
+<p class="child-para" style="color: #333; font-size: 18px; font-weight: bold">
+    Greetings from Meeraq!!
+</p>
+<p class="child-para">Your Slot Booking Confirmation</p>
+<p class="child-para">Coachee has booked your below slot.</p>
+<p>Date: {{date}}</p>
+<p>Time: {{time}}</p>
+<p class="child-para">Please make sure you join in 5 mins before the start time. If you have any queries, feel free to
+    reach out to <a href="mailto:pmocoaching@meeraq.com">pmocoaching@meeraq.com</a> </p>
+<p class="child-para">You can join the session on our SEEQ platform.</p>
+<p class="child-para">Please block your calendars for the same.</p>
+{% endblock %}

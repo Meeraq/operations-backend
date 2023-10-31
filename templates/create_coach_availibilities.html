@@ -1,0 +1,26 @@
+{% extends "parent_template.html" %} {% block title %}Meeraq Coaching{%endblock%} {% block heading %}
+<div>
+    <b>
+        <span class="heading-container">
+            Dear <span class="heading-container-span">PMO</span>,
+        </span>
+    </b>
+</div>
+{% endblock %} {% block content %}
+<p class="child-para" style="color: #333; font-size: 18px; font-weight: bold">
+    Greetings from Meeraq!!
+</p>
+<p>
+<p>{{name}} has given total {{total_slots}} availibilties for the below dates:</p>
+<p>
+{% for date in dates %}
+<p>{{ date }}</p>
+{% endfor %}
+</p>
+</p>
+<p class="child-para">
+    Click
+    <a href="https://seeq.meeraq.com/" style="color: #007bff; text-decoration: underline">here</a>
+    to login to the Meeraq Platform.
+</p>
+{% endblock %}
