@@ -366,7 +366,7 @@ class AssessmentView(APIView):
             else:
                 assessment.number_of_observers = request.data.get("number_of_observers")
             assessment.assessment_end_date = request.data.get("assessment_end_date")
-            assessment.rating_type = request.data.get("rating_type")
+            # assessment.rating_type = request.data.get("rating_type")
             assessment.questionnaire = questionnaire
             assessment.descriptive_questions = request.data.get("descriptive_questions")
             assessment.organisation = organisation
@@ -570,7 +570,7 @@ class QuestionsForAssessment(APIView):
                 full_question = {
                     "id": question.id,
                     "self_question": question.self_question,
-                    # "observer_question": question.observer_question,
+                    "rating_type": question.rating_type,
                 }
 
                 if competency_name in competency_questions:
@@ -604,6 +604,7 @@ class QuestionsForObserverAssessment(APIView):
                 full_question = {
                     "id": question.id,
                     "observer_question": question.observer_question,
+                    "rating_type": question.rating_type,
                 }
 
                 if competency_name in competency_questions:

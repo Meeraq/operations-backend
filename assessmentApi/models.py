@@ -132,7 +132,7 @@ class Assessment(models.Model):
     participants_observers = models.ManyToManyField(
         ParticipantObserverMapping, blank=True
     )
-    rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
+    # rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
     result_released=models.BooleanField(blank=True, default=False)
     updated_at = models.DateTimeField(auto_now=True)
