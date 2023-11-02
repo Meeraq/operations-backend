@@ -30,6 +30,7 @@ from .views import (
     GetObserversUniqueIds,
     GetParticipantObserversUniqueIds,
     StartAssessmentDisabled,
+    ReleaseResults,
 )
 
 
@@ -125,5 +126,8 @@ urlpatterns = [
     ),
     path(
         "start-assessment-disabled/<str:unique_id>/",StartAssessmentDisabled.as_view(),
+    ),
+    path(
+        "release-assessment-result/<int:assessment_id>/",ReleaseResults.as_view(),
     ),
 ]

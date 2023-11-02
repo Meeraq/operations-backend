@@ -1180,3 +1180,22 @@ class StartAssessmentDisabled(APIView):
                 {"error": "Failed to retrieve Observer Response Data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+        
+
+class ReleaseResults(APIView):
+    def put(self, request,assessment_id):
+        try:
+            assessment=Assessment.objects.get(id=assessment_id)
+
+            assessment.result_released=True
+            assessment.save()
+            
+            serializer=AssessmentSerializerDepthThree(assessment)
+            return Response({"success":"Successfully Released Results", "assessment_data": serializer.data})
+            
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to retrieve Observer Response Data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
