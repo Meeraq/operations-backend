@@ -240,6 +240,7 @@ SESSION_TYPE_VALUE = {
     "closure_session": "Closure Session",
     "stakeholder_without_coach": "Tripartite Without Coach",
     "interview": "Interview",
+    "stakeholder_interview": "Stakeholder Interview"
 }
 
 
@@ -4663,7 +4664,7 @@ def get_current_session_of_stakeholder(request, room_id):
         Q(session_type="tripartite")
         | Q(session_type="mid_review")
         | Q(session_type="end_review")
-        | Q(session_type="stakeholder_without_coach"),
+        | Q(session_type="stakeholder_without_coach")| Q(session_type="stakeholder_interview") ,
         Q(invitees__contains=request.data["email"]),
         Q(is_archive=False),
         ~Q(status="completed"),
@@ -4697,6 +4698,11 @@ def schedule_session_directly(request, session_id):
     if request.data["user_type"] == "coach":
         coach = Coach.objects.get(id=request.data["user_id"])
         session.coach = coach
+        
+    if session.session_type == "stakeholder_interview":
+        engagement = Engagement.objects.get(learner=session.learner, project=session.project)
+        session.coach = engagement.coach
+        session.hr = session.project.hr.first()
 
     session.availibility.add(availability)
     session.confirmed_availability = availability
