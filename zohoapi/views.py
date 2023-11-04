@@ -14,6 +14,7 @@ from rest_framework.permissions import AllowAny
 from api.models import (
     Coach,
     OTP,
+    UserLoginActivity,
 )
 from api.serializers import (
     CoachDepthOneSerializer,
@@ -307,6 +308,12 @@ def validate_otp(request):
         .order_by("-created_at")
         .first()
     )
+    data = request.data
+    platform = data.get("platform")
+    current_platform="unknown"
+    if platform == env("VENDOR_DOMAIN"):
+        current_platform = "vendor"
+
 
     if otp_obj is None:
         raise AuthenticationFailed("Invalid OTP")
@@ -321,6 +328,8 @@ def validate_otp(request):
     if user_data:
         organization = get_organization_data()
         zoho_vendor = get_vendor(user_data["vendor_id"])
+        login_timestamp = timezone.now()
+        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=current_platform)
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -363,11 +372,16 @@ def login_view(request):
     data = request.data
     username = data.get("username")
     password = data.get("password")
+    platform = data.get("platform")
     if username is None or password is None:
         raise ValidationError({"detail": "Please provide username and password."})
     user = authenticate(request, username=username, password=password)
     if user is None:
         raise AuthenticationFailed({"detail": "Invalid credentials."})
+    
+    current_platform="unknown"
+    if platform == env("VENDOR_DOMAIN"):
+        current_platform = "vendor"
 
     last_login = user.last_login
     login(request, user)
@@ -375,6 +389,8 @@ def login_view(request):
     if user_data:
         organization = get_organization_data()
         zoho_vendor = get_vendor(user_data["vendor_id"])
+        login_timestamp = timezone.now()
+        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=current_platform)
         return Response(
             {
                 "detail": "Successfully logged in.",
