@@ -1928,9 +1928,20 @@ def login_view(request):
     data = request.data
     username = data.get("username")
     password = data.get("password")
+    platform = data.get("platform")
     if username is None or password is None:
         raise ValidationError({"detail": "Please provide username and password."})
     user = authenticate(request, username=username, password=password)
+    current_platform="unknown"
+    if platform == env("CAAS_DOMAIN"):
+        current_platform = "caas"
+    elif platform == env("SEEQ_DOMAIN"):
+        current_platform = "seeq"
+    elif platform == env("VENDOR_DOMAIN"):
+        current_platform = "vendor"
+    elif platform == env("ASSESSMENT_DOMAIN"):
+        current_platform = "assessment"
+
     # check_user = Profile.objects.get(user__username=username)
     # if check_user:
     #     if check_user.type == 'hr':
@@ -1944,7 +1955,7 @@ def login_view(request):
     user_data = get_user_data(user)
     if user_data:
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp)
+        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=current_platform)
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -2056,6 +2067,17 @@ def validate_otp(request):
         .order_by("-created_at")
         .first()
     )
+    data = request.data
+    platform = data.get("platform")
+    current_platform="unknown"
+    if platform == env("CAAS_DOMAIN"):
+        current_platform = "caas"
+    elif platform == env("SEEQ_DOMAIN"):
+        current_platform = "seeq"
+    elif platform == env("VENDOR_DOMAIN"):
+        current_platform = "vendor"
+    elif platform == env("ASSESSMENT_DOMAIN"):
+        current_platform = "assessment"
 
     if otp_obj is None:
         raise AuthenticationFailed("Invalid OTP")
@@ -2069,7 +2091,7 @@ def validate_otp(request):
     user_data = get_user_data(user)
     if user_data:
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp)
+        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=current_platform)
         return Response(
             {
                 "detail": "Successfully logged in.",
