@@ -5764,7 +5764,7 @@ def send_reset_password_link(request):
             send_mail_templates(
             "greeting_email_to_vendor.html",
             [user_data["email"]],
-            "Meeraq - Reset Password",
+            "Meeraq - Exciting News! New Vendor Platform Launch.",
             {"vendor_name": user_data["name"], "link": reset_password_link},
             [],
         		)
