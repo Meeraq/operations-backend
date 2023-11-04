@@ -5,7 +5,7 @@ from .views import (
     SessionCountsForAllLearners,
     SessionsProgressOfAllCoacheeForAnHr,
     AddRegisteredCoach,
-    ActivitySummary
+    ActivitySummary,
 )
 
 urlpatterns = [
@@ -263,5 +263,7 @@ urlpatterns = [
         "pmo-dashboard/",
         views.get_all_engagements,
     ),
-    path("activity-summary/", ActivitySummary.as_view())
+    path("activity-summary/", ActivitySummary.as_view()),
+    path("coach-profile-templates/", views.create_coach_profile_template),
+    path("project/<int:project_id>/data/", views.get_coach_profile_template),
 ]

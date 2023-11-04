@@ -477,3 +477,12 @@ class AddGoalActivity(models.Model):
 
     def __str__(self):
         return f"{self.user} added a goal."
+
+
+class CoachProfileTemplate(models.Model):
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    templates = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return f"{self.coach} template."
