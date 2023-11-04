@@ -103,6 +103,10 @@ from openpyxl.styles import Font
 from rest_framework import generics
 from django.db.models import Subquery, OuterRef
 from schedularApi.models import SchedularBatch
+from django_rest_passwordreset.models import ResetPasswordToken
+from django_rest_passwordreset.serializers import EmailSerializer
+from django_rest_passwordreset.tokens import get_token_generator
+
 
 # Create your views here.
 from collections import defaultdict
@@ -240,7 +244,7 @@ SESSION_TYPE_VALUE = {
     "closure_session": "Closure Session",
     "stakeholder_without_coach": "Tripartite Without Coach",
     "interview": "Interview",
-    "stakeholder_interview": "Stakeholder Interview"
+    "stakeholder_interview": "Stakeholder Interview",
 }
 
 
@@ -1989,9 +1993,17 @@ def get_user_data(user):
         return None
     elif user.profile.type == "coach":
         serializer = CoachDepthOneSerializer(user.profile.coach)
-        is_caas_allowed = Project.objects.filter(coaches_status__coach = user.profile.coach).exists()
-        is_seeq_allowed = SchedularBatch.objects.filter(coaches=user.profile.coach).exists()
-        return {**serializer.data, "is_caas_allowed": is_caas_allowed,"is_seeq_allowed": is_seeq_allowed }
+        is_caas_allowed = Project.objects.filter(
+            coaches_status__coach=user.profile.coach
+        ).exists()
+        is_seeq_allowed = SchedularBatch.objects.filter(
+            coaches=user.profile.coach
+        ).exists()
+        return {
+            **serializer.data,
+            "is_caas_allowed": is_caas_allowed,
+            "is_seeq_allowed": is_seeq_allowed,
+        }
     elif user.profile.type == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user.profile.type == "learner":
@@ -4664,7 +4676,8 @@ def get_current_session_of_stakeholder(request, room_id):
         Q(session_type="tripartite")
         | Q(session_type="mid_review")
         | Q(session_type="end_review")
-        | Q(session_type="stakeholder_without_coach")| Q(session_type="stakeholder_interview") ,
+        | Q(session_type="stakeholder_without_coach")
+        | Q(session_type="stakeholder_interview"),
         Q(invitees__contains=request.data["email"]),
         Q(is_archive=False),
         ~Q(status="completed"),
@@ -4698,9 +4711,11 @@ def schedule_session_directly(request, session_id):
     if request.data["user_type"] == "coach":
         coach = Coach.objects.get(id=request.data["user_id"])
         session.coach = coach
-        
+
     if session.session_type == "stakeholder_interview":
-        engagement = Engagement.objects.get(learner=session.learner, project=session.project)
+        engagement = Engagement.objects.get(
+            learner=session.learner, project=session.project
+        )
         session.coach = engagement.coach
         session.hr = session.project.hr.first()
 
@@ -5730,3 +5745,29 @@ class ActivitySummary(APIView):
         }
 
         return Response(response_data)
+
+@api_view(["POST"])
+def send_reset_password_link(request):
+    # Assuming you are sending a POST request with a list of emails in the body
+    users = request.data["users"]
+    for user_data in users:
+        try:
+            user = User.objects.get(
+            email=user_data["email"]
+              )  
+            # Replace YourUserModel with your actual user model
+            token = get_token_generator().generate_token()
+        		# Save the token to the database
+            ResetPasswordToken.objects.create(user=user, key=token)
+        		# def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
+            reset_password_link = f"https://vendor.meeraq.com/reset-password/{token}"
+            send_mail_templates(
+            "greeting_email_to_vendor.html",
+            [user_data["email"]],
+            "Meeraq - Exciting News! New Vendor Platform Launch.",
+            {"vendor_name": user_data["name"], "link": reset_password_link},
+            [],
+        		)
+        except Exception as e:
+            print(f"Error sending link to {user_data['email']}: {str(e)}") 
+    return Response({"message": "Reset password links sent successfully"})
