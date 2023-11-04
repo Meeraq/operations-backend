@@ -309,10 +309,8 @@ def validate_otp(request):
         .first()
     )
     data = request.data
-    platform = data.get("platform")
-    current_platform="unknown"
-    if platform == env("VENDOR_DOMAIN"):
-        current_platform = "vendor"
+    platform = data.get("platform","unknown")
+    
 
 
     if otp_obj is None:
@@ -329,7 +327,7 @@ def validate_otp(request):
         organization = get_organization_data()
         zoho_vendor = get_vendor(user_data["vendor_id"])
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=current_platform)
+        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=platform)
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -372,16 +370,14 @@ def login_view(request):
     data = request.data
     username = data.get("username")
     password = data.get("password")
-    platform = data.get("platform")
+    platform = data.get("platform","unknown")
     if username is None or password is None:
         raise ValidationError({"detail": "Please provide username and password."})
     user = authenticate(request, username=username, password=password)
     if user is None:
         raise AuthenticationFailed({"detail": "Invalid credentials."})
     
-    current_platform="unknown"
-    if platform == env("VENDOR_DOMAIN"):
-        current_platform = "vendor"
+    
 
     last_login = user.last_login
     login(request, user)
@@ -390,7 +386,7 @@ def login_view(request):
         organization = get_organization_data()
         zoho_vendor = get_vendor(user_data["vendor_id"])
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=current_platform)
+        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=platform)
         return Response(
             {
                 "detail": "Successfully logged in.",
