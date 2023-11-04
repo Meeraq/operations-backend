@@ -5762,10 +5762,10 @@ def send_reset_password_link(request):
         		# def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
             reset_password_link = f"https://vendor.meeraq.com/reset-password/{token}"
             send_mail_templates(
-            "vendors/vendor_welcome.html",
+            "greeting_email_to_vendor.html",
             [user_data["email"]],
             "Meeraq - Reset Password",
-            {"name": user_data["name"], "link": reset_password_link},
+            {"vendor_name": user_data["name"], "link": reset_password_link},
             [],
         		)
         except Exception as e:
