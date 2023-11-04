@@ -1,22 +1,10 @@
 {% extends "table_parent_template.html" %} 
 {% block title %}Meeraq Coaching | New Session request{% endblock %}
  
-
-  {% endblock %}
-
-
-
-
-
 {% block content %}
 <tr style="border: 0">
   <td style="padding: 20px; background: #f8f7f8; border: 0">
-    <h2>Project: <span id="projectName">{{projectName}}</span></h2>
-      <span class="heading-container">
-    <p>
-      <strong><span style="font-size: 14px">Dear&nbsp;</span></strong
-      ><b>{{name}}</b><strong>,</strong>
-    </p>
+ 
     <div align="center">
       <table
         border="0"
@@ -40,6 +28,12 @@
             "
           >
             <td style="padding: 15pt 15pt 15pt 15pt">
+               <h2>Project: <span id="projectName">{{projectName}}</span></h2>
+      <span class="heading-container">
+    <p>
+      <strong><span style="font-size: 14px">Dear&nbsp;</span></strong
+      ><b>{{name}}</b><strong>,</strong>
+    </p>
               <p class="child-para"><span id="coachName">[Coach-name]</span> has requested you to reschedule <span id="sessionName">[session-name]</span>.</p>
   <p class="child-para"><strong>Message from Coach:</strong> <span id="coachMessage">[message-in-bold]</span></p>
   <p class="child-para">Click <a href="https://caas.meeraq.com/">here</a> to login and view the details.</p>

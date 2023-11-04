@@ -2,11 +2,8 @@
 Coaching{%endblock%} {% block content %}
 <tr style="border: 0">
   <td style="padding: 20px; background: #f8f7f8; border: 0">
-    <p id="isPasted">
-      <strong><span style="font-size: 14px">Dear&nbsp;</span></strong
-      ><b>{{name}}</b><strong>,</strong>
-    </p>
-    <div align="center" id="isPasted">
+   
+    <div align="center" >
       <table
         border="0"
         cellpadding="0"
@@ -29,40 +26,44 @@ Coaching{%endblock%} {% block content %}
             "
           >
             <td style="padding: 15pt 15pt 15pt 15pt">
+             <p >
+      <strong><span style="font-size: 14px">Dear&nbsp;</span></strong
+      ><b>{{name}}</b><strong>,</strong>
+    </p>
               <p
-                id="isPasted"
+                
                 style="color: #333; font-size: 18px; font-weight: bold"
               >
                 Greetings from Meeraq!!
               </p>
-              <p id="isPasted">Coaching Session Booking Confirmation</p>
+              <p >Coaching Session Booking Confirmation</p>
 
-              <p id="isPasted">
+              <p >
                 Your coaching session has been successfully booked for the
                 following details:
               </p>
 
-              <p id="isPasted">
+              <p >
                 <strong>Session Date:</strong> {{ date }}<br />
                 <strong>Time Slot:</strong> {{ time }}
               </p>
 
-              <p id="isPasted">
+              <p >
                 You can join your coaching session using the given link:
                 <a href="{{ meeting_link }}" target="_blank"
                   >{{ meeting_link }}</a
                 >
               </p>
 
-              <p id="isPasted">
+              <p >
                 Please make sure you join in 5 mins before the start time. If
                 you have any queries, feel free to reach out to
                 <a href="mailto:pmocoaching@meeraq.com">pmocoaching@meeraq.com</a>.
               </p>
 
-              <p id="isPasted"><br /></p>
-              <p id="isPasted">Best regards,</p>
-              <p id="isPasted">Team Meeraq.</p>
+              <p ><br /></p>
+              <p >Best regards,</p>
+              <p >Team Meeraq.</p>
             </td>
           </tr>
         </tbody>
