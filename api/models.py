@@ -447,8 +447,16 @@ class ProfileEditActivity(models.Model):
 
 
 class UserLoginActivity(models.Model):
+    PLATFORM_CHOICES = (
+        ("caas", "CAAS"),
+        ("seeq", "SEEQ"),
+        ("vendor", "VENDOR"),
+        ("assessment", "ASSESSMENT"),
+        ("unknown","UNKNOWN"),
+    )
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
+    platform = models.CharField(blank=True,choices=PLATFORM_CHOICES,max_length=225)
 
     def __str__(self):
         return f"User Login Activity for {self.user.username}"
