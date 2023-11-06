@@ -1932,7 +1932,7 @@ def login_view(request):
     data = request.data
     username = data.get("username")
     password = data.get("password")
-    platform = data.get("platform","unknown")
+    platform = data.get("platform", "unknown")
     if username is None or password is None:
         raise ValidationError({"detail": "Please provide username and password."})
     user = authenticate(request, username=username, password=password)
@@ -1950,7 +1950,9 @@ def login_view(request):
     user_data = get_user_data(user)
     if user_data:
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=platform)
+        UserLoginActivity.objects.create(
+            user=user, timestamp=login_timestamp, platform=platform
+        )
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -2071,8 +2073,7 @@ def validate_otp(request):
         .first()
     )
     data = request.data
-    platform = data.get("platform","unknown")
-    
+    platform = data.get("platform", "unknown")
 
     if otp_obj is None:
         raise AuthenticationFailed("Invalid OTP")
@@ -2086,7 +2087,9 @@ def validate_otp(request):
     user_data = get_user_data(user)
     if user_data:
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=platform)
+        UserLoginActivity.objects.create(
+            user=user, timestamp=login_timestamp, platform=platform
+        )
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -3986,13 +3989,15 @@ def get_all_sessions_of_user(request, user_type, user_id):
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
             ~Q(session_type="interview"),
-            ~Q(billable_session_number=None),
+            ~Q(session_type="chemistry", billable_session_number=None),
+            # ~Q(billable_session_number=None),
             is_archive=False,
         )
     elif user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
             ~Q(session_type="interview"),
-            ~Q(billable_session_number=None),
+            ~Q(session_type="chemistry", billable_session_number=None),
+            # ~Q(billable_session_number=None),
             is_archive=False,
             project__hr__id=user_id,
         )
@@ -5751,28 +5756,27 @@ class ActivitySummary(APIView):
 
         return Response(response_data)
 
+
 @api_view(["POST"])
 def send_reset_password_link(request):
     # Assuming you are sending a POST request with a list of emails in the body
     users = request.data["users"]
     for user_data in users:
         try:
-            user = User.objects.get(
-            email=user_data["email"]
-              )  
+            user = User.objects.get(email=user_data["email"])
             # Replace YourUserModel with your actual user model
             token = get_token_generator().generate_token()
-        		# Save the token to the database
+            # Save the token to the database
             ResetPasswordToken.objects.create(user=user, key=token)
-        		# def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
+            # def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
             reset_password_link = f"https://vendor.meeraq.com/reset-password/{token}"
             send_mail_templates(
-            "greeting_email_to_vendor.html",
-            [user_data["email"]],
-            "Meeraq - Exciting News! New Vendor Platform Launch.",
-            {"vendor_name": user_data["name"], "link": reset_password_link},
-            [],
-        		)
+                "greeting_email_to_vendor.html",
+                [user_data["email"]],
+                "Meeraq - Exciting News! New Vendor Platform Launch.",
+                {"vendor_name": user_data["name"], "link": reset_password_link},
+                [],
+            )
         except Exception as e:
-            print(f"Error sending link to {user_data['email']}: {str(e)}") 
+            print(f"Error sending link to {user_data['email']}: {str(e)}")
     return Response({"message": "Reset password links sent successfully"})
