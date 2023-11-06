@@ -3,6 +3,9 @@ from . import views
 from .views import (
     UpdateInviteesView,
     SessionCountsForAllLearners,
+    SessionsProgressOfAllCoacheeForAnHr,
+    AddRegisteredCoach,
+    ActivitySummary,
     StandardizedFieldAPI,
     StandardizedFieldRequestAPI,
     StandardFieldAddValue,
@@ -15,7 +18,7 @@ urlpatterns = [
     path("pmos/", views.create_pmo),
     path("coaches/", views.coach_signup),
     path("coaches/all/", views.get_coaches),
-    path("coaches/<int:coach_id>/approve/", views.approve_coach),
+    path("coaches/approve/", views.approve_coach),
     path("pmo-login/", views.pmo_login, name="pmo-login"),
     path("coach-login/", views.coach_login, name="coach-login"),
     path(
@@ -33,7 +36,7 @@ urlpatterns = [
     # path('projects/completed/hr/<int:hr_id>/',views.get_completed_projects_of_hr),
     path("add-coach/", views.add_coach),
     path("hr/all/", views.get_hr),
-    path("coaches/profile/<int:coach_id>/", views.update_coach_profile),
+    path("coaches/profile/<int:id>/", views.update_coach_profile),
     path("csrf/", views.get_csrf, name="api-csrf"),
     path("login/", views.login_view, name="api-login"),
     path("logout/", views.logout_view, name="api-logout"),
@@ -103,6 +106,7 @@ urlpatterns = [
     path("coach/delete/", views.delete_coach),
     path("notifications/all/<int:user_id>/", views.get_notifications),
     path("notifications/mark-as-read/", views.mark_notifications_as_read),
+    path("notifications/mark-all-as-read/", views.mark_all_notifications_as_read),
     path("notifications/unread-count/<int:user_id>/", views.unread_notification_count),
     path("mark_project_as_sold/", views.mark_project_as_sold),
     path(
@@ -254,11 +258,4 @@ urlpatterns = [
         "coaches-which-are-included-in-projects/",
         views.coaches_which_are_included_in_projects,
     ),
-    path("standard_field/<int:user_id>/", views.standard_field_request),
-    path("standardized-fields/", StandardizedFieldAPI.as_view()),
-    path("standardized-field-requests/", StandardizedFieldRequestAPI.as_view()),
-    path("standard-field-add-value/", StandardFieldAddValue.as_view()),
-    path("standard-field-edit-value/", StandardFieldEditValue.as_view()),
-    path("standardized-field-request-accept-reject/",StandardizedFieldRequestAcceptReject.as_view()),
-    path("standard-field-delete-value/",StandardFieldDeleteValue.as_view()),
 ]

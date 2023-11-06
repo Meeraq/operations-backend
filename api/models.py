@@ -17,6 +17,7 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
+from django_celery_beat.models import PeriodicTask
 
 
 import environ
@@ -56,12 +57,15 @@ def password_reset_token_created(
     subject = "Meeraq - Forgot Password"
 
     user_type = reset_password_token.user.profile.type
+    not_approved_coach = False
     if user_type == "pmo":
         user = Pmo.objects.get(email=reset_password_token.user.email)
         name = user.name
     elif user_type == "coach":
         user = Coach.objects.get(email=reset_password_token.user.email)
         name = user.first_name
+        if not user.is_approved:
+            not_approved_coach = True
     elif user_type == "learner":
         user = Learner.objects.get(email=reset_password_token.user.email)
         name = user.name
@@ -71,18 +75,32 @@ def password_reset_token_created(
     else:
         name = "User"
 
-    # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
-    link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
-    # send_mail(
-    #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
-    # )
-    send_mail_templates(
-        "hr_emails/forgot_password.html",
-        [reset_password_token.user.email],
-        "Meeraq Platform | Password Reset",
-        {"name": name, "resetPassword": link},
-        [],  # no bcc
-    )
+    if not_approved_coach == True:
+        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+        link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
+        # send_mail(
+        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
+        # )
+        send_mail_templates(
+            "coach_templates/create_new_password.html",
+            [reset_password_token.user.email],
+            "Meeraq Platform | Create New Password",
+            {"name": name, "createPassword": link},
+            [],  # no bcc
+        )
+    else:
+        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+        link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
+        # send_mail(
+        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
+        # )
+        send_mail_templates(
+            "hr_emails/forgot_password.html",
+            [reset_password_token.user.email],
+            "Meeraq Platform | Password Reset",
+            {"name": name, "resetPassword": link},
+            [],  # no bcc
+        )
 
 
 class Profile(models.Model):
@@ -119,6 +137,7 @@ def validate_pdf_extension(value):
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     coach_id = models.CharField(max_length=20, blank=True)
+    vendor_id = models.CharField(max_length=255, blank=True, default="")
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
@@ -126,9 +145,10 @@ class Coach(models.Model):
     gender = models.CharField(max_length=50, blank=True)
     domain = models.JSONField(default=list, blank=True)
     room_id = models.CharField(max_length=50, blank=True)
+    phone_country_code = models.CharField(max_length=20, default="", blank=True)
     phone = models.CharField(max_length=25)
-    level = models.CharField(max_length=50)
-    rating = models.CharField(max_length=20)
+    level = models.CharField(max_length=50, blank=True)
+    rating = models.CharField(max_length=20, blank=True)
     area_of_expertise = models.JSONField(default=list, blank=True)
     completed_sessions = models.IntegerField(blank=True, default=0)
     profile_pic = models.ImageField(upload_to="post_images", blank=True)
@@ -173,7 +193,7 @@ class Learner(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=100)
     email = models.EmailField()
-    phone = models.CharField(max_length=25)
+    phone = models.CharField(max_length=25,blank=True)
     area_of_expertise = models.CharField(max_length=100, blank=True)
     years_of_experience = models.IntegerField(default=0, blank=True)
 
@@ -220,7 +240,7 @@ class CoachStatus(models.Model):
 
 class Project(models.Model):
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
-    name = models.CharField(max_length=100,unique=True)
+    name = models.CharField(max_length=100, unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type = models.CharField(
         max_length=50, choices=project_type_choice, default="cod"
@@ -252,6 +272,7 @@ class Project(models.Model):
     coach_fees_per_hour = models.IntegerField(default=0, blank=True)
     approx_coachee = models.TextField(blank=True)
     frequency_of_session = models.TextField(blank=True)
+    project_description = models.TextField(blank=True, default="")
 
     class Meta:
         ordering = ["-created_at"]
@@ -415,6 +436,55 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+
+
+class ProfileEditActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"Profile Edit for {self.user.username}"
+
+
+class UserLoginActivity(models.Model):
+    PLATFORM_CHOICES = (
+        ("caas", "CAAS"),
+        ("seeq", "SEEQ"),
+        ("vendor", "VENDOR"),
+        ("assessment", "ASSESSMENT"),
+        ("unknown","UNKNOWN"),
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+    platform = models.CharField(blank=True,choices=PLATFORM_CHOICES,max_length=225)
+
+    def __str__(self):
+        return f"User Login Activity for {self.user.username}"
+
+
+class SentEmailActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    email_subject = models.CharField(max_length=500)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"Sent Email - {self.user.username}"
+
+
+class AddCoachActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"Coach Added - {self.user.username}"
+
+
+class AddGoalActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user} added a goal."
 
 
 class StandardizedField(models.Model):
