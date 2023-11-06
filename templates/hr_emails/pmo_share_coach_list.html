@@ -1,70 +1,38 @@
-{% extends "../table_parent_template.html" %} {% block title %}Welcome to the
-Meeraq Platform {% endblock %} {% block content %}
-<tr style="border: 0">
-  <td style="padding: 20px; background: #f8f7f8; border: 0">
-  
-    <div align="center">
-      <table
-        border="0"
-        cellpadding="0"
-        cellspacing="0"
-        style="
-          width: 100%;
-          mso-cellspacing: 0cm;
-          background: #f8f7f8;
-          mso-yfti-tbllook: 1184;
-          mso-padding-alt: 0cm 0cm 0cm 0cm;
-        "
-        width="100%"
-      >
-        <tbody>
-          <tr
-            style="
-              mso-yfti-irow: 0;
-              mso-yfti-firstrow: yes;
-              mso-yfti-lastrow: yes;
-            "
-          >
-            <td style="padding: 15pt 15pt 15pt 15pt">
-              <p>
-      <strong><span style="font-size: 14px">Dear&nbsp;</span></strong
-      ><b>{{name}}</b><strong>,</strong>
-    </p>
-              <p class="child-para">
-                We are excited to let you know that your project has been added
-                to the Meeraq platform. On this platform, you can:
-              </p>
-              <ol>
-                <li>View Coach Profiles</li>
-                <li>Select the Coaches you want</li>
-                <li>Add your Coachees</li>
-                <li>View their Session Progress</li>
-                <li>Join video call on the Meeraq platform</li>
-                <li>Download Coaching Session Reports</li>
-              </ol>
-              <p class="child-para">
-                We have shortlisted a few coach profiles as per your
-                requirements. You can
-                <a href="https://caas.meeraq.com/">click here</a> to login and
-                view these profiles and select the Coaches.
-              </p>
-              <p class="child-para">Let’s start this journey together!</p>
-              <p class="child-para">
-                Contact us at
-                <a href="mailto:pmocoaching@meeraq.com"
-                  >pmocoaching@meeraq.com</a
-                >
-                for any queries.
-              </p>
-              <p><br /></p>
-              <p>Best regards,</p>
-              <p>Team Meeraq.</p>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </td>
-</tr>
+{% extends "../parent_template.html" %} 
+{% block title %}Welcome to the Meeraq
+Platform {% endblock %} {% block heading %}
+<div>
+  <b>
+    <span class="heading-container">
+      Dear <span class="heading-container-span">{{name}}</span>,
+    </span>
+  </b>
+</div>
+  {% endblock %} {% block content %}
 
-{% endblock %}
+  <p class="child-para">
+    We are excited to let you know that your project has been added to the
+    Meeraq platform. On this platform, you can:
+  </p>
+  <ol>
+    <li>View Coach Profiles</li>
+    <li>Select the Coaches you want</li>
+    <li>Add your Coachees</li>
+    <li>View their Session Progress</li>
+    <li>Join video call on the Meeraq platform</li>
+    <li>Download Coaching Session Reports</li>
+  </ol>
+  <p class="child-para">
+    We have shortlisted a few coach profiles as per your requirements. You can
+    <a href="https://caas.meeraq.com/">click here</a> to login and view
+    these profiles and select the Coaches.
+  </p>
+  <p class="child-para">Let’s start this journey together!</p>
+  <p class="child-para">
+    Contact us at
+    <a href="mailto:pmocoaching@meeraq.com">pmocoaching@meeraq.com</a> for any
+    queries.
+  </p>
+</td>
+  {% endblock %}
+

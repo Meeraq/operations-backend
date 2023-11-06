@@ -14,11 +14,6 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
-    ProfileEditActivity,
-    UserLoginActivity,
-    AddGoalActivity,
-    AddCoachActivity,
-    SentEmailActivity,
     StandardizedField,
     StandardizedFieldRequest,
 )
@@ -71,10 +66,10 @@ class LearnerSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class ProjectSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Project
-        fields = "__all__"
+# class ProjectSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Project
+#         fields = '__all__'
 
 
 class ProjectDepthTwoSerializer(serializers.ModelSerializer):
@@ -155,15 +150,6 @@ class SessionRequestCaasDepthOneSerializer(serializers.ModelSerializer):
         depth = 2
 
 
-class SessionRequestWithEngagementCaasDepthOneSerializer(serializers.ModelSerializer):
-    engagement_status = serializers.CharField()
-
-    class Meta:
-        model = SessionRequestCaas
-        fields = "__all__"
-        depth = 2
-
-
 class SessionRequestCaasDepthTwoSerializer(serializers.ModelSerializer):
     class Meta:
         model = SessionRequestCaas
@@ -182,13 +168,6 @@ class EngagementDepthOneSerializer(serializers.ModelSerializer):
         model = Engagement
         fields = "__all__"
         depth = 1
-
-
-class EngagementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Engagement
-        fields = "__all__"
-        depth = 2
 
 
 class GoalSerializer(serializers.ModelSerializer):
@@ -221,49 +200,17 @@ class ActionItemSerializer(serializers.ModelSerializer):
         model = ActionItem
         fields = ["id", "name", "status", "competency"]
 
-
-class PendingActionItemSerializer(serializers.ModelSerializer):
+class PendingActionItemSerializer(serializers.ModelSerializer):    
     class Meta:
         model = ActionItem
-        fields = "__all__"
-        depth = 2
-
-
+        fields='__all__'
+        depth=2
+        
 class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
-        fields = "__all__"
-
-class ProfileEditActivitySerializer(serializers.ModelSerializer):
-    user =UserSerializer()
-    class Meta:
-        model = ProfileEditActivity
-        fields = '__all__'  
-
-class UserLoginActivitySerializer(serializers.ModelSerializer):
-    user =UserSerializer()
-    class Meta:
-        model = UserLoginActivity
         fields = '__all__'
 
-class AddGoalActivitySerializer(serializers.ModelSerializer):
-    user=UserSerializer()
-    class Meta:
-        model = AddGoalActivity
-        fields = '__all__'
-
-
-class AddCoachActivitySerializer(serializers.ModelSerializer):
-    user=UserSerializer()
-    class Meta:
-        model = AddCoachActivity
-        fields = '__all__'
-
-class SentEmailActivitySerializer(serializers.ModelSerializer):
-    user=UserSerializer()
-    class Meta:
-        model = SentEmailActivity
-        fields = '__all__'
 class StandardizedFieldSerializer(serializers.ModelSerializer):
     class Meta:
         model = StandardizedField
