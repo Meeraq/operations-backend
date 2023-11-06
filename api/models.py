@@ -193,7 +193,7 @@ class Learner(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=100)
     email = models.EmailField()
-    phone = models.CharField(max_length=25)
+    phone = models.CharField(max_length=25,blank=True)
     area_of_expertise = models.CharField(max_length=100, blank=True)
     years_of_experience = models.IntegerField(default=0, blank=True)
 
@@ -447,8 +447,16 @@ class ProfileEditActivity(models.Model):
 
 
 class UserLoginActivity(models.Model):
+    PLATFORM_CHOICES = (
+        ("caas", "CAAS"),
+        ("seeq", "SEEQ"),
+        ("vendor", "VENDOR"),
+        ("assessment", "ASSESSMENT"),
+        ("unknown","UNKNOWN"),
+    )
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
+    platform = models.CharField(blank=True,choices=PLATFORM_CHOICES,max_length=225)
 
     def __str__(self):
         return f"User Login Activity for {self.user.username}"

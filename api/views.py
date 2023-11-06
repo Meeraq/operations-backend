@@ -105,6 +105,10 @@ from openpyxl.styles import Font
 from rest_framework import generics
 from django.db.models import Subquery, OuterRef
 from schedularApi.models import SchedularBatch
+from django_rest_passwordreset.models import ResetPasswordToken
+from django_rest_passwordreset.serializers import EmailSerializer
+from django_rest_passwordreset.tokens import get_token_generator
+
 
 # Create your views here.
 from collections import defaultdict
@@ -242,6 +246,7 @@ SESSION_TYPE_VALUE = {
     "closure_session": "Closure Session",
     "stakeholder_without_coach": "Tripartite Without Coach",
     "interview": "Interview",
+    "stakeholder_interview": "Stakeholder Interview",
 }
 
 
@@ -1929,9 +1934,11 @@ def login_view(request):
     data = request.data
     username = data.get("username")
     password = data.get("password")
+    platform = data.get("platform", "unknown")
     if username is None or password is None:
         raise ValidationError({"detail": "Please provide username and password."})
     user = authenticate(request, username=username, password=password)
+
     # check_user = Profile.objects.get(user__username=username)
     # if check_user:
     #     if check_user.type == 'hr':
@@ -1945,7 +1952,9 @@ def login_view(request):
     user_data = get_user_data(user)
     if user_data:
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp)
+        UserLoginActivity.objects.create(
+            user=user, timestamp=login_timestamp, platform=platform
+        )
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -2065,6 +2074,8 @@ def validate_otp(request):
         .order_by("-created_at")
         .first()
     )
+    data = request.data
+    platform = data.get("platform", "unknown")
 
     if otp_obj is None:
         raise AuthenticationFailed("Invalid OTP")
@@ -2078,7 +2089,9 @@ def validate_otp(request):
     user_data = get_user_data(user)
     if user_data:
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp)
+        UserLoginActivity.objects.create(
+            user=user, timestamp=login_timestamp, platform=platform
+        )
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -4792,7 +4805,8 @@ def get_current_session_of_stakeholder(request, room_id):
         Q(session_type="tripartite")
         | Q(session_type="mid_review")
         | Q(session_type="end_review")
-        | Q(session_type="stakeholder_without_coach"),
+        | Q(session_type="stakeholder_without_coach")
+        | Q(session_type="stakeholder_interview"),
         Q(invitees__contains=request.data["email"]),
         Q(is_archive=False),
         ~Q(status="completed"),
@@ -4826,6 +4840,13 @@ def schedule_session_directly(request, session_id):
     if request.data["user_type"] == "coach":
         coach = Coach.objects.get(id=request.data["user_id"])
         session.coach = coach
+
+    if session.session_type == "stakeholder_interview":
+        engagement = Engagement.objects.get(
+            learner=session.learner, project=session.project
+        )
+        session.coach = engagement.coach
+        session.hr = session.project.hr.first()
 
     session.availibility.add(availability)
     session.confirmed_availability = availability
@@ -5853,6 +5874,31 @@ class ActivitySummary(APIView):
         }
 
         return Response(response_data)
+
+
+@api_view(["POST"])
+def send_reset_password_link(request):
+    # Assuming you are sending a POST request with a list of emails in the body
+    users = request.data["users"]
+    for user_data in users:
+        try:
+            user = User.objects.get(email=user_data["email"])
+            # Replace YourUserModel with your actual user model
+            token = get_token_generator().generate_token()
+            # Save the token to the database
+            ResetPasswordToken.objects.create(user=user, key=token)
+            # def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
+            reset_password_link = f"https://vendor.meeraq.com/reset-password/{token}"
+            send_mail_templates(
+                "greeting_email_to_vendor.html",
+                [user_data["email"]],
+                "Meeraq - Exciting News! New Vendor Platform Launch.",
+                {"vendor_name": user_data["name"], "link": reset_password_link},
+                [],
+            )
+        except Exception as e:
+            print(f"Error sending link to {user_data['email']}: {str(e)}")
+    return Response({"message": "Reset password links sent successfully"})
 
 
 @api_view(["POST"])

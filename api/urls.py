@@ -264,6 +264,7 @@ urlpatterns = [
         views.get_all_engagements,
     ),
     path("activity-summary/", ActivitySummary.as_view()),
+    path("send-reset-password-link/", views.send_reset_password_link),
     path("coach-profile-templates/", views.create_coach_profile_template),
     path("project/<int:project_id>/data/", views.get_coach_profile_template),
 ]
