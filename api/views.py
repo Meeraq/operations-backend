@@ -4110,13 +4110,15 @@ def get_all_sessions_of_user(request, user_type, user_id):
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
             ~Q(session_type="interview"),
-            ~Q(billable_session_number=None),
+            ~Q(session_type="chemistry", billable_session_number=None),
+            # ~Q(billable_session_number=None),
             is_archive=False,
         )
     elif user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
             ~Q(session_type="interview"),
-            ~Q(billable_session_number=None),
+            ~Q(session_type="chemistry", billable_session_number=None),
+            # ~Q(billable_session_number=None),
             is_archive=False,
             project__hr__id=user_id,
         )
