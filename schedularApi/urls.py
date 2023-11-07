@@ -127,4 +127,16 @@ urlpatterns = [
         views.project_report_download,
         name="project_report_download",
     ),
+    path(
+        "add-facilitator/",
+        views.addFacilitator,
+    ),
+    path(
+        "facilitators/",
+        views.get_facilitators,
+    ),
+    path(
+        "add-multiple-facilitator/",
+        views.add_multiple_facilitator,
+    ),
 ]

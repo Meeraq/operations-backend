@@ -11,6 +11,7 @@ from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
 from operationsBackend import settings
 import jwt
+from django.db import transaction, IntegrityError
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework import status
@@ -46,6 +47,7 @@ from .serializers import (
     CoachSchedularGiveAvailibiltySerializer2,
     RequestAvailibiltySerializerDepthOne,
     RequestAvailibiltySerializer,
+    FacilitatorSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -58,6 +60,7 @@ from .models import (
     CoachSchedularAvailibilty,
     RequestAvailibilty,
     SchedularSessions,
+    Facilitator,
 )
 
 
@@ -1450,3 +1453,106 @@ def project_report_download(request, project_id):
             df.to_excel(writer, sheet_name=batch_name, index=False)
 
     return response
+
+
+@api_view(["POST"])
+def addFacilitator(request):
+    data = request.data
+    email = data.get("email", "")
+
+    # Check if a Facilitator with the same email already exists
+    existing_facilitator = Facilitator.objects.filter(email=email).first()
+    if existing_facilitator:
+        return Response("Email already exists", status=status.HTTP_400_BAD_REQUEST)
+
+    facilitator = Facilitator(
+        first_name=data.get("firstName", ""),
+        last_name=data.get("lastName", ""),
+        email=email,
+        age=data.get("age", ""),
+        gender=data.get("gender", ""),
+        domain=data.get("domain", []),
+        phone_country_code=data.get("phoneCountryCode", ""),
+        phone=data.get("phone", ""),
+        level=data.get("level", []),
+        rating=data.get("rating", ""),
+        area_of_expertise=data.get("areaOfExpertise", []),
+        profile_pic=data.get("profilePic", ""),
+        education=data.get("education", []),
+        years_of_corporate_experience=data.get("corporateyearsOfExperience", ""),
+        language=data.get("language", []),
+        job_roles=data.get("job_roles", []),
+        city=data.get("city", []),
+        country=data.get("country", []),
+        linkedin_profile_link=data.get("linkedin_profile_link", ""),
+        companies_worked_in=data.get("companies_worked_in", []),
+        other_certification=data.get("other_certification", []),
+        currency=data.get("currency", ""),
+        client_companies=data.get("client_companies", []),
+        educational_qualification=data.get("educational_qualification", []),
+        fees_per_hour=data.get("fees_per_hour", []),
+        fees_per_day=data.get("fees_per_day", []),
+        topic=data.get("topics", []),
+    )
+
+    facilitator.save()
+
+    return Response("Facilitator added successfully", status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+def get_facilitators(request):
+    facilitators = Facilitator.objects.all()
+    serializer = FacilitatorSerializer(facilitators, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+def add_multiple_facilitator(request):
+    data = request.data.get("coaches", [])
+    facilitators = []
+
+    for coach_data in data:
+        email = coach_data["email"]
+
+        if Facilitator.objects.filter(email=email).exists():
+            return Response(
+                {"message": f"Facilitator with email {email} already exists"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        facilitator = Facilitator(
+            first_name=coach_data["first_name"],
+            last_name=coach_data["last_name"],
+            email=email,
+            age=coach_data["age"],
+            gender=coach_data["gender"],
+            domain=coach_data.get("functional_domain", []),
+            phone=coach_data["mobile"],
+            level=coach_data.get("level", []),
+            rating=coach_data.get("rating", ""),
+            area_of_expertise=coach_data.get("industries", []),
+            education=coach_data.get("education", []),
+            years_of_corporate_experience=coach_data.get("corporate_yoe", ""),
+            city=coach_data.get("city", []),
+            language=coach_data.get("language", []),
+            job_roles=coach_data.get("job_roles", []),
+            country=coach_data.get("country", []),
+            linkedin_profile_link=coach_data.get("linkedin_profile", ""),
+            companies_worked_in=coach_data.get("companies_worked_in", []),
+            educational_qualification=coach_data.get("educational_qualification", []),
+            client_companies=coach_data.get("client_companies", []),
+            fees_per_hour=coach_data.get("fees_per_hour", []),
+            fees_per_day=coach_data.get("fees_per_day", []),
+            topic=coach_data.get("topic", []),
+            other_certification=coach_data.get("other_certification", []),
+        )
+        facilitators.append(facilitator)
+
+    Facilitator.objects.bulk_create(
+        facilitators
+    )  # Bulk create facilitators in the database
+
+    return Response(
+        {"message": "Facilitators added successfully"}, status=status.HTTP_201_CREATED
+    )
