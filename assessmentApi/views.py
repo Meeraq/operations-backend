@@ -2,6 +2,8 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.template.loader import render_to_string
+from operationsBackend import settings
 from .models import (
     Competency,
     Question,
@@ -33,12 +35,95 @@ import json
 import string
 import random
 from django.contrib.auth.models import User
-from api.models import Profile, Learner, Organisation, HR
+from api.models import Profile, Learner, Organisation, HR, SentEmailActivity
+from django.core.mail import EmailMessage, BadHeaderError
 from api.serializers import LearnerSerializer
 from collections import defaultdict
 from django.db.models import BooleanField, F, Exists, OuterRef
 from django.db.models import Q
+from django.dispatch import receiver
+from django_rest_passwordreset.signals import reset_password_token_created
+from django.utils import timezone
+from django_rest_passwordreset.tokens import get_token_generator
+from django_rest_passwordreset.models import ResetPasswordToken
+
 import uuid
+import environ
+
+env = environ.Env()
+
+
+class EmailSendingError(Exception):
+    pass
+
+
+def send_reset_password_link(users):
+        # Assuming you are sending a POST request with a list of emails in the body
+    for user_data in users:
+        try:
+            user = User.objects.get(email=user_data['email'])
+            # Replace YourUserModel with your actual user model
+            token = get_token_generator().generate_token()
+            # Save the token to the database
+            ResetPasswordToken.objects.create(user=user, key=token)
+            # def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
+            reset_password_link = (
+                f"https://assessment.meeraq.com/create-password/{token}"
+            )
+            send_mail_templates(
+                "assessment/assessment_email_to_participant.html",
+                [user_data['email']],
+                "Meeraq - Welcome to Assessment Platform !",
+                {
+                    "participant_name": user_data['name'],
+                    "link": reset_password_link,
+                },
+                [],
+            )
+        except Exception as e:
+            print(f"Error sending link to {user_data.email}: {str(e)}")
+
+
+
+def create_send_email(user_email, file_name):
+    user_email = user_email
+    file_name = file_name
+    try:
+        user = User.objects.get(username=user_email)
+        sent_email = SentEmailActivity.objects.create(
+            user=user,
+            email_subject=file_name,
+            timestamp=timezone.now(),
+        )
+        sent_email.save()
+    except Exception as e:
+        pass
+
+
+def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
+    email_message = render_to_string(file_name, content)
+
+    email = EmailMessage(
+        f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
+        email_message,
+        settings.DEFAULT_FROM_EMAIL,
+        user_email,
+        bcc_emails,
+    )
+    email.content_subtype = "html"
+
+    try:
+        email.send(fail_silently=False)
+        for email in user_email:
+            create_send_email(email, file_name)
+    except BadHeaderError as e:
+        print(f"Error occurred while sending emails: {str(e)}")
+        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
+
+
+# def create_notification(user, path, message):
+#     notification = Notification.objects.create(user=user, path=path, message=message)
+#     return notification
 
 
 def create_learner(learner_name, learner_email):
@@ -504,6 +589,10 @@ class AddParticipantObserverToAssessment(APIView):
             mapping.save()
             assessment.participants_observers.add(mapping)
             assessment.save()
+            print(participant.name,participant.email)
+
+            particpant_data=[{"name":participant.name,"email":participant.email}]
+            send_reset_password_link(particpant_data)
 
             serializer = AssessmentSerializerDepthThree(assessment)
             return Response(
@@ -941,6 +1030,19 @@ class AddObserverToParticipant(APIView):
             )
             observer_unique_id.unique_id = str(uuid.uuid4())
             observer_unique_id.save()
+            observer_link=f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+            send_mail_templates(
+                "assessment/assessment_email_to_observer.html",
+                [observer.email],
+                "Meeraq - Welcome to Assessment Platform !",
+                {
+                    "assessment_name": assessment.name,
+                    "participant_name": participants_observer.participant.name,
+                    "observer_name":observer.name,
+                    "link":observer_link,
+                },
+                [],
+            )
 
             serializer = AssessmentSerializerDepthThree(assessment)
             return Response(
@@ -1200,3 +1302,61 @@ class ReleaseResults(APIView):
                 {"error": "Failed to retrieve Observer Response Data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class ReminderMailForObserverByPmoAndParticipant(APIView):
+    def put(self, request):
+        try:
+            assessment_id= request.data.get("assessment_id")
+            assessment=Assessment.objects.get(
+                    id=assessment_id
+            )    
+            participant_observers_id = request.data.get("participant_observers_id")
+            participants_observer = ParticipantObserverMapping.objects.get(
+                id=participant_observers_id
+            )
+            print(participants_observer)
+            for observer in participants_observer.observers.all():
+                print("observer_resp",participants_observer.participant.id)
+                observer_response_data=ObserverResponse.objects.filter(
+                    participant__id=participants_observer.participant.id,
+                    observer__id=observer.id,
+                    assessment__id=assessment.id,
+                )    
+                print("observer_response_data",observer_response_data)
+                observer_unique_id=ObserverUniqueId.objects.get(
+                    participant=participants_observer.participant,
+                    observer=observer,
+                    assessment=assessment,
+                )
+                
+                if not observer_response_data:
+                    print(observer_unique_id.unique_id)
+                    observer_link=f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+                    print(observer_link)
+                    send_mail_templates(
+                    "assessment/reminder_mail_for_observer_by_pmo_and_participant.html",
+                    [observer.email],
+                    "Meeraq - Welcome to Assessment Platform !",
+                    {
+                        "assessment_name": assessment.name,
+                        "participant_name": participants_observer.participant.name,
+                        "observer_name":observer.name,
+                        "link":observer_link,
+                    },
+                    [],
+                )
+                
+                return Response(
+                    {
+                        "message": "Notification is send succes successfully.",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to add observer."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        

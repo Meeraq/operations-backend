@@ -31,6 +31,7 @@ from .views import (
     GetParticipantObserversUniqueIds,
     StartAssessmentDisabled,
     ReleaseResults,
+    ReminderMailForObserverByPmoAndParticipant,
 )
 
 
@@ -130,4 +131,5 @@ urlpatterns = [
     path(
         "release-assessment-result/<int:assessment_id>/",ReleaseResults.as_view(),
     ),
+    path("reminder-mail-for-observer-by-pmo-and-participant/",ReminderMailForObserverByPmoAndParticipant.as_view()),
 ]
