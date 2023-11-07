@@ -360,6 +360,7 @@ class AssessmentView(APIView):
                 one_hr = HR.objects.get(id=hr_id)
                 hr.append(one_hr)
             assessment.name = request.data.get("name")
+            assessment.participant_view_name=request.data.get("participant_view_name")
             assessment.assessment_type = request.data.get("assessment_type")
             if request.data.get("assessment_type") == "self":
                 assessment.number_of_observers = 0
@@ -693,6 +694,7 @@ class CreateParticipantResponseView(APIView):
                 assessment=assessment,
                 participant_response=response,
             )
+            serializer=AssessmentAnsweredSerializerDepthThree(assessment)
             return Response(
                 {"message": "Submit Successfully."},
                 status=status.HTTP_200_OK,
@@ -1200,3 +1202,6 @@ class ReleaseResults(APIView):
                 {"error": "Failed to retrieve Observer Response Data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+        
+
+
