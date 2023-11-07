@@ -15,6 +15,12 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    ProfileEditActivity,
+    UserLoginActivity,
+    AddGoalActivity,
+    AddCoachActivity,
+    SentEmailActivity,
+    CoachProfileTemplate,
 )
 
 # Register your models here.
@@ -36,3 +42,9 @@ admin.site.register(Notification)
 admin.site.register(Goal)
 admin.site.register(Competency)
 admin.site.register(ActionItem)
+admin.site.register(ProfileEditActivity)
+admin.site.register(UserLoginActivity)
+admin.site.register(SentEmailActivity)
+admin.site.register(AddCoachActivity)
+admin.site.register(AddGoalActivity)
+admin.site.register(CoachProfileTemplate)

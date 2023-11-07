@@ -14,6 +14,12 @@ from .models import (
     Goal,
     Competency,
     ActionItem,
+    ProfileEditActivity,
+    UserLoginActivity,
+    AddGoalActivity,
+    AddCoachActivity,
+    SentEmailActivity,
+    CoachProfileTemplate
 )
 from django.contrib.auth.models import User
 
@@ -146,6 +152,8 @@ class SessionRequestCaasDepthOneSerializer(serializers.ModelSerializer):
         model = SessionRequestCaas
         fields = "__all__"
         depth = 2
+
+
 class SessionRequestWithEngagementCaasDepthOneSerializer(serializers.ModelSerializer):
     engagement_status = serializers.CharField()
 
@@ -153,6 +161,7 @@ class SessionRequestWithEngagementCaasDepthOneSerializer(serializers.ModelSerial
         model = SessionRequestCaas
         fields = "__all__"
         depth = 2
+
 
 class SessionRequestCaasDepthTwoSerializer(serializers.ModelSerializer):
     class Meta:
@@ -222,4 +231,50 @@ class PendingActionItemSerializer(serializers.ModelSerializer):
 class GetActionItemDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
+        fields = "__all__"
+
+
+class ProfileEditActivitySerializer(serializers.ModelSerializer):
+    user = UserSerializer()
+
+    class Meta:
+        model = ProfileEditActivity
+        fields = "__all__"
+
+
+class UserLoginActivitySerializer(serializers.ModelSerializer):
+    user = UserSerializer()
+
+    class Meta:
+        model = UserLoginActivity
+        fields = "__all__"
+
+
+class AddGoalActivitySerializer(serializers.ModelSerializer):
+    user = UserSerializer()
+
+    class Meta:
+        model = AddGoalActivity
+        fields = "__all__"
+
+
+class AddCoachActivitySerializer(serializers.ModelSerializer):
+    user = UserSerializer()
+
+    class Meta:
+        model = AddCoachActivity
+        fields = "__all__"
+
+
+class SentEmailActivitySerializer(serializers.ModelSerializer):
+    user = UserSerializer()
+
+    class Meta:
+        model = SentEmailActivity
+        fields = "__all__"
+
+
+class CoachProfileTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachProfileTemplate
         fields = "__all__"
