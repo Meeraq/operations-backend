@@ -1174,6 +1174,19 @@ class ParticipantAddsObserverToAssessment(APIView):
                 )
                 observer_unique_id.unique_id = str(uuid.uuid4())
                 observer_unique_id.save()
+                observer_link=f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+                send_mail_templates(
+                "assessment/assessment_email_to_observer.html",
+                [observer.email],
+                "Meeraq - Welcome to Assessment Platform !",
+                {
+                    "assessment_name": assessment.name,
+                    "participant_name": participants_observer.participant.name,
+                    "observer_name":observer.name,
+                    "link":observer_link,
+                },
+                [],
+            )
 
             return Response(
                 {
@@ -1315,15 +1328,12 @@ class ReminderMailForObserverByPmoAndParticipant(APIView):
             participants_observer = ParticipantObserverMapping.objects.get(
                 id=participant_observers_id
             )
-            print(participants_observer)
             for observer in participants_observer.observers.all():
-                print("observer_resp",participants_observer.participant.id)
                 observer_response_data=ObserverResponse.objects.filter(
                     participant__id=participants_observer.participant.id,
                     observer__id=observer.id,
                     assessment__id=assessment.id,
                 )    
-                print("observer_response_data",observer_response_data)
                 observer_unique_id=ObserverUniqueId.objects.get(
                     participant=participants_observer.participant,
                     observer=observer,
@@ -1331,9 +1341,7 @@ class ReminderMailForObserverByPmoAndParticipant(APIView):
                 )
                 
                 if not observer_response_data:
-                    print(observer_unique_id.unique_id)
                     observer_link=f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
-                    print(observer_link)
                     send_mail_templates(
                     "assessment/reminder_mail_for_observer_by_pmo_and_participant.html",
                     [observer.email],
@@ -1347,7 +1355,7 @@ class ReminderMailForObserverByPmoAndParticipant(APIView):
                     [],
                 )
                 
-                return Response(
+            return Response(
                     {
                         "message": "Notification is send succes successfully.",
                     },
@@ -1356,7 +1364,7 @@ class ReminderMailForObserverByPmoAndParticipant(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Failed to add observer."},
+                {"error": "Failed to send Notification."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         
