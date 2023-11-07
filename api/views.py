@@ -2443,13 +2443,13 @@ def send_consent(request):
         message = (
             f"Admin has requested your consent to share profile for a new project."
         )
-        for coach in coach_status:
-            create_notification(coach.user.user, path, message)
+        for status in coach_status:
+            create_notification(status.coach.user.user, path, message)
             send_mail_templates(
                 "coach_templates/pmo_ask_for_consent.html",
-                [coach.email],
+                [status.coach.email],
                 "Meeraq Coaching | New Project!",
-                {"name": coach.name},
+                {"name": status.coach.first_name},
                 [],  # no bcc
             )
     except Exception as e:
