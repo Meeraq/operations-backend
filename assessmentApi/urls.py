@@ -31,6 +31,9 @@ from .views import (
     GetParticipantObserversUniqueIds,
     StartAssessmentDisabled,
     ReleaseResults,
+    AssessmentsOfHr,
+    GetParticipantResponseForAllAssessment,
+    GetObserverResponseForAllAssessment,
 )
 
 
@@ -129,5 +132,18 @@ urlpatterns = [
     ),
     path(
         "release-assessment-result/<int:assessment_id>/",ReleaseResults.as_view(),
+    ),
+    path(
+        "assessments-of-hr/<str:hr_email>/",
+        AssessmentsOfHr.as_view(),
+    ),
+    path(
+        "get-participants-response-result-for-all-assessment/<str:hr_email>/",
+        GetParticipantResponseForAllAssessment.as_view(),
+    ),
+   
+    path(
+        "get-observer-assessment-response-result-for-all-assessment/<str:hr_email>/",
+        GetObserverResponseForAllAssessment.as_view(),
     ),
 ]
