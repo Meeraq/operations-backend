@@ -59,10 +59,10 @@ class EmailSendingError(Exception):
 
 
 def send_reset_password_link(users):
-        # Assuming you are sending a POST request with a list of emails in the body
+    # Assuming you are sending a POST request with a list of emails in the body
     for user_data in users:
         try:
-            user = User.objects.get(email=user_data['email'])
+            user = User.objects.get(email=user_data["email"])
             # Replace YourUserModel with your actual user model
             token = get_token_generator().generate_token()
             # Save the token to the database
@@ -73,17 +73,16 @@ def send_reset_password_link(users):
             )
             send_mail_templates(
                 "assessment/assessment_email_to_participant.html",
-                [user_data['email']],
+                [user_data["email"]],
                 "Meeraq - Welcome to Assessment Platform !",
                 {
-                    "participant_name": user_data['name'],
+                    "participant_name": user_data["name"],
                     "link": reset_password_link,
                 },
                 [],
             )
         except Exception as e:
             print(f"Error sending link to {user_data.email}: {str(e)}")
-
 
 
 def create_send_email(user_email, file_name):
@@ -591,9 +590,8 @@ class AddParticipantObserverToAssessment(APIView):
             mapping.save()
             assessment.participants_observers.add(mapping)
             assessment.save()
-          
 
-            particpant_data=[{"name":participant.name,"email":participant.email}]
+            particpant_data = [{"name": participant.name, "email": participant.email}]
             send_reset_password_link(particpant_data)
 
             serializer = AssessmentSerializerDepthThree(assessment)
@@ -1034,7 +1032,7 @@ class AddObserverToParticipant(APIView):
             )
             observer_unique_id.unique_id = str(uuid.uuid4())
             observer_unique_id.save()
-            observer_link=f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+            observer_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
             send_mail_templates(
                 "assessment/assessment_email_to_observer.html",
                 [observer.email],
@@ -1042,8 +1040,8 @@ class AddObserverToParticipant(APIView):
                 {
                     "assessment_name": assessment.name,
                     "participant_name": participants_observer.participant.name,
-                    "observer_name":observer.name,
-                    "link":observer_link,
+                    "observer_name": observer.name,
+                    "link": observer_link,
                 },
                 [],
             )
@@ -1178,19 +1176,19 @@ class ParticipantAddsObserverToAssessment(APIView):
                 )
                 observer_unique_id.unique_id = str(uuid.uuid4())
                 observer_unique_id.save()
-                observer_link=f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+                observer_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
                 send_mail_templates(
-                "assessment/assessment_email_to_observer.html",
-                [observer.email],
-                "Meeraq - Welcome to Assessment Platform !",
-                {
-                    "assessment_name": assessment.name,
-                    "participant_name": participants_observer.participant.name,
-                    "observer_name":observer.name,
-                    "link":observer_link,
-                },
-                [],
-            )
+                    "assessment/assessment_email_to_observer.html",
+                    [observer.email],
+                    "Meeraq - Welcome to Assessment Platform !",
+                    {
+                        "assessment_name": assessment.name,
+                        "participant_name": participants_observer.participant.name,
+                        "observer_name": observer.name,
+                        "link": observer_link,
+                    },
+                    [],
+                )
 
             return Response(
                 {
@@ -1373,51 +1371,75 @@ class GetObserverResponseForAllAssessment(APIView):
 class ReminderMailForObserverByPmoAndParticipant(APIView):
     def put(self, request):
         try:
-            assessment_id= request.data.get("assessment_id")
-            assessment=Assessment.objects.get(
-                    id=assessment_id
-            )    
+            assessment_id = request.data.get("assessment_id")
+            assessment = Assessment.objects.get(id=assessment_id)
             participant_observers_id = request.data.get("participant_observers_id")
             participants_observer = ParticipantObserverMapping.objects.get(
                 id=participant_observers_id
             )
             for observer in participants_observer.observers.all():
-                observer_response_data=ObserverResponse.objects.filter(
+                observer_response_data = ObserverResponse.objects.filter(
                     participant__id=participants_observer.participant.id,
                     observer__id=observer.id,
                     assessment__id=assessment.id,
-                )    
-                observer_unique_id=ObserverUniqueId.objects.get(
+                )
+                observer_unique_id = ObserverUniqueId.objects.get(
                     participant=participants_observer.participant,
                     observer=observer,
                     assessment=assessment,
                 )
-                
+
                 if not observer_response_data:
-                    observer_link=f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+                    observer_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
                     send_mail_templates(
-                    "assessment/reminder_mail_for_observer_by_pmo_and_participant.html",
-                    [observer.email],
-                    "Meeraq - Welcome to Assessment Platform !",
-                    {
-                        "assessment_name": assessment.name,
-                        "participant_name": participants_observer.participant.name,
-                        "observer_name":observer.name,
-                        "link":observer_link,
-                    },
-                    [],
-                )
-                
+                        "assessment/reminder_mail_for_observer_by_pmo_and_participant.html",
+                        [observer.email],
+                        "Meeraq - Welcome to Assessment Platform !",
+                        {
+                            "assessment_name": assessment.name,
+                            "participant_name": participants_observer.participant.name,
+                            "observer_name": observer.name,
+                            "link": observer_link,
+                        },
+                        [],
+                    )
+
             return Response(
-                    {
-                        "message": "Notification is send succes successfully.",
-                    },
-                    status=status.HTTP_200_OK,
-                )
+                {
+                    "message": "Notification is send succes successfully.",
+                },
+                status=status.HTTP_200_OK,
+            )
         except Exception as e:
             print(str(e))
             return Response(
                 {"error": "Failed to send Notification."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        
+
+
+class GetParticipantResponseForAllAssessments(APIView):
+    def get(self, request):
+        try:
+            participant_responses = ParticipantResponse.objects.all()
+
+            serializer = ParticipantResponseSerializer(participant_responses, many=True)
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetObserverResponseForAllAssessments(APIView):
+    def get(self, request):
+        try:
+            observer_responses = ObserverResponse.objects.all()
+            serializer = ObserverResponseSerializer(observer_responses, many=True)
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
