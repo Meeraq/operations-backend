@@ -777,7 +777,7 @@ def create_project_cass(request):
                 final_coaches={"status": "pending"},
                 project_live="pending",
             ),
-            status="active"
+            status="active",
         )
         project.save()
     except IntegrityError:
@@ -4633,14 +4633,14 @@ def mark_session_as_complete(request, session_id):
 
 
 @api_view(["POST"])
-def complete_engagement(request, engagement_id):
+def update_engagement_status(request, status, engagement_id):
     try:
         engagement = Engagement.objects.get(id=engagement_id)
     except Engagement.DoesNotExist:
         return Response({"error": "Engagement not found."}, status=404)
-    engagement.status = "completed"
+    engagement.status = status
     engagement.save()
-    return Response({"message": "Engagement is completed."}, status=201)
+    return Response({"message": f"Engagement marked as {status}."}, status=201)
 
 
 # @api_view(["GET"])
@@ -5797,7 +5797,7 @@ def edit_project_caas(request, project_id):
         return Response({"error": "Project not found"}, status=404)
 
     except Exception as e:
-        return Response({'error': str(e)}, status=500)
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["PUT"])
@@ -5805,29 +5805,34 @@ def project_status(request, project_id):
     try:
         # Use get_object_or_404 to retrieve the project or return a 404 response if it doesn't exist
         project = get_object_or_404(Project, id=project_id)
-
         # Retrieve engagements related to the project
         engagements = Engagement.objects.filter(project=project)
+        # Extract the desired status from the request data
+        new_status = request.data.get("status")
+
+        if not new_status:
+            return Response({"error": "Status cannot be empty."}, status=400)
+
+        # Check if the new status is "completed" and if any engagement is not completed
+        if new_status == "completed" and any(
+            engagement.status != "completed" for engagement in engagements
+        ):
+            return Response(
+                {
+                    "error": "Cannot set project status to 'completed' if there are active engagements."
+                },
+                status=400,
+            )
 
         # Update the project status
-        if not engagements.exists():
-            project.status = "completed" if project.status == "active" else "active"
-        else:
-            # Check if any engagement is active
-            if any(engagement.status == "active" for engagement in engagements):
-                return Response({"error": "Some of the Engagements are active."}, status=404)
-            
-            # Check if all engagements are completed
-            if all(engagement.status == "completed" for engagement in engagements):
-                project.status = "completed"
-            else:
-                project.status = "active"
-
+        project.status = new_status
         # Save the updated project status
         project.save()
-
         # Return a success response
-        return Response({"message": f"Project status updated successfully to {project.status}"}, status=200)
+        return Response(
+            {"message": f"Project status updated successfully to {project.status}"},
+            status=200,
+        )
 
     except Exception as e:
         # Return a 500 response for other exceptions
@@ -5835,11 +5840,11 @@ def project_status(request, project_id):
 
 
 @api_view(["GET"])
-def completed_projects(request,user_id):
-    projects=Project.objects.filter(coaches_status__coach__id=user_id)
-    completed_project=[]
+def completed_projects(request, user_id):
+    projects = Project.objects.filter(coaches_status__coach__id=user_id)
+    completed_project = []
     for project in projects:
-        if project.status=="completed":
+        if project.status == "completed":
             completed_project.append(project)
 
     print(completed_project)
