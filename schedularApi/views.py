@@ -1556,3 +1556,107 @@ def add_multiple_facilitator(request):
     return Response(
         {"message": "Facilitators added successfully"}, status=status.HTTP_201_CREATED
     )
+
+
+@api_view(["PUT"])
+def update_facilitator_profile(request, id):
+    try:
+        facilitator = Facilitator.objects.get(pk=id)
+    except Facilitator.DoesNotExist:
+        return Response(
+            {"error": "Facilitator not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    serializer = FacilitatorSerializer(facilitator, data=request.data, partial=True)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+def delete_facilitator(request):
+    data = request.data
+    facilitator_id = data.get("facilitator_id")
+
+    if facilitator_id is None:
+        return Response(
+            {"error": "Facilitator ID is missing in the request data"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        facilitator = Facilitator.objects.get(pk=facilitator_id)
+    except Facilitator.DoesNotExist:
+        return Response(
+            {"error": "Facilitator not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    facilitator.delete()
+    return Response(
+        {"message": "Facilitator deleted successfully"},
+        status=200,
+    )
+
+
+@api_view(["GET"])
+def get_facilitator_field_values(request):
+    job_roles = set()
+    languages = set()
+    companies_worked_in = set()
+    other_certifications = set()
+    industries = set()
+    functional_domain = set()
+    institute = set()
+    city = set()
+    country = set()
+    topic = set()
+    client_companies = set()
+    education_qualifications = set()
+    for coach in Facilitator.objects.all():
+        # 1st coach
+        for role in coach.job_roles:
+            job_roles.add(role)
+        for language in coach.language:
+            languages.add(language)
+        for company in coach.companies_worked_in:
+            companies_worked_in.add(company)
+        for certificate in coach.other_certification:
+            other_certifications.add(certificate)
+        for industry in coach.area_of_expertise:
+            industries.add(industry)
+        for functional_dom in coach.domain:
+            functional_domain.add(functional_dom)
+        for edu in coach.education:
+            institute.add(edu)
+        for cities in coach.city:
+            city.add(cities)
+        for client_company in coach.client_companies:
+            client_companies.add(client_company)
+        for countries in coach.country:
+            country.add(countries)
+        for topics in coach.topic:
+            topic.add(topics)
+        for qualifications in coach.educational_qualification:
+            education_qualifications.add(qualifications)
+
+        # domains.add(coach.domain)
+        # educations.add(coach.education)
+    return Response(
+        {
+            "job_roles": list(job_roles),
+            "languages": list(languages),
+            "educations": list(institute),
+            "companies_worked_in": list(companies_worked_in),
+            "other_certifications": list(other_certifications),
+            "domains": list(functional_domain),
+            "industries": list(industries),
+            "city": list(city),
+            "country": list(country),
+            "client_companies": list(client_companies),
+            "topic": list(topic),
+            "educational_qualifications": list(education_qualifications),
+        },
+        status=200,
+    )
