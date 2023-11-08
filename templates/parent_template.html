@@ -1,226 +1,233 @@
 <!DOCTYPE html>
 <html>
+  <head>
+    <title>{% block title %}{% endblock %}</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+      }
 
-<head>
-	<title>{% block title %}{% endblock %}</title>
-	<style>
-		* {
-			margin: 0;
-			padding: 0;
-		}
+      .container {
+        width: 100%;
+        max-width: 37.5rem;
+        border-collapse: collapse;
+        /* border: 0.5px solid lightgray; */
+      }
 
-		.container {
-			width: 100%;
-			max-width: 37.5rem;
-			border-collapse: collapse;
-			/* border: 0.5px solid lightgray; */
-		}
+      .logo {
+        /* width: 190px; */
+        margin: 0;
+        padding: 16px;
+      }
 
-		.logo {
-			/* width: 190px; */
-			margin: 0;
-			padding: 16px;
-		}
+      .logo img {
+        /* width: 180px; Reduce the width of the logo */
+        height: auto;
+        display: inline-block;
+        height: 36px;
+        width: auto;
+      }
 
-		.logo img {
-			/* width: 180px; Reduce the width of the logo */
-			height: auto;
-			display: inline-block;
-			height: 36px;
-			width: auto;
-		}
+      .content {
+        padding: 48px 32px;
+        background-color: #f8f7f8;
+      }
 
-		.content {
-			padding: 48px 32px;
-			background-color: #f8f7f8;
-		}
+      .footer {
+        padding: 32px;
+        padding-bottom: 12px;
+        background-color: #2d3044;
+        color: white;
+        display: flex;
+        flex-direction: column;
+        justify-items: center;
+        align-items: center;
+      }
 
-		.footer {
-			padding: 32px;
-			padding-bottom: 12px;
-			background-color: #2d3044;
-			color: white;
-			display: flex;
-			flex-direction: column;
-			justify-items: center;
-			align-items: center;
-		}
+      .heading-container {
+        color: #7030a0;
+        font-size: 25px;
+        margin-top: 10px;
+      }
 
-		.heading-container {
-			color: #7030a0;
-			font-size: 25px;
-			margin-top: 10px;
-		}
+      .heading-container-span {
+        font-size: 22px;
+      }
 
-		.heading-container-span {
-			font-size: 22px;
-		}
+      .child-para {
+        margin: 8px 0 0 0;
+      }
 
-		.child-para {
-			margin: 8px 0 0 0;
-		}
+      .login-link {
+        text-align: center;
+        color: white;
+        padding: 10px;
+        padding-top: 0px;
+      }
 
-		.login-link {
-			text-align: center;
-			color: white;
-			padding: 10px;
-			padding-top: 0px;
-		}
+      .login-link a {
+        color: white;
+      }
 
-		.login-link a {
-			color: white;
-		}
+      .social-media-wrapper {
+        margin-top: 12px;
+        display: flex;
+      }
 
-		.social-media-wrapper {
-			margin-top: 12px;
-			display: flex;
-		}
+      .social-media-icon {
+        display: inline-block;
+        margin-right: 10px;
+      }
 
-		.social-media-icon {
-			display: inline-block;
-			margin-right: 10px;
-		}
+      .welcome-container {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
 
-		.welcome-container {
-			max-width: 600px;
-			margin: 0 auto;
-			background-color: #ffffff;
-			padding: 20px;
-			border-radius: 5px;
-			box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-		}
+      .welcome-title {
+        font-size: 24px;
+        color: #333;
+        margin-bottom: 20px;
+      }
 
-		.welcome-title {
-			font-size: 24px;
-			color: #333;
-			margin-bottom: 20px;
-		}
+      .welcome-text {
+        font-size: 16px;
+        color: #555;
+        line-height: 1.5;
+        margin-bottom: 20px;
+      }
 
-		.welcome-text {
-			font-size: 16px;
-			color: #555;
-			line-height: 1.5;
-			margin-bottom: 20px;
-		}
+      .welcome-text-li {
+        font-size: 12px;
+        color: #555;
+        line-height: 1.5;
+      }
 
-		.welcome-text-li {
-			font-size: 12px;
-			color: #555;
-			line-height: 1.5;
+      .welcome-tips-list {
+        margin-top: 8px;
+        list-style-type: disc;
+        margin-left: 20px;
+      }
 
-		}
+      .welcome-strong {
+        font-weight: bold;
+      }
 
-		.welcome-tips-list {
-			margin-top: 8px;
-			list-style-type: disc;
-			margin-left: 20px;
-		}
+      .approval-title {
+        font-size: 18px;
 
-		.welcome-strong {
-			font-weight: bold;
-		}
+        margin-bottom: 20px;
+      }
 
-		.approval-title {
-			font-size: 18px;
+      .approval-text1 {
+        font-size: 14px;
+        line-height: 1.5;
+      }
 
-			margin-bottom: 20px;
-		}
+      .approval-text {
+        font-size: 14px;
+        line-height: 1.5;
+        margin-bottom: 20px;
+      }
 
-		.approval-text1 {
-			font-size: 14px;
-			line-height: 1.5;
+      .approval-link {
+        text-decoration: none;
+      }
 
-		}
+      /* Media Queries for responsiveness */
+      @media only screen and (max-width: 767px) {
+        .footer,
+        .login-link {
+          padding: 16px 10px;
+        }
 
-		.approval-text {
-			font-size: 14px;
-			line-height: 1.5;
-			margin-bottom: 20px;
-		}
+        .login-link {
+          padding-top: 0px;
+        }
 
-		.approval-link {
+        .content {
+          padding: 32px 10px;
+        }
+      }
 
-			text-decoration: none;
-		}
+      @media only screen and (max-width: 480px) {
+        .logo {
+          padding: 12px;
+        }
 
-		/* Media Queries for responsiveness */
-		@media only screen and (max-width: 767px) {
+        .login-link {
+          padding-top: 0px;
+        }
 
-			.footer,
-			.login-link {
-				padding: 16px 10px;
-			}
+        .footer,
+        .login-link {
+          padding: 12px;
+        }
 
-			.login-link {
-				padding-top: 0px;
-			}
+        .content {
+          padding: 24px 12px;
+        }
+      }
+    </style>
+  </head>
 
-			.content {
-				padding: 32px 10px;
-			}
-		}
+  <body>
+    <div class="container">
+      <div class="logo">
+        <img
+          src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png"
+          alt="Meeraq Logo"
+        />
+      </div>
+      <div class="content">
+        {% block heading %}{% endblock %} {% block content %}{% endblock %}
+        <div style="margin-top: 24px">
+          <p style="color: #4b4b4b">Thanks & Regards,</p>
+          <p style="color: #7030a0; font-weight: 600">Team Meeraq</p>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="login-link">{% block login_link %}{% endblock %}</div>
+        <div class="social-media-wrapper">
+          <!-- Linkedin -->
+          <a
+            class="social-media-icon"
+            href="https://www.linkedin.com/company/meeraq-hq/"
+          >
+            <img
+              src="https://gcbigba.r.bh.d.sendibt3.com/im/6218610/c04c4f7d8818b8ca5d559e3d10595f41882f9243cc4221e22b2b295fd829029e.png?e=FU-lQbgxRt8wCqRZYDSLtvH6ut9LbHOHPXMca1PN0qU9JoCzeNkem7ODu_nTvZ7TADC7TpVpU-ioo_aZqEbLIebvCoJ89qttHcPuxdpgrvMe2zUoL5lIC0fS8vndzRYvSvlOnsbud390ziT65UR-4C72TQH1HEUyqkRkOKmKlGOL-a5q32xMYqtnfuwAzEWBKlpyF5es95giJ37BSVrfP-YdqkiLAEoG_S_Ag05jh1Az6kf_PJ94QFQBnUrn6vEFVExpft8o"
+              width="32"
+            />
+          </a>
 
-		@media only screen and (max-width: 480px) {
-			.logo {
-				padding: 12px;
-			}
+          <!-- instagram -->
+          <a
+            class="social-media-icon"
+            href="https://www.instagram.com/meeraq_hq/"
+          >
+            <img
+              src="https://gcbigba.r.bh.d.sendibt3.com/im/6218610/4d88271b637061e77bd2f267cfcc1b422feb834a8876ede7618c4013bb71ffb6.png?e=b_iXSl90s_TtCk7DlDQDMSP0zo6vEpesMFYc0iTKxQ0s6NlYli2PWGidujAL6GWCBnXR97r7b40L7ChM7FHyxaTjjFLCtQ-MHw0yPvU9EILfRcls9mWK0JuerXlUJs4GWdvell-puEzv6UE8FWxpmUtp4Bnyvd7miT2Da2jL6BnpxpQ7xEzv_uW7xnr_Ip57rD83rkSenbjgaQvZ2JrHJG4u6-v3DRD610vJRQYe_DZxzsmxHJQjRNr7wY3witXhgCrx_scxLA"
+              width="32"
+            />
+          </a>
 
-			.login-link {
-				padding-top: 0px;
-			}
-
-			.footer,
-			.login-link {
-				padding: 12px;
-			}
-
-			.content {
-				padding: 24px 12px;
-			}
-		}
-	</style>
-</head>
-
-<body>
-	<div class="container">
-		<div class="logo">
-			<img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo" />
-		</div>
-		<div class="content">
-			{% block heading %}{% endblock %} {% block content %}{% endblock %}
-			<div style="margin-top: 24px">
-				<p style="color: #4b4b4b">Thanks & Regards,</p>
-				<p style="color: #7030a0; font-weight: 600">Team Meeraq</p>
-			</div>
-		</div>
-		<div class="footer">
-			<div class="login-link">
-				{% block login_link %}{% endblock %}
-			</div>
-			<div class="social-media-wrapper">
-				<!-- Linkedin -->
-				<a class="social-media-icon" href="https://www.linkedin.com/company/meeraq-hq/">
-					<img
-						src="https://gcbigba.r.bh.d.sendibt3.com/im/6218610/c04c4f7d8818b8ca5d559e3d10595f41882f9243cc4221e22b2b295fd829029e.png?e=FU-lQbgxRt8wCqRZYDSLtvH6ut9LbHOHPXMca1PN0qU9JoCzeNkem7ODu_nTvZ7TADC7TpVpU-ioo_aZqEbLIebvCoJ89qttHcPuxdpgrvMe2zUoL5lIC0fS8vndzRYvSvlOnsbud390ziT65UR-4C72TQH1HEUyqkRkOKmKlGOL-a5q32xMYqtnfuwAzEWBKlpyF5es95giJ37BSVrfP-YdqkiLAEoG_S_Ag05jh1Az6kf_PJ94QFQBnUrn6vEFVExpft8o"
-						width="32" />
-				</a>
-
-				<!-- instagram -->
-				<a class="social-media-icon" href="https://www.instagram.com/meeraq_hq/">
-					<img
-						src="https://gcbigba.r.bh.d.sendibt3.com/im/6218610/4d88271b637061e77bd2f267cfcc1b422feb834a8876ede7618c4013bb71ffb6.png?e=b_iXSl90s_TtCk7DlDQDMSP0zo6vEpesMFYc0iTKxQ0s6NlYli2PWGidujAL6GWCBnXR97r7b40L7ChM7FHyxaTjjFLCtQ-MHw0yPvU9EILfRcls9mWK0JuerXlUJs4GWdvell-puEzv6UE8FWxpmUtp4Bnyvd7miT2Da2jL6BnpxpQ7xEzv_uW7xnr_Ip57rD83rkSenbjgaQvZ2JrHJG4u6-v3DRD610vJRQYe_DZxzsmxHJQjRNr7wY3witXhgCrx_scxLA"
-						width="32" />
-				</a>
-
-				<!-- facebook -->
-				<a class="social-media-icon" href="https://www.facebook.com/Meeraq.HQ/">
-					<img
-						src="https://gcbigba.r.bh.d.sendibt3.com/im/6218610/2962440b410e7ab9f4ca2d7b22438f226b7fdaf1dc49143cca108496ff569af9.png?e=DtclMLmBO6nOU0vZruc3_nGmCtaxS4fHg60-7EvAES94A5Fc7ihCuYGiTZchh61KtLmJoi3cI649qL__SvohE2_WJuYByHLUH-K2N-DYonzgRff2DfjAJPeufYBfRy-9_R3vCH9tzKaMA9VNmdqZlfv9-DJ4dSGJXlXAsMN185X_mzg7kTS0O4Lh5iB9DN3kO5WeHGXkyb77OubYPZWzHwKt-gUxONrZsthgkC7HgWeMzKtlAFIUxS_NtRKPow12oQTTcyD4"
-						width="32" />
-				</a>
-			</div>
-		</div>
-	</div>
-</body>
-
+          <!-- facebook -->
+          <a
+            class="social-media-icon"
+            href="https://www.facebook.com/Meeraq.HQ/"
+          >
+            <img
+              src="https://gcbigba.r.bh.d.sendibt3.com/im/6218610/2962440b410e7ab9f4ca2d7b22438f226b7fdaf1dc49143cca108496ff569af9.png?e=DtclMLmBO6nOU0vZruc3_nGmCtaxS4fHg60-7EvAES94A5Fc7ihCuYGiTZchh61KtLmJoi3cI649qL__SvohE2_WJuYByHLUH-K2N-DYonzgRff2DfjAJPeufYBfRy-9_R3vCH9tzKaMA9VNmdqZlfv9-DJ4dSGJXlXAsMN185X_mzg7kTS0O4Lh5iB9DN3kO5WeHGXkyb77OubYPZWzHwKt-gUxONrZsthgkC7HgWeMzKtlAFIUxS_NtRKPow12oQTTcyD4"
+              width="32"
+            />
+          </a>
+        </div>
+      </div>
+    </div>
+  </body>
 </html>
