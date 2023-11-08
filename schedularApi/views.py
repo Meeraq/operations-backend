@@ -1490,9 +1490,9 @@ def addFacilitator(request):
         currency=data.get("currency", ""),
         client_companies=data.get("client_companies", []),
         educational_qualification=data.get("educational_qualification", []),
-        fees_per_hour=data.get("fees_per_hour", []),
-        fees_per_day=data.get("fees_per_day", []),
-        topic=data.get("topics", []),
+        fees_per_hour=data.get("fees_per_hour", ""),
+        fees_per_day=data.get("fees_per_day", ""),
+        topic=data.get("topic", []),
     )
 
     facilitator.save()
@@ -1511,7 +1511,6 @@ def get_facilitators(request):
 def add_multiple_facilitator(request):
     data = request.data.get("coaches", [])
     facilitators = []
-
     for coach_data in data:
         email = coach_data["email"]
 
@@ -1520,7 +1519,6 @@ def add_multiple_facilitator(request):
                 {"message": f"Facilitator with email {email} already exists"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
         facilitator = Facilitator(
             first_name=coach_data["first_name"],
             last_name=coach_data["last_name"],
@@ -1542,8 +1540,8 @@ def add_multiple_facilitator(request):
             companies_worked_in=coach_data.get("companies_worked_in", []),
             educational_qualification=coach_data.get("educational_qualification", []),
             client_companies=coach_data.get("client_companies", []),
-            fees_per_hour=coach_data.get("fees_per_hour", []),
-            fees_per_day=coach_data.get("fees_per_day", []),
+            fees_per_hour=coach_data.get("fees_per_hour", ""),
+            fees_per_day=coach_data.get("fees_per_day", ""),
             topic=coach_data.get("topic", []),
             other_certification=coach_data.get("other_certification", []),
         )

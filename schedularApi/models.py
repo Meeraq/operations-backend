@@ -158,8 +158,8 @@ class Facilitator(models.Model):
     currency = models.CharField(max_length=100, blank=True, default="")
     client_companies = models.JSONField(default=list, blank=True)
     educational_qualification = models.JSONField(default=list, blank=True)
-    fees_per_hour = models.JSONField(default=list, blank=True)
-    fees_per_day = models.JSONField(default=list, blank=True)
+    fees_per_hour = models.CharField(max_length=20, blank=True)
+    fees_per_day = models.CharField(max_length=20, blank=True)
     topic = models.JSONField(default=list, blank=True)
 
     def __str__(self):
