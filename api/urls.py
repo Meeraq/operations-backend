@@ -189,8 +189,8 @@ urlpatterns = [
     ),
     path("sessions/status/update/<int:session_id>/", views.edit_session_status),
     path(
-        "engagement/complete/<int:engagement_id>/",
-        views.complete_engagement,
+        "engagement/<str:status>/<int:engagement_id>/",
+        views.update_engagement_status,
     ),
     path(
         "all/competency/",
@@ -267,4 +267,6 @@ urlpatterns = [
     path("send-reset-password-link/", views.send_reset_password_link),
     path("coach-profile-templates/", views.create_coach_profile_template),
     path("project/<int:project_id>/data/", views.get_coach_profile_template),
+    path("project-status-changing/<int:project_id>/", views.project_status),
+    path("completed-projects/<int:user_id>/", views.completed_projects),
 ]

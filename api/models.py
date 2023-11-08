@@ -239,6 +239,10 @@ class CoachStatus(models.Model):
 
 
 class Project(models.Model):
+    STATUS_CHOICES = (
+        ("active", "Active"),
+        ("completed", "Completed"),
+    )
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
     name = models.CharField(max_length=100, unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
@@ -273,6 +277,9 @@ class Project(models.Model):
     approx_coachee = models.TextField(blank=True)
     frequency_of_session = models.TextField(blank=True)
     project_description = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, blank=True, null=True
+    )
 
     class Meta:
         ordering = ["-created_at"]
