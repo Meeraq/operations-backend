@@ -34,6 +34,7 @@ from .views import (
     AssessmentsOfHr,
     GetParticipantResponseForAllAssessment,
     GetObserverResponseForAllAssessment,
+    ReminderMailForObserverByPmoAndParticipant,
 )
 
 
@@ -146,4 +147,5 @@ urlpatterns = [
         "get-observer-assessment-response-result-for-all-assessment/<str:hr_email>/",
         GetObserverResponseForAllAssessment.as_view(),
     ),
+    path("reminder-mail-for-observer-by-pmo-and-participant/",ReminderMailForObserverByPmoAndParticipant.as_view()),
 ]
