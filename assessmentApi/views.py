@@ -591,7 +591,7 @@ class AddParticipantObserverToAssessment(APIView):
             mapping.save()
             assessment.participants_observers.add(mapping)
             assessment.save()
-            print(participant.name,participant.email)
+          
 
             particpant_data=[{"name":participant.name,"email":participant.email}]
             send_reset_password_link(particpant_data)
