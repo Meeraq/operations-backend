@@ -570,6 +570,7 @@ class QuestionsForAssessment(APIView):
                 full_question = {
                     "id": question.id,
                     "self_question": question.self_question,
+                    "label": question.label,
                     "rating_type": question.rating_type,
                 }
 
