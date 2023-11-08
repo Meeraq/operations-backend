@@ -118,6 +118,7 @@ class Assessment(models.Model):
     ]
 
     name = models.CharField(max_length=255, blank=True)
+    participant_view_name=models.CharField(max_length=255, blank=True)
     assessment_type = models.CharField(
         max_length=10, choices=ASSESSMENT_TYPES, blank=True
     )

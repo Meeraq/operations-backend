@@ -48,6 +48,7 @@ from django_rest_passwordreset.tokens import get_token_generator
 from django_rest_passwordreset.models import ResetPasswordToken
 
 import uuid
+from django.db.models import Q, Prefetch, Exists, OuterRef, Count
 import environ
 
 env = environ.Env()
@@ -438,13 +439,14 @@ class AssessmentView(APIView):
             questionnaire = Questionnaire.objects.get(
                 id=request.data.get("questionnaire")
             )
-            
+
             organisation = Organisation.objects.get(id=request.data.get("organisation"))
             hr = []
             for hr_id in request.data.get("hr"):
                 one_hr = HR.objects.get(id=hr_id)
                 hr.append(one_hr)
             assessment.name = request.data.get("name")
+            assessment.participant_view_name = request.data.get("participant_view_name")
             assessment.assessment_type = request.data.get("assessment_type")
             if request.data.get("assessment_type") == "self":
                 assessment.number_of_observers = 0
@@ -782,6 +784,7 @@ class CreateParticipantResponseView(APIView):
                 assessment=assessment,
                 participant_response=response,
             )
+            serializer = AssessmentAnsweredSerializerDepthThree(assessment)
             return Response(
                 {"message": "Submit Successfully."},
                 status=status.HTTP_200_OK,
@@ -1266,54 +1269,103 @@ class GetParticipantObserversUniqueIds(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+
 class StartAssessmentDisabled(APIView):
-    def get(self, request,unique_id):
+    def get(self, request, unique_id):
         try:
             observers_unique_id = ObserverUniqueId.objects.filter(
                 unique_id=unique_id
             ).first()
 
-            observer_response_data=ObserverResponse.objects.filter(
+            observer_response_data = ObserverResponse.objects.filter(
                 participant=observers_unique_id.participant,
                 observer=observers_unique_id.observer,
                 assessment=observers_unique_id.assessment,
             )
-            if(observer_response_data):
-                return Response(
-                    {
-                        "observer_response":True
-                    }
-                )
+            if observer_response_data:
+                return Response({"observer_response": True})
             else:
-                return Response(
-                    {
-                        "observer_response":False
-                    }
-                )
+                return Response({"observer_response": False})
         except Exception as e:
             print(str(e))
             return Response(
                 {"error": "Failed to retrieve Observer Response Data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        
+
 
 class ReleaseResults(APIView):
-    def put(self, request,assessment_id):
+    def put(self, request, assessment_id):
         try:
-            assessment=Assessment.objects.get(id=assessment_id)
+            assessment = Assessment.objects.get(id=assessment_id)
 
-            assessment.result_released=True
+            assessment.result_released = True
             assessment.save()
-            
-            serializer=AssessmentSerializerDepthThree(assessment)
-            return Response({"success":"Successfully Released Results", "assessment_data": serializer.data})
-            
+
+            serializer = AssessmentSerializerDepthThree(assessment)
+            return Response(
+                {
+                    "success": "Successfully Released Results",
+                    "assessment_data": serializer.data,
+                }
+            )
+
         except Exception as e:
             print(str(e))
             return Response(
                 {"error": "Failed to retrieve Observer Response Data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class AssessmentsOfHr(APIView):
+    def get(self, request, hr_email):
+        try:
+            hr = HR.objects.get(email=hr_email)
+
+            assessments = Assessment.objects.filter(
+                Q(hr=hr) & (Q(status="ongoing") | Q(status="completed"))
+            )
+
+            serializer = AssessmentSerializerDepthThree(assessments, many=True)
+
+            return Response(serializer.data)
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetParticipantResponseForAllAssessment(APIView):
+    def get(self, request, hr_email):
+        try:
+            participant_responses = ParticipantResponse.objects.filter(
+                assessment__hr__email=hr_email,
+            )
+
+            serializer = ParticipantResponseSerializer(participant_responses, many=True)
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetObserverResponseForAllAssessment(APIView):
+    def get(self, request, hr_email):
+        try:
+            observer_responses = ObserverResponse.objects.filter(
+                assessment__hr__email=hr_email,
+            )
+
+            serializer = ObserverResponseSerializer(observer_responses, many=True)
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 

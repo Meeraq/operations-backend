@@ -20,7 +20,7 @@ from .models import (
     AddGoalActivity,
     AddCoachActivity,
     SentEmailActivity,
-
+    CoachProfileTemplate,
 )
 
 # Register your models here.
@@ -47,3 +47,4 @@ admin.site.register(UserLoginActivity)
 admin.site.register(SentEmailActivity)
 admin.site.register(AddCoachActivity)
 admin.site.register(AddGoalActivity)
+admin.site.register(CoachProfileTemplate)
