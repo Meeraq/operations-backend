@@ -38,6 +38,7 @@ from .views import (
     GetObserverResponseForAllAssessments,
     GetParticipantResponseForAllAssessments,
     AddMultipleQuestions,
+    AddMultipleParticipants,
 )
 
 
@@ -160,9 +161,13 @@ urlpatterns = [
         "get-observer-assessment-response-result-for-all-assessments/",
         GetObserverResponseForAllAssessments.as_view(),
     ),
-        path(
+    path(
         "add-multiple-questions/",
         AddMultipleQuestions.as_view(),
+    ),
+    path(
+        "add-multiple-participants/",
+        AddMultipleParticipants.as_view(),
     ),
 ]
 

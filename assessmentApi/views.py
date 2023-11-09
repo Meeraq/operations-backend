@@ -590,7 +590,7 @@ class AddParticipantObserverToAssessment(APIView):
                 ):
                     return Response(
                         {
-                            "error": "Email Already exist. Please try using another email.",
+                            "error": "Email Already exist as another user. Please try using another email.",
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
@@ -885,7 +885,9 @@ class GetParticipantResponseForParticipant(APIView):
                 participant=participant,
             )
 
-            serializer = ParticipantResponseSerializerDepthFive(participant_responses, many=True)
+            serializer = ParticipantResponseSerializerDepthFive(
+                participant_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -903,7 +905,9 @@ class GetParticipantResponseFormAssessment(APIView):
                 assessment=assessment,
             )
 
-            serializer = ParticipantResponseSerializerDepthFive(participant_responses, many=True)
+            serializer = ParticipantResponseSerializerDepthFive(
+                participant_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -921,7 +925,9 @@ class GetObserverResponseForObserver(APIView):
                 observer=observer,
             )
 
-            serializer = ObserverResponseSerializerDepthFour(observer_responses, many=True)
+            serializer = ObserverResponseSerializerDepthFour(
+                observer_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -939,7 +945,9 @@ class GetObserverResponseFormAssessment(APIView):
                 assessment=assessment,
             )
 
-            serializer = ObserverResponseSerializerDepthFour(observer_responses, many=True)
+            serializer = ObserverResponseSerializerDepthFour(
+                observer_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -1393,7 +1401,9 @@ class GetParticipantResponseForAllAssessment(APIView):
                 assessment__hr__email=hr_email,
             )
 
-            serializer = ParticipantResponseSerializerDepthFive(participant_responses, many=True)
+            serializer = ParticipantResponseSerializerDepthFive(
+                participant_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -1409,7 +1419,9 @@ class GetObserverResponseForAllAssessment(APIView):
                 assessment__hr__email=hr_email,
             )
 
-            serializer = ObserverResponseSerializerDepthFour(observer_responses, many=True)
+            serializer = ObserverResponseSerializerDepthFour(
+                observer_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -1473,7 +1485,9 @@ class GetParticipantResponseForAllAssessments(APIView):
         try:
             participant_responses = ParticipantResponse.objects.all()
 
-            serializer = ParticipantResponseSerializerDepthFive(participant_responses, many=True)
+            serializer = ParticipantResponseSerializerDepthFive(
+                participant_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -1486,7 +1500,9 @@ class GetObserverResponseForAllAssessments(APIView):
     def get(self, request):
         try:
             observer_responses = ObserverResponse.objects.all()
-            serializer = ObserverResponseSerializerDepthFour(observer_responses, many=True)
+            serializer = ObserverResponseSerializerDepthFour(
+                observer_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -1500,7 +1516,7 @@ class AddMultipleQuestions(APIView):
     def post(self, request):
         try:
             questions = request.data.get("questions")
-            print(request.data)
+
             for question in questions:
                 behavior, created = Behavior.objects.get_or_create(
                     name=question["behaviour"],
@@ -1557,5 +1573,75 @@ class AddMultipleQuestions(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to add questions."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class AddMultipleParticipants(APIView):
+    @transaction.atomic
+    def post(self, request):
+        try:
+            participants = request.data.get("participants")
+            assessment_id = request.data.get("assessment_id")
+            assessment = Assessment.objects.get(id=assessment_id)
+            for participant in participants:
+                if assessment.participants_observers.filter(
+                    participant__email=participant["email"]
+                ).exists():
+                    return Response(
+                        {
+                            "error": f"Participant with email {participant['email']} already exists in the assessment."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                user = User.objects.filter(username=participant["email"]).first()
+
+                if user:
+                    user_profile = Profile.objects.filter(user=user).first()
+
+                    if (
+                        user_profile.type == "hr"
+                        or user_profile.type == "pmo"
+                        or user_profile.type == "coach"
+                    ):
+                        return Response(
+                            {
+                                "error": f"Email {participant['email']} already exist as another user. Please try using another email.",
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                new_participant = create_learner(
+                    participant["name"], participant["email"]
+                )
+
+                mapping = ParticipantObserverMapping.objects.create(
+                    participant=new_participant
+                )
+
+                mapping.save()
+                assessment.participants_observers.add(mapping)
+                assessment.save()
+
+                particpant_data = [
+                    {"name": participant["name"], "email": participant["email"]}
+                ]
+                
+                send_reset_password_link(particpant_data)
+
+            serializer = AssessmentSerializerDepthFour(assessment)
+            return Response(
+                {
+                    "message": "Participants added successfully.",
+                    "assessment_data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to add participants."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
