@@ -19,7 +19,7 @@ from .models import (
     AddGoalActivity,
     AddCoachActivity,
     SentEmailActivity,
-    CoachProfileTemplate
+    CoachProfileTemplate,
     StandardizedField,
     StandardizedFieldRequest,
 )
@@ -281,11 +281,13 @@ class CoachProfileTemplateSerializer(serializers.ModelSerializer):
         model = CoachProfileTemplate
         fields = "__all__"
 
+
 class StandardizedFieldSerializer(serializers.ModelSerializer):
     class Meta:
         model = StandardizedField
         fields = "__all__"
-        
+
+
 class StandardizedFieldRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = StandardizedFieldRequest
