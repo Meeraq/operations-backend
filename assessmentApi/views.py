@@ -18,18 +18,18 @@ from .models import (
     Behavior,
 )
 from .serializers import (
-    CompetencySerializer,
+    CompetencySerializerDepthOne,
     QuestionSerializer,
     QuestionnaireSerializer,
-    QuestionSerializerDepthOne,
-    QuestionnaireSerializerDepthTwo,
+    QuestionSerializerDepthTwo,
+    QuestionnaireSerializerDepthThree,
     AssessmentSerializer,
-    AssessmentSerializerDepthThree,
-    AssessmentAnsweredSerializerDepthThree,
-    ParticipantResponseSerializer,
-    ObserverResponseSerializer,
-    ParticipantObserverTypeSerializer,
-    ObserverUniqueIdSerializerDepthOne,
+    AssessmentSerializerDepthFour,
+    AssessmentAnsweredSerializerDepthFour,
+    ParticipantResponseSerializerDepthFive,
+    ObserverResponseSerializerDepthFour,
+    ParticipantObserverTypeSerializerDepthTwo,
+    ObserverUniqueIdSerializerDepthTwo,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -173,7 +173,7 @@ def create_learner(learner_name, learner_email):
 class CompetencyView(APIView):
     def get(self, request):
         competencies = Competency.objects.all()
-        serializer = CompetencySerializer(competencies, many=True)
+        serializer = CompetencySerializerDepthOne(competencies, many=True)
         return Response(serializer.data)
 
     def post(self, request):
@@ -274,14 +274,14 @@ class OneCompetencyDetail(APIView):
                 {"message": "Competency not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = CompetencySerializer(competency)
+        serializer = CompetencySerializerDepthOne(competency)
         return Response(serializer.data)
 
 
 class QuestionView(APIView):
     def get(self, request):
         questions = Question.objects.all()
-        serializer = QuestionSerializerDepthOne(questions, many=True)
+        serializer = QuestionSerializerDepthTwo(questions, many=True)
 
         return Response(serializer.data)
 
@@ -313,7 +313,7 @@ class QuestionView(APIView):
             )
         serializer = None
         if isinstance(competency, dict):
-            serializer = QuestionSerializerDepthOne(question, data=request.data)
+            serializer = QuestionSerializerDepthTwo(question, data=request.data)
         else:
             serializer = QuestionSerializer(question, data=request.data)
 
@@ -355,14 +355,14 @@ class OneQuestionDetail(APIView):
                 {"message": "Question not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = QuestionSerializerDepthOne(question)
+        serializer = QuestionSerializerDepthTwo(question)
         return Response(serializer.data)
 
 
 class QuestionnaireView(APIView):
     def get(self, request):
         questionnaires = Questionnaire.objects.all()
-        serializer = QuestionnaireSerializerDepthTwo(questionnaires, many=True)
+        serializer = QuestionnaireSerializerDepthThree(questionnaires, many=True)
         return Response(serializer.data)
 
     def post(self, request):
@@ -433,14 +433,14 @@ class OneQuestionnaireDetail(APIView):
                 {"message": "Questionnaire not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = QuestionnaireSerializerDepthTwo(questionnaire)
+        serializer = QuestionnaireSerializerDepthThree(questionnaire)
         return Response(serializer.data)
 
 
 class AssessmentView(APIView):
     def get(self, request):
         assessments = Assessment.objects.all()
-        serializer = AssessmentSerializerDepthThree(assessments, many=True)
+        serializer = AssessmentSerializerDepthFour(assessments, many=True)
         return Response(serializer.data)
 
     def post(self, request):
@@ -494,7 +494,7 @@ class AssessmentView(APIView):
             assessment.hr.set(hr)
             assessment.save()
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "message": "Assessment updated successfully",
@@ -536,7 +536,7 @@ class AssessmentStatusOrEndDataChange(APIView):
             assessment.status = request.data.get("status")
             assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {"message": "Update successfully.", "assessment_data": serializer.data},
                 status=status.HTTP_200_OK,
@@ -629,7 +629,7 @@ class AddParticipantObserverToAssessment(APIView):
             particpant_data = [{"name": participant.name, "email": participant.email}]
             send_reset_password_link(particpant_data)
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "message": "Participant added successfully.",
@@ -666,7 +666,7 @@ class AssessmentsOfParticipant(APIView):
                 )
             )
 
-            serializer = AssessmentAnsweredSerializerDepthThree(assessments, many=True)
+            serializer = AssessmentAnsweredSerializerDepthFour(assessments, many=True)
 
             return Response(serializer.data)
 
@@ -783,7 +783,7 @@ class ObserverAssessment(APIView):
                 participants_observers__observers__email=email, status="ongoing"
             ).distinct()
 
-            serializer = AssessmentSerializerDepthThree(assessments, many=True)
+            serializer = AssessmentSerializerDepthFour(assessments, many=True)
             return Response(serializer.data)
         except Assessment.DoesNotExist:
             return Response(
@@ -819,7 +819,7 @@ class CreateParticipantResponseView(APIView):
                 assessment=assessment,
                 participant_response=response,
             )
-            serializer = AssessmentAnsweredSerializerDepthThree(assessment)
+            serializer = AssessmentAnsweredSerializerDepthFour(assessment)
             return Response(
                 {"message": "Submit Successfully."},
                 status=status.HTTP_200_OK,
@@ -885,7 +885,7 @@ class GetParticipantResponseForParticipant(APIView):
                 participant=participant,
             )
 
-            serializer = ParticipantResponseSerializer(participant_responses, many=True)
+            serializer = ParticipantResponseSerializerDepthFive(participant_responses, many=True)
 
             return Response(serializer.data)
         except Exception as e:
@@ -903,7 +903,7 @@ class GetParticipantResponseFormAssessment(APIView):
                 assessment=assessment,
             )
 
-            serializer = ParticipantResponseSerializer(participant_responses, many=True)
+            serializer = ParticipantResponseSerializerDepthFive(participant_responses, many=True)
 
             return Response(serializer.data)
         except Exception as e:
@@ -921,7 +921,7 @@ class GetObserverResponseForObserver(APIView):
                 observer=observer,
             )
 
-            serializer = ObserverResponseSerializer(observer_responses, many=True)
+            serializer = ObserverResponseSerializerDepthFour(observer_responses, many=True)
 
             return Response(serializer.data)
         except Exception as e:
@@ -939,7 +939,7 @@ class GetObserverResponseFormAssessment(APIView):
                 assessment=assessment,
             )
 
-            serializer = ObserverResponseSerializer(observer_responses, many=True)
+            serializer = ObserverResponseSerializerDepthFour(observer_responses, many=True)
 
             return Response(serializer.data)
         except Exception as e:
@@ -951,7 +951,7 @@ class GetObserverResponseFormAssessment(APIView):
 class ParticipantObserverTypeList(APIView):
     def get(self, request):
         participant_observer_types = ParticipantObserverType.objects.all()
-        serializer = ParticipantObserverTypeSerializer(
+        serializer = ParticipantObserverTypeSerializerDepthTwo(
             participant_observer_types, many=True
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -970,7 +970,7 @@ class DeleteParticipantFromAssessment(APIView):
                 participant__id=participant_observers["participant"]["id"]
             ).delete()
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "message": "Successfully removed participant from assessment.",
@@ -1007,7 +1007,7 @@ class DeleteObserverFromAssessment(APIView):
 
             participants_observer.observers.remove(observer_to_remove)
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
 
             return Response(
                 {
@@ -1089,7 +1089,7 @@ class AddObserverToParticipant(APIView):
                 [],
             )
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "message": "Observer added successfully.",
@@ -1259,7 +1259,7 @@ class StartAssessmentDataForObserver(APIView):
         try:
             observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
 
-            serializer = AssessmentSerializerDepthThree(observer_unique_id.assessment)
+            serializer = AssessmentSerializerDepthFour(observer_unique_id.assessment)
 
             return Response(
                 {
@@ -1284,7 +1284,7 @@ class GetObserversUniqueIds(APIView):
                 assessment__id=assessment_id
             )
 
-            serializer = ObserverUniqueIdSerializerDepthOne(
+            serializer = ObserverUniqueIdSerializerDepthTwo(
                 observers_unique_id, many=True
             )
 
@@ -1305,7 +1305,7 @@ class GetParticipantObserversUniqueIds(APIView):
                 participant__email=participant_email
             )
 
-            serializer = ObserverUniqueIdSerializerDepthOne(
+            serializer = ObserverUniqueIdSerializerDepthTwo(
                 observers_unique_id, many=True
             )
 
@@ -1351,7 +1351,7 @@ class ReleaseResults(APIView):
             assessment.result_released = True
             assessment.save()
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "success": "Successfully Released Results",
@@ -1376,7 +1376,7 @@ class AssessmentsOfHr(APIView):
                 Q(hr=hr) & (Q(status="ongoing") | Q(status="completed"))
             )
 
-            serializer = AssessmentSerializerDepthThree(assessments, many=True)
+            serializer = AssessmentSerializerDepthFour(assessments, many=True)
 
             return Response(serializer.data)
 
@@ -1393,7 +1393,7 @@ class GetParticipantResponseForAllAssessment(APIView):
                 assessment__hr__email=hr_email,
             )
 
-            serializer = ParticipantResponseSerializer(participant_responses, many=True)
+            serializer = ParticipantResponseSerializerDepthFive(participant_responses, many=True)
 
             return Response(serializer.data)
         except Exception as e:
@@ -1409,7 +1409,7 @@ class GetObserverResponseForAllAssessment(APIView):
                 assessment__hr__email=hr_email,
             )
 
-            serializer = ObserverResponseSerializer(observer_responses, many=True)
+            serializer = ObserverResponseSerializerDepthFour(observer_responses, many=True)
 
             return Response(serializer.data)
         except Exception as e:
@@ -1473,7 +1473,7 @@ class GetParticipantResponseForAllAssessments(APIView):
         try:
             participant_responses = ParticipantResponse.objects.all()
 
-            serializer = ParticipantResponseSerializer(participant_responses, many=True)
+            serializer = ParticipantResponseSerializerDepthFive(participant_responses, many=True)
 
             return Response(serializer.data)
         except Exception as e:
@@ -1486,7 +1486,7 @@ class GetObserverResponseForAllAssessments(APIView):
     def get(self, request):
         try:
             observer_responses = ObserverResponse.objects.all()
-            serializer = ObserverResponseSerializer(observer_responses, many=True)
+            serializer = ObserverResponseSerializerDepthFour(observer_responses, many=True)
 
             return Response(serializer.data)
         except Exception as e:
