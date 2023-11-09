@@ -7,6 +7,7 @@ class CompetencySerializer(serializers.ModelSerializer):
     class Meta:
         model = Competency
         fields = "__all__"
+        depth = 1 
 
 
 class QuestionSerializer(serializers.ModelSerializer):
@@ -19,7 +20,7 @@ class QuestionSerializerDepthOne(serializers.ModelSerializer):
     class Meta:
         model = Question
         fields = "__all__"
-        depth = 1
+        depth = 2
 
 
 class QuestionnaireSerializer(serializers.ModelSerializer):
