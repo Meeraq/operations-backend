@@ -1007,6 +1007,13 @@ class AddObserverToParticipant(APIView):
                     {"error": f"Observer with email '{observerEmail}' already exists."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            if participants_observer.participant.email == observerEmail:
+                return Response(
+                    {
+                        "error": f"Cannot add the same email observer to a participant with the same email address: {observerEmail}"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             observer, created = Observer.objects.get_or_create(
                 email=observerEmail,
@@ -1148,6 +1155,13 @@ class ParticipantAddsObserverToAssessment(APIView):
                     return Response(
                         {
                             "error": f"Observer with email '{observerEmail}' already exists."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if participants_observer.participant.email == observerEmail:
+                    return Response(
+                        {
+                            "error": f"Cannot add the same email observer to a participant with the same email address: {observerEmail}"
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
