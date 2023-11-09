@@ -3,11 +3,16 @@ from api.models import Learner, Profile, Organisation, HR
 
 # Create your models here.
 
+class Behavior(models.Model):
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 class Competency(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    behaviors = models.JSONField(default=list, blank=True)
+    behaviors = models.ManyToManyField(Behavior, blank=True)
     created_on = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -27,7 +32,7 @@ class Question(models.Model):
     type = models.CharField(max_length=10, choices=QUESTION_TYPES, blank=True)
     self_question = models.TextField()
     observer_question = models.TextField(blank=True, null=True)
-    behavior= models.CharField(max_length=225,blank=True)
+    behavior= models.ForeignKey(Behavior, on_delete=models.CASCADE)
     rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

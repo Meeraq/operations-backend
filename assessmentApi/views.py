@@ -15,6 +15,7 @@ from .models import (
     ObserverResponse,
     ParticipantObserverType,
     ObserverUniqueId,
+    Behavior,
 )
 from .serializers import (
     CompetencySerializer,
@@ -176,42 +177,79 @@ class CompetencyView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        serializer = CompetencySerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
+        try:
+            print(request.data)
+            behaviors = request.data.get("behaviors")
+            behavior_ids = []
+
+            # Create and save individual behaviors
+            for behavior_data in behaviors:
+                single_behavior = Behavior(
+                    name=behavior_data.get("name"),
+                    description=behavior_data.get("description"),
+                )
+                single_behavior.save()
+                behavior_ids.append(single_behavior.id)
+
+            # Create the competency with associated behaviors
+            competency = Competency(
+                name=request.data.get("name"),
+                description=request.data.get("description"),
+            )
+            competency.save()
+            competency.behaviors.set(behavior_ids)
+
             return Response(
-                {"message": "Competency created successfully"},
+                {
+                    "message": "Competency and associated behaviors created successfully.",
+                },
                 status=status.HTTP_201_CREATED,
             )
-        return Response(
-            {
-                "error": "Failed to create Competency.",
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+
+        except Exception as e:
+            return Response(
+                {
+                    "error": f"Failed to create Competency: {str(e)}",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
 
     def put(self, request):
+        behaviors = request.data.get("behaviors")
+        behavior_ids = []
         competency_id = request.data.get("id")
         try:
             competency = Competency.objects.get(id=competency_id)
         except Competency.DoesNotExist:
             return Response(
-                {"message": "Competency not found"}, status=status.HTTP_404_NOT_FOUND
+                {"message": "Competency not found"},
+                status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = CompetencySerializer(competency, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
+        try:
+            for behavior_data in behaviors:
+                single_behavior, created = Behavior.objects.get_or_create(
+                    name=behavior_data.get("name"),
+                    description=behavior_data.get("description"),
+                )
+                single_behavior.save()
+                behavior_ids.append(single_behavior.id)
+
+            competency.behaviors.set(behavior_ids)
+            competency.name = request.data.get("name")
+            competency.description = request.data.get("description")
+            competency.save()
+
             return Response(
                 {"message": "Competency updated successfully"},
                 status=status.HTTP_200_OK,
             )
-        return Response(
-            {
-                "error": "Failed to update Competency.",
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to update Competency"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     def delete(self, request):
         competency_id = request.data.get("id")

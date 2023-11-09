@@ -10,6 +10,7 @@ from .models import (
     ObserverResponse,
     ParticipantObserverType,
     ObserverUniqueId,
+    Behavior
 )
 
 # Register your models here.
@@ -25,3 +26,4 @@ admin.site.register(ParticipantResponse)
 admin.site.register(ObserverResponse)
 admin.site.register(ParticipantObserverType)
 admin.site.register(ObserverUniqueId)
+admin.site.register(Behavior)
