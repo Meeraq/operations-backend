@@ -694,6 +694,7 @@ class QuestionsForObserverAssessment(APIView):
                 full_question = {
                     "id": question.id,
                     "observer_question": question.observer_question,
+                    "label": question.label,
                     "rating_type": question.rating_type,
                 }
 
