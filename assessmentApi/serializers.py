@@ -33,7 +33,7 @@ class QuestionnaireSerializerDepthTwo(serializers.ModelSerializer):
     class Meta:
         model = Questionnaire
         fields = "__all__"
-        depth = 2
+        depth = 3
 
 class AssessmentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -45,14 +45,14 @@ class AssessmentSerializerDepthThree(serializers.ModelSerializer):
     class Meta:
         model = Assessment
         fields = "__all__"
-        depth = 3
+        depth = 4
 
 class AssessmentAnsweredSerializerDepthThree(serializers.ModelSerializer):
     assessment_answered = serializers.BooleanField()
     class Meta:
         model = Assessment
         fields = "__all__"
-        depth = 3
+        depth = 4
 
 
 class ParticipantResponseSerializer(serializers.ModelSerializer):
@@ -60,7 +60,7 @@ class ParticipantResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = ParticipantResponse
         fields = "__all__"
-        depth=4
+        depth=5
 
 class ObserverResponseSerializer(serializers.ModelSerializer):
    
@@ -74,13 +74,13 @@ class ParticipantObserverTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = ParticipantObserverType
         fields = '__all__'
-        depth=1
+        depth=2
 
 class ObserverUniqueIdSerializerDepthOne(serializers.ModelSerializer):
     class Meta:
         model = ObserverUniqueId
         fields = '__all__'
-        depth=1
+        depth=2
         
 
         

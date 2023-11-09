@@ -37,6 +37,7 @@ from .views import (
     ReminderMailForObserverByPmoAndParticipant,
     GetObserverResponseForAllAssessments,
     GetParticipantResponseForAllAssessments,
+    AddMultipleQuestions,
 )
 
 
@@ -159,4 +160,9 @@ urlpatterns = [
         "get-observer-assessment-response-result-for-all-assessments/",
         GetObserverResponseForAllAssessments.as_view(),
     ),
+        path(
+        "add-multiple-questions/",
+        AddMultipleQuestions.as_view(),
+    ),
 ]
+

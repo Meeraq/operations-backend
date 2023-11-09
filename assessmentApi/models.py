@@ -32,7 +32,7 @@ class Question(models.Model):
     type = models.CharField(max_length=10, choices=QUESTION_TYPES, blank=True)
     self_question = models.TextField()
     observer_question = models.TextField(blank=True, null=True)
-    behavior= models.ForeignKey(Behavior, on_delete=models.CASCADE)
+    behavior= models.ForeignKey(Behavior, on_delete=models.CASCADE,blank=True)
     rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

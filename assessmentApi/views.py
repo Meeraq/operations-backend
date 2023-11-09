@@ -178,7 +178,6 @@ class CompetencyView(APIView):
 
     def post(self, request):
         try:
-            print(request.data)
             behaviors = request.data.get("behaviors")
             behavior_ids = []
 
@@ -213,7 +212,6 @@ class CompetencyView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        
 
     def put(self, request):
         behaviors = request.data.get("behaviors")
@@ -223,8 +221,7 @@ class CompetencyView(APIView):
             competency = Competency.objects.get(id=competency_id)
         except Competency.DoesNotExist:
             return Response(
-                {"message": "Competency not found"},
-                status=status.HTTP_404_NOT_FOUND
+                {"message": "Competency not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
         try:
@@ -1495,4 +1492,70 @@ class GetObserverResponseForAllAssessments(APIView):
         except Exception as e:
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class AddMultipleQuestions(APIView):
+    @transaction.atomic
+    def post(self, request):
+        try:
+            questions = request.data.get("questions")
+            print(request.data)
+            for question in questions:
+                behavior, created = Behavior.objects.get_or_create(
+                    name=question["behaviour"],
+                )
+                behavior.save()
+                competency, created = Competency.objects.get_or_create(
+                    name=question["compentency_name"]
+                )
+
+                competency.behaviors.add(behavior)
+                competency.save()
+
+                if question["rating_type"] == "1-5":
+                    labels = {
+                        "1": question["label1"],
+                        "2": question["label2"],
+                        "3": question["label3"],
+                        "4": question["label4"],
+                        "5": question["label5"],
+                    }
+                elif question["rating_type"] == "1-10":
+                    labels = {
+                        "1": question["label1"],
+                        "2": question["label2"],
+                        "3": question["label3"],
+                        "4": question["label4"],
+                        "5": question["label5"],
+                        "6": question["label6"],
+                        "7": question["label7"],
+                        "8": question["label8"],
+                        "9": question["label9"],
+                        "10": question["label10"],
+                    }
+
+                new_question, created = Question.objects.get_or_create(
+                    type=question["type"],
+                    behavior=behavior,
+                    competency=competency,
+                    self_question=question["self_question"],
+                    observer_question=question["observer_question"],
+                    rating_type=question["rating_type"],
+                    label=labels,
+                )
+                new_question.save()
+
+            return Response(
+                {
+                    "message": "Questions created successfully.",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to add questions."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
