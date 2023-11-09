@@ -45,6 +45,7 @@ from .serializers import (
     CoachProfileTemplateSerializer,
     StandardizedFieldSerializer,
     StandardizedFieldRequestSerializer,
+    StandardizedFieldRequestDepthOneSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -251,6 +252,18 @@ SESSION_TYPE_VALUE = {
     "stakeholder_without_coach": "Tripartite Without Coach",
     "interview": "Interview",
     "stakeholder_interview": "Stakeholder Interview",
+}
+
+FIELD_NAME_VALUES = {
+    "location": "Location",
+    "other_certification": "Other Certification",
+    "area_of_expertise": "Industry",
+    "job_roles": "Job roles",
+    "companies_worked_in": "Companies worked in",
+    "language": "Language",
+    "education": "Education institutions",
+    "domain": "Functional Domain",
+    "client_companies": "Client companies",
 }
 
 
@@ -3567,7 +3580,7 @@ def add_mulitple_coaches(request):
                 active_inactive = coach_data.get("active_inactive")
                 corporate_yoe = coach_data.get("corporate_yoe", "")
                 coaching_yoe = coach_data.get("coaching_yoe", "")
-                domain = coach_data.get("functional_domain", "")
+                domain = coach_data.get("functional_domain", [])
                 email = coach_data.get("email")
                 phone = coach_data.get("mobile")
                 phone_country_code = coach_data.get("phone_country_code")
@@ -6029,10 +6042,10 @@ class StandardizedFieldRequestAPI(APIView):
             Q(status="pending") & Q(requested_at__lt=today_start)
         ).order_by("-requested_at")
 
-        today_requests_serializer = StandardizedFieldRequestSerializer(
+        today_requests_serializer = StandardizedFieldRequestDepthOneSerializer(
             today_requests, many=True
         )
-        other_requests_serializer = StandardizedFieldRequestSerializer(
+        other_requests_serializer = StandardizedFieldRequestDepthOneSerializer(
             other_requests, many=True
         )
 
@@ -6113,16 +6126,12 @@ class StandardizedFieldRequestAcceptReject(APIView):
                     standardized_field.save()
                 else:
                     return Response({"error": "Value already present."}, status=404)
-                return Response(
-                    {"message": f"Status {status} for request."}, status=200
-                )
+                return Response({"message": f"Request {status}"}, status=200)
             else:
                 request_instance.status = status
                 request_instance.save()
 
-                return Response(
-                    {"message": f"Status {status} for request."}, status=200
-                )
+                return Response({"message": f"Request {status}"}, status=200)
         except StandardizedFieldRequest.DoesNotExist:
             return Response({"error": f"Request not found."}, status=404)
 
@@ -6141,5 +6150,6 @@ class StandardFieldDeleteValue(APIView):
             return Response({"error": "Value not present."}, status=404)
 
         return Response(
-            {"message": f"Value deleted from {field_name} field."}, status=200
+            {"message": f"Value deleted from {FIELD_NAME_VALUES[field_name]} field."},
+            status=200,
         )
