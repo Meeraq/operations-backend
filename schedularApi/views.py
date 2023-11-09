@@ -1206,7 +1206,7 @@ def send_unbooked_coaching_session_mail(request):
         send_mail_templates(
             "seteventlink.html",
             [participant],
-            "Meeraq -Book Coacing Session",
+            "Meeraq -Book Coaching Session",
             {
                 "name": participant_name,
                 "event_link": booking_link,
