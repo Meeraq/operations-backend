@@ -193,7 +193,7 @@ class Learner(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=100)
     email = models.EmailField()
-    phone = models.CharField(max_length=25,blank=True)
+    phone = models.CharField(max_length=25, blank=True)
     area_of_expertise = models.CharField(max_length=100, blank=True)
     years_of_experience = models.IntegerField(default=0, blank=True)
 
@@ -239,6 +239,10 @@ class CoachStatus(models.Model):
 
 
 class Project(models.Model):
+    STATUS_CHOICES = (
+        ("active", "Active"),
+        ("completed", "Completed"),
+    )
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
     name = models.CharField(max_length=100, unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
@@ -273,6 +277,9 @@ class Project(models.Model):
     approx_coachee = models.TextField(blank=True)
     frequency_of_session = models.TextField(blank=True)
     project_description = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, blank=True, null=True
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -452,11 +459,11 @@ class UserLoginActivity(models.Model):
         ("seeq", "SEEQ"),
         ("vendor", "VENDOR"),
         ("assessment", "ASSESSMENT"),
-        ("unknown","UNKNOWN"),
+        ("unknown", "UNKNOWN"),
     )
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
-    platform = models.CharField(blank=True,choices=PLATFORM_CHOICES,max_length=225)
+    platform = models.CharField(blank=True, choices=PLATFORM_CHOICES, max_length=225)
 
     def __str__(self):
         return f"User Login Activity for {self.user.username}"
@@ -487,6 +494,15 @@ class AddGoalActivity(models.Model):
         return f"{self.user} added a goal."
 
 
+class CoachProfileTemplate(models.Model):
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    templates = models.JSONField(default=dict, blank=True)
+
+    def __str__(self):
+        return f"{self.coach} template."
+
+
 class StandardizedField(models.Model):
     FIELD_CHOICES = (
         ("location", "Location"),
@@ -504,7 +520,7 @@ class StandardizedField(models.Model):
     values = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     def __str__(self):
         return f"{self.field}"
 
@@ -519,13 +535,11 @@ class StandardizedFieldRequest(models.Model):
     standardized_field_name = models.ForeignKey(
         StandardizedField, on_delete=models.CASCADE, blank=True
     )
-    value = models.CharField(
-        max_length=255, blank=True
-    ) 
+    value = models.CharField(max_length=255, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, blank=True)
     requested_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     def __str__(self):
         return f"{self.coach.email} - {self.standardized_field_name} - {self.status}"

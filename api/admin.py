@@ -20,7 +20,7 @@ from .models import (
     AddGoalActivity,
     AddCoachActivity,
     SentEmailActivity,
-
+    CoachProfileTemplate,
     StandardizedField,
     StandardizedFieldRequest,
 )
@@ -49,5 +49,7 @@ admin.site.register(UserLoginActivity)
 admin.site.register(SentEmailActivity)
 admin.site.register(AddCoachActivity)
 admin.site.register(AddGoalActivity)
+admin.site.register(CoachProfileTemplate)
+
 admin.site.register(StandardizedField)
 admin.site.register(StandardizedFieldRequest)
