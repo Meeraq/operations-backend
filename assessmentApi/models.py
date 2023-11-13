@@ -32,6 +32,7 @@ class Question(models.Model):
     type = models.CharField(max_length=10, choices=QUESTION_TYPES, blank=True)
     self_question = models.TextField()
     observer_question = models.TextField(blank=True, null=True)
+    reverse_question= models.BooleanField(blank=True, default=False)
     behavior= models.ForeignKey(Behavior, on_delete=models.CASCADE,blank=True)
     rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -88,16 +89,15 @@ class ParticipantObserverMapping(models.Model):
     def __str__(self):
         return f"Mapping for {self.participant}"
 
+class ObserverTypes(models.Model):
+    type = models.CharField(max_length=225,blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 class ParticipantObserverType(models.Model):
-    OBSERVER_TYPES = [
-        ("manager", "Manager"),
-        ("reportee", "Reportee"),
-        ("peer", "Peer"),
-    ]
     participant = models.ForeignKey(Learner, on_delete=models.CASCADE, blank=True)
     observers = models.ForeignKey(Observer, on_delete=models.CASCADE, blank=True)
-    type = models.CharField(max_length=10, choices=OBSERVER_TYPES, blank=True)
+    type = models.ForeignKey(ObserverTypes, on_delete=models.CASCADE, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -139,6 +139,7 @@ class Assessment(models.Model):
     participants_observers = models.ManyToManyField(
         ParticipantObserverMapping, blank=True
     )
+    observer_types= models.ManyToManyField(ObserverTypes, blank=True)
     # rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
     result_released=models.BooleanField(blank=True, default=False)
