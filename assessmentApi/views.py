@@ -16,6 +16,7 @@ from .models import (
     ParticipantObserverType,
     ObserverUniqueId,
     Behavior,
+    ObserverTypes,
 )
 from .serializers import (
     CompetencySerializerDepthOne,
@@ -30,6 +31,7 @@ from .serializers import (
     ObserverResponseSerializerDepthFour,
     ParticipantObserverTypeSerializerDepthTwo,
     ObserverUniqueIdSerializerDepthTwo,
+    ObserverTypeSerializer,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -63,7 +65,7 @@ def send_reset_password_link(users):
     # Assuming you are sending a POST request with a list of emails in the body
     for user_data in users:
         try:
-            user = User.objects.get(email=user_data["email"])
+            user = User.objects.get(username=user_data["email"])
             # Replace YourUserModel with your actual user model
             token = get_token_generator().generate_token()
             # Save the token to the database
@@ -83,7 +85,7 @@ def send_reset_password_link(users):
                 [],
             )
         except Exception as e:
-            print(f"Error sending link to {user_data.email}: {str(e)}")
+            print(f"Error sending link to {user_data['email']}: {str(e)}")
 
 
 def create_send_email(user_email, file_name):
@@ -479,6 +481,11 @@ class AssessmentView(APIView):
             for hr_id in request.data.get("hr"):
                 one_hr = HR.objects.get(id=hr_id)
                 hr.append(one_hr)
+            observer_types = []
+            for observer_type_id in request.data.get("observer_types"):
+                one_observer_type = ObserverTypes.objects.get(id=observer_type_id)
+                observer_types.append(one_observer_type)
+
             assessment.name = request.data.get("name")
             assessment.participant_view_name = request.data.get("participant_view_name")
             assessment.assessment_type = request.data.get("assessment_type")
@@ -492,6 +499,7 @@ class AssessmentView(APIView):
             assessment.descriptive_questions = request.data.get("descriptive_questions")
             assessment.organisation = organisation
             assessment.hr.set(hr)
+            assessment.observer_types.set(observer_types)
             assessment.save()
 
             serializer = AssessmentSerializerDepthFour(assessment)
@@ -579,7 +587,6 @@ class AddParticipantObserverToAssessment(APIView):
             user = User.objects.filter(
                 username=participants[0]["participantEmail"]
             ).first()
-
             if user:
                 user_profile = Profile.objects.filter(user=user).first()
 
@@ -598,7 +605,6 @@ class AddParticipantObserverToAssessment(APIView):
             participant = create_learner(
                 participants[0]["participantName"], participants[0]["participantEmail"]
             )
-
             mapping = ParticipantObserverMapping.objects.create(participant=participant)
 
             # if assessment.assessment_type == "360":
@@ -628,7 +634,6 @@ class AddParticipantObserverToAssessment(APIView):
 
             particpant_data = [{"name": participant.name, "email": participant.email}]
             send_reset_password_link(particpant_data)
-
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -1044,7 +1049,9 @@ class AddObserverToParticipant(APIView):
             observerName = request.data.get("observerName")
             observerEmail = request.data.get("observerEmail")
             observerType = request.data.get("observerType")
+
             assessment = Assessment.objects.get(id=assessment_id)
+            observer_type = ObserverTypes.objects.get(id=observerType)
 
             if participants_observer.observers.filter(email=observerEmail).exists():
                 return Response(
@@ -1062,16 +1069,19 @@ class AddObserverToParticipant(APIView):
             observer, created = Observer.objects.get_or_create(
                 email=observerEmail,
             )
+
             observer.name = observerName
             observer.save()
+
             (
                 participant_observer_type,
                 created1,
             ) = ParticipantObserverType.objects.get_or_create(
                 participant=participants_observer.participant,
                 observers=observer,
+                type=observer_type,
             )
-            participant_observer_type.type = observerType
+
             participant_observer_type.save()
             participants_observer.observers.add(observer)
             participants_observer.save()
@@ -1195,6 +1205,7 @@ class ParticipantAddsObserverToAssessment(APIView):
                 observerName = observer_data["observerName"]
                 observerEmail = observer_data["observerEmail"]
                 observerType = observer_data["observerType"]
+                observer_type = ObserverTypes.objects.get(id=observerType)
                 if participants_observer.observers.filter(email=observerEmail).exists():
                     return Response(
                         {
@@ -1221,8 +1232,8 @@ class ParticipantAddsObserverToAssessment(APIView):
                 ) = ParticipantObserverType.objects.get_or_create(
                     participant=participants_observer.participant,
                     observers=observer,
+                    type=observer_type,
                 )
-                participant_observer_type.type = observerType
                 participant_observer_type.save()
                 participants_observer.observers.add(observer)
                 participants_observer.save()
@@ -1627,7 +1638,7 @@ class AddMultipleParticipants(APIView):
                 particpant_data = [
                     {"name": participant["name"], "email": participant["email"]}
                 ]
-                
+
                 send_reset_password_link(particpant_data)
 
             serializer = AssessmentSerializerDepthFour(assessment)
@@ -1644,4 +1655,42 @@ class AddMultipleParticipants(APIView):
             return Response(
                 {"error": "Failed to add participants."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class CreateObserverType(APIView):
+    @transaction.atomic
+    def post(
+        self,
+        request,
+    ):
+        try:
+            name = request.data.get("name")
+            observer_type = ObserverTypes.objects.create(type=name)
+            observer_type.save()
+
+            return Response(
+                {
+                    "success": "Successfully created observer type",
+                }
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to create observer type."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetObserverTypes(APIView):
+    def get(self, request):
+        try:
+            observer_types = ObserverTypes.objects.all()
+            serializer = ObserverTypeSerializer(observer_types, many=True)
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

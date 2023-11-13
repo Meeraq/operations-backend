@@ -39,6 +39,8 @@ from .views import (
     GetParticipantResponseForAllAssessments,
     AddMultipleQuestions,
     AddMultipleParticipants,
+    CreateObserverType,
+    GetObserverTypes,
 )
 
 
@@ -133,10 +135,12 @@ urlpatterns = [
         GetParticipantObserversUniqueIds.as_view(),
     ),
     path(
-        "start-assessment-disabled/<str:unique_id>/",StartAssessmentDisabled.as_view(),
+        "start-assessment-disabled/<str:unique_id>/",
+        StartAssessmentDisabled.as_view(),
     ),
     path(
-        "release-assessment-result/<int:assessment_id>/",ReleaseResults.as_view(),
+        "release-assessment-result/<int:assessment_id>/",
+        ReleaseResults.as_view(),
     ),
     path(
         "assessments-of-hr/<str:hr_email>/",
@@ -146,17 +150,18 @@ urlpatterns = [
         "get-participants-response-result-for-all-assessment/<str:hr_email>/",
         GetParticipantResponseForAllAssessment.as_view(),
     ),
-   
     path(
         "get-observer-assessment-response-result-for-all-assessment/<str:hr_email>/",
         GetObserverResponseForAllAssessment.as_view(),
     ),
-    path("reminder-mail-for-observer-by-pmo-and-participant/",ReminderMailForObserverByPmoAndParticipant.as_view()),
+    path(
+        "reminder-mail-for-observer-by-pmo-and-participant/",
+        ReminderMailForObserverByPmoAndParticipant.as_view(),
+    ),
     path(
         "get-participants-response-result-for-all-assessments/",
         GetParticipantResponseForAllAssessments.as_view(),
     ),
-   
     path(
         "get-observer-assessment-response-result-for-all-assessments/",
         GetObserverResponseForAllAssessments.as_view(),
@@ -169,5 +174,12 @@ urlpatterns = [
         "add-multiple-participants/",
         AddMultipleParticipants.as_view(),
     ),
+    path(
+        "create-observer-types/",
+        CreateObserverType.as_view(),
+    ),
+    path(
+        "get-observer-types/",
+        GetObserverTypes.as_view(),
+    ),
 ]
-
