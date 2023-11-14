@@ -21,6 +21,8 @@ from .models import (
     AddCoachActivity,
     SentEmailActivity,
     CoachProfileTemplate,
+    StandardizedField,
+    StandardizedFieldRequest,
 )
 
 # Register your models here.
@@ -48,3 +50,6 @@ admin.site.register(SentEmailActivity)
 admin.site.register(AddCoachActivity)
 admin.site.register(AddGoalActivity)
 admin.site.register(CoachProfileTemplate)
+
+admin.site.register(StandardizedField)
+admin.site.register(StandardizedFieldRequest)
