@@ -239,6 +239,10 @@ class CoachStatus(models.Model):
 
 
 class Project(models.Model):
+    STATUS_CHOICES = (
+        ("active", "Active"),
+        ("completed", "Completed"),
+    )
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
     name = models.CharField(max_length=100, unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
@@ -273,6 +277,9 @@ class Project(models.Model):
     approx_coachee = models.TextField(blank=True)
     frequency_of_session = models.TextField(blank=True)
     project_description = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, blank=True, null=True
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -494,3 +501,46 @@ class CoachProfileTemplate(models.Model):
 
     def __str__(self):
         return f"{self.coach} template."
+
+
+class StandardizedField(models.Model):
+    FIELD_CHOICES = (
+        ("location", "Work Location"),
+        ("other_certification", "Assessment Certification"),
+        ("area_of_expertise", "Industry"),
+        ("job_roles", "Job roles"),
+        ("companies_worked_in", "Companies worked in"),
+        ("language", "Language Proficiency"),
+        ("education", "Education Institutions"),
+        ("domain", "Functional Domain"),
+        ("client_companies", "Client companies"),
+        ("educational_qualification", "Educational Qualification"),
+    )
+
+    field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
+    values = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.field}"
+
+
+class StandardizedFieldRequest(models.Model):
+    STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("accepted", "Accepted"),
+        ("rejected", "Rejected"),
+    )
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True)
+    standardized_field_name = models.ForeignKey(
+        StandardizedField, on_delete=models.CASCADE, blank=True
+    )
+    value = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.coach.email} - {self.standardized_field_name} - {self.status}"
