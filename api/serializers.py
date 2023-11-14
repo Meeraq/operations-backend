@@ -19,7 +19,9 @@ from .models import (
     AddGoalActivity,
     AddCoachActivity,
     SentEmailActivity,
-    CoachProfileTemplate
+    CoachProfileTemplate,
+    StandardizedField,
+    StandardizedFieldRequest,
 )
 from django.contrib.auth.models import User
 
@@ -278,3 +280,22 @@ class CoachProfileTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = CoachProfileTemplate
         fields = "__all__"
+
+
+class StandardizedFieldSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StandardizedField
+        fields = "__all__"
+
+
+class StandardizedFieldRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StandardizedFieldRequest
+        fields = "__all__"
+
+
+class StandardizedFieldRequestDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StandardizedFieldRequest
+        fields = "__all__"
+        depth = 1

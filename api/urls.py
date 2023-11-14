@@ -6,6 +6,12 @@ from .views import (
     SessionsProgressOfAllCoacheeForAnHr,
     AddRegisteredCoach,
     ActivitySummary,
+    StandardizedFieldAPI,
+    StandardizedFieldRequestAPI,
+    StandardFieldAddValue,
+    StandardFieldEditValue,
+    StandardFieldDeleteValue,
+    StandardizedFieldRequestAcceptReject,
 )
 
 urlpatterns = [
@@ -269,4 +275,14 @@ urlpatterns = [
     path("project/<int:project_id>/data/", views.get_coach_profile_template),
     path("project-status-changing/<int:project_id>/", views.project_status),
     path("completed-projects/<int:user_id>/", views.completed_projects),
+    path("standard_field/<int:user_id>/", views.standard_field_request),
+    path("standardized-fields/", StandardizedFieldAPI.as_view()),
+    path("standardized-field-requests/", StandardizedFieldRequestAPI.as_view()),
+    path("standard-field-add-value/", StandardFieldAddValue.as_view()),
+    path("standard-field-edit-value/", StandardFieldEditValue.as_view()),
+    path(
+        "standardized-field-request-accept-reject/",
+        StandardizedFieldRequestAcceptReject.as_view(),
+    ),
+    path("standard-field-delete-value/", StandardFieldDeleteValue.as_view()),
 ]
