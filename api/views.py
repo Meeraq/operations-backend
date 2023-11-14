@@ -255,15 +255,16 @@ SESSION_TYPE_VALUE = {
 }
 
 FIELD_NAME_VALUES = {
-    "location": "Location",
-    "other_certification": "Other Certification",
+    "location": "Work Location",
+    "other_certification": "Assessment Certification",
     "area_of_expertise": "Industry",
     "job_roles": "Job roles",
     "companies_worked_in": "Companies worked in",
-    "language": "Language",
+    "language": "Language Proficiency",
     "education": "Education institutions",
     "domain": "Functional Domain",
     "client_companies": "Client companies",
+    "educational_qualification": "Educational Qualification",
 }
 
 
@@ -6072,7 +6073,10 @@ class StandardFieldAddValue(APIView):
         else:
             return Response({"error": "Value already present."}, status=404)
 
-        return Response({"message": f"Value Added to {field_name} field."}, status=200)
+        return Response(
+            {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."},
+            status=200,
+        )
 
 
 class StandardFieldEditValue(APIView):
@@ -6091,15 +6095,22 @@ class StandardFieldEditValue(APIView):
                 standardized_field.save()
 
                 return Response(
-                    {"message": f"Value Updated in {field_name} field."}, status=200
+                    {
+                        "message": f"Value Updated in {FIELD_NAME_VALUES[field_name]} field."
+                    },
+                    status=200,
                 )
             else:
                 return Response(
-                    {"message": f"{previous_value} not found in {field_name} field."},
+                    {
+                        "message": f"{previous_value} not found in {FIELD_NAME_VALUES[field_name]} field."
+                    },
                     status=404,
                 )
         except StandardizedField.DoesNotExist:
-            return Response({"error": f"{field_name} not found."}, status=404)
+            return Response(
+                {"error": f"{FIELD_NAME_VALUES[field_name]} not found."}, status=404
+            )
 
 
 class StandardizedFieldRequestAcceptReject(APIView):
