@@ -11,7 +11,7 @@ from .models import (
     EmailTemplate,
     SentEmail,
     RequestAvailibilty,
-    
+    Facilitator,
 )
 
 # Register your models here.
@@ -27,3 +27,4 @@ admin.site.register(LiveSession)
 admin.site.register(EmailTemplate)
 admin.site.register(SentEmail)
 admin.site.register(RequestAvailibilty)
+admin.site.register(Facilitator)

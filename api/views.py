@@ -43,6 +43,9 @@ from .serializers import (
     AddCoachActivitySerializer,
     SentEmailActivitySerializer,
     CoachProfileTemplateSerializer,
+    StandardizedFieldSerializer,
+    StandardizedFieldRequestSerializer,
+    StandardizedFieldRequestDepthOneSerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -82,6 +85,8 @@ from .models import (
     AddCoachActivity,
     SentEmailActivity,
     CoachProfileTemplate,
+    StandardizedField,
+    StandardizedFieldRequest,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -247,6 +252,19 @@ SESSION_TYPE_VALUE = {
     "stakeholder_without_coach": "Tripartite Without Coach",
     "interview": "Interview",
     "stakeholder_interview": "Stakeholder Interview",
+}
+
+FIELD_NAME_VALUES = {
+    "location": "Work Location",
+    "other_certification": "Assessment Certification",
+    "area_of_expertise": "Industry",
+    "job_roles": "Job roles",
+    "companies_worked_in": "Companies worked in",
+    "language": "Language Proficiency",
+    "education": "Education institutions",
+    "domain": "Functional Domain",
+    "client_companies": "Client companies",
+    "educational_qualification": "Educational Qualification",
 }
 
 
@@ -3563,7 +3581,7 @@ def add_mulitple_coaches(request):
                 active_inactive = coach_data.get("active_inactive")
                 corporate_yoe = coach_data.get("corporate_yoe", "")
                 coaching_yoe = coach_data.get("coaching_yoe", "")
-                domain = coach_data.get("functional_domain", "")
+                domain = coach_data.get("functional_domain", [])
                 email = coach_data.get("email")
                 phone = coach_data.get("mobile")
                 phone_country_code = coach_data.get("phone_country_code")
@@ -4643,37 +4661,6 @@ def update_engagement_status(request, status, engagement_id):
     return Response({"message": f"Engagement marked as {status}."}, status=201)
 
 
-# @api_view(["GET"])
-# def get_all_competencies(request):
-#     competencies = Competency.objects.all()
-#     competency_list = []
-
-#     for competency in competencies:
-#         goal_name = (competency.goal.name if competency.goal else "N/A",)
-#         project_name = (
-#             competency.goal.engagement.project.name
-#             if competency.goal and competency.goal.engagement.project
-#             else "N/A"
-#         )
-#         coachee_name = (
-#             competency.goal.engagement.learner.name
-#             if competency.goal and competency.goal.engagement.learner
-#             else "N/A"
-#         )
-#         competency_data = {
-#             "id": competency.id,
-#             "goal_id": goal_name,
-#             "name": competency.name,
-#             "scoring": competency.scoring,
-#             "created_at": competency.created_at.isoformat(),
-#             "project_name": project_name,
-#             "learner_name": coachee_name,
-#         }
-#         competency_list.append(competency_data)
-
-#     return Response({"competencies": competency_list})
-
-
 @api_view(["GET"])
 def get_all_competencies(request):
     goals_with_competencies = Goal.objects.prefetch_related("competency_set").all()
@@ -5318,11 +5305,36 @@ def remove_coach_from_project(request, project_id):
         status=status.HTTP_400_BAD_REQUEST,
     )
 
+    # if request.method == "POST":
+
+
+@api_view(["POST"])
+def standard_field_request(request, user_id):
+    value = request.data.get("value")
+
+    user_instance = Coach.objects.get(id=user_id)
+
+    field_name = request.data.get("field_name")  # Adjust this based on your field name
+    standardized_field, created = StandardizedField.objects.get_or_create(
+        field=field_name
+    )
+
+    standardized_field_request = StandardizedFieldRequest(
+        standardized_field_name=standardized_field,
+        coach=user_instance,
+        value=value,
+        status="pending",
+    )
+    standardized_field_request.save()
+
+    return Response({"message": "Request sent."}, status=200)
+
 
 @api_view(["GET"])
 def coaches_which_are_included_in_projects(request):
     coachesId = []
     projects = Project.objects.all()
+
     for project in projects:
         for coach_status in project.coaches_status.all():
             if (
@@ -6001,3 +6013,154 @@ def get_coach_profile_template(request, project_id):
         return Response(serializer.data)
     except CoachProfileTemplate.DoesNotExist:
         return Response(status=404)
+
+
+class StandardizedFieldAPI(APIView):
+    def get(self, request):
+        standardized_fields = StandardizedField.objects.all()
+
+        standardized_fields_serializer = StandardizedFieldSerializer(
+            standardized_fields, many=True
+        )
+
+        field_data = {
+            field_data["field"]: field_data["values"]
+            for field_data in standardized_fields_serializer.data
+        }
+
+        return Response(field_data)
+
+
+class StandardizedFieldRequestAPI(APIView):
+    def get(self, request):
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        today_requests = StandardizedFieldRequest.objects.filter(
+            requested_at__gte=today_start, status="pending"
+        ).order_by("-requested_at")
+
+        other_requests = StandardizedFieldRequest.objects.filter(
+            Q(status="pending") & Q(requested_at__lt=today_start)
+        ).order_by("-requested_at")
+
+        today_requests_serializer = StandardizedFieldRequestDepthOneSerializer(
+            today_requests, many=True
+        )
+        other_requests_serializer = StandardizedFieldRequestDepthOneSerializer(
+            other_requests, many=True
+        )
+
+        return Response(
+            {
+                "today_requests": today_requests_serializer.data,
+                "other_requests": other_requests_serializer.data,
+            }
+        )
+
+
+class StandardFieldAddValue(APIView):
+    def post(self, request):
+        field_name = request.data.get("field_name")
+        option_value = request.data.get("optionValue")
+
+        standardized_field, created = StandardizedField.objects.get_or_create(
+            field=field_name
+        )
+
+        if option_value not in standardized_field.values:
+            standardized_field.values.append(option_value)
+            standardized_field.save()
+        else:
+            return Response({"error": "Value already present."}, status=404)
+
+        return Response(
+            {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."},
+            status=200,
+        )
+
+
+class StandardFieldEditValue(APIView):
+    def put(self, request):
+        field_name = request.data.get("field_name")
+        previous_value = request.data.get("previous_value")
+        new_value = request.data.get("new_value")
+
+        try:
+            standardized_field = StandardizedField.objects.get(field=field_name)
+
+            if previous_value in standardized_field.values:
+                index = standardized_field.values.index(previous_value)
+                standardized_field.values[index] = new_value
+
+                standardized_field.save()
+
+                return Response(
+                    {
+                        "message": f"Value Updated in {FIELD_NAME_VALUES[field_name]} field."
+                    },
+                    status=200,
+                )
+            else:
+                return Response(
+                    {
+                        "message": f"{previous_value} not found in {FIELD_NAME_VALUES[field_name]} field."
+                    },
+                    status=404,
+                )
+        except StandardizedField.DoesNotExist:
+            return Response(
+                {"error": f"{FIELD_NAME_VALUES[field_name]} not found."}, status=404
+            )
+
+
+class StandardizedFieldRequestAcceptReject(APIView):
+    def put(self, request):
+        status = request.data.get("status")
+        request_id = request.data.get("request_id")
+
+        try:
+            request_instance = StandardizedFieldRequest.objects.get(id=request_id)
+
+            if status == "accepted":
+                request_instance.status = status
+                request_instance.save()
+
+                field_name = request_instance.standardized_field_name.field
+                value = request_instance.value
+
+                standardized_field, created = StandardizedField.objects.get_or_create(
+                    field=field_name
+                )
+
+                if value not in standardized_field.values:
+                    standardized_field.values.append(value)
+                    standardized_field.save()
+                else:
+                    return Response({"error": "Value already present."}, status=404)
+                return Response({"message": f"Request {status}"}, status=200)
+            else:
+                request_instance.status = status
+                request_instance.save()
+
+                return Response({"message": f"Request {status}"}, status=200)
+        except StandardizedFieldRequest.DoesNotExist:
+            return Response({"error": f"Request not found."}, status=404)
+
+
+class StandardFieldDeleteValue(APIView):
+    def delete(self, request):
+        field_name = request.data.get("field_name")
+        option_value = request.data.get("optionValue")
+
+        standardized_field = StandardizedField.objects.get(field=field_name)
+
+        if option_value in standardized_field.values:
+            standardized_field.values.remove(option_value)
+            standardized_field.save()
+        else:
+            return Response({"error": "Value not present."}, status=404)
+
+        return Response(
+            {"message": f"Value deleted from {FIELD_NAME_VALUES[field_name]} field."},
+            status=200,
+        )
