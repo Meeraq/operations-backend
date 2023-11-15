@@ -1479,7 +1479,7 @@ class ReminderMailForObserverByPmoAndParticipant(APIView):
 
             return Response(
                 {
-                    "message": "Notification is send succes successfully.",
+                    "message": "Reminders are Send Successfully",
                 },
                 status=status.HTTP_200_OK,
             )
