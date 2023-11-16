@@ -127,4 +127,5 @@ urlpatterns = [
         views.project_report_download,
         name="project_report_download",
     ),
+    path("save-email-template/", views.save_email_template),
 ]

@@ -1450,3 +1450,18 @@ def project_report_download(request, project_id):
             df.to_excel(writer, sheet_name=batch_name, index=False)
 
     return response
+
+
+@api_view(["POST"])
+def save_email_template(request):
+    title = request.data.get("temp")
+    template_data = request.data.get("templateContent")
+
+    if title is not None and template_data is not None:
+        email_template = EmailTemplate(title=title, template_data=template_data)
+        email_template.save()
+
+        serializer = EmailTemplateSerializer(email_template)
+        return Response(serializer.data, status=201)
+    else:
+        return Response({"error": "Enter all the details"}, status=400)
