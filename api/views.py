@@ -4679,6 +4679,12 @@ def get_all_competencies(request):
             if goal.engagement and goal.engagement.learner
             else "N/A"
         )
+        coach_name = (
+            goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
+            if goal.engagement
+            and goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
+            else "N/A"
+        )
 
         # Include goals without competencies
         if goal.competency_set.exists():
@@ -4691,6 +4697,7 @@ def get_all_competencies(request):
                     "created_at": competency.created_at.isoformat(),
                     "project_name": project_name,
                     "learner_name": coachee_name,
+                    "coach_name": coach_name,
                 }
                 competency_list.append(competency_data)
         else:
@@ -4703,6 +4710,7 @@ def get_all_competencies(request):
                 "created_at": None,
                 "project_name": project_name,
                 "learner_name": coachee_name,
+                "coach_name": coach_name,
             }
             competency_list.append(competency_data)
 
@@ -5163,6 +5171,13 @@ def get_all_competencies_of_hr(request, hr_id):
             else "N/A"
         )
 
+        coach_name = (
+            goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
+            if goal.engagement
+            and goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
+            else "N/A"
+        )
+
         # Include goals without competencies
         if goal.competency_set.exists():
             for competency in goal.competency_set.all():
@@ -5174,6 +5189,7 @@ def get_all_competencies_of_hr(request, hr_id):
                     "created_at": competency.created_at.isoformat(),
                     "project_name": project_name,
                     "learner_name": coachee_name,
+                    "coach_name": coach_name,
                 }
                 competency_list.append(competency_data)
         else:
@@ -5186,6 +5202,7 @@ def get_all_competencies_of_hr(request, hr_id):
                 "created_at": None,
                 "project_name": project_name,
                 "learner_name": coachee_name,
+                "coach_name": coach_name,
             }
             competency_list.append(competency_data)
 
