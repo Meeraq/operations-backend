@@ -23,6 +23,6 @@ urlpatterns = [
     path("api/", include("api.urls")),
     path("zoho/", include("zohoapi.urls")),
     path("schedular/", include("schedularApi.urls")),
-    path('assessmentApi/', include('assessmentApi.urls')),
-
+    path("assessmentApi/", include("assessmentApi.urls")),
+    path("courses-apis/", include("courses.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
