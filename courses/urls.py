@@ -4,6 +4,7 @@ from .views import (
     CourseListView,
     CourseDetailView,
     TextLessonCreateView,
+    TextLessonEditView,
     LessonListView,
     LessonDetailView,
 )
@@ -23,6 +24,9 @@ urlpatterns = [
         name="course-list-create-update-destroy",
     ),
     path("text-lessons/", TextLessonCreateView.as_view(), name="text-lesson-create"),
+    path(
+        "text-lessons/<int:pk>/", TextLessonEditView.as_view(), name="text-lesson-edit"
+    ),
     path(
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
     ),

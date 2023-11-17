@@ -28,6 +28,23 @@ class TextLessonCreateSerializer(serializers.ModelSerializer):
         text_lesson = TextLesson.objects.create(lesson=lesson, **validated_data)
         return text_lesson
 
+    def update(self, instance, validated_data):
+        lesson_data = validated_data.pop("lesson")
+        lesson_instance = instance.lesson
+
+        lesson_instance.course = lesson_data.get("course", lesson_instance.course)
+        lesson_instance.name = lesson_data.get("name", lesson_instance.name)
+        lesson_instance.status = lesson_data.get("status", lesson_instance.status)
+        lesson_instance.lesson_type = lesson_data.get(
+            "lesson_type", lesson_instance.lesson_type
+        )
+        lesson_instance.save()
+
+        instance.content = validated_data.get("content", instance.content)
+        instance.save()
+
+        return instance
+
 
 class TextLessonSerializer(serializers.ModelSerializer):
     class Meta:

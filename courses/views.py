@@ -45,6 +45,11 @@ class TextLessonCreateView(generics.CreateAPIView):
     serializer_class = TextLessonCreateSerializer
 
 
+class TextLessonEditView(generics.RetrieveUpdateAPIView):
+    queryset = TextLesson.objects.all()
+    serializer_class = TextLessonCreateSerializer
+
+
 class LessonListView(generics.ListAPIView):
     queryset = Lesson.objects.all()
     serializer_class = LessonSerializer
