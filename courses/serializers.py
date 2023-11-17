@@ -1,6 +1,6 @@
 # serializers.py
 from rest_framework import serializers
-from .models import Course, Lesson, TextLesson
+from .models import Course, LiveSession, Lesson, TextLesson
 
 
 class CourseSerializer(serializers.ModelSerializer):
@@ -39,3 +39,8 @@ class LessonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lesson
         fields = ["id", "course", "name", "status", "lesson_type"]
+
+class LiveSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LiveSession
+        fields = "__all__"

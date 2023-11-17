@@ -1,15 +1,18 @@
 from django.shortcuts import render
 
 # Create your views here.
-from rest_framework import generics, serializers
+from rest_framework import generics, serializers, status
 from .models import Course, TextLesson, Lesson
+from rest_framework.response import Response
 from .serializers import (
     CourseSerializer,
     TextLessonCreateSerializer,
     TextLessonSerializer,
     LessonSerializer,
+    LiveSessionSerializer,
+    LessonSerializer,
 )
-from rest_framework.response import Response
+from rest_framework.decorators import api_view, permission_classes
 
 
 class CourseListView(generics.ListCreateAPIView):
@@ -85,3 +88,32 @@ class LessonDetailView(generics.RetrieveAPIView):
             return Response({"error": f"Failed to get the lessons"}, status=400)
 
         return Response(serializer.data)
+
+
+@api_view(["POST"])
+def create_lesson_with_live_session(request):
+    print(request.data)
+    lesson_data = request.data.get("lesson")
+    live_session_data = request.data.get("live_session")
+
+    lesson_serializer = LessonSerializer(data=lesson_data)
+    lesson_serializer.is_valid(raise_exception=True)
+    lesson_instance = lesson_serializer.save()  # Save Lesson
+
+    # Update live_session_data to include lesson_id
+    live_session_data["lesson"] = lesson_instance.id
+
+    live_session_serializer = LiveSessionSerializer(data=live_session_data)
+    live_session_serializer.is_valid(raise_exception=True)
+    live_session_instance = (
+        live_session_serializer.save()
+    )  # Save LiveSession linked to Lesson
+
+    return Response(
+        {
+            "lesson_id": lesson_instance.id,
+            "live_session_id": live_session_instance.id,
+            "message": "Lesson and LiveSession created successfully!",
+        },
+        status=status.HTTP_201_CREATED,
+    )
