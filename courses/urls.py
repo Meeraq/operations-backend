@@ -1,6 +1,12 @@
 from django.urls import path, include
 from . import views
-from .views import CourseListView, CourseDetailView
+from .views import (
+    CourseListView,
+    CourseDetailView,
+    TextLessonCreateView,
+    LessonListView,
+    LessonDetailView,
+)
 import environ
 
 env = environ.Env()
@@ -15,5 +21,14 @@ urlpatterns = [
         "courses/",
         CourseListView.as_view(),
         name="course-list-create-update-destroy",
+    ),
+    path("text-lessons/", TextLessonCreateView.as_view(), name="text-lesson-create"),
+    path(
+        "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
+    ),
+    path(
+        "lessons/<str:lesson_type>/<int:lesson_id>/",
+        LessonDetailView.as_view(),
+        name="lesson-list",
     ),
 ]
