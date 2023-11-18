@@ -6,4 +6,3 @@ admin.site.register(Course)
 admin.site.register(Lesson)
 admin.site.register(LiveSession)
 admin.site.register(TextLesson)
-

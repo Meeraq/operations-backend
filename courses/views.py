@@ -2,7 +2,7 @@ from django.shortcuts import render
 
 # Create your views here.
 from rest_framework import generics, serializers, status
-from .models import Course, TextLesson, Lesson
+from .models import Course, TextLesson, Lesson, LiveSession
 from rest_framework.response import Response
 from .serializers import (
     CourseSerializer,
@@ -11,6 +11,7 @@ from .serializers import (
     LessonSerializer,
     LiveSessionSerializer,
     LessonSerializer,
+    LiveSessionSerializerDepthOne,
 )
 from rest_framework.decorators import api_view, permission_classes
 
@@ -81,9 +82,9 @@ class LessonDetailView(generics.RetrieveAPIView):
         if lesson_type == "text":
             text_lesson = TextLesson.objects.get(lesson=lesson)
             serializer = TextLessonSerializer(text_lesson)
-        # elif lesson_type == "quiz":
-        # quiz_lesson = QuizLesson.objects.get(lesson=lesson)
-        # serializer = QuizLessonSerializer(quiz_lesson)
+        elif lesson_type == "live_session":
+            live_session = LiveSession.objects.get(lesson=lesson)
+            serializer = LiveSessionSerializer(live_session)
         else:
             return Response({"error": f"Failed to get the lessons"}, status=400)
 
@@ -116,4 +117,63 @@ def create_lesson_with_live_session(request):
             "message": "Lesson and LiveSession created successfully!",
         },
         status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["GET"])
+def get_live_sessions_for_lesson(request, lesson_id, course_id):
+    print(request.data)
+    print(lesson_id, course_id)
+    try:
+        live_sessions = LiveSession.objects.filter(
+            lesson__id=lesson_id, lesson__course__id=course_id
+        )
+        serializer = LiveSessionSerializerDepthOne(live_sessions, many=True)
+        print(serializer.data)
+        return Response(serializer.data)
+    except LiveSession.DoesNotExist:
+        return Response(status=404)
+
+
+@api_view(["PUT"])
+def update_live_session(request, course_id, lesson_id):
+    try:
+        lesson = Lesson.objects.get(pk=lesson_id, course__id=course_id)
+        live_session = LiveSession.objects.get(lesson=lesson)
+    except (Lesson.DoesNotExist, LiveSession.DoesNotExist):
+        return Response(
+            {"message": "Live session does not exist for this lesson"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if request.method == "PUT":
+        lesson_data = request.data.get("lesson")
+        live_session_data = request.data.get("live_session")
+
+        # Update Lesson instance fields
+        lesson.name = lesson_data.get("name")
+        lesson.status = lesson_data.get("status")
+        lesson.lesson_type = lesson_data.get("lesson_type")
+        lesson.save()
+
+        # Update LiveSession instance fields
+        live_session.description = live_session_data.get("description")
+        live_session.meeting_link = live_session_data.get("meeting_link")
+        live_session.date = live_session_data.get("date")
+        live_session.start_time = live_session_data.get("start_time")
+        live_session.end_time = live_session_data.get("end_time")
+        live_session.save()
+
+        # Update Lesson status based on incoming data
+        lesson_status = lesson_data.get("status")
+        if lesson_status:
+            lesson.status = lesson_status
+            lesson.save()
+
+        # Serialize the updated LiveSession instance
+        serializer = LiveSessionSerializer(live_session)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    return Response(
+        {"message": "Invalid request method"}, status=status.HTTP_400_BAD_REQUEST
     )

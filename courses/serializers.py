@@ -40,7 +40,15 @@ class LessonSerializer(serializers.ModelSerializer):
         model = Lesson
         fields = ["id", "course", "name", "status", "lesson_type"]
 
+
 class LiveSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = LiveSession
         fields = "__all__"
+
+
+class LiveSessionSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = LiveSession
+        fields = "__all__"
+        depth = 1

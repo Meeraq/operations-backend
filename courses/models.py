@@ -53,8 +53,8 @@ class LiveSession(models.Model):
     description = models.TextField()
     meeting_link = models.URLField()
     date = models.DateField()
-    start_time = models.DateTimeField(auto_now_add=True)
-    end_time = models.DateTimeField(auto_now_add=True)
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
 
 
 # class LaserCoachingSession(models.Model):

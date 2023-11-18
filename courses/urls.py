@@ -35,4 +35,13 @@ urlpatterns = [
         LessonDetailView.as_view(),
         name="lesson-list",
     ),
+    path(
+        "course/<int:course_id>/lesson/<int:lesson_id>/live-sessions/",
+        views.get_live_sessions_for_lesson,
+    ),
+    path(
+        "courses/<int:course_id>/lessons/<int:lesson_id>/update-live-session/",
+        views.update_live_session,
+        name="update-live-session",
+    ),
 ]
