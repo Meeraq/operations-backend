@@ -17,6 +17,7 @@ from .models import (
     ObserverUniqueId,
     Behavior,
     ObserverTypes,
+    AssessmentNotification,
 )
 from .serializers import (
     CompetencySerializerDepthOne,
@@ -32,6 +33,7 @@ from .serializers import (
     ParticipantObserverTypeSerializerDepthTwo,
     ObserverUniqueIdSerializerDepthTwo,
     ObserverTypeSerializer,
+    AssessmentNotificationSerializer
 )
 from django.db import transaction, IntegrityError
 import json
@@ -39,6 +41,7 @@ import string
 import random
 from django.contrib.auth.models import User
 from api.models import Profile, Learner, Organisation, HR, SentEmailActivity
+from api.serializers import OrganisationSerializer
 from django.core.mail import EmailMessage, BadHeaderError
 from api.serializers import LearnerSerializer
 from collections import defaultdict
@@ -49,13 +52,28 @@ from django_rest_passwordreset.signals import reset_password_token_created
 from django.utils import timezone
 from django_rest_passwordreset.tokens import get_token_generator
 from django_rest_passwordreset.models import ResetPasswordToken
-
+import requests
 import uuid
 from django.db.models import Q, Prefetch, Exists, OuterRef, Count
 import environ
-
+import base64
+from django.core.mail import EmailMessage
+from io import BytesIO
+from xhtml2pdf import pisa
+import pdfkit
+from decouple import config
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib
+from django.http import FileResponse
+import os
+from django.http import HttpResponse
+matplotlib.use("Agg")
 env = environ.Env()
 
+wkhtmltopdf_path = os.environ.get('WKHTMLTOPDF_PATH', r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe")
+
+pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
 class EmailSendingError(Exception):
     pass
@@ -1564,6 +1582,7 @@ class AddMultipleQuestions(APIView):
 
                 new_question, created = Question.objects.get_or_create(
                     type=question["type"],
+                    reverse_question = True if question["reverse_question"] == "Yes" else False,
                     behavior=behavior,
                     competency=competency,
                     self_question=question["self_question"],
@@ -1694,3 +1713,604 @@ class GetObserverTypes(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+def calculate_average(question_with_answers):
+    competency_averages = []
+
+    for competency_data in question_with_answers:
+        competency_name = competency_data["competency_name"]
+        questions = competency_data["questions"]
+
+        total_participant_responses = 0
+        total_observer_responses = {}
+
+        for question in questions:
+            total_participant_responses += question["participant_response"]
+
+            # Sum observer responses for each question
+            for key, value in question.items():
+                if key != "question" and key != "participant_response":
+                    if key not in total_observer_responses:
+                        total_observer_responses[key] = 0
+                    total_observer_responses[key] += value
+
+        # Calculate averages
+        num_questions = len(questions)
+
+        average_participant_response = round(
+            total_participant_responses / num_questions, 2
+        )
+        total_observer_responses = sum(total_observer_responses.values())
+        average_observer_responses = round(total_observer_responses / num_questions, 2)
+        competency_average = {
+            "competency_name": competency_name,
+            "average_participant_response": average_participant_response,
+            "average_observer_responses": average_observer_responses,
+        }
+
+        competency_averages.append(competency_average)
+
+    return competency_averages
+
+
+def generate_graph(data):
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    bar_width = 0.35
+    index = np.arange(len(data))
+    participant_responses = [
+        competency["average_participant_response"] for competency in data
+    ]
+    observer_responses = [
+        competency["average_observer_responses"] for competency in data
+    ]
+
+    bar1 = ax.bar(
+        index,
+        participant_responses,
+        bar_width,
+        label="Participant Response",
+        color="#3b64ad",
+    )
+    bar2 = ax.bar(
+        index + bar_width,
+        observer_responses,
+        bar_width,
+        label="Observer Response",
+        color="#8fa2d4",
+    )
+
+    for bars in [bar1, bar2]:
+        for bar in bars:
+            yval = bar.get_height()
+            plt.text(
+                bar.get_x() + bar.get_width() / 2,
+                yval,
+                round(yval, 2),
+                ha="center",
+                va="bottom",
+            )
+
+    plt.title("Average Responses by Competency")
+    plt.xlabel("Competency")
+    plt.ylabel("Average Response")
+    plt.xticks(
+        index + bar_width / 2,
+        [competency["competency_name"] for competency in data],
+        rotation=45,
+        ha="right",
+    )
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig("average_responses_by_competency.png")
+
+
+def send_mail_templates_with_attachment(
+    file_name, user_email, email_subject, content, body_message
+):
+    try:
+        image_path = "average_responses_by_competency.png"
+        with open(image_path, "rb") as image_file:
+            image_content = image_file.read()
+        image_base64 = base64.b64encode(image_content).decode("utf-8")
+        content["image_base64_graph"] = image_base64
+
+        organisation = Organisation.objects.get(id=content["organisation_id"])
+        org_serializer=OrganisationSerializer(organisation)
+
+        image_url = f"{org_serializer.data.get('image_url')}"
+        image_response = requests.get(image_url)
+        image_response.raise_for_status()
+
+        image_organisation_base64 = base64.b64encode(image_response.content).decode("utf-8")
+
+        content["image_organisation_base64"] = image_organisation_base64
+
+        email_message = render_to_string(file_name, content)
+        
+        pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+        pdf_path = "Report.pdf"
+        with open(pdf_path, "wb") as pdf_file:
+            pdf_file.write(pdf)
+        # email = EmailMessage(
+        #     subject=f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
+        #     body=body_message,
+        #     from_email=settings.DEFAULT_FROM_EMAIL,
+        #     to=user_email,
+        # )
+
+        # # Attach the PDF to the email
+        # email.attach("Report.pdf", pdf, "application/pdf")
+        # email.send()
+
+    except Exception as e:
+        print(str(e))
+
+def html_for_pdf_preview(
+    file_name, user_email, email_subject, content, body_message
+):
+    try:
+        image_path = "average_responses_by_competency.png"
+        with open(image_path, "rb") as image_file:
+            image_content = image_file.read()
+        image_base64 = base64.b64encode(image_content).decode("utf-8")
+        content["image_base64_graph"] = image_base64
+
+        organisation = Organisation.objects.get(id=content["organisation_id"])
+        org_serializer=OrganisationSerializer(organisation)
+
+        image_url = f"{org_serializer.data.get('image_url')}"
+        image_response = requests.get(image_url)
+        image_response.raise_for_status()
+
+        image_organisation_base64 = base64.b64encode(image_response.content).decode("utf-8")
+
+        content["image_organisation_base64"] = image_organisation_base64
+
+        html_message = render_to_string(file_name, content)
+
+        return html_message
+    except Exception as e:
+        print(str(e))
+
+
+def process_question_data(question_with_answer):
+    processed_data = []
+
+    for competency_data in question_with_answer:
+        competency_name = competency_data["competency_name"]
+        questions = competency_data["questions"]
+        competency_average = {
+            "competency_name": competency_name,
+            "total_participant_responses": 0,
+        }
+        for question in questions:
+            competency_average["total_participant_responses"] += question[
+                "participant_response"
+            ]
+
+            for key, value in question.items():
+                if key != "question" and key != "participant_response":
+                    if key not in competency_average:
+                        competency_average[key] = 0
+                    competency_average[key] += value
+        num_questions = len(questions)
+        competency_average["total_participant_responses"] = round(
+            competency_average["total_participant_responses"] / num_questions, 2
+        )
+        for key, value in competency_average.items():
+            if key != "competency_name" and key != "total_participant_responses":
+                competency_average[key] = round(
+                    competency_average[key] / num_questions, 2
+                )
+        competency_array = [[key, value] for key, value in competency_average.items()]
+
+        processed_data.append(competency_array)
+
+    return processed_data
+
+
+def get_total_observer_types(participant_observer, participant_id):
+    observer_types_total = {}
+    for observer in participant_observer.observers.all():
+        observer_type = (
+            ParticipantObserverType.objects.filter(
+                participant__id=participant_id,
+                observers__id=observer.id,
+            )
+            .first()
+            .type.type
+        )
+        if observer_type in observer_types_total:
+            observer_types_total[observer_type] = (
+                observer_types_total[observer_type] + 1
+            )
+        else:
+            observer_types_total[observer_type] = 1
+    return observer_types_total
+
+
+def get_data_for_score_analysis(question_with_answer):
+    res = []
+    for competency in question_with_answer:
+        unique_columns = []
+        rows = []
+
+        for question in competency["questions"]:
+            for key in question:
+                if key not in unique_columns:
+                    unique_columns.append(key)
+
+        for question in competency["questions"]:
+            question_data = []
+            for column in unique_columns:
+                if column in question:
+                    question_data.append(question[column])
+                else:
+                    question_data.append("Not available")
+            rows.append(question_data)
+        res.append(
+            {
+                "competency_name": competency["competency_name"],
+                "rows": rows,
+                "unique_columns": unique_columns,
+            }
+        )
+
+    return res
+
+
+def get_frequency_analysis_data(
+    questions, participant_response, participant_observer, participant_id, assessment_id
+):
+    question_with_labels = []
+    for competency in questions.values("competency").distinct():
+        competency_id = competency["competency"]
+        competency_questions = questions.filter(competency__id=competency_id)
+
+        max_key = max(map(int, competency_questions[0].label.keys()))
+
+        result_array = []
+        for i in range(1, max_key + 1):
+            if competency_questions[0].label.get(str(i), "Not Avaliable") == "":
+                result_array.append("Not Avaliable")
+            else:
+                result_array.append(
+                    competency_questions[0].label.get(str(i), "Not Avaliable")
+                )
+
+        competency_object = {
+            "competency_name": Competency.objects.get(id=competency_id).name,
+            "labels_name": result_array,
+            "questions": [],
+        }
+        for question in competency_questions:
+            question_object = {
+                "question": question.self_question,
+            }
+
+            participant_question_response = (
+                participant_response.participant_response.get(str(question.id), "")
+            )
+
+            if participant_question_response in question_object:
+                question_object[participant_question_response] += 1
+            else:
+                question_object[participant_question_response] = 1
+
+            for observer in participant_observer.observers.all():
+                observer_response = ObserverResponse.objects.get(
+                    participant__id=participant_id,
+                    observer__id=observer.id,
+                    assessment__id=assessment_id,
+                )
+                observer_question_response = observer_response.observer_response.get(
+                    str(question.id), ""
+                )
+
+                if observer_question_response in question_object:
+                    question_object[observer_question_response] += 1
+                else:
+                    question_object[observer_question_response] = 1
+
+            final_array = [question_object["question"]] + [
+                question_object.get(i, "") for i in range(1, max_key + 1)
+            ]
+            competency_object["questions"].append(final_array)
+
+        question_with_labels.append(competency_object)
+    
+    return question_with_labels
+
+
+class DownloadParticipantResultReport(APIView):
+    def post(self, request):
+        try:
+            assessment_id = request.data.get("assessment_id")
+            participant_id = request.data.get("participant_id")
+            assessment = Assessment.objects.get(id=assessment_id)
+            participant = Learner.objects.get(id=participant_id)
+            participant_observer = assessment.participants_observers.filter(
+                participant__id=participant_id
+            ).first()
+            participant_response = ParticipantResponse.objects.get(
+                participant__id=participant_id, assessment__id=assessment_id
+            )
+
+            question_with_answers = []
+
+            frequency_analysis_data = get_frequency_analysis_data(
+                assessment.questionnaire.questions,
+                participant_response,
+                participant_observer,
+                participant_id,
+                assessment_id,
+            )
+            # Group questions by competency
+            for competency in assessment.questionnaire.questions.values(
+                "competency"
+            ).distinct():
+                competency_id = competency["competency"]
+                competency_questions = assessment.questionnaire.questions.filter(
+                    competency__id=competency_id
+                )
+
+                competency_object = {
+                    "competency_name": Competency.objects.get(id=competency_id).name,
+                    "questions": [],
+                }
+
+                for question in competency_questions:
+                    question_object = None
+
+                    
+                    question_object = {
+                            "question": question.self_question,
+                            "participant_response": participant_response.participant_response.get(
+                                str(question.id)
+                            ),
+                        }
+
+                    count = 1
+                    observer_types_total = get_total_observer_types(
+                        participant_observer, participant_id
+                    )
+                    # Collect observer responses
+                    for observer in participant_observer.observers.all():
+                        observer_response = ObserverResponse.objects.get(
+                            participant__id=participant_id,
+                            observer__id=observer.id,
+                            assessment__id=assessment_id,
+                        )
+                        
+                        observer_question_response = (
+                                observer_response.observer_response.get(
+                                    str(question.id)
+                                )
+                            )
+                        observer_type = (
+                            ParticipantObserverType.objects.filter(
+                                participant__id=participant_id,
+                                observers__id=observer.id,
+                            )
+                            .first()
+                            .type.type
+                        )
+
+                        if observer_type in question_object:
+                            existing_responses = question_object[observer_type]
+                            new_response = observer_question_response
+                            averaged_response = existing_responses + new_response
+                            question_object[observer_type] = averaged_response
+                        else:
+                            question_object[observer_type] = observer_question_response
+
+                        count = count + 1
+                    for key, value in observer_types_total.items():
+                        question_object[key] = question_object[key] / value
+
+                    competency_object["questions"].append(question_object)
+
+                question_with_answers.append(competency_object)
+
+            averages = calculate_average(question_with_answers)
+
+            generate_graph(averages)
+
+            data_for_assessment_overview_table = process_question_data(
+                question_with_answers
+            )
+            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+
+            html_message=html_for_pdf_preview(
+                "assessment/report/assessment_report.html",
+                ["shashank@meeraq.com"],
+                f"Report for {participant.name}",
+                {
+                    "name": participant.name,
+                    "assessment_name": assessment.name,
+                    "organisation_name": assessment.organisation.name,
+                    "assessment_type":assessment.assessment_type,
+                    "organisation_id": assessment.organisation.id,
+                    "data_for_score_analysis": data_for_score_analysis,
+                    "data_for_assessment_overview_table": data_for_assessment_overview_table,
+                    "frequency_analysis_data": frequency_analysis_data,
+                },
+                f"This new report generated for {participant.name}",
+            )
+            
+            return Response({"html_pdf_preview":html_message}, status=status.HTTP_200_OK,)
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download report."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+    def get(self, request, assessment_id,participant_id ):
+        try:
+           
+            assessment = Assessment.objects.get(id=assessment_id)
+            participant = Learner.objects.get(id=participant_id)
+            participant_observer = assessment.participants_observers.filter(
+                participant__id=participant_id
+            ).first()
+            participant_response = ParticipantResponse.objects.get(
+                participant__id=participant_id, assessment__id=assessment_id
+            )
+
+            question_with_answers = []
+
+            frequency_analysis_data = get_frequency_analysis_data(
+                assessment.questionnaire.questions,
+                participant_response,
+                participant_observer,
+                participant_id,
+                assessment_id,
+            )
+            # Group questions by competency
+            for competency in assessment.questionnaire.questions.values(
+                "competency"
+            ).distinct():
+                competency_id = competency["competency"]
+                competency_questions = assessment.questionnaire.questions.filter(
+                    competency__id=competency_id
+                )
+
+                competency_object = {
+                    "competency_name": Competency.objects.get(id=competency_id).name,
+                    "questions": [],
+                }
+
+                for question in competency_questions:
+                    question_object = None
+
+                    
+                    question_object = {
+                            "question": question.self_question,
+                            "participant_response": participant_response.participant_response.get(
+                                str(question.id)
+                            ),
+                        }
+
+                    count = 1
+                    observer_types_total = get_total_observer_types(
+                        participant_observer, participant_id
+                    )
+                    # Collect observer responses
+                    for observer in participant_observer.observers.all():
+                        observer_response = ObserverResponse.objects.get(
+                            participant__id=participant_id,
+                            observer__id=observer.id,
+                            assessment__id=assessment_id,
+                        )
+                        
+                        observer_question_response = (
+                                observer_response.observer_response.get(
+                                    str(question.id)
+                                )
+                            )
+                        observer_type = (
+                            ParticipantObserverType.objects.filter(
+                                participant__id=participant_id,
+                                observers__id=observer.id,
+                            )
+                            .first()
+                            .type.type
+                        )
+
+                        if observer_type in question_object:
+                            existing_responses = question_object[observer_type]
+                            new_response = observer_question_response
+                            averaged_response = existing_responses + new_response
+                            question_object[observer_type] = averaged_response
+                        else:
+                            question_object[observer_type] = observer_question_response
+
+                        count = count + 1
+                    for key, value in observer_types_total.items():
+                        question_object[key] = question_object[key] / value
+
+                    competency_object["questions"].append(question_object)
+
+                question_with_answers.append(competency_object)
+
+            averages = calculate_average(question_with_answers)
+
+            generate_graph(averages)
+
+            data_for_assessment_overview_table = process_question_data(
+                question_with_answers
+            )
+            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+
+            send_mail_templates_with_attachment(
+                "assessment/report/assessment_report.html",
+                ["shashank@meeraq.com"],
+                f"Report for {participant.name}",
+                {
+                    "name": participant.name,
+                    "assessment_name": assessment.name,
+                    "organisation_name": assessment.organisation.name,
+                    "assessment_type":assessment.assessment_type,
+                    "organisation_id": assessment.organisation.id,
+                    "data_for_score_analysis": data_for_score_analysis,
+                    "data_for_assessment_overview_table": data_for_assessment_overview_table,
+                    "frequency_analysis_data": frequency_analysis_data,
+                },
+                f"This new report generated for {participant.name}",
+            )
+            pdf_path = "Report.pdf"  
+
+            with open(pdf_path, 'rb') as pdf_file:
+                response = HttpResponse(pdf_file.read(), content_type='application/pdf')
+                response['Content-Disposition'] = 'attachment; filename="Report.pdf"'
+
+            # Close the file after reading
+            pdf_file.close()
+
+            return response 
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download report."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        
+
+class GetAssessmentNotification(APIView):
+    def get(self,request, user_id):
+        notifications = AssessmentNotification.objects.filter(user__id=user_id).order_by(
+            "-created_at"
+        )
+        
+        serializer = AssessmentNotificationSerializer(notifications, many=True)
+        return Response(serializer.data)
+    
+
+class MarkAllNotificationAsRead(APIView):
+    def put(self,request):
+        notifications = AssessmentNotification.objects.filter(
+            read_status=False, user__id=request.data["user_id"]
+        )
+        notifications.update(read_status=True)
+        return Response("Notifications marked as read.")
+
+
+
+class MarkNotificationAsRead(APIView):
+    def put(self,request):
+        user_id = request.data.get("user_id")
+        notification_ids = request.data.get("notification_ids")
+
+        if user_id is None or notification_ids is None:
+            return Response("Both user_id and notification_ids are required.", status=400)
+
+        notifications = AssessmentNotification.objects.filter(
+            id=notification_ids, user__id=user_id, read_status=False
+        )
+
+        notifications.update(read_status=True)
+        return Response("Notifications marked as read.")

@@ -1,6 +1,6 @@
 from django.db import models
 from api.models import Learner, Profile, Organisation, HR
-
+from django.contrib.auth.models import User
 # Create your models here.
 
 class Behavior(models.Model):
@@ -185,3 +185,14 @@ class ObserverUniqueId(models.Model):
 
     def __str__(self):
         return f"Unique Id for Observer {self.observer.name} in Assessment {self.assessment.name} participant is {self.participant.name}"
+
+
+class AssessmentNotification(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    path = models.CharField(max_length=255, blank=True, default="")
+    message = models.TextField(blank=True)
+    read_status = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.user.username

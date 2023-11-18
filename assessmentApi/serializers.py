@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Competency, Question, Questionnaire,Assessment,ParticipantResponse,ObserverResponse,ParticipantObserverType,ObserverUniqueId,ObserverTypes
+from .models import Competency, Question, Questionnaire,Assessment,ParticipantResponse,ObserverResponse,AssessmentNotification,ParticipantObserverType,ObserverUniqueId,ObserverTypes
 
 
 class CompetencySerializerDepthOne(serializers.ModelSerializer):
@@ -88,3 +88,7 @@ class ObserverTypeSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
         
+class AssessmentNotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssessmentNotification
+        fields = "__all__"

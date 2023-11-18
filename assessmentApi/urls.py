@@ -41,6 +41,10 @@ from .views import (
     AddMultipleParticipants,
     CreateObserverType,
     GetObserverTypes,
+    DownloadParticipantResultReport,
+    GetAssessmentNotification,
+    MarkAllNotificationAsRead,
+    MarkNotificationAsRead,
 )
 
 
@@ -182,4 +186,16 @@ urlpatterns = [
         "get-observer-types/",
         GetObserverTypes.as_view(),
     ),
+    path(
+        "download-participant-result-report/",
+        DownloadParticipantResultReport.as_view(),
+    ),
+     path(
+        "download-participant-result-report/<int:assessment_id>/<int:participant_id>/",
+        DownloadParticipantResultReport.as_view(),
+    ),
+    
+    path("notifications/all/<int:user_id>/",  GetAssessmentNotification.as_view()),
+    path("notifications/mark-as-read/", MarkNotificationAsRead.as_view()),
+    path("notifications/mark-all-as-read/", MarkAllNotificationAsRead.as_view()),
 ]
