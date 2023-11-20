@@ -770,6 +770,9 @@ def get_coach_availabilities_booking_link(request):
                 and coaching_session.expiry_date < current_date
             ):
                 return Response({"error": "The booking link has expired."})
+            
+            session_duration = coaching_session.duration
+
             coaches_in_batch = coaching_session.batch.coaches.all()
             start_date = datetime.combine(
                 coaching_session.start_date, datetime.min.time()
@@ -789,7 +792,7 @@ def get_coach_availabilities_booking_link(request):
                 is_confirmed=False,
             )
             serializer = AvailabilitySerializer(coach_availabilities, many=True)
-            return Response({"slots": serializer.data})
+            return Response({"slots": serializer.data , "session_duration": session_duration})
         except Exception as e:
             return Response({"error": "Unable to get slots"}, status=400)
     else:
@@ -804,6 +807,21 @@ def schedule_session(request):
         participant_email = request.data.get("participant_email", "")
         coach_availability_id = request.data.get("availability_id", "")
         timestamp = request.data.get("timestamp", "")
+        end_time=request.data.get("end_time","")
+        coach_id=request.data.get("coach_id","")
+        request_id=request.data.get("request_id","")
+        
+        request_avail=RequestAvailibilty.objects.get(id=request_id)
+        coach=Coach.objects.get(id=coach_id)
+        coach_availability, created =CoachSchedularAvailibilty.objects.get_or_create(
+            request=request_avail,
+            coach=coach,
+            start_time=timestamp,
+            end_time=end_time,
+            is_confirmed=False,
+        )
+        coach_availability.save()
+        coach_availability_id=coach_availability.id
 
         new_timestamp = int(timestamp) / 1000
         date_obj = datetime.fromtimestamp(new_timestamp)

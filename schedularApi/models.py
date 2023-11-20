@@ -45,6 +45,7 @@ class RequestAvailibilty(models.Model):
         default=list
     )  # used to store coach ids who already provided the slots
     expiry_date = models.DateField(blank=True, null=True)
+    slot_duration= models.PositiveIntegerField(null=True, blank=True)
     availability = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, null=True, default=None)
