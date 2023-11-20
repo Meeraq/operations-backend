@@ -33,7 +33,7 @@ from .serializers import (
     ParticipantObserverTypeSerializerDepthTwo,
     ObserverUniqueIdSerializerDepthTwo,
     ObserverTypeSerializer,
-    AssessmentNotificationSerializer
+    AssessmentNotificationSerializer,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -65,12 +65,16 @@ import numpy as np
 import matplotlib
 import os
 from django.http import HttpResponse
+
 matplotlib.use("Agg")
 env = environ.Env()
 
-wkhtmltopdf_path = os.environ.get('WKHTMLTOPDF_PATH', r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe")
+wkhtmltopdf_path = os.environ.get(
+    "WKHTMLTOPDF_PATH", r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+)
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
 
 class EmailSendingError(Exception):
     pass
@@ -1579,7 +1583,9 @@ class AddMultipleQuestions(APIView):
 
                 new_question, created = Question.objects.get_or_create(
                     type=question["type"],
-                    reverse_question = True if question["reverse_question"] == "Yes" else False,
+                    reverse_question=True
+                    if question["reverse_question"] == "Yes"
+                    else False,
                     behavior=behavior,
                     competency=competency,
                     self_question=question["self_question"],
@@ -1711,7 +1717,8 @@ class GetObserverTypes(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-def calculate_average(question_with_answers):
+
+def calculate_average(question_with_answers, assessment_type):
     competency_averages = []
 
     for competency_data in question_with_answers:
@@ -1722,7 +1729,11 @@ def calculate_average(question_with_answers):
         total_observer_responses = {}
 
         for question in questions:
-            total_observers=(len(question.keys())-2) #two columns substracted question and participant response for number of observer
+            total_observers = (
+                len(question.keys()) - 2
+            )  # two columns substracted question and participant response for number of observer
+            if assessment_type == "self":
+                total_observers = 1
             total_participant_responses += question["participant_response"]
 
             # Sum observer responses for each question
@@ -1739,7 +1750,9 @@ def calculate_average(question_with_answers):
             total_participant_responses / num_questions, 2
         )
         total_observer_responses = sum(total_observer_responses.values())
-        average_observer_responses = round((total_observer_responses / num_questions)/total_observers, 2)
+        average_observer_responses = round(
+            (total_observer_responses / num_questions) / total_observers, 2
+        )
         competency_average = {
             "competency_name": competency_name,
             "average_participant_response": average_participant_response,
@@ -1751,35 +1764,28 @@ def calculate_average(question_with_answers):
     return competency_averages
 
 
-def generate_graph(data):
+def generate_graph(data, assessment_type):
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    bar_width = 0.35
+    bar_width = 0.1
     index = np.arange(len(data))
     participant_responses = [
         competency["average_participant_response"] for competency in data
     ]
-    observer_responses = [
-        competency["average_observer_responses"] for competency in data
-    ]
 
-    bar1 = ax.bar(
-        index,
-        participant_responses,
-        bar_width,
-        label="Participant Response",
-        color="#3b64ad",
-    )
-    bar2 = ax.bar(
-        index + bar_width,
-        observer_responses,
-        bar_width,
-        label="Observer Response",
-        color="#8fa2d4",
-    )
-
-    for bars in [bar1, bar2]:
-        for bar in bars:
+    # Conditionally include the observer_responses only if the assessment type is not "self"
+    if assessment_type != "self":
+        observer_responses = [
+            competency["average_observer_responses"] for competency in data
+        ]
+        bar2 = ax.bar(
+            index + bar_width,
+            observer_responses,
+            bar_width,
+            label="Observer Response",
+            color="#8fa2d4",
+        )
+        for bar in bar2:
             yval = bar.get_height()
             plt.text(
                 bar.get_x() + bar.get_width() / 2,
@@ -1789,11 +1795,29 @@ def generate_graph(data):
                 va="bottom",
             )
 
+    bar1 = ax.bar(
+        index,
+        participant_responses,
+        bar_width,
+        label="Participant Response",
+        color="#3b64ad",
+    )
+
+    for bar in bar1:
+        yval = bar.get_height()
+        plt.text(
+            bar.get_x() + bar.get_width() / 2,
+            yval,
+            round(yval, 2),
+            ha="center",
+            va="bottom",
+        )
+
     plt.title("Average Responses by Competency")
     plt.xlabel("Competency")
     plt.ylabel("Average Response")
     plt.xticks(
-        index + bar_width / 2,
+        index if assessment_type == "self" else index + bar_width / 2,
         [competency["competency_name"] for competency in data],
         rotation=45,
         ha="right",
@@ -1815,18 +1839,20 @@ def send_mail_templates_with_attachment(
         content["image_base64_graph"] = image_base64
 
         organisation = Organisation.objects.get(id=content["organisation_id"])
-        org_serializer=OrganisationSerializer(organisation)
+        org_serializer = OrganisationSerializer(organisation)
 
         image_url = f"{org_serializer.data.get('image_url')}"
         image_response = requests.get(image_url)
         image_response.raise_for_status()
 
-        image_organisation_base64 = base64.b64encode(image_response.content).decode("utf-8")
+        image_organisation_base64 = base64.b64encode(image_response.content).decode(
+            "utf-8"
+        )
 
         content["image_organisation_base64"] = image_organisation_base64
 
         email_message = render_to_string(file_name, content)
-        
+
         pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
         pdf_path = "Report.pdf"
         with open(pdf_path, "wb") as pdf_file:
@@ -1845,9 +1871,8 @@ def send_mail_templates_with_attachment(
     except Exception as e:
         print(str(e))
 
-def html_for_pdf_preview(
-    file_name, user_email, email_subject, content, body_message
-):
+
+def html_for_pdf_preview(file_name, user_email, email_subject, content, body_message):
     try:
         image_path = "average_responses_by_competency.png"
         with open(image_path, "rb") as image_file:
@@ -1856,13 +1881,15 @@ def html_for_pdf_preview(
         content["image_base64_graph"] = image_base64
 
         organisation = Organisation.objects.get(id=content["organisation_id"])
-        org_serializer=OrganisationSerializer(organisation)
+        org_serializer = OrganisationSerializer(organisation)
 
         image_url = f"{org_serializer.data.get('image_url')}"
         image_response = requests.get(image_url)
         image_response.raise_for_status()
 
-        image_organisation_base64 = base64.b64encode(image_response.content).decode("utf-8")
+        image_organisation_base64 = base64.b64encode(image_response.content).decode(
+            "utf-8"
+        )
 
         content["image_organisation_base64"] = image_organisation_base64
 
@@ -2018,7 +2045,7 @@ def get_frequency_analysis_data(
             competency_object["questions"].append(final_array)
 
         question_with_labels.append(competency_object)
-    
+
     return question_with_labels
 
 
@@ -2062,13 +2089,12 @@ class DownloadParticipantResultReport(APIView):
                 for question in competency_questions:
                     question_object = None
 
-                    
                     question_object = {
-                            "question": question.self_question,
-                            "participant_response": participant_response.participant_response.get(
-                                str(question.id)
-                            ),
-                        }
+                        "question": question.self_question,
+                        "participant_response": participant_response.participant_response.get(
+                            str(question.id)
+                        ),
+                    }
 
                     count = 1
                     observer_types_total = get_total_observer_types(
@@ -2081,12 +2107,10 @@ class DownloadParticipantResultReport(APIView):
                             observer__id=observer.id,
                             assessment__id=assessment_id,
                         )
-                        
+
                         observer_question_response = (
-                                observer_response.observer_response.get(
-                                    str(question.id)
-                                )
-                            )
+                            observer_response.observer_response.get(str(question.id))
+                        )
                         observer_type = (
                             ParticipantObserverType.objects.filter(
                                 participant__id=participant_id,
@@ -2112,16 +2136,18 @@ class DownloadParticipantResultReport(APIView):
 
                 question_with_answers.append(competency_object)
 
-            averages = calculate_average(question_with_answers)
+            averages = calculate_average(
+                question_with_answers, assessment.assessment_type
+            )
 
-            generate_graph(averages)
+            generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers
             )
             data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
 
-            html_message=html_for_pdf_preview(
+            html_message = html_for_pdf_preview(
                 "assessment/report/assessment_report.html",
                 ["shashank@meeraq.com"],
                 f"Report for {participant.name}",
@@ -2129,7 +2155,7 @@ class DownloadParticipantResultReport(APIView):
                     "name": participant.name,
                     "assessment_name": assessment.name,
                     "organisation_name": assessment.organisation.name,
-                    "assessment_type":assessment.assessment_type,
+                    "assessment_type": assessment.assessment_type,
                     "organisation_id": assessment.organisation.id,
                     "data_for_score_analysis": data_for_score_analysis,
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
@@ -2137,8 +2163,11 @@ class DownloadParticipantResultReport(APIView):
                 },
                 f"This new report generated for {participant.name}",
             )
-            
-            return Response({"html_pdf_preview":html_message}, status=status.HTTP_200_OK,)
+
+            return Response(
+                {"html_pdf_preview": html_message},
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             print(str(e))
@@ -2146,9 +2175,9 @@ class DownloadParticipantResultReport(APIView):
                 {"error": "Failed to download report."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-    def get(self, request, assessment_id,participant_id ):
+
+    def get(self, request, assessment_id, participant_id):
         try:
-           
             assessment = Assessment.objects.get(id=assessment_id)
             participant = Learner.objects.get(id=participant_id)
             participant_observer = assessment.participants_observers.filter(
@@ -2184,13 +2213,12 @@ class DownloadParticipantResultReport(APIView):
                 for question in competency_questions:
                     question_object = None
 
-                    
                     question_object = {
-                            "question": question.self_question,
-                            "participant_response": participant_response.participant_response.get(
-                                str(question.id)
-                            ),
-                        }
+                        "question": question.self_question,
+                        "participant_response": participant_response.participant_response.get(
+                            str(question.id)
+                        ),
+                    }
 
                     count = 1
                     observer_types_total = get_total_observer_types(
@@ -2203,12 +2231,10 @@ class DownloadParticipantResultReport(APIView):
                             observer__id=observer.id,
                             assessment__id=assessment_id,
                         )
-                        
+
                         observer_question_response = (
-                                observer_response.observer_response.get(
-                                    str(question.id)
-                                )
-                            )
+                            observer_response.observer_response.get(str(question.id))
+                        )
                         observer_type = (
                             ParticipantObserverType.objects.filter(
                                 participant__id=participant_id,
@@ -2234,9 +2260,11 @@ class DownloadParticipantResultReport(APIView):
 
                 question_with_answers.append(competency_object)
 
-            averages = calculate_average(question_with_answers)
+            averages = calculate_average(
+                question_with_answers, assessment.assessment_type
+            )
 
-            generate_graph(averages)
+            generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers
@@ -2251,7 +2279,7 @@ class DownloadParticipantResultReport(APIView):
                     "name": participant.name,
                     "assessment_name": assessment.name,
                     "organisation_name": assessment.organisation.name,
-                    "assessment_type":assessment.assessment_type,
+                    "assessment_type": assessment.assessment_type,
                     "organisation_id": assessment.organisation.id,
                     "data_for_score_analysis": data_for_score_analysis,
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
@@ -2259,16 +2287,16 @@ class DownloadParticipantResultReport(APIView):
                 },
                 f"This new report generated for {participant.name}",
             )
-            pdf_path = "Report.pdf"  
+            pdf_path = "Report.pdf"
 
-            with open(pdf_path, 'rb') as pdf_file:
-                response = HttpResponse(pdf_file.read(), content_type='application/pdf')
-                response['Content-Disposition'] = 'attachment; filename="Report.pdf"'
+            with open(pdf_path, "rb") as pdf_file:
+                response = HttpResponse(pdf_file.read(), content_type="application/pdf")
+                response["Content-Disposition"] = 'attachment; filename="Report.pdf"'
 
             # Close the file after reading
             pdf_file.close()
 
-            return response 
+            return response
 
         except Exception as e:
             print(str(e))
@@ -2276,20 +2304,20 @@ class DownloadParticipantResultReport(APIView):
                 {"error": "Failed to download report."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        
+
 
 class GetAssessmentNotification(APIView):
-    def get(self,request, user_id):
-        notifications = AssessmentNotification.objects.filter(user__id=user_id).order_by(
-            "-created_at"
-        )
-        
+    def get(self, request, user_id):
+        notifications = AssessmentNotification.objects.filter(
+            user__id=user_id
+        ).order_by("-created_at")
+
         serializer = AssessmentNotificationSerializer(notifications, many=True)
         return Response(serializer.data)
-    
+
 
 class MarkAllNotificationAsRead(APIView):
-    def put(self,request):
+    def put(self, request):
         notifications = AssessmentNotification.objects.filter(
             read_status=False, user__id=request.data["user_id"]
         )
@@ -2297,14 +2325,15 @@ class MarkAllNotificationAsRead(APIView):
         return Response("Notifications marked as read.")
 
 
-
 class MarkNotificationAsRead(APIView):
-    def put(self,request):
+    def put(self, request):
         user_id = request.data.get("user_id")
         notification_ids = request.data.get("notification_ids")
 
         if user_id is None or notification_ids is None:
-            return Response("Both user_id and notification_ids are required.", status=400)
+            return Response(
+                "Both user_id and notification_ids are required.", status=400
+            )
 
         notifications = AssessmentNotification.objects.filter(
             id=notification_ids, user__id=user_id, read_status=False
