@@ -1763,29 +1763,62 @@ def calculate_average(question_with_answers, assessment_type):
 
     return competency_averages
 
+def delete_previous_graphs():
+    
+    graph_directory = "graphsAndReports"
+    files = os.listdir(graph_directory)
+    previous_graphs = [file for file in files if file.startswith("average_responses")]
+    
+    for graph in previous_graphs:
+        file_path = os.path.join(graph_directory, graph)
+        os.remove(file_path)
 
 def generate_graph(data, assessment_type):
-    fig, ax = plt.subplots(figsize=(10, 6))
+    # Call the function to delete previous graphs
+    delete_previous_graphs()
 
     bar_width = 0.1
-    index = np.arange(len(data))
-    participant_responses = [
-        competency["average_participant_response"] for competency in data
-    ]
+    competency_names = [competency["competency_name"] for competency in data]
+    num_competencies = len(competency_names)
+    num_graphs = int(np.ceil(num_competencies / 5.0))
 
-    # Conditionally include the observer_responses only if the assessment type is not "self"
-    if assessment_type != "self":
-        observer_responses = [
-            competency["average_observer_responses"] for competency in data
-        ]
-        bar2 = ax.bar(
-            index + bar_width,
-            observer_responses,
+    for i in range(num_graphs):
+        start_index = i * 5
+        end_index = min((i + 1) * 5, num_competencies)
+        subset_data = data[start_index:end_index]
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        index = np.arange(len(subset_data))
+        participant_responses = [comp["average_participant_response"] for comp in subset_data]
+
+        if assessment_type != "self":
+            observer_responses = [comp["average_observer_responses"] for comp in subset_data]
+            bar2 = ax.bar(
+                index + bar_width,
+                observer_responses,
+                bar_width,
+                label="Observer Response",
+                color="#8fa2d4",
+            )
+            for bar in bar2:
+                yval = bar.get_height()
+                plt.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    yval,
+                    round(yval, 2),
+                    ha="center",
+                    va="bottom",
+                )
+
+        bar1 = ax.bar(
+            index,
+            participant_responses,
             bar_width,
-            label="Observer Response",
-            color="#8fa2d4",
+            label="Participant Response",
+            color="#3b64ad",
         )
-        for bar in bar2:
+
+        for bar in bar1:
             yval = bar.get_height()
             plt.text(
                 bar.get_x() + bar.get_width() / 2,
@@ -1795,48 +1828,46 @@ def generate_graph(data, assessment_type):
                 va="bottom",
             )
 
-    bar1 = ax.bar(
-        index,
-        participant_responses,
-        bar_width,
-        label="Participant Response",
-        color="#3b64ad",
-    )
-
-    for bar in bar1:
-        yval = bar.get_height()
-        plt.text(
-            bar.get_x() + bar.get_width() / 2,
-            yval,
-            round(yval, 2),
-            ha="center",
-            va="bottom",
+        plt.title(f"Average Responses by Competency (Graph {i + 1})")
+        plt.xlabel("Competency")
+        plt.ylabel("Average Response")
+        plt.xticks(
+            index if assessment_type == "self" else index + bar_width / 2,
+            competency_names[start_index:end_index],
+            rotation=45,
+            ha="right",
         )
+        plt.legend()
 
-    plt.title("Average Responses by Competency")
-    plt.xlabel("Competency")
-    plt.ylabel("Average Response")
-    plt.xticks(
-        index if assessment_type == "self" else index + bar_width / 2,
-        [competency["competency_name"] for competency in data],
-        rotation=45,
-        ha="right",
-    )
-    plt.legend()
+        plt.tight_layout()
+        plt.savefig(f"graphsAndReports/average_responses_by_competency_{i + 1}.png")
+        plt.close()
 
-    plt.tight_layout()
-    plt.savefig("average_responses_by_competency.png")
 
 
 def send_mail_templates_with_attachment(
     file_name, user_email, email_subject, content, body_message
 ):
     try:
-        image_path = "average_responses_by_competency.png"
-        with open(image_path, "rb") as image_file:
-            image_content = image_file.read()
-        image_base64 = base64.b64encode(image_content).decode("utf-8")
-        content["image_base64_graph"] = image_base64
+        # image_path = "graphsAndReports/average_responses_by_competency.png"
+        # with open(image_path, "rb") as image_file:
+        #     image_content = image_file.read()
+        # image_base64 = base64.b64encode(image_content).decode("utf-8")
+        # content["image_base64_graph"] = image_base64
+
+        graph_directory = "graphsAndReports"
+        graph_files = [file for file in os.listdir(graph_directory) if file.startswith("average_responses")]
+        
+        image_base64_array = []
+
+        for graph_file in graph_files:
+            graph_file_path = os.path.join(graph_directory, graph_file)
+            with open(graph_file_path, "rb") as image_file:
+                image_content = image_file.read()
+            image_base64 = base64.b64encode(image_content).decode("utf-8")
+            image_base64_array.append(image_base64)
+
+        content["image_base64_array"] = image_base64_array
 
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
@@ -1854,7 +1885,7 @@ def send_mail_templates_with_attachment(
         email_message = render_to_string(file_name, content)
 
         pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
-        pdf_path = "Report.pdf"
+        pdf_path = "graphsAndReports/Report.pdf"
         with open(pdf_path, "wb") as pdf_file:
             pdf_file.write(pdf)
         # email = EmailMessage(
@@ -1874,11 +1905,19 @@ def send_mail_templates_with_attachment(
 
 def html_for_pdf_preview(file_name, user_email, email_subject, content, body_message):
     try:
-        image_path = "average_responses_by_competency.png"
-        with open(image_path, "rb") as image_file:
-            image_content = image_file.read()
-        image_base64 = base64.b64encode(image_content).decode("utf-8")
-        content["image_base64_graph"] = image_base64
+        graph_directory = "graphsAndReports"
+        graph_files = [file for file in os.listdir(graph_directory) if file.startswith("average_responses")]
+        
+        image_base64_array = []
+
+        for graph_file in graph_files:
+            graph_file_path = os.path.join(graph_directory, graph_file)
+            with open(graph_file_path, "rb") as image_file:
+                image_content = image_file.read()
+            image_base64 = base64.b64encode(image_content).decode("utf-8")
+            image_base64_array.append(image_base64)
+
+        content["image_base64_array"] = image_base64_array
 
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
@@ -2287,7 +2326,7 @@ class DownloadParticipantResultReport(APIView):
                 },
                 f"This new report generated for {participant.name}",
             )
-            pdf_path = "Report.pdf"
+            pdf_path = "graphsAndReports/Report.pdf"
 
             with open(pdf_path, "rb") as pdf_file:
                 response = HttpResponse(pdf_file.read(), content_type="application/pdf")

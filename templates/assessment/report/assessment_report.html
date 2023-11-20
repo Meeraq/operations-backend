@@ -548,11 +548,13 @@
           feedback against each competency. The higher the score, the greater
           the perception that you display the behavior.
         </p>
+      {% for image_base64 in image_base64_array %}
         <img
-          src="data:image/png;base64, {{image_base64_graph}}"
+          src="data:image/png;base64, {{ image_base64 }}"
           alt="graph"
-          style="width: 100%; height: auto; margin-left: 20pt ; margin-top: 60pt;"
+          style="width: 100%; height: auto; margin-left: 20pt; margin-top: 60pt;"
         />
+    {% endfor %}
       </div>
     </div>
     <div style="page-break-before: always"></div>
