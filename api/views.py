@@ -4681,8 +4681,7 @@ def get_all_competencies(request):
         )
         coach_name = (
             goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
-            if goal.engagement
-            and goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
+            if goal.engagement and goal.engagement.coach
             else "N/A"
         )
 
@@ -5173,8 +5172,7 @@ def get_all_competencies_of_hr(request, hr_id):
 
         coach_name = (
             goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
-            if goal.engagement
-            and goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
+            if goal.engagement and goal.engagement.coach 
             else "N/A"
         )
 
