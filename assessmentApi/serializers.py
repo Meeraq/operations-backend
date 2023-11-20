@@ -1,12 +1,13 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Competency, Question, Questionnaire,Assessment,ParticipantResponse,ObserverResponse,ParticipantObserverType,ObserverUniqueId
+from .models import Competency, Question, Questionnaire,Assessment,ParticipantResponse,ObserverResponse,AssessmentNotification,ParticipantObserverType,ObserverUniqueId,ObserverTypes
 
 
-class CompetencySerializer(serializers.ModelSerializer):
+class CompetencySerializerDepthOne(serializers.ModelSerializer):
     class Meta:
         model = Competency
         fields = "__all__"
+        depth = 1 
 
 
 class QuestionSerializer(serializers.ModelSerializer):
@@ -15,11 +16,11 @@ class QuestionSerializer(serializers.ModelSerializer):
         fields = "__all__"
      
 
-class QuestionSerializerDepthOne(serializers.ModelSerializer):
+class QuestionSerializerDepthTwo(serializers.ModelSerializer):
     class Meta:
         model = Question
         fields = "__all__"
-        depth = 1
+        depth = 2
 
 
 class QuestionnaireSerializer(serializers.ModelSerializer):
@@ -28,11 +29,11 @@ class QuestionnaireSerializer(serializers.ModelSerializer):
         fields = "__all__"
         
 
-class QuestionnaireSerializerDepthTwo(serializers.ModelSerializer):
+class QuestionnaireSerializerDepthThree(serializers.ModelSerializer):
     class Meta:
         model = Questionnaire
         fields = "__all__"
-        depth = 2
+        depth = 3
 
 class AssessmentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -40,28 +41,28 @@ class AssessmentSerializer(serializers.ModelSerializer):
         fields = "__all__"
         
 
-class AssessmentSerializerDepthThree(serializers.ModelSerializer):
+class AssessmentSerializerDepthFour(serializers.ModelSerializer):
     class Meta:
         model = Assessment
         fields = "__all__"
-        depth = 3
+        depth = 4
 
-class AssessmentAnsweredSerializerDepthThree(serializers.ModelSerializer):
+class AssessmentAnsweredSerializerDepthFour(serializers.ModelSerializer):
     assessment_answered = serializers.BooleanField()
     class Meta:
         model = Assessment
         fields = "__all__"
-        depth = 3
+        depth = 4
 
 
-class ParticipantResponseSerializer(serializers.ModelSerializer):
+class ParticipantResponseSerializerDepthFive(serializers.ModelSerializer):
    
     class Meta:
         model = ParticipantResponse
         fields = "__all__"
-        depth=4
+        depth=5
 
-class ObserverResponseSerializer(serializers.ModelSerializer):
+class ObserverResponseSerializerDepthFour(serializers.ModelSerializer):
    
     class Meta:
         model = ObserverResponse
@@ -69,17 +70,25 @@ class ObserverResponseSerializer(serializers.ModelSerializer):
         depth=4
    
    
-class ParticipantObserverTypeSerializer(serializers.ModelSerializer):
+class ParticipantObserverTypeSerializerDepthTwo(serializers.ModelSerializer):
     class Meta:
         model = ParticipantObserverType
         fields = '__all__'
-        depth=1
+        depth=2
 
-class ObserverUniqueIdSerializerDepthOne(serializers.ModelSerializer):
+class ObserverUniqueIdSerializerDepthTwo(serializers.ModelSerializer):
     class Meta:
         model = ObserverUniqueId
         fields = '__all__'
-        depth=1
+        depth=2
         
+class ObserverTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ObserverTypes
+        fields = '__all__'
 
         
+class AssessmentNotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssessmentNotification
+        fields = "__all__"
