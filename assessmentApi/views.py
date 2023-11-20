@@ -65,7 +65,7 @@ import numpy as np
 import matplotlib
 import os
 from django.http import HttpResponse
-
+import io
 matplotlib.use("Agg")
 env = environ.Env()
 
@@ -1774,13 +1774,14 @@ def delete_previous_graphs():
         os.remove(file_path)
 
 def generate_graph(data, assessment_type):
-    # Call the function to delete previous graphs
-    delete_previous_graphs()
+    
 
     bar_width = 0.1
     competency_names = [competency["competency_name"] for competency in data]
     num_competencies = len(competency_names)
     num_graphs = int(np.ceil(num_competencies / 5.0))
+
+    encoded_images = []  # Array to store base64 encoded images
 
     for i in range(num_graphs):
         start_index = i * 5
@@ -1800,7 +1801,6 @@ def generate_graph(data, assessment_type):
                 label="Observer Response",
                 color="#8fa2d4",
             )
-            
 
         bar1 = ax.bar(
             index,
@@ -1809,8 +1809,6 @@ def generate_graph(data, assessment_type):
             label="Participant Response",
             color="#3b64ad",
         )
-
-        
 
         plt.title(f"Average Responses by Competency (Graph {i + 1})")
         plt.xlabel("Competency")
@@ -1824,8 +1822,17 @@ def generate_graph(data, assessment_type):
         plt.legend()
 
         plt.tight_layout()
-        plt.savefig(f"graphsAndReports/average_responses_by_competency_{i + 1}.png")
+
+        # Save the image data to a BytesIO object
+        image_stream = io.BytesIO()
+        plt.savefig(image_stream, format='png')
         plt.close()
+
+        # Convert the image data to base64
+        encoded_image = base64.b64encode(image_stream.getvalue()).decode('utf-8')
+        encoded_images.append(encoded_image)
+
+    return encoded_images
 
 
 
@@ -1833,25 +1840,7 @@ def generate_report_for_participant(
     file_name, content
 ):
     try:
-        # image_path = "graphsAndReports/average_responses_by_competency.png"
-        # with open(image_path, "rb") as image_file:
-        #     image_content = image_file.read()
-        # image_base64 = base64.b64encode(image_content).decode("utf-8")
-        # content["image_base64_graph"] = image_base64
-
-        graph_directory = "graphsAndReports"
-        graph_files = [file for file in os.listdir(graph_directory) if file.startswith("average_responses")]
         
-        image_base64_array = []
-
-        for graph_file in graph_files:
-            graph_file_path = f"graphsAndReports/{graph_file}"
-            with open(graph_file_path, "rb") as image_file:
-                image_content = image_file.read()
-            image_base64 = base64.b64encode(image_content).decode("utf-8")
-            image_base64_array.append(image_base64)
-
-        content["image_base64_array"] = image_base64_array
 
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
@@ -1872,16 +1861,6 @@ def generate_report_for_participant(
         pdf_path = "graphsAndReports/Report.pdf"
         with open(pdf_path, "wb") as pdf_file:
             pdf_file.write(pdf)
-        # email = EmailMessage(
-        #     subject=f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
-        #     body=body_message,
-        #     from_email=settings.DEFAULT_FROM_EMAIL,
-        #     to=user_email,
-        # )
-
-        # # Attach the PDF to the email
-        # email.attach("Report.pdf", pdf, "application/pdf")
-        # email.send()
 
     except Exception as e:
         print(str(e))
@@ -1889,19 +1868,7 @@ def generate_report_for_participant(
 
 def html_for_pdf_preview(file_name, user_email, email_subject, content, body_message):
     try:
-        graph_directory = "graphsAndReports"
-        graph_files = [file for file in os.listdir(graph_directory) if file.startswith("average_responses")]
         
-        image_base64_array = []
-
-        for graph_file in graph_files:
-            graph_file_path = f"graphsAndReports/{graph_file}"
-            with open(graph_file_path, "rb") as image_file:
-                image_content = image_file.read()
-            image_base64 = base64.b64encode(image_content).decode("utf-8")
-            image_base64_array.append(image_base64)
-
-        content["image_base64_array"] = image_base64_array
 
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
@@ -2163,7 +2130,7 @@ class DownloadParticipantResultReport(APIView):
                 question_with_answers, assessment.assessment_type
             )
 
-            generate_graph(averages, assessment.assessment_type)
+            graph_images=generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers
@@ -2183,6 +2150,7 @@ class DownloadParticipantResultReport(APIView):
                     "data_for_score_analysis": data_for_score_analysis,
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
+                    "image_base64_array":graph_images
                 },
                 f"This new report generated for {participant.name}",
             )
@@ -2287,7 +2255,7 @@ class DownloadParticipantResultReport(APIView):
                 question_with_answers, assessment.assessment_type
             )
 
-            generate_graph(averages, assessment.assessment_type)
+            graph_images=generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers
@@ -2305,6 +2273,7 @@ class DownloadParticipantResultReport(APIView):
                     "data_for_score_analysis": data_for_score_analysis,
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
+                    "image_base64_array":graph_images
                 },
             )
             pdf_path = "graphsAndReports/Report.pdf"
