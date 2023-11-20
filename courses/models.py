@@ -48,13 +48,13 @@ class TextLesson(models.Model):
 #     answers = models.TextField()
 
 
-# class LiveSession(models.Model):
-#     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
-#     description = models.TextField()
-#     meeting_link = models.URLField()
-#     date = models.DateField()
-#     start_time = models.TimeField()
-#     end_time = models.TimeField()
+class LiveSession(models.Model):
+    lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    description = models.TextField()
+    meeting_link = models.URLField()
+    date = models.DateField()
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
 
 
 # class LaserCoachingSession(models.Model):
