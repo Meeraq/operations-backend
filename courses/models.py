@@ -42,10 +42,22 @@ class TextLesson(models.Model):
     content = models.TextField(default="", blank=True)
 
 
-# class QuizLesson(models.Model):
-#     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
-#     questions = models.TextField()
-#     answers = models.TextField()
+class Question(models.Model):
+    QUESTION_TYPES = [
+        ("single_correct_answer", "Single Correct Answer"),
+        ("multiple_correct_answer", "Multiple Correct Answers"),
+        ("rating_1_to_5", "1 to 5 Rating"),
+        ("rating_1_to_10", "1 to 10 Rating"),
+        ("descriptive_answer", "Descriptive Answer"),
+    ]
+    text = models.CharField(max_length=255)
+    options = models.JSONField(default=list)
+    type = models.CharField(max_length=255, choices=QUESTION_TYPES)
+
+
+class QuizLesson(models.Model):
+    lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    questions = models.ManyToManyField(Question)
 
 
 # class LiveSession(models.Model):

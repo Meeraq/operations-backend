@@ -35,4 +35,5 @@ urlpatterns = [
         LessonDetailView.as_view(),
         name="lesson-list",
     ),
+    path("quiz-lessons/", views.create_quiz_lesson, name="text-lesson-create"),
 ]
