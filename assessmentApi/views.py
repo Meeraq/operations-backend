@@ -58,14 +58,11 @@ from django.db.models import Q, Prefetch, Exists, OuterRef, Count
 import environ
 import base64
 from django.core.mail import EmailMessage
-from io import BytesIO
 from xhtml2pdf import pisa
 import pdfkit
-from decouple import config
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib
-from django.http import FileResponse
 import os
 from django.http import HttpResponse
 matplotlib.use("Agg")
@@ -1725,6 +1722,7 @@ def calculate_average(question_with_answers):
         total_observer_responses = {}
 
         for question in questions:
+            total_observers=(len(question.keys())-2) #two columns substracted question and participant response for number of observer
             total_participant_responses += question["participant_response"]
 
             # Sum observer responses for each question
@@ -1741,7 +1739,7 @@ def calculate_average(question_with_answers):
             total_participant_responses / num_questions, 2
         )
         total_observer_responses = sum(total_observer_responses.values())
-        average_observer_responses = round(total_observer_responses / num_questions, 2)
+        average_observer_responses = round((total_observer_responses / num_questions)/total_observers, 2)
         competency_average = {
             "competency_name": competency_name,
             "average_participant_response": average_participant_response,
