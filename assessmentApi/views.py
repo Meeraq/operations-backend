@@ -1800,15 +1800,7 @@ def generate_graph(data, assessment_type):
                 label="Observer Response",
                 color="#8fa2d4",
             )
-            for bar in bar2:
-                yval = bar.get_height()
-                plt.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    yval,
-                    round(yval, 2),
-                    ha="center",
-                    va="bottom",
-                )
+            
 
         bar1 = ax.bar(
             index,
@@ -1818,15 +1810,7 @@ def generate_graph(data, assessment_type):
             color="#3b64ad",
         )
 
-        for bar in bar1:
-            yval = bar.get_height()
-            plt.text(
-                bar.get_x() + bar.get_width() / 2,
-                yval,
-                round(yval, 2),
-                ha="center",
-                va="bottom",
-            )
+        
 
         plt.title(f"Average Responses by Competency (Graph {i + 1})")
         plt.xlabel("Competency")
