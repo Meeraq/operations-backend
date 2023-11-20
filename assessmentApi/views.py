@@ -1845,8 +1845,8 @@ def generate_graph(data, assessment_type):
 
 
 
-def send_mail_templates_with_attachment(
-    file_name, user_email, email_subject, content, body_message
+def generate_report_for_participant(
+    file_name, content
 ):
     try:
         # image_path = "graphsAndReports/average_responses_by_competency.png"
@@ -1861,7 +1861,7 @@ def send_mail_templates_with_attachment(
         image_base64_array = []
 
         for graph_file in graph_files:
-            graph_file_path = os.path.join(graph_directory, graph_file)
+            graph_file_path = f"graphsAndReports/{graph_file}"
             with open(graph_file_path, "rb") as image_file:
                 image_content = image_file.read()
             image_base64 = base64.b64encode(image_content).decode("utf-8")
@@ -1911,7 +1911,7 @@ def html_for_pdf_preview(file_name, user_email, email_subject, content, body_mes
         image_base64_array = []
 
         for graph_file in graph_files:
-            graph_file_path = os.path.join(graph_directory, graph_file)
+            graph_file_path = f"graphsAndReports/{graph_file}"
             with open(graph_file_path, "rb") as image_file:
                 image_content = image_file.read()
             image_base64 = base64.b64encode(image_content).decode("utf-8")
@@ -1929,9 +1929,9 @@ def html_for_pdf_preview(file_name, user_email, email_subject, content, body_mes
         image_organisation_base64 = base64.b64encode(image_response.content).decode(
             "utf-8"
         )
-
+        
         content["image_organisation_base64"] = image_organisation_base64
-
+        
         html_message = render_to_string(file_name, content)
 
         return html_message
@@ -2310,10 +2310,8 @@ class DownloadParticipantResultReport(APIView):
             )
             data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
 
-            send_mail_templates_with_attachment(
+            generate_report_for_participant(
                 "assessment/report/assessment_report.html",
-                ["shashank@meeraq.com"],
-                f"Report for {participant.name}",
                 {
                     "name": participant.name,
                     "assessment_name": assessment.name,
@@ -2324,7 +2322,6 @@ class DownloadParticipantResultReport(APIView):
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
                 },
-                f"This new report generated for {participant.name}",
             )
             pdf_path = "graphsAndReports/Report.pdf"
 
