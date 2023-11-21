@@ -48,5 +48,18 @@ urlpatterns = [
         views.update_live_session,
         name="update-live-session",
     ),
+    path(
+        "create-laser-booking-lesson/",
+        views.create_laser_booking_lesson,
+    ),
+    path(
+        "courses/<int:course_id>/lessons/<int:lesson_id>/laser-coaching-sessions/",
+        views.get_laser_coaching_sessions,
+    ),
+    path(
+        "courses/<int:course_id>/lessons/<int:lesson_id>/laser-coaching-sessions/<int:session_id>/",
+        views.update_laser_coaching_session,
+    ),
     path("quiz-lessons/", views.create_quiz_lesson, name="text-lesson-create"),
 ]
+    

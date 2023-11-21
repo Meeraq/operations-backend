@@ -69,10 +69,10 @@ class LiveSession(models.Model):
     end_time = models.DateTimeField()
 
 
-# class LaserCoachingSession(models.Model):
-#     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
-#     description = models.TextField()
-#     booking_link = models.URLField()
+class LaserCoachingSession(models.Model):
+    lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    description = models.TextField()
+    booking_link = models.URLField()
 
 
 # class Feedback(models.Model):
