@@ -132,13 +132,88 @@ def create_quiz_lesson(request):
         # Create QuizLesson and associate it with the Lesson
         quiz_lesson = QuizLesson.objects.create(lesson=lesson)
         quiz_lesson.questions.set(questions)
+        lesson_serializer = LessonSerializer(lesson)
+        response_data = {
+            "message": "Lesson and Quiz created successfully",
+            "lesson": lesson_serializer.data,
+        }
 
         return Response(
-            {"message": "Lesson and Quiz created successfully"},
+            response_data,
             status=status.HTTP_201_CREATED,
         )
     else:
         return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+def edit_quiz_lesson(request, quiz_lesson_id):
+    try:
+        quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
+    except QuizLesson.DoesNotExist:
+        return Response(
+            {"message": "Quiz Lesson not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Deserialize the incoming data
+    data = request.data
+    lesson_data = data.get("lesson")
+    questions_data = data.get("questions")
+
+    # Update Lesson details
+    lesson = quiz_lesson.lesson
+    lesson_serializer = LessonSerializer(lesson, data=lesson_data)
+    if lesson_serializer.is_valid():
+        lesson = lesson_serializer.save()
+    else:
+        return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    # Remove existing questions from QuizLesson
+    quiz_lesson.questions.clear()
+
+    # Update or create new questions and add them to the QuizLesson
+    for question_data in questions_data:
+        question_id = question_data.get("_id")
+        if question_id:
+            try:
+                existing_question = Question.objects.get(id=question_id)
+                question_serializer = QuestionSerializer(
+                    existing_question, data=question_data
+                )
+                if question_serializer.is_valid():
+                    question = question_serializer.save()
+                    quiz_lesson.questions.add(question)
+                else:
+                    return Response(
+                        question_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                    )
+            except Question.DoesNotExist:
+                # If question does not exist, create a new one
+                question_serializer = QuestionSerializer(data=question_data)
+                if question_serializer.is_valid():
+                    question = question_serializer.save()
+                    quiz_lesson.questions.add(question)
+                else:
+                    return Response(
+                        question_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                    )
+        else:
+            # If no question ID is provided, create a new question
+            question_serializer = QuestionSerializer(data=question_data)
+            if question_serializer.is_valid():
+                question = question_serializer.save()
+                quiz_lesson.questions.add(question)
+            else:
+                return Response(
+                    question_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+    lesson_serializer = LessonSerializer(lesson)
+    response_data = {
+        "message": "Quiz Lesson updated successfully",
+        "lesson": lesson_serializer.data,
+    }
+
+    return Response(response_data, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
