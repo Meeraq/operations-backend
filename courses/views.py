@@ -1,17 +1,21 @@
 from django.shortcuts import render
 
 # Create your views here.
-from rest_framework import generics, serializers, status
-from .models import Course, TextLesson, Lesson, LiveSession
+from rest_framework import generics, serializers
+from rest_framework.decorators import api_view
+from rest_framework import status
+from .models import Course, TextLesson, Lesson, Question, QuizLesson, LiveSession
 from rest_framework.response import Response
+
 from .serializers import (
     CourseSerializer,
     TextLessonCreateSerializer,
     TextLessonSerializer,
     LessonSerializer,
     LiveSessionSerializer,
-    LessonSerializer,
     LiveSessionSerializerDepthOne,
+    QuestionSerializer,
+    QuizLessonDepthOneSerializer,
 )
 from rest_framework.decorators import api_view, permission_classes
 
@@ -90,10 +94,51 @@ class LessonDetailView(generics.RetrieveAPIView):
         elif lesson_type == "live_session":
             live_session = LiveSession.objects.get(lesson=lesson)
             serializer = LiveSessionSerializer(live_session)
+        elif lesson_type == "quiz":
+            quiz_lesson = QuizLesson.objects.get(lesson=lesson)
+            serializer = QuizLessonDepthOneSerializer(quiz_lesson)
         else:
             return Response({"error": f"Failed to get the lessons"}, status=400)
 
         return Response(serializer.data)
+
+
+@api_view(["POST"])
+def create_quiz_lesson(request):
+    # Deserialize the incoming data
+    data = request.data
+    lesson_data = data.get("lesson")
+    questions_data = data.get("questions")
+
+    # Create the Lesson
+    lesson_serializer = LessonSerializer(data=lesson_data)
+    if lesson_serializer.is_valid():
+        lesson = lesson_serializer.save()
+
+        # Create Questions and associate them with the Lesson
+        questions = []
+        for question_data in questions_data:
+            question_serializer = QuestionSerializer(data=question_data)
+            if question_serializer.is_valid():
+                question = question_serializer.save()
+                questions.append(question)
+            else:
+                # If any question is invalid, delete the created lesson and return an error
+                lesson.delete()
+                return Response(
+                    question_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Create QuizLesson and associate it with the Lesson
+        quiz_lesson = QuizLesson.objects.create(lesson=lesson)
+        quiz_lesson.questions.set(questions)
+
+        return Response(
+            {"message": "Lesson and Quiz created successfully"},
+            status=status.HTTP_201_CREATED,
+        )
+    else:
+        return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["POST"])

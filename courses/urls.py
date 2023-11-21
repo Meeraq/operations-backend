@@ -48,4 +48,5 @@ urlpatterns = [
         views.update_live_session,
         name="update-live-session",
     ),
+    path("quiz-lessons/", views.create_quiz_lesson, name="text-lesson-create"),
 ]
