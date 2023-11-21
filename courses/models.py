@@ -88,9 +88,8 @@ class LaserCoachingSession(models.Model):
 #     )  # JSONField or separate models for questions can be considered
 
 
-# class Assessment(models.Model):
-#     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
-#     message = models.TextField()
+class Assessment(models.Model):
+    lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
 
 
 # class Video(models.Model):
