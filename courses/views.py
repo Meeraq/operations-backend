@@ -2,7 +2,16 @@ from django.shortcuts import render
 
 # Create your views here.
 from rest_framework import generics, serializers, status
-from .models import Course, TextLesson, Lesson, LiveSession, LaserCoachingSession,  Question, QuizLesson
+from .models import (
+    Course,
+    TextLesson,
+    Lesson,
+    LiveSession,
+    LaserCoachingSession,
+    Question,
+    QuizLesson,
+    FeedbackLesson,
+)
 from rest_framework.response import Response
 
 from .serializers import (
@@ -16,6 +25,7 @@ from .serializers import (
     QuizLessonDepthOneSerializer,
     LaserSessionSerializerDepthOne,
     LaserCoachingSessionSerializer,
+    FeedbackLessonDepthOneSerializer
 )
 from rest_framework.decorators import api_view, permission_classes
 
@@ -99,6 +109,9 @@ class LessonDetailView(generics.RetrieveAPIView):
         elif lesson_type == "laser_coaching":
             laser_coaching = LaserCoachingSession.objects.get(lesson=lesson)
             serializer = LaserSessionSerializerDepthOne(laser_coaching)
+        elif lesson_type == "feedback":
+            laser_coaching = FeedbackLesson.objects.get(lesson=lesson)
+            serializer = FeedbackLessonDepthOneSerializer(laser_coaching)
         else:
             return Response({"error": f"Failed to get the lessons"}, status=400)
 
@@ -212,6 +225,119 @@ def edit_quiz_lesson(request, quiz_lesson_id):
     lesson_serializer = LessonSerializer(lesson)
     response_data = {
         "message": "Quiz Lesson updated successfully",
+        "lesson": lesson_serializer.data,
+    }
+
+    return Response(response_data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+def create_feedback_lesson(request):
+    # Deserialize the incoming data
+    data = request.data
+    lesson_data = data.get("lesson")
+    questions_data = data.get("questions")
+
+    # Create the Lesson
+    lesson_serializer = LessonSerializer(data=lesson_data)
+    if lesson_serializer.is_valid():
+        lesson = lesson_serializer.save()
+
+        # Create Questions and associate them with the Lesson
+        questions = []
+        for question_data in questions_data:
+            question_serializer = QuestionSerializer(data=question_data)
+            if question_serializer.is_valid():
+                question = question_serializer.save()
+                questions.append(question)
+            else:
+                # If any question is invalid, delete the created lesson and return an error
+                lesson.delete()
+                return Response(
+                    question_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Create QuizLesson and associate it with the Lesson
+        feedback_lesson = FeedbackLesson.objects.create(lesson=lesson)
+        feedback_lesson.questions.set(questions)
+        lesson_serializer = LessonSerializer(lesson)
+        response_data = {
+            "message": "Lesson and Feedback created successfully",
+            "lesson": lesson_serializer.data,
+        }
+
+        return Response(
+            response_data,
+            status=status.HTTP_201_CREATED,
+        )
+    else:
+        return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+def edit_feedback_lesson(request, feedback_lesson_id):
+    try:
+        feedback_lesson = FeedbackLesson.objects.get(id=feedback_lesson_id)
+    except QuizLesson.DoesNotExist:
+        return Response(
+            {"message": "Feedback Lesson not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Deserialize the incoming data
+    data = request.data
+    lesson_data = data.get("lesson")
+    questions_data = data.get("questions")
+
+    # Update Lesson details
+    lesson = feedback_lesson.lesson
+    lesson_serializer = LessonSerializer(lesson, data=lesson_data)
+    if lesson_serializer.is_valid():
+        lesson = lesson_serializer.save()
+    else:
+        return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    # Remove existing questions from QuizLesson
+    feedback_lesson.questions.clear()
+
+    # Update or create new questions and add them to the QuizLesson
+    for question_data in questions_data:
+        question_id = question_data.get("_id")
+        if question_id:
+            try:
+                existing_question = Question.objects.get(id=question_id)
+                question_serializer = QuestionSerializer(
+                    existing_question, data=question_data
+                )
+                if question_serializer.is_valid():
+                    question = question_serializer.save()
+                    feedback_lesson.questions.add(question)
+                else:
+                    return Response(
+                        question_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                    )
+            except Question.DoesNotExist:
+                # If question does not exist, create a new one
+                question_serializer = QuestionSerializer(data=question_data)
+                if question_serializer.is_valid():
+                    question = question_serializer.save()
+                    feedback_lesson.questions.add(question)
+                else:
+                    return Response(
+                        question_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                    )
+        else:
+            # If no question ID is provided, create a new question
+            question_serializer = QuestionSerializer(data=question_data)
+            if question_serializer.is_valid():
+                question = question_serializer.save()
+                feedback_lesson.questions.add(question)
+            else:
+                return Response(
+                    question_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+    lesson_serializer = LessonSerializer(lesson)
+    response_data = {
+        "message": "Feedback Lesson updated successfully",
         "lesson": lesson_serializer.data,
     }
 

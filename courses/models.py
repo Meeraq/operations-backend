@@ -60,6 +60,11 @@ class QuizLesson(models.Model):
     questions = models.ManyToManyField(Question)
 
 
+class FeedbackLesson(models.Model):
+    lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    questions = models.ManyToManyField(Question)
+
+
 class LiveSession(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     description = models.TextField()

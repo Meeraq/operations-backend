@@ -60,11 +60,18 @@ urlpatterns = [
         "courses/<int:course_id>/lessons/<int:lesson_id>/laser-coaching-sessions/<int:session_id>/",
         views.update_laser_coaching_session,
     ),
-    path("quiz-lessons/", views.create_quiz_lesson, name="text-lesson-create"),
+    path("quiz-lessons/", views.create_quiz_lesson, name="quiz-lesson-create"),
     path(
         "quiz-lessons/<int:quiz_lesson_id>/",
         views.edit_quiz_lesson,
-        name="text-lesson-edit",
+        name="quiz-lesson-edit",
+    ),
+    path(
+        "feedback-lessons/", views.create_feedback_lesson, name="feedback-lesson-create"
+    ),
+    path(
+        "feedback-lessons/<int:feedback_lesson_id>/",
+        views.edit_feedback_lesson,
+        name="feedback-lesson-edit",
     ),
 ]
-    
