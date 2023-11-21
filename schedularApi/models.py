@@ -67,6 +67,10 @@ class CoachSchedularAvailibilty(models.Model):
 
 
 class CoachingSession(models.Model):
+    SESSION_CHOICES = [
+        ("laser_coaching_session", "Laser Coaching Session"),
+        ("mentoring_session", "Mentoring Session"),
+    ]
     booking_link = models.CharField(max_length=500, blank=True, default="")
     start_date = models.DateField(blank=True, null=True)
     end_date = models.DateField(blank=True, null=True)
@@ -77,6 +81,7 @@ class CoachingSession(models.Model):
     duration = models.CharField(max_length=50, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    session_type = models.CharField(max_length=50, choices=SESSION_CHOICES, default="laser_coaching_session")
 
 
 class SchedularSessions(models.Model):

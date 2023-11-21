@@ -710,7 +710,7 @@ def add_batch(request, project_id):
                     )
                 elif session_type == "laser_coaching_session":
                     coaching_session_number = (
-                        CoachingSession.objects.filter(batch=batch).count() + 1
+                        CoachingSession.objects.filter(batch=batch,session_type=session_type).count() + 1
                     )
                     booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                     coaching_session = CoachingSession.objects.create(
@@ -719,6 +719,21 @@ def add_batch(request, project_id):
                         order=order,
                         duration=duration,
                         booking_link=booking_link,
+                        session_type=session_type,
+                    )
+                elif session_type == "mentoring_session":
+                    coaching_session_number = (
+                        CoachingSession.objects.filter(batch=batch,session_type=session_type).count() + 1
+                    )
+                    print(CoachingSession.objects.filter(batch=batch,session_type=session_type))
+                    booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                    coaching_session = CoachingSession.objects.create(
+                        batch=batch,
+                        coaching_session_number=coaching_session_number,
+                        order=order,
+                        duration=duration,
+                        booking_link=booking_link,
+                        session_type=session_type,
                     )
 
         # Check if participant with the same email exists
@@ -772,6 +787,7 @@ def get_coach_availabilities_booking_link(request):
                 return Response({"error": "The booking link has expired."})
             
             session_duration = coaching_session.duration
+            session_type=coaching_session.session_type
 
             coaches_in_batch = coaching_session.batch.coaches.all()
             start_date = datetime.combine(
@@ -792,7 +808,7 @@ def get_coach_availabilities_booking_link(request):
                 is_confirmed=False,
             )
             serializer = AvailabilitySerializer(coach_availabilities, many=True)
-            return Response({"slots": serializer.data , "session_duration": session_duration})
+            return Response({"slots": serializer.data , "session_duration": session_duration,"session_type":session_type})
         except Exception as e:
             return Response({"error": "Unable to get slots"}, status=400)
     else:
@@ -837,6 +853,7 @@ def schedule_session(request):
         coaching_session = get_object_or_404(CoachingSession, booking_link=booking_link)
         # Retrieve batch from the coaching session
         batch = coaching_session.batch
+        session_type=coaching_session.session_type
 
         # Check if the participant is in the batch
         participant = get_object_or_404(SchedularParticipants, email=participant_email)
@@ -909,12 +926,13 @@ def schedule_session(request):
             send_mail_templates(
                 "coach_templates/coaching_email_template.html",
                 [participant_email],
-                "Meeraq - Laser Coaching Session Booked",
+                "Meeraq - Laser Coaching Session Booked" if session_type == "laser_coaching_session" else "Meeraq - Mentoring Session Booked",
                 {
                     "name": coach_name,
                     "date": formatted_date,
                     "time": start_time_for_mail,
                     "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                    "session_type": "Mentoring" if session_type== "mentoring_session" else "Laser Coaching",
                 },
                 [],
             )
@@ -1078,6 +1096,7 @@ def get_sessions_by_type(request, sessions_type):
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
+            "session_type":session.coaching_session.session_type,
         }
         session_details.append(session_detail)
     return Response(session_details, status=status.HTTP_200_OK)
@@ -1207,12 +1226,14 @@ def get_participants(request):
 
 @api_view(["POST"])
 def send_unbooked_coaching_session_mail(request):
+    print(request.data)
     batch_name = request.data.get("batchName", "")
     participants = request.data.get("participants", [])
     booking_link = request.data.get("bookingLink", "")
     expiry_date = request.data.get("expiry_date", "")
     date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
     formatted_date = date_obj.strftime("%d %B %Y")
+    session_type=request.data.get("session_type","")
 
     for participant in participants:
         try:
@@ -1224,11 +1245,12 @@ def send_unbooked_coaching_session_mail(request):
         send_mail_templates(
             "seteventlink.html",
             [participant],
-            "Meeraq -Book Coaching Session",
+            "Meeraq -Book Laser Coaching Session" if session_type == "laser_coaching_session" else "Meeraq - Book Mentoring Session",
             {
                 "name": participant_name,
                 "event_link": booking_link,
                 "expiry_date": formatted_date,
+                "session_type": "mentoring" if session_type== "mentoring_session" else "laser coaching",
             },
             [],
         )
