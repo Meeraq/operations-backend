@@ -60,5 +60,6 @@ urlpatterns = [
         "courses/<int:course_id>/lessons/<int:lesson_id>/laser-coaching-sessions/<int:session_id>/",
         views.update_laser_coaching_session,
     ),
+    path("quiz-lessons/", views.create_quiz_lesson, name="text-lesson-create"),
 ]
     
