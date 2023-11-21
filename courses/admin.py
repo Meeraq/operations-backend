@@ -8,6 +8,7 @@ from .models import (
     TextLesson,
     LaserCoachingSession,
     FeedbackLesson,
+    Assessment
 )
 
 # Register your models here.
@@ -19,3 +20,4 @@ admin.site.register(QuizLesson)
 admin.site.register(FeedbackLesson)
 admin.site.register(Question)
 admin.site.register(LaserCoachingSession)
+admin.site.register(Assessment)

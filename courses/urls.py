@@ -67,6 +67,18 @@ urlpatterns = [
         name="quiz-lesson-edit",
     ),
     path(
+        "create-assessment-lesson/",
+        views.create_assessment_and_lesson,
+    ),
+    path(
+        "courses/<int:course_id>/lessons/<int:lesson_id>/assessment-lesson/",
+        views.get_assessment_lesson,
+    ),
+    path(
+        "courses/<int:course_id>/lessons/<int:lesson_id>/assessment-lesson/<int:session_id>/",
+        views.update_assessment_lesson,
+    ),
+    path(
         "feedback-lessons/", views.create_feedback_lesson, name="feedback-lesson-create"
     ),
     path(

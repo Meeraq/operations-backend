@@ -9,6 +9,7 @@ from .models import (
     LiveSession,
     LaserCoachingSession,
     FeedbackLesson,
+    Assessment,
 )
 
 
@@ -111,3 +112,16 @@ class LaserCoachingSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = LaserCoachingSession
         fields = "__all__"
+
+
+class AssessmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Assessment
+        fields = "__all__"
+
+
+class AssessmentSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = Assessment
+        fields = "__all__"
+        depth = 1

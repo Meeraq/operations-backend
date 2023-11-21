@@ -11,6 +11,7 @@ from .models import (
     Question,
     QuizLesson,
     FeedbackLesson,
+    Assessment,
 )
 from rest_framework.response import Response
 
@@ -25,7 +26,9 @@ from .serializers import (
     QuizLessonDepthOneSerializer,
     LaserSessionSerializerDepthOne,
     LaserCoachingSessionSerializer,
-    FeedbackLessonDepthOneSerializer
+    FeedbackLessonDepthOneSerializer,
+    AssessmentSerializerDepthOne,
+    AssessmentSerializer,
 )
 from rest_framework.decorators import api_view, permission_classes
 
@@ -109,6 +112,9 @@ class LessonDetailView(generics.RetrieveAPIView):
         elif lesson_type == "laser_coaching":
             laser_coaching = LaserCoachingSession.objects.get(lesson=lesson)
             serializer = LaserSessionSerializerDepthOne(laser_coaching)
+        elif lesson_type == "assessment":
+            laser_coaching = Assessment.objects.get(lesson=lesson)
+            serializer = AssessmentSerializerDepthOne(laser_coaching)
         elif lesson_type == "feedback":
             laser_coaching = FeedbackLesson.objects.get(lesson=lesson)
             serializer = FeedbackLessonDepthOneSerializer(laser_coaching)
@@ -500,6 +506,111 @@ def update_laser_coaching_session(request, course_id, lesson_id, session_id):
     return Response(
         {
             "lesson_errors": lesson_serializer.errors,
+            "session_errors": session_serializer.errors,
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from .models import Course, Lesson
+from .serializers import LessonSerializer
+
+
+@api_view(["POST"])
+def create_assessment_and_lesson(request):
+    lesson_data = request.data.get("lesson")
+    # coaching_session_data = request.data.get("assessment_lesson")
+
+    # Create a Lesson instance
+    lesson = Lesson.objects.create(
+        course_id=lesson_data["course"],
+        name=lesson_data["name"],
+        status=lesson_data["status"],
+        lesson_type=lesson_data["lesson_type"],
+    )
+
+    # Create a LaserCoachingSession instance associated with the created Lesson
+    assessment = Assessment.objects.create(
+        lesson=lesson,
+        # message=coaching_session_data["message"],
+    )
+
+    # Optionally, return a success response
+    return Response(
+        "Assessment lesson created successfully", status=status.HTTP_201_CREATED
+    )
+
+
+@api_view(["GET"])
+def get_assessment_lesson(request, lesson_id, course_id):
+    try:
+        assessment = Assessment.objects.filter(
+            lesson__id=lesson_id, lesson__course__id=course_id
+        )
+        serializer = AssessmentSerializerDepthOne(assessment, many=True)
+        return Response(serializer.data)
+    except Assessment.DoesNotExist:
+        return Response(status=404)
+
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Lesson, Assessment
+from .serializers import LessonSerializer, AssessmentSerializer
+
+
+@api_view(["PUT"])
+def update_assessment_lesson(request, course_id, lesson_id, session_id):
+    print(course_id, lesson_id, session_id)
+    try:
+        lesson = Lesson.objects.get(course_id=course_id, id=lesson_id)
+        assessment = Assessment.objects.get(lesson_id=lesson_id, id=session_id)
+    except (Lesson.DoesNotExist, Assessment.DoesNotExist):
+        return Response(
+            "Assessment lesson not found",
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    lesson_data = request.data.get("lesson")
+
+    # Check if 'lesson' data is provided in the request and update the lesson name
+    if lesson_data and "name" in lesson_data:
+        lesson.name = lesson_data["name"]
+
+    # Update other fields of the lesson if present in the request
+    if lesson_data:
+        lesson_serializer = LessonSerializer(lesson, data=lesson_data, partial=True)
+        if lesson_serializer.is_valid():
+            lesson_serializer.save()
+        else:
+            return Response(
+                {"lesson_errors": lesson_serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    session_data = (
+        {}
+    )  # Empty data for assessment session as not specified in the request
+
+    session_serializer = AssessmentSerializer(
+        assessment, data=session_data, partial=True
+    )
+
+    if session_serializer.is_valid():
+        session_serializer.save()
+        return Response(
+            {
+                "lesson": LessonSerializer(lesson).data,
+                "assessment_lesson": session_serializer.data,
+            }
+        )
+
+    return Response(
+        {
             "session_errors": session_serializer.errors,
         },
         status=status.HTTP_400_BAD_REQUEST,
