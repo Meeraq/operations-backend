@@ -1,6 +1,6 @@
 # serializers.py
 from rest_framework import serializers
-from .models import Course, Lesson, TextLesson, Question, QuizLesson
+from .models import Course, Lesson, TextLesson, Question, QuizLesson, LiveSession
 
 
 class CourseSerializer(serializers.ModelSerializer):
@@ -67,5 +67,18 @@ class QuestionSerializer(serializers.ModelSerializer):
 class QuizLessonDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuizLesson
+        fields = "__all__"
+        depth = 1
+
+
+class LiveSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LiveSession
+        fields = "__all__"
+
+
+class LiveSessionSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = LiveSession
         fields = "__all__"
         depth = 1
