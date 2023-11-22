@@ -31,6 +31,7 @@ from .serializers import (
     FeedbackLessonDepthOneSerializer,
     AssessmentSerializerDepthOne,
     AssessmentSerializer,
+    CourseEnrollmentDepthOneSerializer,
     CertificateSerializerDepthOne,
 )
 from rest_framework.views import APIView
@@ -116,7 +117,12 @@ class LessonListView(generics.ListAPIView):
     def get_queryset(self):
         # Retrieve lessons for a specific course based on the course ID in the URL
         course_id = self.kwargs.get("course_id")
-        return Lesson.objects.filter(course__id=course_id)
+        queryset = Lesson.objects.filter(course__id=course_id)
+        status = self.request.query_params.get("status", None)
+        if status:
+            queryset = queryset.filter(status=status)
+
+        return queryset
 
 
 class LessonDetailView(generics.RetrieveAPIView):
@@ -692,6 +698,53 @@ def enroll_participants_to_course(request, course_id, schedular_batch_id):
             }
         )
     except LaserCoachingSession.DoesNotExist:
+        return Response(status=404)
+
+
+@api_view(["GET"])
+def get_course_enrollment(request, course_enrollment_id, learner_id):
+    try:
+        course_enrollment = CourseEnrollment.objects.get(
+            id=course_enrollment_id, learner__id=learner_id
+        )
+        course_enrollment_serializer = CourseEnrollmentDepthOneSerializer(
+            course_enrollment
+        )
+        lessons = Lesson.objects.filter(
+            course=course_enrollment.course, status="public"
+        )
+        lessons_serializer = LessonSerializer(lessons, many=True)
+
+        return Response(
+            {
+                "course_enrollment": course_enrollment_serializer.data,
+                "lessons": lessons_serializer.data,
+            }
+        )
+    except CourseEnrollment.DoesNotExist:
+        return Response(status=404)
+
+
+@api_view(["GET"])
+def get_course_enrollments_of_learner(request, learner_id):
+    try:
+        course_enrollments = CourseEnrollment.objects.filter(learner__id=learner_id)
+        res = []
+        for course_enrollment in course_enrollments:
+            course_enrollment_serializer = CourseEnrollmentDepthOneSerializer(
+                course_enrollment
+            )
+            lessons = Lesson.objects.filter(
+                course=course_enrollment.course, status="public"
+            )
+            lessons_serializer = LessonSerializer(lessons, many=True)
+            data = {
+                "course_enrollment": course_enrollment_serializer.data,
+                "lessons": lessons_serializer.data,
+            }
+            res.append(data)
+        return Response(res)
+    except CourseEnrollment.DoesNotExist:
         return Response(status=404)
 
 
