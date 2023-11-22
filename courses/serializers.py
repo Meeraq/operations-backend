@@ -10,6 +10,7 @@ from .models import (
     LaserCoachingSession,
     FeedbackLesson,
     Assessment,
+    CourseEnrollment,
 )
 
 
@@ -123,5 +124,12 @@ class AssessmentSerializer(serializers.ModelSerializer):
 class AssessmentSerializerDepthOne(serializers.ModelSerializer):
     class Meta:
         model = Assessment
+        fields = "__all__"
+        depth = 1
+
+
+class CourseEnrollmentDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CourseEnrollment
         fields = "__all__"
         depth = 1

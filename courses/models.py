@@ -94,6 +94,7 @@ class CourseEnrollment(models.Model):
     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
     course = models.ForeignKey(Course, on_delete=models.CASCADE)
     enrollment_date = models.DateTimeField(auto_now_add=True)
+    completed_lessons = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return f"{self.learner.name} enrolled in {self.course.name}"
