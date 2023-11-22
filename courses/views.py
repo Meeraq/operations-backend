@@ -12,9 +12,10 @@ from .models import (
     QuizLesson,
     FeedbackLesson,
     Assessment,
+    CourseEnrollment,
 )
 from rest_framework.response import Response
-
+from django.utils import timezone
 from .serializers import (
     CourseSerializer,
     TextLessonCreateSerializer,
@@ -30,7 +31,41 @@ from .serializers import (
     AssessmentSerializerDepthOne,
     AssessmentSerializer,
 )
+from api.models import User, Learner, Profile
+from schedularApi.models import SchedularParticipants, SchedularBatch
 from rest_framework.decorators import api_view, permission_classes
+from django.db import transaction
+import random
+import string
+
+
+def create_learner(learner_name, learner_email, learner_phone):
+    try:
+        with transaction.atomic():
+            learner_email = learner_email.strip()
+            temp_password = "".join(
+                random.choices(
+                    string.ascii_uppercase + string.ascii_lowercase + string.digits,
+                    k=8,
+                )
+            )
+            user = User.objects.create_user(
+                username=learner_email,
+                password=temp_password,
+                email=learner_email,
+            )
+            user.save()
+            learner_profile = Profile.objects.create(user=user, type="learner")
+            learner = Learner.objects.create(
+                user=learner_profile,
+                name=learner_name,
+                email=learner_email,
+                phone=learner_phone,
+            )
+            return learner
+
+    except Exception as e:
+        return None
 
 
 class CourseListView(generics.ListCreateAPIView):
@@ -556,13 +591,6 @@ def get_assessment_lesson(request, lesson_id, course_id):
         return Response(status=404)
 
 
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
-from .models import Lesson, Assessment
-from .serializers import LessonSerializer, AssessmentSerializer
-
-
 @api_view(["PUT"])
 def update_assessment_lesson(request, course_id, lesson_id, session_id):
     print(course_id, lesson_id, session_id)
@@ -615,3 +643,50 @@ def update_assessment_lesson(request, course_id, lesson_id, session_id):
         },
         status=status.HTTP_400_BAD_REQUEST,
     )
+
+
+@api_view(["POST"])
+def enroll_participants_to_course(request, course_id, schedular_batch_id):
+    try:
+        course = Course.objects.get(id=course_id)
+        batch = SchedularBatch.objects.get(id=schedular_batch_id)
+        batch_participants = batch.participants.all()
+        learners = []
+        not_enrolled_learner_emails = []
+        for participant in batch_participants:
+            # check if same email user exists or not
+            user = User.objects.filter(username=participant.email).first()
+            if user:
+                if user.profile.type == "learner":
+                    learner = Learner.objects.get(user=user.profile)
+                    learners.append(learner)
+                else:
+                    not_enrolled_learner_emails.append(participant.email)
+            else:
+                learner = create_learner(
+                    participant.name, participant.email, participant.phone
+                )
+                if learner:
+                    learners.append(learner)
+                else:
+                    not_enrolled_learner_emails.append(participant.email)
+
+        for learner in learners:
+            course_enrollments = CourseEnrollment.objects.filter(
+                learner=learner, course=course
+            )
+            if not course_enrollments.exists():
+                datetime = timezone.now()
+                CourseEnrollment.objects.create(
+                    learner=learner, course=course, enrollment_date=datetime
+                )
+        course_serializer = CourseSerializer(course)
+        return Response(
+            {
+                "message": "Participant enrolled successfully",
+                "not_enrolled_learner_emails": not_enrolled_learner_emails,
+                "course": course_serializer.data,
+            }
+        )
+    except LaserCoachingSession.DoesNotExist:
+        return Response(status=404)

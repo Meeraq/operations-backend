@@ -1,4 +1,5 @@
 from django.db import models
+from api.models import Learner
 
 # Create your models here.
 
@@ -80,14 +81,6 @@ class LaserCoachingSession(models.Model):
     booking_link = models.URLField()
 
 
-# class Feedback(models.Model):
-#     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
-#     title = models.CharField(max_length=255)
-#     questions = (
-#         models.TextField()
-#     )  # JSONField or separate models for questions can be considered
-
-
 class Assessment(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
 
@@ -95,3 +88,12 @@ class Assessment(models.Model):
 # class Video(models.Model):
 #     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
 #     video = models.FileField(upload_to="videos/")
+
+
+class CourseEnrollment(models.Model):
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    enrollment_date = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.learner.name} enrolled in {self.course.name}"
