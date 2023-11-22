@@ -7,6 +7,10 @@ from .views import (
     TextLessonEditView,
     LessonListView,
     LessonDetailView,
+    CertificateListAPIView,
+    GetFilteredCoursesForCertificate,
+    AssignCoursesToCertificate,
+    DeleteCourseFromCertificate
 )
 import environ
 
@@ -107,4 +111,12 @@ urlpatterns = [
         "quiz-result/<int:quiz_lesson_id>/<int:learner_id>/",
         views.get_quiz_result,
     ),
+    path('certificates/', CertificateListAPIView.as_view()),
+
+    path('get-courses-for-certificates/<int:certificate_id>', GetFilteredCoursesForCertificate.as_view()),
+
+    path('assign-courses-to-certificate/', AssignCoursesToCertificate.as_view()),
+
+    path('delete-courses-to-certificate/', DeleteCourseFromCertificate.as_view()),
+
 ]

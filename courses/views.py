@@ -14,6 +14,7 @@ from .models import (
     Assessment,
     CourseEnrollment,
     Answer,
+    Certificate,
 )
 from rest_framework.response import Response
 from django.utils import timezone
@@ -33,7 +34,9 @@ from .serializers import (
     AssessmentSerializer,
     CourseEnrollmentDepthOneSerializer,
     AnswerSerializer,
+    CertificateSerializerDepthOne,
 )
+from rest_framework.views import APIView
 from api.models import User, Learner, Profile
 from schedularApi.models import SchedularParticipants, SchedularBatch
 from rest_framework.decorators import api_view, permission_classes
@@ -789,3 +792,138 @@ def get_quiz_result(request, quiz_lesson_id, learner_id):
             "total_questions": questions.count(),
         }
     )
+
+
+class CertificateListAPIView(APIView):
+    def get(self, request, format=None):
+        certificates = Certificate.objects.all()
+        serializer = CertificateSerializerDepthOne(certificates, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        try:
+            name = request.data["name"]
+            content = request.data["content"]
+
+            if Certificate.objects.filter(name=name).exists():
+                return Response(
+                    {"error": f"Certificate with the name '{name}' already exists."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            new_certificate = Certificate.objects.create(name=name, content=content)
+            new_certificate.save()
+            return Response(
+                {
+                    "message": "Created Sucessfully.",
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to create cretificate."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def put(self, request):
+        try:
+            name = request.data["name"]
+            content = request.data["content"]
+            certificate_id = request.data.get("certificate_id")
+
+            if Certificate.objects.filter(name=name).exists():
+                return Response(
+                    {"error": f"Certificate with the name '{name}' already exists."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            certificate = Certificate.objects.get(id=certificate_id)
+            certificate.name = name
+            certificate.content = content
+            certificate.save()
+            return Response(
+                {
+                    "message": "Certificate updated Sucessfully.",
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to update cretificate."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetFilteredCoursesForCertificate(APIView):
+    def get(self, request, certificate_id):
+        try:
+            certificate = Certificate.objects.get(id=certificate_id)
+        except Certificate.DoesNotExist:
+            return Response(
+                {"error": "Certificate not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        available_courses = Course.objects.exclude(id__in=certificate.courses.all())
+
+        serializer = CourseSerializer(available_courses, many=True)
+
+        return Response(serializer.data)
+
+
+class AssignCoursesToCertificate(APIView):
+    def post(self, request):
+        try:
+            courses = request.data.get("courses", [])
+            certificate_id = request.data.get("certificate_id")
+
+            certificate = Certificate.objects.get(id=certificate_id)
+
+            courses_to_assign = Course.objects.filter(id__in=courses)
+
+            certificate.courses.add(*courses_to_assign)
+
+            serializers = CertificateSerializerDepthOne(certificate)
+            return Response(
+                {
+                    "message": "Courses assigned successfully.",
+                    "certificate_data": serializers.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to assign courses."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class DeleteCourseFromCertificate(APIView):
+    def delete(self, request):
+        try:
+            course_id = request.data.get("course_id")
+            certificate_id = request.data.get("certificate_id")
+
+            certificate = Certificate.objects.get(id=certificate_id)
+
+            course = Course.objects.get(id=course_id)
+
+            certificate.courses.remove(course)
+
+            serializer = CertificateSerializerDepthOne(certificate)
+
+            return Response(
+                {
+                    "message": "Course removed successfully.",
+                    "certificate_data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to remove the course."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

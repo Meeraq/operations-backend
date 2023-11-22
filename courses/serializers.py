@@ -12,6 +12,7 @@ from .models import (
     Assessment,
     CourseEnrollment,
     Answer,
+    Certificate
 )
 
 
@@ -140,3 +141,10 @@ class AnswerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Answer
         fields = "__all__"
+
+
+class CertificateSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = Certificate
+        fields = "__all__"
+        depth = 1

@@ -11,6 +11,7 @@ from .models import (
     Assessment,
     CourseEnrollment,
     Answer,
+    Certificate,
 )
 
 # Register your models here.
@@ -25,3 +26,4 @@ admin.site.register(LaserCoachingSession)
 admin.site.register(Assessment)
 admin.site.register(CourseEnrollment)
 admin.site.register(Answer)
+admin.site.register(Certificate)
