@@ -10,6 +10,7 @@ from .models import (
     FeedbackLesson,
     Assessment,
     CourseEnrollment,
+    Answer,
 )
 
 # Register your models here.
@@ -23,3 +24,4 @@ admin.site.register(Question)
 admin.site.register(LaserCoachingSession)
 admin.site.register(Assessment)
 admin.site.register(CourseEnrollment)
+admin.site.register(Answer)

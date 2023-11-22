@@ -98,3 +98,18 @@ class CourseEnrollment(models.Model):
 
     def __str__(self):
         return f"{self.learner.name} enrolled in {self.course.name}"
+
+
+class Answer(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    learner = models.ForeignKey(
+        Learner, on_delete=models.CASCADE
+    )  # Assuming you have a User model, you may need to import it
+    text_answer = models.TextField(blank=True, null=True)  # For descriptive answers
+    selected_options = models.JSONField(
+        default=list
+    )  # For single/multiple choice answers
+    rating = models.IntegerField(blank=True, null=True)  # For rating type answers
+
+    def __str__(self):
+        return f"Answer for {self.question.text} by {self.learner.name}"

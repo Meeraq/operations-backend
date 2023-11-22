@@ -99,4 +99,12 @@ urlpatterns = [
         "course-enrollments/<int:learner_id>/",
         views.get_course_enrollments_of_learner,
     ),
+    path(
+        "submit-quiz/<int:quiz_lesson_id>/<int:learner_id>/",
+        views.submit_quiz_answers,
+    ),
+    path(
+        "quiz-result/<int:quiz_lesson_id>/<int:learner_id>/",
+        views.get_quiz_result,
+    ),
 ]
