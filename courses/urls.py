@@ -86,4 +86,11 @@ urlpatterns = [
         views.edit_feedback_lesson,
         name="feedback-lesson-edit",
     ),
+    path(
+        "create_video_with_lesson/",
+        views.create_videos,
+    ),
+    path("videos/", views.get_all_videos, name="get-all-videos"),
+    path("create_video_lesson/", views.create_video_lesson, name="create_video_lesson"),
+    path("video_library/", views.get_all_videos, name="video-list"),
 ]

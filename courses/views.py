@@ -29,6 +29,7 @@ from .serializers import (
     FeedbackLessonDepthOneSerializer,
     AssessmentSerializerDepthOne,
     AssessmentSerializer,
+    VideoLessonSerializerDepthOne,
 )
 from rest_framework.decorators import api_view, permission_classes
 
@@ -118,6 +119,9 @@ class LessonDetailView(generics.RetrieveAPIView):
         elif lesson_type == "feedback":
             laser_coaching = FeedbackLesson.objects.get(lesson=lesson)
             serializer = FeedbackLessonDepthOneSerializer(laser_coaching)
+        elif lesson_type == "video":
+            video = VideoLesson.objects.get(lesson=lesson)
+            serializer = VideoLessonSerializerDepthOne(video)
         else:
             return Response({"error": f"Failed to get the lessons"}, status=400)
 
@@ -615,3 +619,109 @@ def update_assessment_lesson(request, course_id, lesson_id, session_id):
         },
         status=status.HTTP_400_BAD_REQUEST,
     )
+
+
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from .models import Video
+from .serializers import VideoSerializer  # Import your Video model serializer
+
+
+@api_view(["POST"])
+def create_videos(request):
+    name = request.data.get("name")  # Extract 'name' from request data
+    video_file = request.data.get("video")  # Extract 'video' file from request data
+
+    # You can perform validation or error checking here as needed
+
+    # Assuming you have a VideoSerializer defined, you can create a new Video instance
+    video_instance = Video(name=name, video=video_file)
+
+    # Save the video instance to the database
+    video_instance.save()
+
+    # Serialize the newly created video instance
+    serialized_video = VideoSerializer(video_instance)
+
+    return Response(serialized_video.data)
+
+
+# views.py
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from .models import Video
+from .serializers import VideoSerializer
+
+
+@api_view(["GET"])
+def get_all_videos(request):
+    videos = Video.objects.all()  # Retrieve all videos from the database
+
+    # Serialize the video queryset
+    serializer = VideoSerializer(videos, many=True)
+
+    return Response(serializer.data)
+
+
+# views.py
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Lesson, Video, VideoLesson
+from .serializers import LessonSerializer, VideoLessonSerializer
+
+
+@api_view(["POST"])
+def create_video_lesson(request):
+    if request.method == "POST":
+        lesson_data = request.data.get("lesson")
+        video_id = request.data.get("video")
+
+        # Create or update lesson
+        lesson_serializer = LessonSerializer(data=lesson_data)
+        if not lesson_serializer.is_valid():
+            return Response(
+                lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Save the lesson instance
+        lesson_instance = lesson_serializer.save()
+
+        try:
+            # Retrieve video instance
+            video_instance = Video.objects.get(id=video_id)
+
+            # Create VideoLesson object
+            video_lesson_data = {
+                "lesson": lesson_instance.id,
+                "video": video_instance.id,
+            }
+            video_lesson_serializer = VideoLessonSerializer(data=video_lesson_data)
+            if video_lesson_serializer.is_valid():
+                video_lesson_serializer.save()
+                return Response(
+                    video_lesson_serializer.data, status=status.HTTP_201_CREATED
+                )
+            return Response(
+                video_lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+            )
+        except Video.DoesNotExist:
+            return Response(
+                {"error": "Video does not exist"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+
+# views.py
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Video
+from .serializers import VideoSerializer
+
+
+@api_view(["GET"])
+def get_all_videos(request):
+    if request.method == "GET":
+        videos = Video.objects.all()
+        serializer = VideoSerializer(videos, many=True)
+        return Response(serializer.data)
