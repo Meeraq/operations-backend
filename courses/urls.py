@@ -103,6 +103,14 @@ urlpatterns = [
         "course-enrollments/<int:learner_id>/",
         views.get_course_enrollments_of_learner,
     ),
+    path(
+        "submit-quiz/<int:quiz_lesson_id>/<int:learner_id>/",
+        views.submit_quiz_answers,
+    ),
+    path(
+        "quiz-result/<int:quiz_lesson_id>/<int:learner_id>/",
+        views.get_quiz_result,
+    ),
     path('certificates/', CertificateListAPIView.as_view()),
 
     path('get-courses-for-certificates/<int:certificate_id>', GetFilteredCoursesForCertificate.as_view()),

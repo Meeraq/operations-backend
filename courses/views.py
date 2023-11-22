@@ -13,6 +13,7 @@ from .models import (
     FeedbackLesson,
     Assessment,
     CourseEnrollment,
+    Answer,
     Certificate,
 )
 from rest_framework.response import Response
@@ -32,6 +33,7 @@ from .serializers import (
     AssessmentSerializerDepthOne,
     AssessmentSerializer,
     CourseEnrollmentDepthOneSerializer,
+    AnswerSerializer,
     CertificateSerializerDepthOne,
 )
 from rest_framework.views import APIView
@@ -746,6 +748,50 @@ def get_course_enrollments_of_learner(request, learner_id):
         return Response(res)
     except CourseEnrollment.DoesNotExist:
         return Response(status=404)
+
+
+@api_view(["POST"])
+def submit_quiz_answers(request, quiz_lesson_id, learner_id):
+    quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
+    course_enrollment = CourseEnrollment.objects.get(
+        course=quiz_lesson.lesson.course, learner__id=learner_id
+    )
+    answers_data = request.data
+
+    # Validate and save the answers
+    serializer = AnswerSerializer(data=answers_data, many=True)
+    if serializer.is_valid():
+        course_enrollment.completed_lessons.append(quiz_lesson.lesson.id)
+        course_enrollment.save()
+        serializer.save()
+        return Response(
+            {"detail": "Quiz answers submitted successfully"}, status=status.HTTP_200_OK
+        )
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+def get_quiz_result(request, quiz_lesson_id, learner_id):
+    quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
+    correct_answers = 0
+    questions = quiz_lesson.questions.all()
+    for question in questions:
+        is_correct = False
+        answer = Answer.objects.get(question=question, learner__id=learner_id)
+        for option in question.options:
+            if option["is_correct"]:
+                if option["option"] in answer.selected_options:
+                    is_correct = True
+                    break
+        if is_correct:
+            correct_answers += 1
+    return Response(
+        {
+            "correct_answers": correct_answers,
+            "total_questions": questions.count(),
+        }
+    )
 
 
 class CertificateListAPIView(APIView):
