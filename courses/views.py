@@ -831,7 +831,7 @@ class CertificateListAPIView(APIView):
             content = request.data["content"]
             certificate_id = request.data.get("certificate_id")
 
-            if Certificate.objects.filter(name=name).exists():
+            if Certificate.objects.filter(name=name).exclude(id=certificate_id).exists():
                 return Response(
                     {"error": f"Certificate with the name '{name}' already exists."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
