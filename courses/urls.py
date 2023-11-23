@@ -7,6 +7,10 @@ from .views import (
     TextLessonEditView,
     LessonListView,
     LessonDetailView,
+    CertificateListAPIView,
+    GetFilteredCoursesForCertificate,
+    AssignCoursesToCertificate,
+    DeleteCourseFromCertificate
 )
 import environ
 
@@ -86,6 +90,35 @@ urlpatterns = [
         views.edit_feedback_lesson,
         name="feedback-lesson-edit",
     ),
+    path(
+        "courses/<int:course_id>/enroll-participants/<int:schedular_batch_id>/",
+        views.enroll_participants_to_course,
+        name="enroll-participants-to-course",
+    ),
+    path(
+        "course-enrollment/<int:course_enrollment_id>/<int:learner_id>/",
+        views.get_course_enrollment,
+    ),
+    path(
+        "course-enrollments/<int:learner_id>/",
+        views.get_course_enrollments_of_learner,
+    ),
+    path(
+        "submit-quiz/<int:quiz_lesson_id>/<int:learner_id>/",
+        views.submit_quiz_answers,
+    ),
+    path(
+        "quiz-result/<int:quiz_lesson_id>/<int:learner_id>/",
+        views.get_quiz_result,
+    ),
+    path('certificates/', CertificateListAPIView.as_view()),
+
+    path('get-courses-for-certificates/<int:certificate_id>', GetFilteredCoursesForCertificate.as_view()),
+
+    path('assign-courses-to-certificate/', AssignCoursesToCertificate.as_view()),
+
+    path('delete-courses-to-certificate/', DeleteCourseFromCertificate.as_view()),
+
     path(
         "create_video_with_lesson/",
         views.create_videos,

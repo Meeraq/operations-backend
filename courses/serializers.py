@@ -10,6 +10,9 @@ from .models import (
     LaserCoachingSession,
     FeedbackLesson,
     Assessment,
+    CourseEnrollment,
+    Answer,
+    Certificate,
     Video,
     VideoLesson,
 )
@@ -144,5 +147,25 @@ class VideoLessonSerializer(serializers.ModelSerializer):
 class VideoLessonSerializerDepthOne(serializers.ModelSerializer):
     class Meta:
         model = VideoLesson
+        fields = "__all__"
+        depth = 1
+
+
+class CourseEnrollmentDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CourseEnrollment
+        fields = "__all__"
+        depth = 1
+
+
+class AnswerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Answer
+        fields = "__all__"
+
+
+class CertificateSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = Certificate
         fields = "__all__"
         depth = 1

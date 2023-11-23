@@ -1,4 +1,5 @@
 from django.db import models
+from api.models import Learner
 
 # Create your models here.
 
@@ -80,14 +81,6 @@ class LaserCoachingSession(models.Model):
     booking_link = models.URLField()
 
 
-# class Feedback(models.Model):
-#     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
-#     title = models.CharField(max_length=255)
-#     questions = (
-#         models.TextField()
-#     )  # JSONField or separate models for questions can be considered
-
-
 class Assessment(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
 
@@ -101,3 +94,39 @@ class Video(models.Model):
 class VideoLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     video = models.ForeignKey(Video, on_delete=models.CASCADE)
+
+
+class CourseEnrollment(models.Model):
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    enrollment_date = models.DateTimeField(auto_now_add=True)
+    completed_lessons = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return f"{self.learner.name} enrolled in {self.course.name}"
+
+
+class Answer(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    learner = models.ForeignKey(
+        Learner, on_delete=models.CASCADE
+    )  # Assuming you have a User model, you may need to import it
+    text_answer = models.TextField(blank=True, null=True)  # For descriptive answers
+    selected_options = models.JSONField(
+        default=list
+    )  # For single/multiple choice answers
+    rating = models.IntegerField(blank=True, null=True)  # For rating type answers
+
+    def __str__(self):
+        return f"Answer for {self.question.text} by {self.learner.name}"
+
+
+class Certificate(models.Model):
+    name = models.CharField(max_length=100, blank=True, null=True)
+    content = models.TextField(blank=True, null=True)
+    courses = models.ManyToManyField(Course, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.name}"

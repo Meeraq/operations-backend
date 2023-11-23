@@ -9,6 +9,9 @@ from .models import (
     LaserCoachingSession,
     FeedbackLesson,
     Assessment,
+    CourseEnrollment,
+    Answer,
+    Certificate,
     Video,
     VideoLesson,
 )
@@ -23,5 +26,8 @@ admin.site.register(FeedbackLesson)
 admin.site.register(Question)
 admin.site.register(LaserCoachingSession)
 admin.site.register(Assessment)
+admin.site.register(CourseEnrollment)
+admin.site.register(Answer)
+admin.site.register(Certificate)
 admin.site.register(Video)
 admin.site.register(VideoLesson)
