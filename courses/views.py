@@ -835,7 +835,11 @@ class CertificateListAPIView(APIView):
             content = request.data["content"]
             certificate_id = request.data.get("certificate_id")
 
-            if Certificate.objects.filter(name=name).exclude(id=certificate_id).exists():
+            if (
+                Certificate.objects.filter(name=name)
+                .exclude(id=certificate_id)
+                .exists()
+            ):
                 return Response(
                     {"error": f"Certificate with the name '{name}' already exists."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -931,7 +935,6 @@ class DeleteCourseFromCertificate(APIView):
                 {"error": "Failed to remove the course."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-    )
 
 
 from rest_framework.response import Response
@@ -1038,3 +1041,66 @@ def get_all_videos(request):
         videos = Video.objects.all()
         serializer = VideoSerializer(videos, many=True)
         return Response(serializer.data)
+
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import VideoLesson, Lesson, Video
+from .serializers import VideoLessonSerializer, LessonSerializer
+
+@api_view(['PUT'])
+def update_video_lesson(request, lesson_id):
+    try:
+        lesson = Lesson.objects.get(pk=lesson_id)
+    except Lesson.DoesNotExist:
+        return Response({"message": "Lesson does not exist"}, status=status.HTTP_404_NOT_FOUND)
+
+    video_id = request.data.get('video')
+
+    try:
+        video = Video.objects.get(pk=video_id)
+    except Video.DoesNotExist:
+        return Response({"message": "Video does not exist"}, status=status.HTTP_404_NOT_FOUND)
+
+    lesson_data = request.data.get('lesson')
+    if lesson_data:
+        lesson_serializer = LessonSerializer(lesson, data=lesson_data, partial=True)
+        if lesson_serializer.is_valid():
+            lesson_serializer.save()
+
+    video_lesson_data = {
+        'lesson': lesson_id,
+        'video': video_id
+    }
+
+    try:
+        video_lesson = VideoLesson.objects.get(lesson_id=lesson_id)
+        serializer = VideoLessonSerializer(video_lesson, data=video_lesson_data)
+    except VideoLesson.DoesNotExist:
+        serializer = VideoLessonSerializer(data=video_lesson_data)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from .models import Video
+from .serializers import VideoSerializer
+
+@api_view(['PUT'])
+def update_video(request, pk):
+    try:
+        video = Video.objects.get(pk=pk)
+    except Video.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    serializer = VideoSerializer(video, data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -10,7 +10,7 @@ from .views import (
     CertificateListAPIView,
     GetFilteredCoursesForCertificate,
     AssignCoursesToCertificate,
-    DeleteCourseFromCertificate
+    DeleteCourseFromCertificate,
 )
 import environ
 
@@ -111,14 +111,13 @@ urlpatterns = [
         "quiz-result/<int:quiz_lesson_id>/<int:learner_id>/",
         views.get_quiz_result,
     ),
-    path('certificates/', CertificateListAPIView.as_view()),
-
-    path('get-courses-for-certificates/<int:certificate_id>', GetFilteredCoursesForCertificate.as_view()),
-
-    path('assign-courses-to-certificate/', AssignCoursesToCertificate.as_view()),
-
-    path('delete-courses-to-certificate/', DeleteCourseFromCertificate.as_view()),
-
+    path("certificates/", CertificateListAPIView.as_view()),
+    path(
+        "get-courses-for-certificates/<int:certificate_id>",
+        GetFilteredCoursesForCertificate.as_view(),
+    ),
+    path("assign-courses-to-certificate/", AssignCoursesToCertificate.as_view()),
+    path("delete-courses-to-certificate/", DeleteCourseFromCertificate.as_view()),
     path(
         "create_video_with_lesson/",
         views.create_videos,
@@ -126,4 +125,10 @@ urlpatterns = [
     path("videos/", views.get_all_videos, name="get-all-videos"),
     path("create_video_lesson/", views.create_video_lesson, name="create_video_lesson"),
     path("video_library/", views.get_all_videos, name="video-list"),
+    path(
+        "video-lesson/<int:lesson_id>/",
+        views.update_video_lesson,
+        name="update-video-lesson",
+    ),
+    path("videos/<int:pk>/update/", views.update_video, name="update_video"),
 ]
