@@ -46,6 +46,17 @@ from rest_framework.decorators import api_view, permission_classes
 from django.db import transaction
 import random
 import string
+import pdfkit
+import os
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+import base64
+
+wkhtmltopdf_path = os.environ.get(
+    "WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf"
+)
+
+pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
 
 def create_learner(learner_name, learner_email, learner_phone):
@@ -952,18 +963,17 @@ class CertificateListAPIView(APIView):
 
 
 class GetFilteredCoursesForCertificate(APIView):
-    def get(self, request, certificate_id):
-        try:
-            certificate = Certificate.objects.get(id=certificate_id)
-        except Certificate.DoesNotExist:
-            return Response(
-                {"error": "Certificate not found"}, status=status.HTTP_404_NOT_FOUND
-            )
+    def get(self, request):
+        certificates = Certificate.objects.all()
+        all_courses = Course.objects.all()
 
-        available_courses = Course.objects.exclude(id__in=certificate.courses.all())
+        courses_in_certificates = set()
+        for certificate in certificates:
+            courses_in_certificates.update(certificate.courses.values_list('id', flat=True))
+        
+        available_courses = all_courses.exclude(id__in=courses_in_certificates)
 
         serializer = CourseSerializer(available_courses, many=True)
-
         return Response(serializer.data)
 
 
@@ -1055,3 +1065,42 @@ class LessonMarkAsCompleteAndNotComplete(APIView):
                 {"error": "Failed to update lesson status."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class DownlaodLessonCertificate(APIView):
+    def get(self, request, lesson_id,learner_id):
+        try:
+           
+            lesson = Lesson.objects.get(id=lesson_id)
+            content={}
+            course_enrollment = CourseEnrollment.objects.get(
+                course=lesson.course, learner__id=learner_id
+            )
+            
+            content["learner_name"]=course_enrollment.learner.name
+            content["course_name"]=lesson.course.name
+            try:
+            
+                certificate = Certificate.objects.filter(courses=lesson.course).first()
+            except Certificate.DoesNotExist:
+                return Response(
+                {"error": "Certificate not found for the given course"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            
+            email_message = certificate.content
+            for key, value in content.items():
+                email_message = email_message.replace(f'{{{{{key}}}}}', str(value))
+            
+            pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config, options={'orientation': 'Landscape'})
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response["Content-Disposition"] = 'attachment; filename="Certificate.pdf"'
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to downlaod certificate."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        
