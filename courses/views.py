@@ -1129,6 +1129,7 @@ class GetCertificateForCourse(APIView):
             )
 
 
+<<<<<<< Updated upstream
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from .models import Video
@@ -1296,3 +1297,36 @@ def update_video(request, pk):
         serializer.save()
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+=======
+@api_view(["GET"])
+def get_course_report(request):
+    res = []
+    courses = Course.objects.filter(status="public")
+    for course in courses:
+        course_serializer = CourseSerializer(course)
+        lessons = Lesson.objects.filter(status="public", course=course)
+        course_enrollments = CourseEnrollment.objects.filter(course=course)
+        total_lessons_completed_by_learner = 0
+        for course_enrollment in course_enrollments:
+            total_lessons_completed_by_learner += len(
+                course_enrollment.completed_lessons
+            )
+        completion_percentage = (
+            (
+                total_lessons_completed_by_learner
+                / (lessons.count() * course_enrollments.count())
+            )
+            * 100
+            if course_enrollments.count() > 0
+            else 0
+        )
+
+        res.append(
+            {
+                **course_serializer.data,
+                "total_learners": course_enrollments.count(),
+                "completion_percentage": completion_percentage,
+            }
+        )
+    return Response(res)
+>>>>>>> Stashed changes
