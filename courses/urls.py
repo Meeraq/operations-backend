@@ -13,6 +13,7 @@ from .views import (
     DeleteCourseFromCertificate,
     LessonMarkAsCompleteAndNotComplete,
     DownlaodLessonCertificate,
+    GetCertificateForCourse,
 )
 import environ
 
@@ -130,4 +131,5 @@ urlpatterns = [
     path("delete-courses-to-certificate/", DeleteCourseFromCertificate.as_view()),
     path("lesson-mark-as-complete/", LessonMarkAsCompleteAndNotComplete.as_view()),
     path('download-lesson-certificate/<int:lesson_id>/<int:learner_id>/', DownlaodLessonCertificate.as_view()),
+    path('get-certificate-for-course/<int:course_id>/', GetCertificateForCourse.as_view()),
 ]
