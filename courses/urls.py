@@ -10,7 +10,8 @@ from .views import (
     CertificateListAPIView,
     GetFilteredCoursesForCertificate,
     AssignCoursesToCertificate,
-    DeleteCourseFromCertificate
+    DeleteCourseFromCertificate,
+    LessonMarkAsCompleteAndNotComplete
 )
 import environ
 
@@ -118,5 +119,7 @@ urlpatterns = [
     path('assign-courses-to-certificate/', AssignCoursesToCertificate.as_view()),
 
     path('delete-courses-to-certificate/', DeleteCourseFromCertificate.as_view()),
+
+    path('lesson-mark-as-complete/', LessonMarkAsCompleteAndNotComplete.as_view()),
 
 ]

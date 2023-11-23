@@ -831,7 +831,11 @@ class CertificateListAPIView(APIView):
             content = request.data["content"]
             certificate_id = request.data.get("certificate_id")
 
-            if Certificate.objects.filter(name=name).exclude(id=certificate_id).exists():
+            if (
+                Certificate.objects.filter(name=name)
+                .exclude(id=certificate_id)
+                .exists()
+            ):
                 return Response(
                     {"error": f"Certificate with the name '{name}' already exists."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -925,5 +929,36 @@ class DeleteCourseFromCertificate(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to remove the course."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class LessonMarkAsCompleteAndNotComplete(APIView):
+    def post(self, request):
+        try:
+            lesson_id = request.data.get("lesson_id")
+            learner_id = request.data.get("learner_id")
+
+            lesson = Lesson.objects.get(id=lesson_id)
+            course_enrollment = CourseEnrollment.objects.get(
+                course=lesson.course, learner__id=learner_id
+            )
+            completed_lessons = course_enrollment.completed_lessons
+            
+            if lesson_id in completed_lessons:
+                completed_lessons.remove(lesson_id)
+                message = "Lesson marked as Incomplete."
+            else:
+                completed_lessons.append(lesson_id)
+                message = "Lesson marked as Completed."
+
+            course_enrollment.save()
+
+            return Response({"message": message}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to update lesson status."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
