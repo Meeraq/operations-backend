@@ -12,6 +12,8 @@ from .models import (
     CourseEnrollment,
     Answer,
     Certificate,
+    QuizLessonResponse,
+    FeedbackLessonResponse,
     Video,
     VideoLesson,
 )
@@ -29,5 +31,7 @@ admin.site.register(Assessment)
 admin.site.register(CourseEnrollment)
 admin.site.register(Answer)
 admin.site.register(Certificate)
+admin.site.register(QuizLessonResponse)
+admin.site.register(FeedbackLessonResponse)
 admin.site.register(Video)
 admin.site.register(VideoLesson)

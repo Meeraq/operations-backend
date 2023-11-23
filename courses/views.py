@@ -15,8 +15,11 @@ from .models import (
     CourseEnrollment,
     Answer,
     Certificate,
+    QuizLessonResponse,
+    FeedbackLessonResponse,
 )
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializers import (
     CourseSerializer,
@@ -44,6 +47,15 @@ from rest_framework.decorators import api_view, permission_classes
 from django.db import transaction
 import random
 import string
+import pdfkit
+import os
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+import base64
+
+wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
+
+pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
 
 def create_learner(learner_name, learner_email, learner_phone):
@@ -708,10 +720,10 @@ def enroll_participants_to_course(request, course_id, schedular_batch_id):
 
 
 @api_view(["GET"])
-def get_course_enrollment(request, course_enrollment_id, learner_id):
+def get_course_enrollment(request, course_id, learner_id):
     try:
         course_enrollment = CourseEnrollment.objects.get(
-            id=course_enrollment_id, learner__id=learner_id
+            course__id=course_id, learner__id=learner_id
         )
         course_enrollment_serializer = CourseEnrollmentDepthOneSerializer(
             course_enrollment
@@ -732,9 +744,32 @@ def get_course_enrollment(request, course_enrollment_id, learner_id):
 
 
 @api_view(["GET"])
+def get_course_enrollment_for_pmo_preview(request, course_id):
+    try:
+        course = Course.objects.get(id=course_id)
+        course_serializer = CourseSerializer(course)
+        lessons = Lesson.objects.filter(course=course, status="public")
+        lessons_serializer = LessonSerializer(lessons, many=True)
+        completed_lessons = []
+        return Response(
+            {
+                "course_enrollment": {
+                    "completed_lessons": completed_lessons,
+                    "course": course_serializer.data,
+                },
+                "lessons": lessons_serializer.data,
+            }
+        )
+    except Course.DoesNotExist:
+        return Response(status=404)
+
+
+@api_view(["GET"])
 def get_course_enrollments_of_learner(request, learner_id):
     try:
-        course_enrollments = CourseEnrollment.objects.filter(learner__id=learner_id)
+        course_enrollments = CourseEnrollment.objects.filter(
+            learner__id=learner_id, course__status="public"
+        )
         res = []
         for course_enrollment in course_enrollments:
             course_enrollment_serializer = CourseEnrollmentDepthOneSerializer(
@@ -756,20 +791,35 @@ def get_course_enrollments_of_learner(request, learner_id):
 
 @api_view(["POST"])
 def submit_quiz_answers(request, quiz_lesson_id, learner_id):
-    quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
-    course_enrollment = CourseEnrollment.objects.get(
-        course=quiz_lesson.lesson.course, learner__id=learner_id
-    )
-    answers_data = request.data
+    try:
+        quiz_lesson = get_object_or_404(QuizLesson, id=quiz_lesson_id)
+        course_enrollment = get_object_or_404(
+            CourseEnrollment, course=quiz_lesson.lesson.course, learner__id=learner_id
+        )
+        learner = get_object_or_404(Learner, id=learner_id)
+    except (
+        QuizLesson.DoesNotExist,
+        CourseEnrollment.DoesNotExist,
+        Learner.DoesNotExist,
+    ) as e:
+        return Response(
+            {"error": "Failed to submit quiz."}, status=status.HTTP_404_NOT_FOUND
+        )
 
-    # Validate and save the answers
+    answers_data = request.data
     serializer = AnswerSerializer(data=answers_data, many=True)
+
     if serializer.is_valid():
+        answers = serializer.save()
+        quiz_lesson_response = QuizLessonResponse.objects.create(
+            quiz_lesson=quiz_lesson, learner=learner
+        )
+        quiz_lesson_response.answers.set(answers)
+        quiz_lesson_response.save()
         course_enrollment.completed_lessons.append(quiz_lesson.lesson.id)
         course_enrollment.save()
-        serializer.save()
         return Response(
-            {"detail": "Quiz answers submitted successfully"}, status=status.HTTP_200_OK
+            {"detail": "Quiz submitted successfully"}, status=status.HTTP_200_OK
         )
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -778,24 +828,76 @@ def submit_quiz_answers(request, quiz_lesson_id, learner_id):
 @api_view(["GET"])
 def get_quiz_result(request, quiz_lesson_id, learner_id):
     quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
+    quiz_lesson_response = QuizLessonResponse.objects.get(
+        learner__id=learner_id, quiz_lesson=quiz_lesson
+    )
     correct_answers = 0
     questions = quiz_lesson.questions.all()
     for question in questions:
         is_correct = False
-        answer = Answer.objects.get(question=question, learner__id=learner_id)
-        for option in question.options:
-            if option["is_correct"]:
-                if option["option"] in answer.selected_options:
-                    is_correct = True
-                    break
+        try:
+            answer = quiz_lesson_response.answers.get(question=question)
+            selected_options = answer.selected_options
+        except Answer.DoesNotExist:
+            selected_options = []
+
+        if question.type == "single_correct_answer":
+            correct_option = next(
+                (opt["option"] for opt in question.options if opt["is_correct"]), None
+            )
+            is_correct = correct_option in selected_options
+        elif question.type == "multiple_correct_answer":
+            correct_options = [
+                opt["option"] for opt in question.options if opt["is_correct"]
+            ]
+            is_correct = set(selected_options) == set(correct_options)
         if is_correct:
             correct_answers += 1
+
     return Response(
         {
             "correct_answers": correct_answers,
             "total_questions": questions.count(),
         }
     )
+
+
+@api_view(["POST"])
+def submit_feedback_answers(request, feedback_lesson_id, learner_id):
+    try:
+        feedback_lesson = get_object_or_404(FeedbackLesson, id=feedback_lesson_id)
+        course_enrollment = get_object_or_404(
+            CourseEnrollment,
+            course=feedback_lesson.lesson.course,
+            learner__id=learner_id,
+        )
+        learner = get_object_or_404(Learner, id=learner_id)
+    except (
+        FeedbackLesson.DoesNotExist,
+        CourseEnrollment.DoesNotExist,
+        Learner.DoesNotExist,
+    ) as e:
+        return Response(
+            {"error": "Failed to submit feedback."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    answers_data = request.data
+    serializer = AnswerSerializer(data=answers_data, many=True)
+
+    if serializer.is_valid():
+        answers = serializer.save()
+        feedback_lesson_response = FeedbackLessonResponse.objects.create(
+            feedback_lesson=feedback_lesson, learner=learner
+        )
+        feedback_lesson_response.answers.set(answers)
+        feedback_lesson_response.save()
+        course_enrollment.completed_lessons.append(feedback_lesson.lesson.id)
+        course_enrollment.save()
+        return Response(
+            {"detail": "Feedback submitted successfully"}, status=status.HTTP_200_OK
+        )
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CertificateListAPIView(APIView):
@@ -840,6 +942,11 @@ class CertificateListAPIView(APIView):
                 .exclude(id=certificate_id)
                 .exists()
             ):
+            if (
+                Certificate.objects.filter(name=name)
+                .exclude(id=certificate_id)
+                .exists()
+            ):
                 return Response(
                     {"error": f"Certificate with the name '{name}' already exists."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -863,18 +970,19 @@ class CertificateListAPIView(APIView):
 
 
 class GetFilteredCoursesForCertificate(APIView):
-    def get(self, request, certificate_id):
-        try:
-            certificate = Certificate.objects.get(id=certificate_id)
-        except Certificate.DoesNotExist:
-            return Response(
-                {"error": "Certificate not found"}, status=status.HTTP_404_NOT_FOUND
+    def get(self, request):
+        certificates = Certificate.objects.all()
+        all_courses = Course.objects.all()
+
+        courses_in_certificates = set()
+        for certificate in certificates:
+            courses_in_certificates.update(
+                certificate.courses.values_list("id", flat=True)
             )
 
-        available_courses = Course.objects.exclude(id__in=certificate.courses.all())
+        available_courses = all_courses.exclude(id__in=courses_in_certificates)
 
         serializer = CourseSerializer(available_courses, many=True)
-
         return Response(serializer.data)
 
 
@@ -933,6 +1041,96 @@ class DeleteCourseFromCertificate(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to remove the course."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class LessonMarkAsCompleteAndNotComplete(APIView):
+    def post(self, request):
+        try:
+            lesson_id = request.data.get("lesson_id")
+            learner_id = request.data.get("learner_id")
+
+            lesson = Lesson.objects.get(id=lesson_id)
+            course_enrollment = CourseEnrollment.objects.get(
+                course=lesson.course, learner__id=learner_id
+            )
+            completed_lessons = course_enrollment.completed_lessons
+
+            if lesson_id in completed_lessons:
+                completed_lessons.remove(lesson_id)
+                message = "Lesson marked as Incomplete."
+            else:
+                completed_lessons.append(lesson_id)
+                message = "Lesson marked as Completed."
+
+            course_enrollment.save()
+
+            return Response({"message": message}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to update lesson status."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class DownlaodLessonCertificate(APIView):
+    def get(self, request, lesson_id, learner_id):
+        try:
+            lesson = Lesson.objects.get(id=lesson_id)
+            content = {}
+            course_enrollment = CourseEnrollment.objects.get(
+                course=lesson.course, learner__id=learner_id
+            )
+
+            content["learner_name"] = course_enrollment.learner.name
+            content["course_name"] = lesson.course.name
+            try:
+                certificate = Certificate.objects.filter(courses=lesson.course).first()
+            except Certificate.DoesNotExist:
+                return Response(
+                    {"error": "Certificate not found for the given course"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+            email_message = certificate.content
+            for key, value in content.items():
+                email_message = email_message.replace(f"{{{{{key}}}}}", str(value))
+
+            pdf = pdfkit.from_string(
+                email_message,
+                False,
+                configuration=pdfkit_config,
+                options={"orientation": "Landscape"},
+            )
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response["Content-Disposition"] = 'attachment; filename="Certificate.pdf"'
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to downlaod certificate."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetCertificateForCourse(APIView):
+    def get(self, request, course_id):
+        try:
+            course = get_object_or_404(Course, id=course_id)
+
+            certificate = Certificate.objects.filter(courses=course).first()
+
+            if certificate:
+                return Response({"certificate_present": True})
+            else:
+                return Response({"certificate_present": False})
+        except Exception as e:
+            return Response(
+                {"error": "Failed to retrieve certificates for the given course."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
