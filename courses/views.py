@@ -730,7 +730,9 @@ def get_course_enrollment(request, course_enrollment_id, learner_id):
 @api_view(["GET"])
 def get_course_enrollments_of_learner(request, learner_id):
     try:
-        course_enrollments = CourseEnrollment.objects.filter(learner__id=learner_id)
+        course_enrollments = CourseEnrollment.objects.filter(
+            learner__id=learner_id, course__status="public"
+        )
         res = []
         for course_enrollment in course_enrollments:
             course_enrollment_serializer = CourseEnrollmentDepthOneSerializer(
