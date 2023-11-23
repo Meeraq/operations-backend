@@ -97,8 +97,12 @@ urlpatterns = [
         name="enroll-participants-to-course",
     ),
     path(
-        "course-enrollment/<int:course_enrollment_id>/<int:learner_id>/",
+        "course-enrollment/<int:course_id>/<int:learner_id>/",
         views.get_course_enrollment,
+    ),
+    path(
+        "course-enrollment/pmo/<int:course_id>/",
+        views.get_course_enrollment_for_pmo_preview,
     ),
     path(
         "course-enrollments/<int:learner_id>/",

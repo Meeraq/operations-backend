@@ -707,10 +707,10 @@ def enroll_participants_to_course(request, course_id, schedular_batch_id):
 
 
 @api_view(["GET"])
-def get_course_enrollment(request, course_enrollment_id, learner_id):
+def get_course_enrollment(request, course_id, learner_id):
     try:
         course_enrollment = CourseEnrollment.objects.get(
-            id=course_enrollment_id, learner__id=learner_id
+            course__id=course_id, learner__id=learner_id
         )
         course_enrollment_serializer = CourseEnrollmentDepthOneSerializer(
             course_enrollment
@@ -727,6 +727,27 @@ def get_course_enrollment(request, course_enrollment_id, learner_id):
             }
         )
     except CourseEnrollment.DoesNotExist:
+        return Response(status=404)
+
+
+@api_view(["GET"])
+def get_course_enrollment_for_pmo_preview(request, course_id):
+    try:
+        course = Course.objects.get(id=course_id)
+        course_serializer = CourseSerializer(course)
+        lessons = Lesson.objects.filter(course=course, status="public")
+        lessons_serializer = LessonSerializer(lessons, many=True)
+        completed_lessons = []
+        return Response(
+            {
+                "course_enrollment": {
+                    "completed_lessons": completed_lessons,
+                    "course": course_serializer.data,
+                },
+                "lessons": lessons_serializer.data,
+            }
+        )
+    except Course.DoesNotExist:
         return Response(status=404)
 
 
@@ -1016,7 +1037,7 @@ class LessonMarkAsCompleteAndNotComplete(APIView):
                 course=lesson.course, learner__id=learner_id
             )
             completed_lessons = course_enrollment.completed_lessons
-            
+
             if lesson_id in completed_lessons:
                 completed_lessons.remove(lesson_id)
                 message = "Lesson marked as Incomplete."
