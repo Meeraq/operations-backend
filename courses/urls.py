@@ -132,4 +132,24 @@ urlpatterns = [
     path("lesson-mark-as-complete/", LessonMarkAsCompleteAndNotComplete.as_view()),
     path('download-lesson-certificate/<int:lesson_id>/<int:learner_id>/', DownlaodLessonCertificate.as_view()),
     path('get-certificate-for-course/<int:course_id>/', GetCertificateForCourse.as_view()),
+    path("certificates/", CertificateListAPIView.as_view()),
+    path(
+        "get-courses-for-certificates/<int:certificate_id>",
+        GetFilteredCoursesForCertificate.as_view(),
+    ),
+    path("assign-courses-to-certificate/", AssignCoursesToCertificate.as_view()),
+    path("delete-courses-to-certificate/", DeleteCourseFromCertificate.as_view()),
+    path(
+        "create_video_with_lesson/",
+        views.create_videos,
+    ),
+    path("videos/", views.get_all_videos, name="get-all-videos"),
+    path("create_video_lesson/", views.create_video_lesson, name="create_video_lesson"),
+    path("video_library/", views.get_all_videos, name="video-list"),
+    path(
+        "video-lesson/<int:lesson_id>/",
+        views.update_video_lesson,
+        name="update-video-lesson",
+    ),
+    path("videos/<int:pk>/update/", views.update_video, name="update_video"),
 ]

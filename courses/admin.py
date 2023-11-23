@@ -14,6 +14,8 @@ from .models import (
     Certificate,
     QuizLessonResponse,
     FeedbackLessonResponse,
+    Video,
+    VideoLesson,
 )
 
 # Register your models here.
@@ -31,3 +33,5 @@ admin.site.register(Answer)
 admin.site.register(Certificate)
 admin.site.register(QuizLessonResponse)
 admin.site.register(FeedbackLessonResponse)
+admin.site.register(Video)
+admin.site.register(VideoLesson)
