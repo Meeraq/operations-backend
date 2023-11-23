@@ -102,9 +102,6 @@ class CourseEnrollment(models.Model):
 
 class Answer(models.Model):
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
-    learner = models.ForeignKey(
-        Learner, on_delete=models.CASCADE
-    )  # Assuming you have a User model, you may need to import it
     text_answer = models.TextField(blank=True, null=True)  # For descriptive answers
     selected_options = models.JSONField(
         default=list
@@ -112,7 +109,7 @@ class Answer(models.Model):
     rating = models.IntegerField(blank=True, null=True)  # For rating type answers
 
     def __str__(self):
-        return f"Answer for {self.question.text} by {self.learner.name}"
+        return f"Answer for {self.question.text}"
 
 
 class Certificate(models.Model):
@@ -124,3 +121,19 @@ class Certificate(models.Model):
 
     def __str__(self):
         return f"{self.name}"
+
+
+class QuizLessonResponse(models.Model):
+    quiz_lesson = models.ForeignKey(QuizLesson, on_delete=models.CASCADE)
+    answers = models.ManyToManyField(Answer)
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
+
+
+class FeedbackLessonResponse(models.Model):
+    feedback_lesson = models.ForeignKey(FeedbackLesson, on_delete=models.CASCADE)
+    answers = models.ManyToManyField(Answer)
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)

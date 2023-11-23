@@ -15,8 +15,11 @@ from .models import (
     CourseEnrollment,
     Answer,
     Certificate,
+    QuizLessonResponse,
+    FeedbackLessonResponse,
 )
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializers import (
     CourseSerializer,
@@ -754,20 +757,35 @@ def get_course_enrollments_of_learner(request, learner_id):
 
 @api_view(["POST"])
 def submit_quiz_answers(request, quiz_lesson_id, learner_id):
-    quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
-    course_enrollment = CourseEnrollment.objects.get(
-        course=quiz_lesson.lesson.course, learner__id=learner_id
-    )
-    answers_data = request.data
+    try:
+        quiz_lesson = get_object_or_404(QuizLesson, id=quiz_lesson_id)
+        course_enrollment = get_object_or_404(
+            CourseEnrollment, course=quiz_lesson.lesson.course, learner__id=learner_id
+        )
+        learner = get_object_or_404(Learner, id=learner_id)
+    except (
+        QuizLesson.DoesNotExist,
+        CourseEnrollment.DoesNotExist,
+        Learner.DoesNotExist,
+    ) as e:
+        return Response(
+            {"error": "Failed to submit quiz."}, status=status.HTTP_404_NOT_FOUND
+        )
 
-    # Validate and save the answers
+    answers_data = request.data
     serializer = AnswerSerializer(data=answers_data, many=True)
+
     if serializer.is_valid():
+        answers = serializer.save()
+        quiz_lesson_response = QuizLessonResponse.objects.create(
+            quiz_lesson=quiz_lesson, learner=learner
+        )
+        quiz_lesson_response.answers.set(answers)
+        quiz_lesson_response.save()
         course_enrollment.completed_lessons.append(quiz_lesson.lesson.id)
         course_enrollment.save()
-        serializer.save()
         return Response(
-            {"detail": "Quiz answers submitted successfully"}, status=status.HTTP_200_OK
+            {"detail": "Quiz submitted successfully"}, status=status.HTTP_200_OK
         )
     else:
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -776,24 +794,76 @@ def submit_quiz_answers(request, quiz_lesson_id, learner_id):
 @api_view(["GET"])
 def get_quiz_result(request, quiz_lesson_id, learner_id):
     quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
+    quiz_lesson_response = QuizLessonResponse.objects.get(
+        learner__id=learner_id, quiz_lesson=quiz_lesson
+    )
     correct_answers = 0
     questions = quiz_lesson.questions.all()
     for question in questions:
         is_correct = False
-        answer = Answer.objects.get(question=question, learner__id=learner_id)
-        for option in question.options:
-            if option["is_correct"]:
-                if option["option"] in answer.selected_options:
-                    is_correct = True
-                    break
+        try:
+            answer = quiz_lesson_response.answers.get(question=question)
+            selected_options = answer.selected_options
+        except Answer.DoesNotExist:
+            selected_options = []
+
+        if question.type == "single_correct_answer":
+            correct_option = next(
+                (opt["option"] for opt in question.options if opt["is_correct"]), None
+            )
+            is_correct = correct_option in selected_options
+        elif question.type == "multiple_correct_answer":
+            correct_options = [
+                opt["option"] for opt in question.options if opt["is_correct"]
+            ]
+            is_correct = set(selected_options) == set(correct_options)
         if is_correct:
             correct_answers += 1
+
     return Response(
         {
             "correct_answers": correct_answers,
             "total_questions": questions.count(),
         }
     )
+
+
+@api_view(["POST"])
+def submit_feedback_answers(request, feedback_lesson_id, learner_id):
+    try:
+        feedback_lesson = get_object_or_404(FeedbackLesson, id=feedback_lesson_id)
+        course_enrollment = get_object_or_404(
+            CourseEnrollment,
+            course=feedback_lesson.lesson.course,
+            learner__id=learner_id,
+        )
+        learner = get_object_or_404(Learner, id=learner_id)
+    except (
+        FeedbackLesson.DoesNotExist,
+        CourseEnrollment.DoesNotExist,
+        Learner.DoesNotExist,
+    ) as e:
+        return Response(
+            {"error": "Failed to submit feedback."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    answers_data = request.data
+    serializer = AnswerSerializer(data=answers_data, many=True)
+
+    if serializer.is_valid():
+        answers = serializer.save()
+        feedback_lesson_response = FeedbackLessonResponse.objects.create(
+            feedback_lesson=feedback_lesson, learner=learner
+        )
+        feedback_lesson_response.answers.set(answers)
+        feedback_lesson_response.save()
+        course_enrollment.completed_lessons.append(feedback_lesson.lesson.id)
+        course_enrollment.save()
+        return Response(
+            {"detail": "Feedback submitted successfully"}, status=status.HTTP_200_OK
+        )
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CertificateListAPIView(APIView):
