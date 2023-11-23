@@ -1009,7 +1009,7 @@ class DownlaodLessonCertificate(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Failed to downlaod report."},
+                {"error": "Failed to downlaod certificate."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         
