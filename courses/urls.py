@@ -98,8 +98,12 @@ urlpatterns = [
         name="enroll-participants-to-course",
     ),
     path(
-        "course-enrollment/<int:course_enrollment_id>/<int:learner_id>/",
+        "course-enrollment/<int:course_id>/<int:learner_id>/",
         views.get_course_enrollment,
+    ),
+    path(
+        "course-enrollment/pmo/<int:course_id>/",
+        views.get_course_enrollment_for_pmo_preview,
     ),
     path(
         "course-enrollments/<int:learner_id>/",
@@ -113,15 +117,17 @@ urlpatterns = [
         "quiz-result/<int:quiz_lesson_id>/<int:learner_id>/",
         views.get_quiz_result,
     ),
-    path('certificates/', CertificateListAPIView.as_view()),
-
-    path('get-courses-for-certificates/', GetFilteredCoursesForCertificate.as_view()),
-
-    path('assign-courses-to-certificate/', AssignCoursesToCertificate.as_view()),
-
-    path('delete-courses-to-certificate/', DeleteCourseFromCertificate.as_view()),
-
-    path('lesson-mark-as-complete/', LessonMarkAsCompleteAndNotComplete.as_view()),
-
+    path(
+        "submit-feedback/<int:feedback_lesson_id>/<int:learner_id>/",
+        views.submit_feedback_answers,
+    ),
+    path("certificates/", CertificateListAPIView.as_view()),
+    path(
+        "get-courses-for-certificates/",
+        GetFilteredCoursesForCertificate.as_view(),
+    ),
+    path("assign-courses-to-certificate/", AssignCoursesToCertificate.as_view()),
+    path("delete-courses-to-certificate/", DeleteCourseFromCertificate.as_view()),
+    path("lesson-mark-as-complete/", LessonMarkAsCompleteAndNotComplete.as_view()),
     path('download-lesson-certificate/<int:lesson_id>/<int:learner_id>/', DownlaodLessonCertificate.as_view()),
 ]

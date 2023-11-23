@@ -12,6 +12,8 @@ from .models import (
     CourseEnrollment,
     Answer,
     Certificate,
+    QuizLessonResponse,
+    FeedbackLessonResponse,
 )
 
 # Register your models here.
@@ -27,3 +29,5 @@ admin.site.register(Assessment)
 admin.site.register(CourseEnrollment)
 admin.site.register(Answer)
 admin.site.register(Certificate)
+admin.site.register(QuizLessonResponse)
+admin.site.register(FeedbackLessonResponse)
