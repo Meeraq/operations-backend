@@ -730,7 +730,9 @@ def get_course_enrollment(request, course_enrollment_id, learner_id):
 @api_view(["GET"])
 def get_course_enrollments_of_learner(request, learner_id):
     try:
-        course_enrollments = CourseEnrollment.objects.filter(learner__id=learner_id)
+        course_enrollments = CourseEnrollment.objects.filter(
+            learner__id=learner_id, course__status="public"
+        )
         res = []
         for course_enrollment in course_enrollments:
             course_enrollment_serializer = CourseEnrollmentDepthOneSerializer(
@@ -831,7 +833,11 @@ class CertificateListAPIView(APIView):
             content = request.data["content"]
             certificate_id = request.data.get("certificate_id")
 
-            if Certificate.objects.filter(name=name).exclude(id=certificate_id).exists():
+            if (
+                Certificate.objects.filter(name=name)
+                .exclude(id=certificate_id)
+                .exists()
+            ):
                 return Response(
                     {"error": f"Certificate with the name '{name}' already exists."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
