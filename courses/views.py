@@ -936,12 +936,6 @@ class CertificateListAPIView(APIView):
             name = request.data["name"]
             content = request.data["content"]
             certificate_id = request.data.get("certificate_id")
-
-            if (
-                Certificate.objects.filter(name=name)
-                .exclude(id=certificate_id)
-                .exists()
-            ):
             if (
                 Certificate.objects.filter(name=name)
                 .exclude(id=certificate_id)
