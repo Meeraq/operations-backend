@@ -14,6 +14,7 @@ from .views import (
     LessonMarkAsCompleteAndNotComplete,
     DownlaodLessonCertificate,
     GetCertificateForCourse,
+    GetLaserCoachingTime,
 )
 import environ
 
@@ -132,4 +133,5 @@ urlpatterns = [
     path("lesson-mark-as-complete/", LessonMarkAsCompleteAndNotComplete.as_view()),
     path('download-lesson-certificate/<int:lesson_id>/<int:learner_id>/', DownlaodLessonCertificate.as_view()),
     path('get-certificate-for-course/<int:course_id>/', GetCertificateForCourse.as_view()),
+    path('get-laser-coaching-time/<int:laser_coaching_id>/<str:participant_email>/', GetLaserCoachingTime.as_view()),
 ]
