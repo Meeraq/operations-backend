@@ -85,9 +85,15 @@ class Assessment(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
 
 
-# class Video(models.Model):
-#     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
-#     video = models.FileField(upload_to="videos/")
+class Video(models.Model):
+    # lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    name = models.TextField()
+    video = models.FileField(upload_to="videos/")
+
+
+class VideoLesson(models.Model):
+    lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    video = models.ForeignKey(Video, on_delete=models.CASCADE)
 
 
 class CourseEnrollment(models.Model):
