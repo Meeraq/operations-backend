@@ -52,7 +52,7 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 import base64
 
-from schedularApi.models import CoachingSession,SchedularSessions
+from schedularApi.models import CoachingSession, SchedularSessions
 
 wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
@@ -1129,18 +1129,27 @@ class GetCertificateForCourse(APIView):
 
 
 class GetLaserCoachingTime(APIView):
-    def get(self, request, laser_coaching_id,participant_email):
+    def get(self, request, laser_coaching_id, participant_email):
         try:
             laser_coaching = LaserCoachingSession.objects.get(id=laser_coaching_id)
             coaching_session = CoachingSession.objects.get(
                 booking_link=laser_coaching.booking_link
             )
-            participant = get_object_or_404(SchedularParticipants, email=participant_email)
+
+            participant = get_object_or_404(
+                SchedularParticipants, email=participant_email
+            )
+
             existing_session = SchedularSessions.objects.filter(
-            enrolled_participant=participant, coaching_session=coaching_session
-             ).first()
-            existing_session.availibility
-            return Response({"start_time": existing_session.availibility.start_time,"end_time":existing_session.availibility.end_time})
+                enrolled_participant=participant, coaching_session=coaching_session
+            ).first()
+
+            return Response(
+                {
+                    "start_time": existing_session.availibility.start_time,
+                    "end_time": existing_session.availibility.end_time,
+                }
+            )
         except Exception as e:
             return Response(
                 {"error": "Failed to retrieve certificates for the given course."},
