@@ -14,6 +14,7 @@ from .views import (
     LessonMarkAsCompleteAndNotComplete,
     DownlaodLessonCertificate,
     GetCertificateForCourse,
+    GetLaserCoachingTime,
 )
 import environ
 
@@ -145,4 +146,5 @@ urlpatterns = [
         name="update-video-lesson",
     ),
     path("videos/<int:pk>/update/", views.update_video, name="update_video"),
+    path('get-laser-coaching-time/<int:laser_coaching_id>/<str:participant_email>/', GetLaserCoachingTime.as_view()),
 ]
