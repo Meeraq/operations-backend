@@ -52,6 +52,8 @@ import os
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 import base64
+from openpyxl import Workbook
+
 
 wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
@@ -825,15 +827,10 @@ def submit_quiz_answers(request, quiz_lesson_id, learner_id):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(["GET"])
-def get_quiz_result(request, quiz_lesson_id, learner_id):
-    quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
-    quiz_lesson_response = QuizLessonResponse.objects.get(
-        learner__id=learner_id, quiz_lesson=quiz_lesson
-    )
+def calculate_quiz_result(quiz_lesson, quiz_lesson_response):
     correct_answers = 0
-    questions = quiz_lesson.questions.all()
-    for question in questions:
+    total_questions = quiz_lesson.questions.count()
+    for question in quiz_lesson.questions.all():
         is_correct = False
         try:
             answer = quiz_lesson_response.answers.get(question=question)
@@ -853,11 +850,24 @@ def get_quiz_result(request, quiz_lesson_id, learner_id):
             is_correct = set(selected_options) == set(correct_options)
         if is_correct:
             correct_answers += 1
+    return {
+        "correct_answers": correct_answers,
+        "total_questions": total_questions,
+        "percentage": round((correct_answers / total_questions) * 100),
+    }
 
+
+@api_view(["GET"])
+def get_quiz_result(request, quiz_lesson_id, learner_id):
+    quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
+    quiz_lesson_response = QuizLessonResponse.objects.get(
+        learner__id=learner_id, quiz_lesson=quiz_lesson
+    )
+    quiz_result = calculate_quiz_result(quiz_lesson, quiz_lesson_response)
     return Response(
         {
-            "correct_answers": correct_answers,
-            "total_questions": questions.count(),
+            "correct_answers": quiz_result["correct_answers"],
+            "total_questions": quiz_result["total_questions"],
         }
     )
 
@@ -1129,7 +1139,6 @@ class GetCertificateForCourse(APIView):
             )
 
 
-<<<<<<< Updated upstream
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from .models import Video
@@ -1242,30 +1251,32 @@ from rest_framework import status
 from .models import VideoLesson, Lesson, Video
 from .serializers import VideoLessonSerializer, LessonSerializer
 
-@api_view(['PUT'])
+
+@api_view(["PUT"])
 def update_video_lesson(request, lesson_id):
     try:
         lesson = Lesson.objects.get(pk=lesson_id)
     except Lesson.DoesNotExist:
-        return Response({"message": "Lesson does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"message": "Lesson does not exist"}, status=status.HTTP_404_NOT_FOUND
+        )
 
-    video_id = request.data.get('video')
+    video_id = request.data.get("video")
 
     try:
         video = Video.objects.get(pk=video_id)
     except Video.DoesNotExist:
-        return Response({"message": "Video does not exist"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"message": "Video does not exist"}, status=status.HTTP_404_NOT_FOUND
+        )
 
-    lesson_data = request.data.get('lesson')
+    lesson_data = request.data.get("lesson")
     if lesson_data:
         lesson_serializer = LessonSerializer(lesson, data=lesson_data, partial=True)
         if lesson_serializer.is_valid():
             lesson_serializer.save()
 
-    video_lesson_data = {
-        'lesson': lesson_id,
-        'video': video_id
-    }
+    video_lesson_data = {"lesson": lesson_id, "video": video_id}
 
     try:
         video_lesson = VideoLesson.objects.get(lesson_id=lesson_id)
@@ -1285,7 +1296,8 @@ from rest_framework.decorators import api_view
 from .models import Video
 from .serializers import VideoSerializer
 
-@api_view(['PUT'])
+
+@api_view(["PUT"])
 def update_video(request, pk):
     try:
         video = Video.objects.get(pk=pk)
@@ -1297,9 +1309,10 @@ def update_video(request, pk):
         serializer.save()
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-=======
+
+
 @api_view(["GET"])
-def get_course_report(request):
+def get_all_courses_progress(request):
     res = []
     courses = Course.objects.filter(status="public")
     for course in courses:
@@ -1329,4 +1342,159 @@ def get_course_report(request):
             }
         )
     return Response(res)
->>>>>>> Stashed changes
+
+
+@api_view(["GET"])
+def get_course_progress(request, course_id):
+    course_enrollments = CourseEnrollment.objects.filter(course__id=course_id)
+    course_enrollments_serializer = CourseEnrollmentDepthOneSerializer(
+        course_enrollments, many=True
+    )
+    lessons_count = Lesson.objects.filter(course__id=course_id, status="public").count()
+    res = []
+    for course_enrollment in course_enrollments_serializer.data:
+        res.append({**course_enrollment, "total_lessons": lessons_count})
+    return Response(res)
+
+
+@api_view(["GET"])
+def course_report_download(request, course_id):
+    course_enrollments = CourseEnrollment.objects.filter(course__id=course_id)
+    course_enrollments_serializer = CourseEnrollmentDepthOneSerializer(
+        course_enrollments, many=True
+    )
+    lessons_count = Lesson.objects.filter(course__id=course_id, status="public").count()
+    res = []
+    for course_enrollment in course_enrollments_serializer.data:
+        res.append(
+            {
+                **course_enrollment,
+                "total_lessons": lessons_count,
+                "progress": round(
+                    (len(course_enrollment["completed_lessons"]) / lessons_count) * 100
+                ),
+            }
+        )
+
+    # Create a new workbook and add a worksheet
+    wb = Workbook()
+    ws = wb.active
+
+    # Write headers to the worksheet
+    headers = [
+        "Participant Name",
+        "Completed Lessons",
+        "Total Lessons",
+        "Progress",
+    ]
+
+    for col_num, header in enumerate(headers, 1):
+        ws.cell(row=1, column=col_num, value=header)
+
+    # Write data to the worksheet
+    for row_num, course_enrollment_data in enumerate(res, 2):
+        ws.append(
+            [
+                course_enrollment_data["learner"]["name"],
+                len(course_enrollment_data["completed_lessons"]),
+                course_enrollment_data["total_lessons"],
+                str(course_enrollment_data["progress"]) + "%",
+            ]
+        )
+
+    # Create a response with the Excel file
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = "attachment; filename=course_report.xlsx"
+    wb.save(response)
+
+    return response
+
+
+@api_view(["GET"])
+def get_all_quizes_report(request):
+    res = []
+    quizes = QuizLesson.objects.filter(
+        lesson__status="public", lesson__course__status="public"
+    )
+    for quiz in quizes:
+        course_enrollments = CourseEnrollment.objects.filter(course=quiz.lesson.course)
+        total_participants = course_enrollments.count()
+        quiz_lesson_responses = QuizLessonResponse.objects.filter(quiz_lesson=quiz)
+        total_responses = quiz_lesson_responses.count()
+        total_percentage = 0
+        for quiz_lesson_response in quiz_lesson_responses:
+            quiz_result = calculate_quiz_result(quiz, quiz_lesson_response)
+            print(total_percentage)
+            print(quiz_result["percentage"])
+            total_percentage += quiz_result["percentage"]
+        average_percentage = total_percentage / total_responses
+        res.append(
+            {
+                "id": quiz.id,
+                "quiz_name": quiz.lesson.name,
+                "course_name": quiz.lesson.course.name,
+                "total_participants": total_participants,
+                "total_responses": total_responses,
+                "average_percentage": average_percentage,
+            }
+        )
+
+    return Response(res)
+
+
+def get_quiz_report_data(quiz_lesson):
+    quiz_lesson_responses = QuizLessonResponse.objects.filter(quiz_lesson=quiz_lesson)
+    res = []
+    for quiz_lesson_response in quiz_lesson_responses:
+        quiz_result = calculate_quiz_result(quiz_lesson, quiz_lesson_response)
+        res.append({"learner": quiz_lesson_response.learner.name, **quiz_result})
+    return res
+
+
+@api_view(["GET"])
+def get_quiz_report(request, quiz_id):
+    quiz_lesson = QuizLesson.objects.get(id=quiz_id)
+    data = get_quiz_report_data(quiz_lesson)
+    return Response(data)
+
+
+@api_view(["GET"])
+def quiz_report_download(request, quiz_id):
+    quiz_lesson = QuizLesson.objects.get(id=quiz_id)
+    quiz_data = get_quiz_report_data(quiz_lesson)
+    # Create a new workbook and add a worksheet
+    wb = Workbook()
+    ws = wb.active
+
+    # Write headers to the worksheet
+    headers = [
+        "Participant Name",
+        "Correct Answers",
+        "Total Questions",
+        "Percentage",
+    ]
+
+    for col_num, header in enumerate(headers, 1):
+        ws.cell(row=1, column=col_num, value=header)
+
+    # Write data to the worksheet
+    for row_num, quiz_data_item in enumerate(quiz_data, 2):
+        ws.append(
+            [
+                quiz_data_item["learner"],
+                quiz_data_item["correct_answers"],
+                quiz_data_item["total_questions"],
+                str(quiz_data_item["percentage"]) + "%",
+            ]
+        )
+
+    # Create a response with the Excel file
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = "attachment; filename=quiz_report.xlsx"
+    wb.save(response)
+
+    return response
