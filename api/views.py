@@ -113,7 +113,7 @@ from schedularApi.models import SchedularBatch
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-
+from courses.models import CourseEnrollment
 
 # Create your views here.
 from collections import defaultdict
@@ -4313,6 +4313,11 @@ def get_coachee_of_user(request, user_type, user_id):
         }
         if user_type == "pmo":
             projects = Project.objects.filter(engagement__learner=learner)
+            course_enrollments = CourseEnrollment.objects.filter(learner__id=learner.id)
+            courses_names = []
+            for course_enrollment in course_enrollments:
+                courses_names.append(course_enrollment.course.name)
+            learner_dict["coursesEnrolled"] = courses_names
         elif user_type == "coach":
             projects = Project.objects.filter(
                 Q(engagement__learner=learner) & Q(engagement__coach__id=user_id)
