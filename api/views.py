@@ -2462,17 +2462,25 @@ def send_consent(request):
             f"Admin has requested your consent to share profile for a new project."
         )
         for status in coach_status:
-            create_notification(status.coach.user.user, path, message)
-            send_mail_templates(
-                "coach_templates/pmo_ask_for_consent.html",
-                [status.coach.email],
-                "Meeraq Coaching | New Project!",
-                {"name": status.coach.first_name},
-                [],  # no bcc
-            )
+            if project.coach_consent_mandatory:
+                create_notification(status.coach.user.user, path, message)
+                send_mail_templates(
+                    "coach_templates/pmo_ask_for_consent.html",
+                    [status.coach.email],
+                    "Meeraq Coaching | New Project!",
+                    {"name": status.coach.first_name},
+                    [],  # no bcc
+                )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-
+    for coach_id in coach_list:
+        if not project.coach_consent_mandatory:
+            for coach_status in project.coaches_status.all():
+                if coach_status.coach.id == coach.id:
+                    coach_status.status["consent"]["status"] = "select"
+                    if project.steps["project_structure"]["status"] == "complete":
+                        coach_status.status["project_structure"]["status"] = "select"
+                    coach_status.save()
     return Response({"message": "Consent sent successfully", "details": ""}, status=200)
 
 
@@ -5806,6 +5814,9 @@ def edit_project_caas(request, project_id):
         project.location = json.loads(request.data.get("location", "[]"))
         project.project_description = request.data.get(
             "project_description", project.project_description
+        )
+        project.coach_consent_mandatory = request.data.get(
+            "coach_consent_mandatory", project.coach_consent_mandatory
         )
         project.hr.clear()
         for hr in request.data["hr"]:
