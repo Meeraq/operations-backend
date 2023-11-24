@@ -855,7 +855,9 @@ def calculate_quiz_result(quiz_lesson, quiz_lesson_response):
     return {
         "correct_answers": correct_answers,
         "total_questions": total_questions,
-        "percentage": round((correct_answers / total_questions) * 100),
+        "percentage": round((correct_answers / total_questions) * 100)
+        if total_questions > 0
+        else 0,
     }
 
 
@@ -1457,10 +1459,10 @@ def get_all_quizes_report(request):
         total_percentage = 0
         for quiz_lesson_response in quiz_lesson_responses:
             quiz_result = calculate_quiz_result(quiz, quiz_lesson_response)
-            print(total_percentage)
-            print(quiz_result["percentage"])
             total_percentage += quiz_result["percentage"]
-        average_percentage = total_percentage / total_responses
+        average_percentage = (
+            (total_percentage / total_responses) if total_responses > 0 else 0
+        )
         res.append(
             {
                 "id": quiz.id,
