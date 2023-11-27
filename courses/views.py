@@ -1335,6 +1335,7 @@ class GetLaserCoachingTime(APIView):
                 {
                     "start_time": existing_session.availibility.start_time,
                     "end_time": existing_session.availibility.end_time,
+                    "room_id": existing_session.availibility.coach.room_id,
                 }
             )
         except Exception as e:

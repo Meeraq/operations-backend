@@ -109,7 +109,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from rest_framework import generics
 from django.db.models import Subquery, OuterRef
-from schedularApi.models import SchedularBatch
+from schedularApi.models import SchedularBatch, SchedularSessions
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
@@ -4739,6 +4739,16 @@ def get_current_session(request, user_type, room_id, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
+
+        if sessions.count() == 0:
+            learner = Learner.objects.get(id=user_id)
+            sessions = SchedularSessions.objects.filter(
+                availibility__start_time__lt=five_minutes_plus_current_time,
+                availibility__end_time__gt=current_time,
+                enrolled_participant__email=learner.email,
+                availibility__coach__room_id=room_id,
+            )
+
     elif user_type == "hr":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
