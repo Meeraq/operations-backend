@@ -12,6 +12,7 @@ from .views import (
     StandardFieldEditValue,
     StandardFieldDeleteValue,
     StandardizedFieldRequestAcceptReject,
+    download
 )
 
 urlpatterns = [
@@ -285,4 +286,5 @@ urlpatterns = [
         StandardizedFieldRequestAcceptReject.as_view(),
     ),
     path("standard-field-delete-value/", StandardFieldDeleteValue.as_view()),
+     path("download-report/", download.as_view()),
 ]
