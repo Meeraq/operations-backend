@@ -280,7 +280,8 @@ class Project(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, blank=True, null=True
     )
-
+    coach_consent_mandatory=models.BooleanField(default=True)
+    
     class Meta:
         ordering = ["-created_at"]
 
