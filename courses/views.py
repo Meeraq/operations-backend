@@ -119,6 +119,73 @@ class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
         serializer.save()
 
 
+class DuplicateCourseAPIView(APIView):
+    def post(self, request, course_id, *args, **kwargs):
+        try:
+            original_course = get_object_or_404(Course, pk=course_id)
+
+            # Duplicate the course
+            new_course = Course.objects.create(
+                name=f"Copy of - {original_course.name}",
+                description=original_course.description,
+                status="draft",
+            )
+
+            # Duplicate lessons
+            original_lessons = Lesson.objects.filter(course=original_course)
+            for original_lesson in original_lessons:
+                new_lesson = None
+
+                # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
+                if original_lesson.lesson_type in ["text", "quiz", "feedback"]:
+                    new_lesson = Lesson.objects.create(
+                        course=new_course,
+                        name=original_lesson.name,
+                        status="draft",
+                        lesson_type=original_lesson.lesson_type,
+                        order=original_lesson.order,
+                    )
+
+                    # Duplicate specific lesson types
+                    if original_lesson.lesson_type == "text":
+                        TextLesson.objects.create(
+                            lesson=new_lesson,
+                            content=original_lesson.textlesson.content,
+                        )
+
+                    elif original_lesson.lesson_type == "quiz":
+                        new_quiz_lesson = QuizLesson.objects.create(lesson=new_lesson)
+                        for question in original_lesson.quizlesson.questions.all():
+                            new_question = Question.objects.create(
+                                text=question.text,
+                                options=question.options,
+                                type=question.type,
+                            )
+                            new_quiz_lesson.questions.add(new_question)
+
+                    elif original_lesson.lesson_type == "feedback":
+                        new_feedback_lesson = FeedbackLesson.objects.create(
+                            lesson=new_lesson
+                        )
+                        for question in original_lesson.feedbacklesson.questions.all():
+                            new_question = Question.objects.create(
+                                text=question.text,
+                                options=question.options,
+                                type=question.type,
+                            )
+                            new_feedback_lesson.questions.add(new_question)
+
+            return Response(
+                {"message": "Course duplicated successfully"},
+                status=status.HTTP_201_CREATED,
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
 class UpdateLessonOrder(APIView):
     def post(self, request, *args, **kwargs):
         payload = request.data

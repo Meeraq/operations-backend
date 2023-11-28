@@ -32,6 +32,11 @@ urlpatterns = [
         name="course-list-create-update-destroy",
     ),
     path(
+        "courses/<int:course_id>/duplicate/",
+        views.DuplicateCourseAPIView.as_view(),
+        name="course-detail",
+    ),
+    path(
         "create-lesson-with-live-session/",
         views.create_lesson_with_live_session,
     ),
