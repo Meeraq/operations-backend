@@ -35,6 +35,11 @@ urlpatterns = [
         "create-lesson-with-live-session/",
         views.create_lesson_with_live_session,
     ),
+    path(
+        "lessons/update_lesson_order/",
+        views.UpdateLessonOrder.as_view(),
+        name="update_lesson_order",
+    ),
     path("text-lessons/", TextLessonCreateView.as_view(), name="text-lesson-create"),
     path(
         "text-lessons/<int:pk>/", TextLessonEditView.as_view(), name="text-lesson-edit"
