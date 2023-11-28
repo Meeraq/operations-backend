@@ -4289,17 +4289,65 @@ def edit_session_availability(request, session_id):
         return Response({"message": "Session edit failed."}, status=401)
 
 
+# @api_view(["GET"])
+# def get_coachee_of_user(request, user_type, user_id):
+#     learners_data = []
+#     if user_type == "pmo":
+#         learners = Learner.objects.all()
+#     elif user_type == "coach":
+#         learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+#     elif user_type == "hr":
+#         learners = Learner.objects.filter(
+#             engagement__project__hr__id=user_id
+#         ).distinct()
+#     for learner in learners:
+#         learner_dict = {
+#             "id": learner.id,
+#             "name": learner.name,
+#             "email": learner.email,
+#             "phone": learner.phone,
+#             "area_of_expertise": learner.area_of_expertise,
+#             "years_of_experience": learner.years_of_experience,
+#             "projects": [],
+#             "coach": set(),
+#             "organisation": set(),
+#         }
+#         if user_type == "pmo":
+#             projects = Project.objects.filter(engagement__learner=learner)
+#         elif user_type == "coach":
+#             projects = Project.objects.filter(
+#                 Q(engagement__learner=learner) & Q(engagement__coach__id=user_id)
+#             )
+#         elif user_type == "hr":
+#             projects = Project.objects.filter(
+#                 Q(engagement__learner=learner) & Q(hr__id=user_id)
+#             )
+
+#         # project_data = []
+#         # organisation = set()
+#         print(projects)
+#         for project in projects:
+#             print(project)
+#             project_dict = {
+#                 "name": project.name,
+#             }
+#             learner_dict["organisation"].add(project.organisation.name)
+#             learner_dict["projects"].append(project_dict)
+#         learners_data.append(learner_dict)
+#     # serializer = LearnerSerializer(learners,many=True)
+#     return Response(learners_data)
+
 @api_view(["GET"])
 def get_coachee_of_user(request, user_type, user_id):
     learners_data = []
+
     if user_type == "pmo":
         learners = Learner.objects.all()
     elif user_type == "coach":
         learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
     elif user_type == "hr":
-        learners = Learner.objects.filter(
-            engagement__project__hr__id=user_id
-        ).distinct()
+        learners = Learner.objects.filter(engagement__project__hr__id=user_id).distinct()
+
     for learner in learners:
         learner_dict = {
             "id": learner.id,
@@ -4309,8 +4357,10 @@ def get_coachee_of_user(request, user_type, user_id):
             "area_of_expertise": learner.area_of_expertise,
             "years_of_experience": learner.years_of_experience,
             "projects": [],
+            "coaches": set(),
             "organisation": set(),
         }
+
         if user_type == "pmo":
             projects = Project.objects.filter(engagement__learner=learner)
         elif user_type == "coach":
@@ -4321,16 +4371,19 @@ def get_coachee_of_user(request, user_type, user_id):
             projects = Project.objects.filter(
                 Q(engagement__learner=learner) & Q(hr__id=user_id)
             )
-        # project_data = []
-        # organisation = set()
+
         for project in projects:
-            project_dict = {
-                "name": project.name,
-            }
+            project_dict = {"name": project.name}
             learner_dict["organisation"].add(project.organisation.name)
             learner_dict["projects"].append(project_dict)
+
+            # Fetch all coaches related to the learner in the project
+            coaches = Coach.objects.filter(engagement__learner=learner, engagement__project=project).distinct()
+            for coach in coaches:
+                learner_dict["coaches"].add(coach.first_name + " " + coach.last_name)  # Assuming 'name' is the coach's attribute to display
+
         learners_data.append(learner_dict)
-    # serializer = LearnerSerializer(learners,many=True)
+
     return Response(learners_data)
 
 
@@ -5172,7 +5225,7 @@ def get_all_competencies_of_hr(request, hr_id):
 
         coach_name = (
             goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
-            if goal.engagement and goal.engagement.coach 
+            if goal.engagement and goal.engagement.coach
             else "N/A"
         )
 
