@@ -2874,21 +2874,21 @@ def book_session_caas(request):
                     },
                     [],  # no bcc
                 )
-                send_mail_templates(
-                    "pmo_emails/session_scheduled.html",
-                    [pmo.email],
-                    "Meeraq Coaching | Session Booked",
-                    {
-                        "projectName": session_request.project.name,
-                        "name": pmo.name,
-                        "coachee_name": coachee.name,
-                        "coach_name": coach_name,
-                        "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
-                        "slot_date": session_date,
-                        "slot_time": session_time,
-                    },
-                    [],  # no bcc
-                )
+                # send_mail_templates(
+                #     "pmo_emails/session_scheduled.html",
+                #     [pmo.email],
+                #     "Meeraq Coaching | Session Booked",
+                #     {
+                #         "projectName": session_request.project.name,
+                #         "name": pmo.name,
+                #         "coachee_name": coachee.name,
+                #         "coach_name": coach_name,
+                #         "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
+                #         "slot_date": session_date,
+                #         "slot_time": session_time,
+                #     },
+                #     [],  # no bcc
+                # )
 
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
