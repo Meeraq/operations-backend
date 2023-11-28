@@ -70,7 +70,7 @@ class TextLessonSerializer(serializers.ModelSerializer):
 class LessonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lesson
-        fields = ["id", "course", "name", "status", "lesson_type"]
+        fields = ["id", "course", "name", "status", "lesson_type", "order"]
 
 
 class QuestionSerializer(serializers.ModelSerializer):

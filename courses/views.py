@@ -119,6 +119,26 @@ class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
         serializer.save()
 
 
+class UpdateLessonOrder(APIView):
+    def post(self, request, *args, **kwargs):
+        payload = request.data
+
+        for lesson_id, order in payload.items():
+            try:
+                lesson = Lesson.objects.get(pk=lesson_id)
+                lesson.order = order
+                lesson.save()
+            except Lesson.DoesNotExist:
+                return Response(
+                    {"error": f"Lesson with id {lesson_id} not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        return Response(
+            {"message": "Lesson orders updated successfully"}, status=status.HTTP_200_OK
+        )
+
+
 class TextLessonCreateView(generics.CreateAPIView):
     queryset = TextLesson.objects.all()
     serializer_class = TextLessonCreateSerializer
@@ -511,6 +531,7 @@ def create_laser_booking_lesson(request):
         name=lesson_data["name"],
         status=lesson_data["status"],
         lesson_type=lesson_data["lesson_type"],
+        order=lesson_data["order"],
     )
 
     # Create a LaserCoachingSession instance associated with the created Lesson
@@ -596,6 +617,7 @@ def create_assessment_and_lesson(request):
         name=lesson_data["name"],
         status=lesson_data["status"],
         lesson_type=lesson_data["lesson_type"],
+        order=lesson_data["order"],
     )
 
     # Create a LaserCoachingSession instance associated with the created Lesson
