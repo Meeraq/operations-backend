@@ -21,7 +21,7 @@ from django.utils import timezone
 from openpyxl import Workbook
 from django.http import HttpResponse
 import pandas as pd
-
+from django.db.models import Q
 
 from django.shortcuts import render
 from api.models import Organisation, HR, Coach, User
