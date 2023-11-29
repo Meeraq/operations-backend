@@ -1,20 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>Multi-Page HTML</title>
+    <title>{{name}} Report</title>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <!-- <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@100;300;400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@100;300;400&display=swap" rel="stylesheet"> -->
     <style>
       body {
-        font-family: "Lato", sans-serif;
+        font-family:"Calibri", sans-serif;
+   
       }
       /* Add any additional styles here */
       .page {
         /* width: 610pt;
         height: 940pt; */
+        
         margin-top: 1px;
         /* background-color: #ffcccb; */
         overflow: hidden; /* Hide content that exceeds the fixed height */
@@ -32,6 +34,7 @@
         margin-bottom: 5.5pt;
         text-align: justify;
         text-justify: inter-word;
+        font-size: 11pt;
       }
 
       .tableStyle {
@@ -39,7 +42,8 @@
         border-collapse: collapse;
         margin-bottom: 20px;
         margin: 0 auto;
-        font-size:x-small;
+        font-size: 11pt;
+       
       }
 
       th,
@@ -68,7 +72,7 @@
     </style>
   </head>
   <body>
-    <div class="page">
+   <div class="page">
       <div
         style="
           background-color: #2f5597;
@@ -187,221 +191,322 @@
     </div>
     <div style="page-break-before: always"></div>
     <div class="page_no_overflow">
-      <div style="font-size: 14pt; padding: 8pt; letter-spacing: normal ; margin-top: 40pt; line-height: 1.6;">
-        <ul>
-          <li>
-            The report is generated electronically, derived from the survey
-            results completed by the candidate and the respondents, i.e., their
-            chosen superiors, peers, subordinates, clients, etc; and reflects
-            the responses made by them.
-          </li>
-
-          <li>
-            Meeraq shall not accept any liability for the consequences of the
-            use of this report, howsoever arising. What any
-            individual/management/HR chooses to do — or ‘should’ choose — with
-            the results of the   
-             {% if assessment_type == '360' %}
+      
+      <div style=" padding: 8pt; letter-spacing: normal ; margin-top: 40pt; line-height: 1.6;">
+        <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo" style="width: 140px; height: 33px;">
+            </div>
+            <div style="float: right; text-align: right;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="medline Logo">
+            </div>
+          </div>
+          <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;  margin-left: 8pt;">
+              <p>  {% if assessment_type == '360' %}
             360-degree
           {% else %}
             Self
-          {% endif %} Feedback is a matter for the
-            individual/management/HR and is in no way dictated by the survey
-            itself.
-          </li>
-
-          <li>
-            Meeraq expressly disclaims all liability for any indirect,
-            incidental, consequential, special, exemplary, or punitive damages,
-            including but not limited to loss of revenues, profits, or
-            reputation, arising out of or related to the use of this report,
-            even if Meeraq has been advised of the possibility of such damages.
-          </li>
-
-          <li>
-            All participants in the survey have consented to the collection,
-            analysis, and sharing of their responses as described herein.
-          </li>
-
-          <li>
-            The report describes the feedback as provided by self and the
-            respondents at the time the survey is conducted, and such feedback
-            can obviously change even within a few days depending on any
-            potential change in the candidate’s conduct, surrounding
-            circumstances, and the respondents' perceptions.
-          </li>
-
-          <li>
-            The 
-            {% if assessment_type == '360' %}
+          {% endif %} Report</p>
+            </div>
+            <div style="float: right; text-align: right;">
+              <p>{{ name }}</p>
+            </div>
+          </div>
+            <div
+          style="
+            text-align: center;
+            font-size: 23pt;
+            padding-top: 28t;
+            padding-bottom: 28t;
+            font-weight: bold;
+          "
+        >
+         DISCLAIMER
+        </div>
+        <div
+          style="
+            height:30pt;
+          "
+        >
+        
+        </div>
+       <ul>
+            <li>
+                The report is generated electronically, derived from the survey results
+                completed by the candidate and the respondents, i.e., their chosen
+                superiors, peers, subordinates, clients, etc; and reflects the responses
+                made by them.
+            </li>
+            <li>
+                Meeraq shall not accept any liability for the consequences of the use of
+                this report, howsoever arising. What any individual/management/HR chooses to
+                do — or ‘should’ choose — with the results of the   {% if assessment_type == '360' %}
             360-degree
           {% else %}
             Self
-          {% endif %}
-          Feedback tool is Copyright © Meeraq or its licensors.
-            All brand names, product names, and titles used on www.meeraq.com
-            are trademarks or trade names of their respective holders. All
-            Rights Reserved.
-          </li>
+          {% endif %} Feedback is a
+                matter for the individual/management/HR and is in no way dictated by the
+                survey itself.
+            </li>
+            <li>
+                Meeraq expressly disclaims all liability for any indirect, incidental,
+                consequential, special, exemplary, or punitive damages, including but not
+                limited to loss of revenues, profits, or reputation, arising out of or
+                related to the use of this report, even if Meeraq has been advised of the
+                possibility of such damages.
+            </li>
+            <li>
+                All participants in the survey have consented to the collection, analysis,
+                and sharing of their responses as described herein.
+            </li>
+            <li>
+                The report describes the feedback as provided by self and the respondents at
+                the time the survey is conducted, and such feedback can obviously change
+                even within a few days depending on any potential change in the candidate’s
+                conduct, surrounding circumstances, and the respondents' perceptions.
+            </li>
+            <li>
+                The   {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Feedback tool is Copyright © Meeraq or its licensors. All
+                brand names, product names, and titles used on www.meeraq.com are trademarks
+                or trade names of their respective holders. All Rights Reserved.
+            </li>
+            <li>
+                No permission is given with respect to using any of the brand names, product
+                names, and titles used on www.meeraq.com. Any such use may constitute an
+                infringement of the holders' rights.
+            </li>
+            <li>
+                The report may be shared with the candidate’s employer for appraisal or any
+                other purpose if such survey has been conducted at the employer's
+                insistence. The employer has sufficiently communicated to the candidate and
+                respective raters the basis of this survey and to what end this report will
+                be used.
+            </li>
+            <li>
+                All of the intellectual property rights for this survey belong to Meeraq or
+                its' licensors.
+            </li>
+            <li>
+                This   {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Feedback survey, scoring algorithms, report generation
+                algorithms, and software code are valuable intellectual property (trade
+                secrets and confidential information) of Meeraq.
+            </li>
+            <li>
+                All content of this   {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Feedback is protected by law, including
+                without limitation the copyright laws of India and other countries, and by
+                international treaty provisions.
+            </li>
+            <li>Meeraq and its licensors reserve all rights not expressly granted.</li>
+            <li>
+                Meeraq is committed to protecting the privacy and security of personal data
+                collected through our surveys, in compliance with applicable data protection
+                laws.
+            </li>
+            <li>
+                Meeraq reserves the right to modify the content or format of the survey and
+                report at any time without notice.
+            </li>
+            <li>
+                Any unauthorized use of the test and report of   {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Feedback can
+                result in civil and criminal sanctions, including intellectual property
+                proceedings, the pursuit of statutory damages, and all other recourse
+                available to Meeraq.
+            </li>
+            <li>
+                Meeraq products use methodology, questionnaire, scoring, and software
+                proprietary to Meeraq.
+            </li>
+            <li>
+                Our assessments and their results are neither based on nor incorporate any
+                other commercial assessment methodology or instrument. They shall not be
+                confused with similar instruments offered by other assessment companies.
+            </li>
+            <li>Meeraq is not affiliated with any other assessment company.</li>
+            <li>
+                This disclaimer, and any dispute arising out of or in connection with this
+                disclaimer or the use of the   {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Feedback report, shall be governed
+                by and construed in accordance with the laws of India, without regard to its
+                conflict of law principles.
+            </li>
 
-          <li>
-            No permission is given with respect to using any of the brand names,
-            product names, and titles used on www.meeraq.com. Any such use may
-            constitute an infringement of the holders' rights.
-          </li>
-
-          <li>
-            The report may be shared with the candidate’s employer for appraisal
-            or any other purpose if such survey has been conducted at the
-            employer's insistence.
-          </li>
-
-          <li>
-            The employer has sufficiently communicated to the candidate and
-            respective raters the basis of this survey and to what end this
-            report will be used. All of the intellectual property rights for
-            this survey belong to Meeraq or its' licensors.
-          </li>
-
-          <li>
-            This 
-               {% if assessment_type == '360' %}
-          360-degree
-        {% else %}
-          Self
-        {% endif %}
-         Feedback survey, scoring algorithms, report
-            generation algorithms, and software code are valuable intellectual
-            property (trade secrets and confidential information) of Meeraq.
-          </li>
-
-          <li>
-            All content of this 
-               {% if assessment_type == '360' %}
-          360-degree
-        {% else %}
-          Self
-        {% endif %}
-         Feedback is protected by law,
-            including without limitation the copyright laws of India and other
-            countries, and by international treaty provisions.
-          </li>
-
-          <li>
-            Meeraq and its licensors reserve all rights not expressly granted.
-          </li>
-
-          <li>
-            Meeraq is committed to protecting the privacy and security of
-            personal data collected through our surveys, in compliance with
-            applicable data protection laws.
-          </li>
-
-          <li>
-            Meeraq reserves the right to modify the content or format of the
-            survey and report at any time without notice.
-          </li>
-
-          <li>
-            Any unauthorized use of the test and report of   
-       {% if assessment_type == '360' %}
-          360-degree
-        {% else %}
-          Self
-        {% endif %}
-         Feedback
-            can result in civil and criminal sanctions, including intellectual
-            property proceedings, the pursuit of statutory damages, and all
-            other recourse available to Meeraq.
-          </li>
-
-          <li>
-            Meeraq products use methodology, questionnaire, scoring, and
-            software proprietary to Meeraq.
-          </li>
-
-          <li>
-            Our assessments and their results are neither based on nor
-            incorporate any other commercial assessment methodology or
-            instrument. They shall not be confused with similar instruments
-            offered by other assessment companies.
-          </li>
-
-          <li>Meeraq is not affiliated with any other assessment company.</li>
-          <li>
-            This disclaimer, and any dispute arising out of or in connection
-            with this disclaimer or the use of the   
-         {% if assessment_type == '360' %}
-          360-degree
-        {% else %}
-          Self
-        {% endif %}
-         Feedback report,
-            shall be governed by and construed in accordance with the laws of
-            India, without regard to its conflict of law principles.
-          </li>
-
-          <li>
-            Should any part of this disclaimer be determined to be invalid or
-            unenforceable under applicable law, the remaining parts shall remain
-            in full force and effect.
-          </li>
-
-          <li>
-            Meeraq provides this report 'as is' and expressly disclaims any
-            warranty of accuracy or completeness of the feedback.
-          </li>
-
-          <li>
-            Meeraq does not endorse or approve of any specific actions that may
-            be taken by the employer or individuals based on the feedback
-            contained in this report.
-          </li>
         </ul>
+
       </div>
+      <div style="text-align: center;">2</div>
     </div>
     <div style="page-break-before: always"></div>
     <div class="page">
+        <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+            </div>
+            <div style="float: right; text-align: right;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="medline Logo">
+            </div>
+          </div>
+          <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;  margin-left: 8pt;">
+              <p>  {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Report</p>
+            </div>
+            <div style="float: right; text-align: right;">
+              <p>{{ name }}</p>
+            </div>
+          </div>
+      <div style="margin-top: 30pt;">
+      <ul >
+        <li>
+            Should any part of this disclaimer be determined to be invalid or
+            unenforceable under applicable law, the remaining parts shall remain in full
+            force and effect.
+        </li>
+        <li>
+            Meeraq provides this report 'as is' and expressly disclaims any warranty of
+            accuracy or completeness of the feedback.
+        </li>
+        <li>
+            Meeraq does not endorse or approve of any specific actions that may be taken
+            by the employer or individuals based on the feedback contained in this
+            report.
+        </li>
+      </ul>
+      <div style="text-align: center; margin-top: 115%;">3</div>
+    </div>
+    <div style="page-break-before: always"></div>
+    <div class="page">
+        <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+            </div>
+            <div style="float: right; text-align: right;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="medline Logo">
+            </div>
+          </div>
+          <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;  margin-left: 8pt;">
+              <p>  {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Report</p>
+            </div>
+            <div style="float: right; text-align: right;">
+              <p>{{ name }}</p>
+            </div>
+          </div>
       <div>
         <div
           style="
             text-align: center;
-            font-size: 25pt;
+            font-size: 23pt;
             margin-top: 28t;
             font-weight: bold;
           "
         >
           Contents
         </div>
-        <div style="margin-top: 65pt">
+        <div style="margin-top: 65pt ; font-size: 11pt;">
           <ul class="custom-list">
-            <li class="custom-list-item">Overview</li>
-            <li class="custom-list-item">Objective</li>
-            <li class="custom-list-item">Competencies Assessed</li>
+            <li class="custom-list-item">Overview ----------------------------------------------------------------------------------------------------------------------------------- 5</li>
+            <li class="custom-list-item">Objective ----------------------------------------------------------------------------------------------------------------------------------- 5</li>
+            <li class="custom-list-item">Competencies Assessed ----------------------------------------------------------------------------------------------------------------- 5</li>
             <li class="custom-list-item">
-              Introduction to the assessment report
+                Rating scale used -------------------------------------------------------------------------------------------------------------------------- 5
             </li>
-            <li class="custom-list-item">Rating Methodology</li>
-            <li class="custom-list-item">Your Scores</li>
-            <li class="custom-list-item">Assessment – Overview</li>
-            <li class="custom-list-item">Detailed Ratings on Behaviour</li>
-            <li class="custom-list-item">Comments</li>
-          </ul>
+            <li class="custom-list-item">Introduction to the assessment report------------------------------------------------------------------------------------------------- 6</li>
+            <li class="custom-list-item">Rating Methodology----------------------------------------------------------------------------------------------------------------------- 7</li>
+            <li class="custom-list-item">Your Scores --------------------------------------------------------------------------------------------------------------------------------- 8</li>
+            <li class="custom-list-item">Assessment – Overview ------------------------------------------------------------------------------------------------------------------ 9</li>
+            <li class="custom-list-item">Detailed Ratings on Behaviour ---------------------------------------------------------------------------------------------------------- 10</li>
+             <!-- <li class="custom-list-item">Comments----------------------------------------------------------------------------------------------------------------------------------</li> -->
+        </ul>
         </div>
       </div>
+      <div style="text-align: center; margin-top: 45%;">4</div>
     </div>
     <div style="page-break-before: always"></div>
-    <div class="page"></div>
+    <div class="page">
+        <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+            </div>
+            <div style="float: right; text-align: right;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="medline Logo">
+            </div>
+          </div>
+          <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;  margin-left: 8pt;">
+              <p>  {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Report</p>
+            </div>
+            <div style="float: right; text-align: right;">
+              <p>{{ name }}</p>
+            </div>
+          </div>
+        <img
+          src="data:image/png;base64, {{ page_after_content_image_base64 }}"
+          alt="graph"
+          style="width: 100%; height: auto;margin-top:50pt;"
+        /> 
+        <div style="text-align: center; margin-top: 10%;">5</div>
+    </div>   
     <div style="page-break-before: always"></div>
     <div class="page">
-      <div style="text-align: center; font-size: 25pt; margin-top: 28pt; font-weight: bold;">
+        <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+            </div>
+            <div style="float: right; text-align: right;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="medline Logo">
+            </div>
+          </div>
+          <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;  margin-left: 8pt;">
+              <p>  {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Report</p>
+            </div>
+            <div style="float: right; text-align: right;">
+              <p>{{ name }}</p>
+            </div>
+          </div>
+      <div style="text-align: center; font-size: 23pt; margin-top: 28pt; font-weight: bold;">
         Introduction to the Assessment Report
       </div>
     
       <div style="
-      text-align: center;
-      font-size: 16pt;
-      margin-top: 20pt;
+      
+      font-size: 13pt;
+      margin-top: 40pt;
       margin-bottom: 10pt;
       font-weight: 400;
   ">
@@ -410,37 +515,36 @@
       <h2 style="text-align: left; color: #333; margin-top: 40pt;">
       
       </h2>
-      <p style="text-align: left; margin-bottom: 15pt; margin-top: 20pt; font-size: 15pt;">
-        {% if assessment_type == '360' %}
-          360-degree
-        {% else %}
-          Self
-        {% endif %}
-        feedback is becoming increasingly popular in linking good quality feedback with improved performance and as an essential part of personal development. It offers a simplified, manageable, and often more immediate assessment, facilitating quicker adjustments and real-time development for employees. The
-        {% if assessment_type == '360' %}
-          360-degree
-        {% else %}
-          self
-        {% endif %}
-        feedback approach is particularly beneficial for organizations or teams that value swift, straightforward performance evaluations without the complexities of broader input.
-      </p>
+      <p style="text-align: left; margin-bottom: 15pt; margin-top: 20pt; font-size: 11pt; ">
+        
+          {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} feedback is becoming increasingly popular in linking good quality feedback with improved performance and as an essential part of personal development. It offers a simplified, manageable, and often more immediate assessment, facilitating quicker adjustments and real-time development for employees. The   {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} feedback approach is particularly beneficial for organizations or teams that value swift, straightforward performance evaluations without the complexities of broader input. </p>
 
       <div style="
-      text-align: center;
-      font-size: 16pt;
-      margin-top: 20pt;
+      
+      font-size: 13pt;
+      margin-top: 40pt;
       margin-bottom: 10pt;
       font-weight: 400;
   ">
        The Purpose of
-       {% if assessment_type == '360' %}
-         360-degree
-       {% else %}
-         Self
-       {% endif %}
+  
+           {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %}
+
        Feedback
       </div>
-      <ul style="text-align: left; list-style-type: disc; margin-left: 20pt; margin-bottom: 15pt; font-size: 15pt;">
+      <ul style="text-align: left; list-style-type: disc; margin-left: 20pt; margin-bottom: 15pt; font-size: 11pt;">
         <li class="custom-list-item">
           To develop an awareness of your perceived behavior within the workplace.
         </li>
@@ -460,14 +564,35 @@
           To give you the opportunity to take responsibility for your own development.
         </li>
       </ul>
+      <div style="text-align: center; margin-top: 45%;">6</div>
     </div>
     
     <div style="page-break-before: always"></div>
     <div class="page">
+        <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+            </div>
+            <div style="float: right; text-align: right;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="medline Logo">
+            </div>
+          </div>
+          <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;  margin-left: 8pt;">
+              <p>  {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Report</p>
+            </div>
+            <div style="float: right; text-align: right;">
+              <p>{{ name }}</p>
+            </div>
+          </div>
       <div
         style="
           text-align: center;
-          font-size: 25pt;
+          font-size: 23pt;
           margin-top: 28pt;
           font-weight: bold;
         "
@@ -480,20 +605,16 @@
           text-align: left;
           margin-bottom: 25pt;
           margin-top: 40pt;
-          font-size: 15pt;
+          font-size: 11pt;
         "
       >
-        The feedback is based on the questionnaires filled up by you  
-        {% if assessment_type == '360' %}
-        and your observers
-      {% else %}
-       
-    {% endif %}
+        The feedback is based on the questionnaires filled up by you and your manager
+     
     . A number of questions were asked on a range of Leadership
         competencies based on the competencies listed above.
       </p>
 
-      <p style="text-align: left; margin-bottom: 15pt; font-size: 15pt">
+      <p style="text-align: left; margin-bottom: 15pt; font-size: 11pt">
         The computation of the rating level has been done using the following
         rationale:
       </p>
@@ -504,7 +625,7 @@
           list-style-type: disc;
           margin-left: 20pt;
           margin-bottom: 15pt;
-          font-size: 15pt;
+          font-size: 11pt;
         "
       >
         <li class="custom-list-item">
@@ -524,45 +645,91 @@
           the analysis.
         </li>
       </ul>
+      <div style="text-align: center;margin-top: 75%;">7</div>
     </div>
     <div style="page-break-before: always"></div>
     <div class="page">
+        <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+            </div>
+            <div style="float: right; text-align: right;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="medline Logo">
+            </div>
+          </div>
+          <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;  margin-left: 8pt;">
+              <p>  {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Report</p>
+            </div>
+            <div style="float: right; text-align: right;">
+              <p>{{ name }}</p>
+            </div>
+          </div>
       <div>
         <div
           style="
             text-align: center;
-            font-size: 25pt;
+            font-size: 23pt;
             margin-top: 28pt;
             font-weight: bold;
           "
         >
           Your Scores
         </div>
-        <p style="margin: 20pt; margin-top: 80pt; margin-bottom: 50pt; font-size: 15pt;">
+        <p style="margin: 20pt; margin-top: 80pt; margin-bottom: 50pt; font-size: 11pt;">
           The table below summaries the self and manager scores of your    
-          {% if assessment_type == '360' %}
-          360-degree
-        {% else %}
-          Self
-        {% endif %}
+       
+            {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %}
+       
           feedback against each competency. The higher the score, the greater
           the perception that you display the behavior.
         </p>
-      {% for image_base64 in image_base64_array %}
+   
+        {% for image_base64 in image_base64_array %}
         <img
           src="data:image/png;base64, {{ image_base64 }}"
           alt="graph"
           style="width: 100%; height: auto; margin-left: 20pt; margin-top: 60pt;"
         />
     {% endfor %}
+      
       </div>
+      <div style="text-align: center; margin-top: 30%;">8</div>
     </div>
     <div style="page-break-before: always"></div>
-    <div class="page" style="float: center">
+    <div class="page" >
+        <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+            </div>
+            <div style="float: right; text-align: right;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="medline Logo">
+            </div>
+          </div>
+          <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;  margin-left: 8pt;">
+              <p>  {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Report</p>
+            </div>
+            <div style="float: right; text-align: right;">
+              <p>{{ name }}</p>
+            </div>
+          </div>
       <div
         style="
           text-align: center;
-          font-size: 25pt;
+          font-size: 23pt;
           margin-top: 28t;
           margin-bottom: 60pt;
           font-weight: bold;
@@ -571,37 +738,59 @@
         Assessment Overview
       </div>
 
-      <div style="text-align: center;">
+      <div style="text-align: center; font-size: 11pt;">
+      
         <table class="tableStyle">
-            <tr>
-                {% for competency_data in data_for_assessment_overview_table.0 %}
-                    <th>
-                        {% if competency_data.0 == 'competency_name' %}
-                            Competencies
-                        {% elif competency_data.0 == 'total_participant_responses' %}
-                            Self
-                        {% else %}
-                            {{ competency_data.0 }}
-                        {% endif %}
-                    </th>
-                {% endfor %}
-            </tr>
-    
-            {% for competency_data in data_for_assessment_overview_table %}
-                <tr>
-                    {% for pair in competency_data %}
-                        <td>{{ pair.1 }}</td>
-                    {% endfor %}
-                </tr>
-            {% endfor %}
-        </table>
+          <tr>
+              {% for competency_data in data_for_assessment_overview_table.0 %}
+                  <th>
+                      {% if competency_data.0 == 'competency_name' %}
+                          Competencies
+                      {% elif competency_data.0 == 'total_participant_responses' %}
+                          Self
+                      {% else %}
+                          {{ competency_data.0 }}
+                      {% endif %}
+                  </th>
+              {% endfor %}
+          </tr>
+  
+          {% for competency_data in data_for_assessment_overview_table %}
+              <tr>
+                  {% for pair in competency_data %}
+                      <td>{{ pair.1 }}</td>
+                  {% endfor %}
+              </tr>
+          {% endfor %}
+      </table>
+    <div style="text-align: center; margin-top: 80%;">9</div>
     </div>
     
     <div style="page-break-before: always"></div>
     <div class="page_no_overflow">
+        <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+            </div>
+            <div style="float: right; text-align: right;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="medline Logo">
+            </div>
+          </div>
+          <div style="overflow: hidden;">
+            <div style="float: left; text-align: left;  margin-left: 8pt;">
+              <p>  {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Report</p>
+            </div>
+            <div style="float: right; text-align: right;">
+              <p>{{ name }}</p>
+            </div>
+          </div>
       <div style="
           text-align: center;
-          font-size: 25pt;
+          font-size: 23pt;
           margin-top: 28t;
           margin-bottom: 40pt;
           font-weight: bold;
@@ -609,73 +798,101 @@
           Detailed Rating and Behaviors
       </div>
       <div>
-          {% for competency in data_for_score_analysis %}
-              <div style="margin-top: 50pt; font-size: 20pt; font-weight: bold">
-                  {{ competency.competency_name }}
-              </div>
-  
-              <div style="
-                  text-align: center;
-                  font-size: 16pt;
-                  margin-top: 10pt;
-                  font-weight: normal;
-                  margin-bottom: 10pt;
-              ">
-                  Score Analysis
-              </div>
-              <table class="tableStyle">
-                  <tr>
-                      {% for column in competency.unique_columns %}
-                          <th>
-                              {% if column == 'question' %} Questions {% elif column == 'participant_response' %} Self {% else %} {{ column }} {% endif %}
-                          </th>
-                      {% endfor %}
-                  </tr>
-  
-                  <!-- Loop through the questions of the current competency -->
-                  {% for question in competency.rows %}
+        {% for competency in data_for_score_analysis %}
+        <div style="margin-top: 50pt; font-size: 20pt; font-weight: bold;">
+          {{ competency.competency_name }}
+            <div style="height: 70pt;">
+
+            </div>
+        </div>
+            <div style="
+            text-align: center;
+            font-size: 13pt;
+            margin-top: 20pt;
+            font-weight: normal;
+            margin-bottom: 10pt;
+        ">
+           S C O R E &nbsp;  A N A L Y S I S
+        </div>
+            <table class="tableStyle">
+                <tr>
+                  {% for column in competency.unique_columns %}
+                  <th>
+                      {% if column == 'question' %} Questions {% elif column == 'participant_response' %} Self {% else %} {{ column }} {% endif %}
+                  </th>
+              {% endfor %}
+                </tr>
+                {% for question in competency.rows %}
                       <tr>
                           {% for data in question %}
                               <td>{{ data }}</td>
                           {% endfor %}
                       </tr>
                   {% endfor %}
-              </table>
+            </table>
+
+        </div>
+        <div style="height: 70pt;">
+
+        </div>
+        {% for comp_frequency in frequency_analysis_data %}
+        {% if comp_frequency.competency_name == competency.competency_name %}
+        <div style="
+        text-align: center;
+        font-size: 13pt;
+        margin-top: 40pt;
+        font-weight: normal;
+        margin-bottom: 10pt;
+    ">
+       F R E Q U E N C Y &nbsp; A N A L Y S I S
+    </div>
+        <table class="tableStyle">
+          <tr>
+            <th>Questions</th>
+            {% for label_name in comp_frequency.labels_name %}
+                <th>{{ label_name }}</th>
+            {% endfor %}
+        </tr>
+        {% for freq_question in comp_frequency.questions %}
+            <tr>
+                {% for freq_que_data in freq_question %}
+                    <td>{{ freq_que_data }}</td>
+                {% endfor %}
+            </tr>
+        {% endfor %}
+        </table>
+        {% endif %}
+        {% endfor %}
   
-              {% for comp_frequency in frequency_analysis_data %}
-                  {% if comp_frequency.competency_name == competency.competency_name %}
-                      <div style="
-                          text-align: center;
-                          font-size: 16pt;
-                          margin-top: 20pt;
-                          margin-bottom: 10pt;
-                          font-weight: normal;
-                      ">
-                          Frequency Analysis
-                      </div>
-                      <table class="tableStyle">
-                          <tr>
-                              <th>Questions</th>
-                              {% for label_name in comp_frequency.labels_name %}
-                                  <th>{{ label_name }}</th>
-                              {% endfor %}
-                          </tr>
-                          {% for freq_question in comp_frequency.questions %}
-                              <tr>
-                                  {% for freq_que_data in freq_question %}
-                                      <td>{{ freq_que_data }}</td>
-                                  {% endfor %}
-                              </tr>
-                          {% endfor %}
-                      </table>
-                  {% endif %}
-              {% endfor %}
-          {% endfor %}
+
+            <div style="page-break-before: always"></div>
+            <div style="overflow: hidden;">
+                <div style="float: left; text-align: left;">
+                  <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+                </div>
+                <div style="float: right; text-align: right;">
+                  <img src="data:image/png;base64, {{image_organisation_base64}}" alt="medline Logo">
+                </div>
+              </div>
+              <div style="overflow: hidden;">
+                <div style="float: left; text-align: left; margin-left: 8pt;">
+                  <p>  {% if assessment_type == '360' %}
+            360-degree
+          {% else %}
+            Self
+          {% endif %} Report</p>
+                </div>
+                <div style="float: right; text-align: right;">
+                  <p>{{ name }}</p>
+                </div>
+              </div>
+        {% endfor %}
+          
       </div>
   </div>
-  <div style="page-break-before: always"></div>
+ 
   <div class="page">
-    
+   
       <div
         style="
           text-align: center;
@@ -728,7 +945,7 @@
           </tr>  
            </table>
 
-    
+           <!-- <div style="text-align: center; margin-top: 50%;">19</div> -->
   </div>
  
     
