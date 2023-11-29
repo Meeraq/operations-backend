@@ -3464,7 +3464,7 @@ def send_list_to_hr(request):
                 [hr_email],
                 "Welcome to the Meeraq Platform",
                 {"name": hr_name},
-                [env("BCC_EMAIL")],  # bcc
+                json.loads(env("BCC_EMAIL_SALES_TEAM")),  # bcc
             )
 
         for hr_user in project.hr.all():
