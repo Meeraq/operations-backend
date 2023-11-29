@@ -2330,3 +2330,8 @@ class MarkNotificationAsRead(APIView):
 
         notifications.update(read_status=True)
         return Response("Notifications marked as read.")
+
+class GetUnreadNotificationCount(APIView):
+    def get(self, request, user_id):
+        count = AssessmentNotification.objects.filter(user__id=user_id, read_status=False).count()
+        return Response({"count": count})
