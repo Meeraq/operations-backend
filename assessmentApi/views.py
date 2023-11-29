@@ -1844,16 +1844,18 @@ def generate_report_for_participant(
 
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
+        
+        image_url = org_serializer.data.get('image_url')
+        
+        if image_url is not None:
+            image_response = requests.get(image_url)
+            image_response.raise_for_status()
 
-        image_url = f"{org_serializer.data.get('image_url')}"
-        image_response = requests.get(image_url)
-        image_response.raise_for_status()
-
-        image_organisation_base64 = base64.b64encode(image_response.content).decode(
-            "utf-8"
-        )
-
-        content["image_organisation_base64"] = image_organisation_base64
+            image_organisation_base64 = base64.b64encode(image_response.content).decode('utf-8')
+            content["image_organisation_base64"] = image_organisation_base64
+        else:
+            
+            content["image_organisation_base64"] = None  
 
         email_message = render_to_string(file_name, content)
 
@@ -1873,15 +1875,18 @@ def html_for_pdf_preview(file_name, user_email, email_subject, content, body_mes
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
 
-        image_url = f"{org_serializer.data.get('image_url')}"
-        image_response = requests.get(image_url)
-        image_response.raise_for_status()
-
-        image_organisation_base64 = base64.b64encode(image_response.content).decode(
-            "utf-8"
-        )
         
-        content["image_organisation_base64"] = image_organisation_base64
+        image_url = org_serializer.data.get('image_url')
+        
+        if image_url is not None:
+            image_response = requests.get(image_url)
+            image_response.raise_for_status()
+
+            image_organisation_base64 = base64.b64encode(image_response.content).decode('utf-8')
+            content["image_organisation_base64"] = image_organisation_base64
+        else:
+            
+            content["image_organisation_base64"] = None  
         
         html_message = render_to_string(file_name, content)
 
