@@ -285,7 +285,10 @@ class DeleteLessonAPIView(APIView):
             return Response(
                 {"error": "Lesson not found"}, status=status.HTTP_404_NOT_FOUND
             )
-
+        course_enrollment = CourseEnrollment.objects.filter(completed_lessons__contains=lesson.id)
+        for enrollment in course_enrollment:
+            enrollment.completed_lessons = [lesson_id for lesson_id in enrollment.completed_lessons if lesson_id != lesson.id]
+            enrollment.save() 
         lesson.delete()
         return Response(
             {"message": "Lesson deleted successfully"},
