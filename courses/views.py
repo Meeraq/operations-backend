@@ -277,6 +277,22 @@ class LessonDetailView(generics.RetrieveAPIView):
         return Response(serializer.data)
 
 
+class DeleteLessonAPIView(APIView):
+    def delete(self, request, lesson_id):
+        try:
+            lesson = Lesson.objects.get(pk=lesson_id)
+        except Lesson.DoesNotExist:
+            return Response(
+                {"error": "Lesson not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        lesson.delete()
+        return Response(
+            {"message": "Lesson deleted successfully"},
+            status=status.HTTP_204_NO_CONTENT,
+        )
+
+
 @api_view(["POST"])
 def create_quiz_lesson(request):
     # Deserialize the incoming data

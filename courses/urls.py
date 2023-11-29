@@ -58,6 +58,11 @@ urlpatterns = [
         name="lesson-list",
     ),
     path(
+        "lessons/<int:lesson_id>/",
+        views.DeleteLessonAPIView.as_view(),
+        name="delete_lesson",
+    ),
+    path(
         "course/<int:course_id>/lesson/<int:lesson_id>/live-sessions/",
         views.get_live_sessions_for_lesson,
     ),
