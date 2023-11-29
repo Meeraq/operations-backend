@@ -2285,8 +2285,7 @@ class DownloadParticipantResultReport(APIView):
 
             with open(pdf_path, "rb") as pdf_file:
                 response = HttpResponse(pdf_file.read(), content_type="application/pdf")
-                response["Content-Disposition"] = 'attachment; filename="Report.pdf"'
-
+                response["Content-Disposition"] = f'attachment; filename={f"{participant.name} Report.pdf"}'
             # Close the file after reading
             pdf_file.close()
 
