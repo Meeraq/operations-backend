@@ -22,6 +22,10 @@ from .models import (
     CoachProfileTemplate,
     StandardizedField,
     StandardizedFieldRequest,
+    SessionRequestedActivity,
+    DeleteCoachProfileActivity,
+    RemoveCoachActivity,
+    PastSessionActivity,
 )
 from django.contrib.auth.models import User
 
@@ -297,5 +301,37 @@ class StandardizedFieldRequestSerializer(serializers.ModelSerializer):
 class StandardizedFieldRequestDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = StandardizedFieldRequest
+        fields = "__all__"
+        depth = 1
+
+
+class SessionRequestedActivitySerializer(serializers.ModelSerializer):
+    # user = UserSerializer()
+
+    class Meta:
+        model = SessionRequestedActivity
+        fields = "__all__"
+        depth = 1
+
+
+class DeleteCoachProfileActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DeleteCoachProfileActivity
+        fields = "__all__"
+        depth = 1
+        
+
+
+class RemoveCoachActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RemoveCoachActivity
+        fields = "__all__"
+        depth = 1
+
+
+
+class PastSessionActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PastSessionActivity
         fields = "__all__"
         depth = 1
