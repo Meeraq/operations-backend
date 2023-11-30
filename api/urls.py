@@ -12,7 +12,10 @@ from .views import (
     StandardFieldEditValue,
     StandardFieldDeleteValue,
     StandardizedFieldRequestAcceptReject,
+    # ProductAnalytics,
 )
+
+# ProductAnalytics,
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
@@ -285,4 +288,5 @@ urlpatterns = [
         StandardizedFieldRequestAcceptReject.as_view(),
     ),
     path("standard-field-delete-value/", StandardFieldDeleteValue.as_view()),
+    # path("product-analytics/", ProductAnalytics.as_view())
 ]

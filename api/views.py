@@ -46,6 +46,10 @@ from .serializers import (
     StandardizedFieldSerializer,
     StandardizedFieldRequestSerializer,
     StandardizedFieldRequestDepthOneSerializer,
+    SessionRequestedActivitySerializer,
+    DeleteCoachProfileActivitySerializer,
+    RemoveCoachActivitySerializer,
+    PastSessionActivitySerializer,
 )
 
 from django.utils.crypto import get_random_string
@@ -87,6 +91,10 @@ from .models import (
     CoachProfileTemplate,
     StandardizedField,
     StandardizedFieldRequest,
+    SessionRequestedActivity,
+    DeleteCoachProfileActivity,
+    RemoveCoachActivity,
+    PastSessionActivity,
 )
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
@@ -1857,11 +1865,24 @@ def add_coach(request):
 @api_view(["POST"])
 def delete_coach(request):
     coach_id = request.data.get("coach_id", None)
+    print("coach_id",coach_id)
+    user_id = request.data.get("user_id")
     if coach_id:
         try:
             coach = Coach.objects.get(id=coach_id)
+            coach_name=coach.first_name + " " + coach.last_name
             user = coach.user.user
             user.delete()
+            timestamp = timezone.now()
+            # data = request.data
+            current_user = User.objects.get(id=user_id)
+            
+            deleteCoachProfile = DeleteCoachProfileActivity.objects.create(
+                user_who_got_deleted = coach_name,
+                user_who_deleted =current_user,
+                timestamp = timestamp
+            )
+            deleteCoachProfile.save()
             return Response({"message": "Coach deleted."}, status=200)
         except ObjectDoesNotExist:
             return Response({"message": "Failed to delete coach profile"}, status=400)
@@ -4373,6 +4394,24 @@ def request_chemistry_session(request, project_id, learner_id):
         slot_message = get_slot_message(request.data["availibility"])
         message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {session_to_update.project.name}. Please book one of the requested slots now"
         create_notification(coach.user.user, path_for_coach, message_for_coach)
+
+
+        project = Project.objects.get(id=project_id)
+        time_of_request = timezone.now()
+        coachee = Learner.objects.get(id=learner_id)
+        session_name = "chemistry"
+
+        session_request = SessionRequestedActivity.objects.create(
+        project = project,
+        time_of_request = time_of_request,
+        coach = coach,
+        coachee = coachee,
+        session_name = session_name
+
+    )
+
+    session_request.save()
+
     return Response({"message": "Session requested successfully"}, status=200)
 
 
@@ -4394,6 +4433,25 @@ def request_session(request, session_id, coach_id):
     session.coach = coach
     session.status = "requested"
     session.save()
+
+   
+
+    project = session.project
+    time_of_request = timezone.now()
+    coachee = session.learner
+    session_name = session.session_type
+
+    session_request = SessionRequestedActivity.objects.create(
+        project = project,
+        time_of_request = time_of_request,
+        coach = coach,
+        coachee = coachee,
+        session_name = session_name
+
+    )
+
+    session_request.save()
+
     return Response({"message": "Session requested successfully"}, status=200)
 
 
@@ -5119,6 +5177,7 @@ def select_coach_for_coachee(request):
 
 @api_view(["POST"])
 def add_past_session(request, session_id):
+    # print("request data",request.data)
     try:
         session = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
@@ -5138,6 +5197,25 @@ def add_past_session(request, session_id):
             try:
                 coach = Coach.objects.get(id=coach_id)
                 session.coach = coach
+
+                # for addPastSession
+                # coach = session.coach
+                # coachee = session.learner
+                # project = session.project
+                # timestamp = timezone.now()
+                # user_id = request.data.get("userId")
+                # user_who_added = User.objects.get(id=user_id)
+
+                # print(coach, coachee, project, timestamp, user_who_added)
+
+                # addPastSession = PastSessionActivity.objects.create(
+                #             project = project,
+                #             user_who_added = user_who_added,
+                #             coach = coach,
+                #             coachee = coachee,
+                #             timestamp = timestamp
+                #         )
+                # addPastSession.save()
             except Coach.DoesNotExist:
                 return Response({"error": "Coach not found."}, status=404)
 
@@ -5145,6 +5223,29 @@ def add_past_session(request, session_id):
     session.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session.status_updated_at = datetime.now()
     session.save()
+
+    coach = session.coach
+    coachee = session.learner
+    project = session.project
+    timestamp = timezone.now()
+    user_id = request.data.get("userId")
+    user_who_added = User.objects.get(id=user_id)
+
+    # print(coach, coachee, project, timestamp, user_who_added)
+
+    addPastSession = PastSessionActivity.objects.create(
+                project = project,
+                user_who_added = user_who_added,
+                coach = coach,
+                coachee = coachee,
+                timestamp = timestamp
+            )
+    addPastSession.save()
+    # print("after addpastsession")
+    
+
+    
+    
     return Response({"message": "Session booked successfully."})
 
 
@@ -5280,6 +5381,10 @@ def remove_coach_from_project(request, project_id):
         project = Project.objects.get(id=project_id)
         coach_id = request.data.get("coachIdToDelete")
         coach = Coach.objects.get(id=coach_id)
+        currentuser_id = request.data.get("currentUserId")
+        currentuser = User.objects.get(id=currentuser_id)
+        print("currentuser", currentuser)
+
     except Project.DoesNotExist:
         return Response(
             {"message": "Project not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5317,6 +5422,27 @@ def remove_coach_from_project(request, project_id):
             project.coaches_status.remove(coach_status)
             project.coaches.remove(coach)
             project.save()
+
+            user = "default user"
+            time_of_removal = timezone.now()
+            removed_coach = coach
+            removed_from_project = project
+
+            # deleteCoachProfile = DeleteCoachProfileActivity.objects.create(
+            #     user_who_got_deleted = coach_name,
+            #     user_who_deleted = "default user",
+            #     timestamp = timestamp
+            # )
+            # deleteCoachProfile.save()
+
+            removeCoachProfile = RemoveCoachActivity.objects.create(
+                user = currentuser,
+                time_of_removal = time_of_removal,
+                removed_coach = removed_coach,
+                removed_from_project = removed_from_project
+            )
+
+            removeCoachProfile.save()
 
             return Response(
                 {"message": "Coach has been removed from the project."},
@@ -5942,6 +6068,49 @@ class ActivitySummary(APIView):
             print("sent_email_activities", str(e))
             sent_email_serializer = []
 
+        try:
+            session_requested_activities = SessionRequestedActivity.objects.all()
+            total_session_requested_count = session_requested_activities.count()
+            session_requested_serializer = SessionRequestedActivitySerializer(
+                session_requested_activities, many=True
+            )
+        except Exception as e:
+            print("session_requested_activities", str(e))
+            session_requested_serializer = []
+
+        
+        try:
+            delete_coach_profile_activities = DeleteCoachProfileActivity.objects.all()
+            total_coach_profile_delete_count = delete_coach_profile_activities.count()
+            delete_coach_profile_serializer = DeleteCoachProfileActivitySerializer(
+                delete_coach_profile_activities, many=True
+            )
+        except Exception as e:
+            print("delete_coach_activities", str(e))
+            delete_coach_profile_serializer = []
+
+        
+        try:
+            remove_coach_profile_activities = RemoveCoachActivity.objects.all()
+            total_remove_coach_count = remove_coach_profile_activities.count()
+            remove_coach_profile_serializer = RemoveCoachActivitySerializer(
+                remove_coach_profile_activities, many=True
+            )
+        except Exception as e:
+            print("delete_coach_activities", str(e))
+            delete_coach_profile_serializer = []
+        
+
+        try:
+            add_past_session_activities = PastSessionActivity.objects.all()
+            total_past_session_count = add_past_session_activities.count()
+            past_session_activity_serializer = PastSessionActivitySerializer(
+                add_past_session_activities, many=True
+            )
+        except Exception as e:
+            print("delete_coach_activities", str(e))
+            delete_coach_profile_serializer = []
+
         response_data = {
             "user_login": {
                 "total_count": total_login_count,
@@ -5963,6 +6132,23 @@ class ActivitySummary(APIView):
                 "total_count": total_sent_email_count,
                 "activity": sent_email_serializer.data,
             },
+            "session_requested": {
+                    "total_count": total_session_requested_count,
+                    "activity": session_requested_serializer.data
+            },
+            "delete_coach_profile": {
+                    "total_count": total_coach_profile_delete_count,
+                    "activity": delete_coach_profile_serializer.data
+            },
+            "remove_coach_profile": {
+                    "total_count": total_remove_coach_count,
+                    "activity": remove_coach_profile_serializer.data
+            },
+            "add_past_session": {
+                    "total_count": total_past_session_count,
+                    "activity": past_session_activity_serializer.data
+            },
+            
         }
 
         return Response(response_data)
@@ -6190,3 +6376,36 @@ class StandardFieldDeleteValue(APIView):
             {"message": f"Value deleted from {FIELD_NAME_VALUES[field_name]} field."},
             status=200,
         )
+
+
+
+
+
+
+
+# class ProductAnalytics(APIView):
+#     def get(self, request):
+#         try: 
+#             session_requested_activities = SessionRequestedActivity.objects.all()
+#             total_session_requested_count = session_requested_activities.count()
+            
+#             # Serialize the data directly within the response
+#             response_data = {
+#                 "session_requested": {
+#                     "total_count": total_session_requested_count,
+#                     "activity": SessionRequestedActivitySerializer(session_requested_activities, many=True).data
+#                 }
+#             }
+
+#         except Exception as e:
+#             print("session_requested_activities", str(e))
+#             response_data = {
+#                 "session_requested": {
+#                     "total_count": 0,
+#                     "activity": []
+#                 }
+#             }
+
+#         return Response(response_data, status=status.HTTP_200_OK)
+
+        
