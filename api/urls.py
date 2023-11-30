@@ -14,6 +14,8 @@ from .views import (
     StandardizedFieldRequestAcceptReject,
 )
 
+
+
 urlpatterns = [
     path("pmos/", views.create_pmo),
     path("coaches/", views.coach_signup),
@@ -285,4 +287,5 @@ urlpatterns = [
         StandardizedFieldRequestAcceptReject.as_view(),
     ),
     path("standard-field-delete-value/", StandardFieldDeleteValue.as_view()),
+
 ]

@@ -23,6 +23,10 @@ from .models import (
     CoachProfileTemplate,
     StandardizedField,
     StandardizedFieldRequest,
+    RemoveCoachActivity,
+    DeleteCoachProfileActivity,
+    SessionRequestedActivity,
+    PastSessionActivity
 )
 
 # Register your models here.
@@ -53,3 +57,7 @@ admin.site.register(CoachProfileTemplate)
 
 admin.site.register(StandardizedField)
 admin.site.register(StandardizedFieldRequest)
+admin.site.register(RemoveCoachActivity)
+admin.site.register(DeleteCoachProfileActivity)
+admin.site.register(SessionRequestedActivity)
+admin.site.register(PastSessionActivity)
