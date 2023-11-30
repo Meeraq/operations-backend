@@ -812,7 +812,7 @@ def create_project_cass(request):
         return Response({"error": "Failed to create project."}, status=400)
     hr_emails = []
     project_name = project.name
-    print(request.data["hr"], "HR ID")
+    
     for hr in request.data["hr"]:
         single_hr = HR.objects.get(id=hr)
         # print(single_hr)
@@ -1865,7 +1865,7 @@ def add_coach(request):
 @api_view(["POST"])
 def delete_coach(request):
     coach_id = request.data.get("coach_id", None)
-    print("coach_id",coach_id)
+    
     user_id = request.data.get("user_id")
     if coach_id:
         try:
@@ -5198,24 +5198,6 @@ def add_past_session(request, session_id):
                 coach = Coach.objects.get(id=coach_id)
                 session.coach = coach
 
-                # for addPastSession
-                # coach = session.coach
-                # coachee = session.learner
-                # project = session.project
-                # timestamp = timezone.now()
-                # user_id = request.data.get("userId")
-                # user_who_added = User.objects.get(id=user_id)
-
-                # print(coach, coachee, project, timestamp, user_who_added)
-
-                # addPastSession = PastSessionActivity.objects.create(
-                #             project = project,
-                #             user_who_added = user_who_added,
-                #             coach = coach,
-                #             coachee = coachee,
-                #             timestamp = timestamp
-                #         )
-                # addPastSession.save()
             except Coach.DoesNotExist:
                 return Response({"error": "Coach not found."}, status=404)
 
@@ -5231,7 +5213,7 @@ def add_past_session(request, session_id):
     user_id = request.data.get("userId")
     user_who_added = User.objects.get(id=user_id)
 
-    # print(coach, coachee, project, timestamp, user_who_added)
+    
 
     addPastSession = PastSessionActivity.objects.create(
                 project = project,
@@ -5241,11 +5223,7 @@ def add_past_session(request, session_id):
                 timestamp = timestamp
             )
     addPastSession.save()
-    # print("after addpastsession")
-    
 
-    
-    
     return Response({"message": "Session booked successfully."})
 
 
@@ -5383,7 +5361,7 @@ def remove_coach_from_project(request, project_id):
         coach = Coach.objects.get(id=coach_id)
         currentuser_id = request.data.get("currentUserId")
         currentuser = User.objects.get(id=currentuser_id)
-        print("currentuser", currentuser)
+        
 
     except Project.DoesNotExist:
         return Response(
@@ -5428,12 +5406,6 @@ def remove_coach_from_project(request, project_id):
             removed_coach = coach
             removed_from_project = project
 
-            # deleteCoachProfile = DeleteCoachProfileActivity.objects.create(
-            #     user_who_got_deleted = coach_name,
-            #     user_who_deleted = "default user",
-            #     timestamp = timestamp
-            # )
-            # deleteCoachProfile.save()
 
             removeCoachProfile = RemoveCoachActivity.objects.create(
                 user = currentuser,
