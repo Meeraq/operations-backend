@@ -546,6 +546,52 @@ class StandardizedFieldRequest(models.Model):
         return f"{self.coach.email} - {self.standardized_field_name} - {self.status}"
 
 
+class SessionRequestedActivity(models.Model): 
+    
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    time_of_request = models.DateTimeField()
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    coachee = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    session_name = models.CharField(max_length=225, blank=True, null=True)
+
+    
+
+class DeleteCoachProfileActivity(models.Model):
+    user_who_got_deleted =  models.CharField(max_length=225, blank=True, null=True)
+    user_who_deleted = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user_who_deleted} deleted coach profile."
+
+
+
+class RemoveCoachActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    time_of_removal = models.DateTimeField()
+    removed_coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    removed_from_project = models.ForeignKey(Project, on_delete=models.CASCADE)
+
+
+    def __str__(self):
+        return f"{self.user} removed coach profile."
+
+
+
+class PastSessionActivity(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    user_who_added = models.ForeignKey(User, on_delete=models.CASCADE)
+    coach = models.ForeignKey(Coach, on_delete=models.SET_NULL, null=True)
+    coachee = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+    
+
+    def __str__(self):
+        return f"{self.user_who_added} added past session."
+
+
+
+
 class Template(models.Model):
     title = models.CharField(max_length=100)
     description = models.TextField()

@@ -294,6 +294,7 @@ urlpatterns = [
         StandardizedFieldRequestAcceptReject.as_view(),
     ),
     path("standard-field-delete-value/", StandardFieldDeleteValue.as_view()),
+
     path("projects/<int:project_id>/coaches/", views.remove_coach_from_project),
     path("templates/", views.template_list_create_view),
     path("templates/<int:pk>/", views.template_retrieve_update_destroy_view),
