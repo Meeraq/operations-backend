@@ -2,6 +2,44 @@
 
 from django.db import migrations, models
 import django.db.models.deletion
+from django.utils import timezone
+from api.models import CoachStatus ,Project,Template,ProjectContract,CoachContract
+
+def populate_coach_contracts(apps, schema_editor):
+    filtered_coach_statuses = CoachStatus.objects.filter(
+            status__hr__status="select", status__project_structure__status="select"
+        )
+    projects = []
+    for coach_status in filtered_coach_statuses:
+        project = Project.objects.get(coaches_status__id=coach_status.id)
+        projects.append(project)
+        
+
+    contract_template , created1= Template.objects.get_or_create(
+            title="Template 1", description="<p>{{org_name}} {{project_name}}</p>"
+        )
+    for project in projects:
+        project_contract,created2 = ProjectContract.objects.get_or_create(
+                template_id=contract_template.id,
+                title=contract_template.title,
+                content=contract_template.description,
+                project=project,
+            )
+    coach_contracts=[]
+    for coach_status in filtered_coach_statuses:
+        project = Project.objects.get(coaches_status__id=coach_status.id)
+        project_contract = ProjectContract.objects.get( template_id=contract_template.id,project=project)
+        coach_contract,created3=CoachContract.objects.get_or_create(
+                project_contract=project_contract,
+                name_inputed=coach_status.coach.first_name + " " + coach_status.coach.last_name,
+                project=project,
+                status="approved",
+                coach=coach_status.coach,
+                response_date=timezone.now().date()
+            )
+        coach_contracts.append(coach_contract)
+    print(coach_contracts)
+        
 
 
 class Migration(migrations.Migration):
@@ -48,4 +86,5 @@ class Migration(migrations.Migration):
                 ('project_contract', models.ForeignKey(blank=True, on_delete=django.db.models.deletion.CASCADE, to='api.projectcontract')),
             ],
         ),
+        migrations.RunPython(populate_coach_contracts),
     ]
