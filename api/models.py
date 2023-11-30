@@ -547,16 +547,6 @@ class StandardizedFieldRequest(models.Model):
         return f"{self.coach.email} - {self.standardized_field_name} - {self.status}"
 
 
-
-
-# class AddGoalActivity(models.Model):
-#     user = models.ForeignKey(User, on_delete=models.CASCADE)
-#     timestamp = models.DateTimeField()
-
-#     def __str__(self):
-#         return f"{self.user} added a goal."
-
-
 class SessionRequestedActivity(models.Model): 
     
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
@@ -565,10 +555,7 @@ class SessionRequestedActivity(models.Model):
     coachee = models.ForeignKey(Learner, on_delete=models.CASCADE)
     session_name = models.CharField(max_length=225, blank=True, null=True)
 
-    # def __str__(self):
-    #      return f"{self.user} added a session requested."
     
-
 
 class DeleteCoachProfileActivity(models.Model):
     user_who_got_deleted =  models.CharField(max_length=225, blank=True, null=True)
