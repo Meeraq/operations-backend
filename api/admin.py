@@ -23,6 +23,7 @@ from .models import (
     CoachProfileTemplate,
     StandardizedField,
     StandardizedFieldRequest,
+    Update,
 )
 
 # Register your models here.
@@ -53,3 +54,4 @@ admin.site.register(CoachProfileTemplate)
 
 admin.site.register(StandardizedField)
 admin.site.register(StandardizedFieldRequest)
+admin.site.register(Update)

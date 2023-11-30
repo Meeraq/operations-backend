@@ -242,6 +242,7 @@ class Project(models.Model):
     STATUS_CHOICES = (
         ("active", "Active"),
         ("completed", "Completed"),
+        ("presales", "Presales"),
     )
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
     name = models.CharField(max_length=100, unique=True)
@@ -280,13 +281,24 @@ class Project(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, blank=True, null=True
     )
-    coach_consent_mandatory=models.BooleanField(default=True)
-    
+    coach_consent_mandatory = models.BooleanField(default=True)
+
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self):
         return self.name
+
+
+class Update(models.Model):
+    pmo = models.ForeignKey(Pmo, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    message = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.project.name} update by {self.pmo.name}"
 
 
 class OTP(models.Model):

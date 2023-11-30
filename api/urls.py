@@ -26,6 +26,8 @@ urlpatterns = [
         include("django_rest_passwordreset.urls", namespace="password_reset"),
     ),
     path("projects/ongoing/", views.get_ongoing_projects),
+    path("projects/<int:project_id>/updates/", views.get_project_updates),
+    path("projects/<int:project_id>/updates/create/", views.add_project_update),
     path("projects/learner/<int:learner_id>/", views.get_projects_of_learner),
     path("management-token/", views.get_management_token),
     path(
