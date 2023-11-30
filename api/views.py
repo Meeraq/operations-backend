@@ -6379,33 +6379,4 @@ class StandardFieldDeleteValue(APIView):
 
 
 
-
-
-
-
-# class ProductAnalytics(APIView):
-#     def get(self, request):
-#         try: 
-#             session_requested_activities = SessionRequestedActivity.objects.all()
-#             total_session_requested_count = session_requested_activities.count()
-            
-#             # Serialize the data directly within the response
-#             response_data = {
-#                 "session_requested": {
-#                     "total_count": total_session_requested_count,
-#                     "activity": SessionRequestedActivitySerializer(session_requested_activities, many=True).data
-#                 }
-#             }
-
-#         except Exception as e:
-#             print("session_requested_activities", str(e))
-#             response_data = {
-#                 "session_requested": {
-#                     "total_count": 0,
-#                     "activity": []
-#                 }
-#             }
-
-#         return Response(response_data, status=status.HTTP_200_OK)
-
         
