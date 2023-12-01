@@ -5456,11 +5456,7 @@ def remove_coach_from_project(request, project_id):
             project.coaches.remove(coach)
             project.save()
             coach_status.delete()
-            try:
-                coach_contract=CoachContract.objects.get(project=project,coach=coach)
-                coach_contract.delete()
-            except CoachContract.DoesNotExist:
-                pass
+            
             user = "default user"
             time_of_removal = timezone.now()
             removed_coach = coach   
