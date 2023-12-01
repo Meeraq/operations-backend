@@ -23,6 +23,13 @@ from .models import (
     CoachProfileTemplate,
     StandardizedField,
     StandardizedFieldRequest,
+    RemoveCoachActivity,
+    DeleteCoachProfileActivity,
+    SessionRequestedActivity,
+    PastSessionActivity,
+    Template,
+    ProjectContract,
+    CoachContract,
     Update,
 )
 
@@ -54,4 +61,12 @@ admin.site.register(CoachProfileTemplate)
 
 admin.site.register(StandardizedField)
 admin.site.register(StandardizedFieldRequest)
+admin.site.register(RemoveCoachActivity)
+admin.site.register(DeleteCoachProfileActivity)
+admin.site.register(SessionRequestedActivity)
+admin.site.register(PastSessionActivity)
+admin.site.register(Template)
+admin.site.register(ProjectContract)
+admin.site.register(CoachContract)
+
 admin.site.register(Update)
