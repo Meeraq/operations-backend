@@ -1,4 +1,5 @@
 from django.db import models
+import os
 
 # Create your models here.
 from django.contrib.auth.models import AbstractUser, Group
@@ -16,6 +17,7 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
+from django_celery_beat.models import PeriodicTask
 
 
 import environ
@@ -55,12 +57,15 @@ def password_reset_token_created(
     subject = "Meeraq - Forgot Password"
 
     user_type = reset_password_token.user.profile.type
+    not_approved_coach = False
     if user_type == "pmo":
         user = Pmo.objects.get(email=reset_password_token.user.email)
         name = user.name
     elif user_type == "coach":
         user = Coach.objects.get(email=reset_password_token.user.email)
         name = user.first_name
+        if not user.is_approved:
+            not_approved_coach = True
     elif user_type == "learner":
         user = Learner.objects.get(email=reset_password_token.user.email)
         name = user.name
@@ -70,18 +75,32 @@ def password_reset_token_created(
     else:
         name = "User"
 
-    # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
-    link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
-    # send_mail(
-    #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
-    # )
-    send_mail_templates(
-        "hr_emails/forgot_password.html",
-        [reset_password_token.user.email],
-        "Meeraq Platform | Password Reset",
-        {"name": name, "resetPassword": link},
-        [],  # no bcc
-    )
+    if not_approved_coach == True:
+        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+        link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
+        # send_mail(
+        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
+        # )
+        send_mail_templates(
+            "coach_templates/create_new_password.html",
+            [reset_password_token.user.email],
+            "Meeraq Platform | Create New Password",
+            {"name": name, "createPassword": link},
+            [],  # no bcc
+        )
+    else:
+        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+        link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
+        # send_mail(
+        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
+        # )
+        send_mail_templates(
+            "hr_emails/forgot_password.html",
+            [reset_password_token.user.email],
+            "Meeraq Platform | Password Reset",
+            {"name": name, "resetPassword": link},
+            [],  # no bcc
+        )
 
 
 class Profile(models.Model):
@@ -109,23 +128,31 @@ class Pmo(models.Model):
         return self.name
 
 
+def validate_pdf_extension(value):
+    ext = os.path.splitext(value.name)[1].lower()
+    if not ext == ".pdf":
+        raise ValidationError("Only PDF files are allowed.")
+
+
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     coach_id = models.CharField(max_length=20, blank=True)
+    vendor_id = models.CharField(max_length=255, blank=True, default="")
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
     age = models.CharField(max_length=10, default="", blank=True)
     gender = models.CharField(max_length=50, blank=True)
-    domain = models.CharField(max_length=50, blank=True)
+    domain = models.JSONField(default=list, blank=True)
     room_id = models.CharField(max_length=50, blank=True)
+    phone_country_code = models.CharField(max_length=20, default="", blank=True)
     phone = models.CharField(max_length=25)
-    level = models.CharField(max_length=50)
-    rating = models.CharField(max_length=20)
+    level = models.CharField(max_length=50, blank=True)
+    rating = models.CharField(max_length=20, blank=True)
     area_of_expertise = models.JSONField(default=list, blank=True)
     completed_sessions = models.IntegerField(blank=True, default=0)
     profile_pic = models.ImageField(upload_to="post_images", blank=True)
-    education = models.CharField(max_length=200, blank=True)
+    education = models.JSONField(default=list, blank=True)
     corporate_experience = models.TextField(blank=True)
     coaching_experience = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
@@ -145,6 +172,18 @@ class Coach(models.Model):
     other_certification = models.JSONField(default=list, blank=True)
     active_inactive = models.BooleanField(blank=True, default=False)
     currency = models.CharField(max_length=100, blank=True, default="")
+    internal_coach = models.BooleanField(blank=True, default=False)
+    organization_of_coach = models.CharField(max_length=100, blank=True)
+    reason_for_inactive = models.JSONField(default=list, blank=True)
+    client_companies = models.JSONField(default=list, blank=True)
+    education_pic = models.ImageField(upload_to="post_images", blank=True)
+
+    educational_qualification = models.JSONField(default=list, blank=True)
+
+    # education_upload_file = models.ImageField(upload_to="post_images", blank=True)
+    education_upload_file = models.FileField(
+        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+    )
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -154,7 +193,7 @@ class Learner(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=100)
     email = models.EmailField()
-    phone = models.CharField(max_length=25)
+    phone = models.CharField(max_length=25, blank=True)
     area_of_expertise = models.CharField(max_length=100, blank=True)
     years_of_experience = models.IntegerField(default=0, blank=True)
 
@@ -200,8 +239,12 @@ class CoachStatus(models.Model):
 
 
 class Project(models.Model):
+    STATUS_CHOICES = (
+        ("active", "Active"),
+        ("completed", "Completed"),
+    )
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type = models.CharField(
         max_length=50, choices=project_type_choice, default="cod"
@@ -233,7 +276,12 @@ class Project(models.Model):
     coach_fees_per_hour = models.IntegerField(default=0, blank=True)
     approx_coachee = models.TextField(blank=True)
     frequency_of_session = models.TextField(blank=True)
-
+    project_description = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, blank=True, null=True
+    )
+    coach_consent_mandatory=models.BooleanField(default=True)
+    
     class Meta:
         ordering = ["-created_at"]
 
@@ -314,6 +362,8 @@ class SessionRequestCaas(models.Model):
     status = models.CharField(max_length=30, default="", blank=True)
     session_number = models.IntegerField(blank=True, default=None, null=True)
     session_duration = models.IntegerField(blank=True, default=None, null=True)
+    status_updated_at = models.DateTimeField(blank=True, null=True, default=None)
+    billable_session_number = models.IntegerField(blank=True, default=None, null=True)
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
@@ -393,8 +443,155 @@ class ActionItem(models.Model):
     )
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
-    competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+    competency = models.ForeignKey(Competency, on_delete=models.CASCADE)    
+
+
+class ProfileEditActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"Profile Edit for {self.user.username}"
+
+
+class UserLoginActivity(models.Model):
+    PLATFORM_CHOICES = (
+        ("caas", "CAAS"),
+        ("seeq", "SEEQ"),
+        ("vendor", "VENDOR"),
+        ("assessment", "ASSESSMENT"),
+        ("unknown", "UNKNOWN"),
+    )
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+    platform = models.CharField(blank=True, choices=PLATFORM_CHOICES, max_length=225)
+
+    def __str__(self):
+        return f"User Login Activity for {self.user.username}"
+
+
+class SentEmailActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    email_subject = models.CharField(max_length=500)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"Sent Email - {self.user.username}"
+
+
+class AddCoachActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"Coach Added - {self.user.username}"
+
+
+class AddGoalActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user} added a goal."
+
+
+class CoachProfileTemplate(models.Model):
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    templates = models.JSONField(default=dict, blank=True)
+
+    def __str__(self):
+        return f"{self.coach} template."
+
+
+class StandardizedField(models.Model):
+    FIELD_CHOICES = (
+        ("location", "Work Location"),
+        ("other_certification", "Assessment Certification"),
+        ("area_of_expertise", "Industry"),
+        ("job_roles", "Job roles"),
+        ("companies_worked_in", "Companies worked in"),
+        ("language", "Language Proficiency"),
+        ("education", "Education Institutions"),
+        ("domain", "Functional Domain"),
+        ("client_companies", "Client companies"),
+        ("educational_qualification", "Educational Qualification"),
+    )
+
+    field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
+    values = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.field}"
+
+
+class StandardizedFieldRequest(models.Model):
+    STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("accepted", "Accepted"),
+        ("rejected", "Rejected"),
+    )
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True)
+    standardized_field_name = models.ForeignKey(
+        StandardizedField, on_delete=models.CASCADE, blank=True
+    )
+    value = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.coach.email} - {self.standardized_field_name} - {self.status}"
+
+
+class SessionRequestedActivity(models.Model): 
     
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    time_of_request = models.DateTimeField()
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    coachee = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    session_name = models.CharField(max_length=225, blank=True, null=True)
+
+    
+
+class DeleteCoachProfileActivity(models.Model):
+    user_who_got_deleted =  models.CharField(max_length=225, blank=True, null=True)
+    user_who_deleted = models.ForeignKey(User, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user_who_deleted} deleted coach profile."
+
+
+
+class RemoveCoachActivity(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    time_of_removal = models.DateTimeField()
+    removed_coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    removed_from_project = models.ForeignKey(Project, on_delete=models.CASCADE)
+
+
+    def __str__(self):
+        return f"{self.user} removed coach profile."
+
+
+
+class PastSessionActivity(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    user_who_added = models.ForeignKey(User, on_delete=models.CASCADE)
+    coach = models.ForeignKey(Coach, on_delete=models.SET_NULL, null=True)
+    coachee = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+    
+
+    def __str__(self):
+        return f"{self.user_who_added} added past session."
+
+
+
 
 class UserToken(models.Model):
     

@@ -1,12 +1,26 @@
 from django.urls import path, include
 from . import views
-from .views import UpdateInviteesView
+from .views import (
+    UpdateInviteesView,
+    SessionCountsForAllLearners,
+    SessionsProgressOfAllCoacheeForAnHr,
+    AddRegisteredCoach,
+    ActivitySummary,
+    StandardizedFieldAPI,
+    StandardizedFieldRequestAPI,
+    StandardFieldAddValue,
+    StandardFieldEditValue,
+    StandardFieldDeleteValue,
+    StandardizedFieldRequestAcceptReject,
+)
+
+
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
     path("coaches/", views.coach_signup),
     path("coaches/all/", views.get_coaches),
-    path("coaches/<int:coach_id>/approve/", views.approve_coach),
+    path("coaches/approve/", views.approve_coach),
     path("pmo-login/", views.pmo_login, name="pmo-login"),
     path("coach-login/", views.coach_login, name="coach-login"),
     path(
@@ -24,7 +38,7 @@ urlpatterns = [
     # path('projects/completed/hr/<int:hr_id>/',views.get_completed_projects_of_hr),
     path("add-coach/", views.add_coach),
     path("hr/all/", views.get_hr),
-    path("coaches/profile/<int:coach_id>/", views.update_coach_profile),
+    path("coaches/profile/<int:id>/", views.update_coach_profile),
     path("csrf/", views.get_csrf, name="api-csrf"),
     path("login/", views.login_view, name="api-login"),
     path("logout/", views.logout_view, name="api-logout"),
@@ -94,6 +108,7 @@ urlpatterns = [
     path("coach/delete/", views.delete_coach),
     path("notifications/all/<int:user_id>/", views.get_notifications),
     path("notifications/mark-as-read/", views.mark_notifications_as_read),
+    path("notifications/mark-all-as-read/", views.mark_all_notifications_as_read),
     path("notifications/unread-count/<int:user_id>/", views.unread_notification_count),
     path("mark_project_as_sold/", views.mark_project_as_sold),
     path(
@@ -113,6 +128,14 @@ urlpatterns = [
     path(
         "sessions/requested/<str:user_type>/<int:user_id>/",
         views.get_session_requests_of_user,
+    ),
+    path(
+        "sessions/pending/<str:user_type>/<int:user_id>/",
+        views.get_session_pending_of_user,
+    ),
+    path(
+        "sessions/all/<str:user_type>/<int:user_id>/",
+        views.get_all_sessions_of_user,
     ),
     path(
         "sessions/upcoming/<str:user_type>/<int:user_id>/",
@@ -138,11 +161,17 @@ urlpatterns = [
     path("goals/", views.create_goal),
     path("goals/<int:engagement_id>/", views.get_engagement_goals),
     path("goals/edit/<int:goal_id>/", views.edit_goal, name="edit_goal"),
+    path("goals/delete/<int:goal_id>/", views.delete_goal, name="delete_goal"),
     path("competency/", views.create_competency),
     path(
         "competency/edit/<int:competency_id>/",
         views.edit_competency,
         name="edit_competency",
+    ),
+    path(
+        "competency/delete/<int:competency_id>/",
+        views.delete_competency,
+        name="delete_competency",
     ),
     path("competency/<int:engagement_id>/", views.get_engagement_competency),
     path(
@@ -158,13 +187,18 @@ urlpatterns = [
         name="edit_action_item",
     ),
     path(
+        "action-items/delete/<int:action_item_id>/",
+        views.delete_action_item,
+        name="delete_action_item",
+    ),
+    path(
         "session/complete/<int:session_id>/",
         views.mark_session_as_complete,
     ),
     path("sessions/status/update/<int:session_id>/", views.edit_session_status),
     path(
-        "engagement/complete/<int:engagement_id>/",
-        views.complete_engagement,
+        "engagement/<str:status>/<int:engagement_id>/",
+        views.update_engagement_status,
     ),
     path(
         "all/competency/",
@@ -216,6 +250,44 @@ urlpatterns = [
     ),
     path("update-invitee/<int:session_request_id>/", UpdateInviteesView.as_view()),
     path("hr/<int:hr_id>/competencies/", views.get_all_competencies_of_hr),
+    path("coach/<int:coach_id>/sessions/", views.coach_session_list),
+    path("projects/<int:project_id>/coaches/", views.remove_coach_from_project),
+    path(
+        "coachee-session-counts/<str:user_type>/<int:user_id>/",
+        SessionCountsForAllLearners.as_view(),
+    ),
+    path(
+        "sessions-progress-of-all-coachee-for-an-hr/<int:user_id>/",
+        SessionsProgressOfAllCoacheeForAnHr.as_view(),
+    ),
+    path(
+        "coaches-which-are-included-in-projects/",
+        views.coaches_which_are_included_in_projects,
+    ),
+    path("add_registered_coach/", AddRegisteredCoach.as_view()),
+    path("get-registered-coaches/", views.get_registered_coaches),
+    path("edit-project-caas/<int:project_id>/", views.edit_project_caas),
+    path(
+        "pmo-dashboard/",
+        views.get_all_engagements,
+    ),
+    path("activity-summary/", ActivitySummary.as_view()),
+    path("send-reset-password-link/", views.send_reset_password_link),
+    path("coach-profile-templates/", views.create_coach_profile_template),
+    path("project/<int:project_id>/data/", views.get_coach_profile_template),
+    path("project-status-changing/<int:project_id>/", views.project_status),
+    path("completed-projects/<int:user_id>/", views.completed_projects),
+    path("standard_field/<int:user_id>/", views.standard_field_request),
+    path("standardized-fields/", StandardizedFieldAPI.as_view()),
+    path("standardized-field-requests/", StandardizedFieldRequestAPI.as_view()),
+    path("standard-field-add-value/", StandardFieldAddValue.as_view()),
+    path("standard-field-edit-value/", StandardFieldEditValue.as_view()),
+    path(
+        "standardized-field-request-accept-reject/",
+        StandardizedFieldRequestAcceptReject.as_view(),
+    ),
+    path("standard-field-delete-value/", StandardFieldDeleteValue.as_view()),
+
     path('google/oauth/<str:user_email>/', views.google_oauth, name='google_oauth'),
     path('google-auth-callback/', views.google_auth_callback, name='google_auth_callback'),
     path('microsoft/oauth/<str:user_mail_address>/', views.microsoft_auth),
