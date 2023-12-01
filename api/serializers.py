@@ -26,6 +26,10 @@ from .models import (
     DeleteCoachProfileActivity,
     RemoveCoachActivity,
     PastSessionActivity,
+    Template,
+    ProjectContract,
+    CoachContract,
+    Update,
 )
 from django.contrib.auth.models import User
 
@@ -87,6 +91,19 @@ class ProjectDepthTwoSerializer(serializers.ModelSerializer):
         model = Project
         fields = "__all__"
         depth = 2
+
+
+class UpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Update
+        fields = "__all__"
+
+
+class UpdateDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Update
+        fields = "__all__"
+        depth = 1
 
 
 class AvailibilitySerializer(serializers.ModelSerializer):
@@ -306,7 +323,7 @@ class StandardizedFieldRequestDepthOneSerializer(serializers.ModelSerializer):
 
 
 class SessionRequestedActivitySerializer(serializers.ModelSerializer):
-    # user = UserSerializer()
+    
 
     class Meta:
         model = SessionRequestedActivity
@@ -335,3 +352,20 @@ class PastSessionActivitySerializer(serializers.ModelSerializer):
         model = PastSessionActivity
         fields = "__all__"
         depth = 1
+        
+class TemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Template
+        fields = "__all__"
+
+
+class ProjectContractSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProjectContract
+        fields = "__all__"
+
+
+class CoachContractSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachContract
+        fields = "__all__"
