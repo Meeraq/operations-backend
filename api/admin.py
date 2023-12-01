@@ -26,7 +26,11 @@ from .models import (
     RemoveCoachActivity,
     DeleteCoachProfileActivity,
     SessionRequestedActivity,
-    PastSessionActivity
+    PastSessionActivity,
+    Template,
+    ProjectContract,
+    CoachContract,
+    Update,
 )
 
 # Register your models here.
@@ -61,3 +65,8 @@ admin.site.register(RemoveCoachActivity)
 admin.site.register(DeleteCoachProfileActivity)
 admin.site.register(SessionRequestedActivity)
 admin.site.register(PastSessionActivity)
+admin.site.register(Template)
+admin.site.register(ProjectContract)
+admin.site.register(CoachContract)
+
+admin.site.register(Update)
