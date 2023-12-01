@@ -319,6 +319,42 @@ def get_schedular_project(request, project_id):
         )
 
 
+def merge_time_slots(slots):
+    slots.sort(key=lambda x: x["start_time"])
+    merged_slots = []
+    for i in range(len(slots)):
+        if (
+            len(merged_slots) == 0
+            or slots[i]["start_time"] > merged_slots[-1]["end_time"]
+        ):
+            merged_slots.append(slots[i])
+        else:
+            merged_slots[-1]["end_time"] = max(
+                merged_slots[-1]["end_time"], slots[i]["end_time"]
+            )
+    return merged_slots
+
+
+def timestamp_to_datetime(timestamp):
+    return datetime.utcfromtimestamp(int(timestamp) / 1000.0)
+
+
+def generate_slots(start, end, duration):
+    slots = []
+    current_time = timestamp_to_datetime(start)
+
+    while current_time + timedelta(minutes=duration) <= timestamp_to_datetime(end):
+        new_end_time = current_time + timedelta(minutes=duration)
+        slots.append(
+            {
+                "start_time": int(current_time.timestamp() * 1000),
+                "end_time": int(new_end_time.timestamp() * 1000),
+            }
+        )
+        current_time += timedelta(minutes=15)
+    return slots
+
+
 @api_view(["GET"])
 def get_batch_calendar(request, batch_id):
     try:
@@ -332,12 +368,26 @@ def get_batch_calendar(request, batch_id):
         )
         coaching_sessions_result = []
         for coaching_session in coaching_sessions_serializer.data:
+            session_duration = coaching_session["duration"]
             booked_session_count = SchedularSessions.objects.filter(
                 coaching_session__id=coaching_session["id"]
             ).count()
             availabilities = get_upcoming_availabilities_of_coaching_session(
                 coaching_session["id"]
             )
+            # print("avail",availabilities)
+            result = []
+            slots = []
+            if availabilities is not None and len(availabilities):
+                slots = []
+                for availability in availabilities:
+                    slots.append(availability)
+                final_merge_slots = merge_time_slots(slots)
+                for slot in final_merge_slots:
+                    startT = slot["start_time"]
+                    endT = slot["end_time"]
+                    small_session_duration = int(session_duration)
+                    result = generate_slots(startT, endT, small_session_duration)
 
             # Retrieve participants who have not booked this session
             participants = SchedularParticipants.objects.filter(
@@ -347,9 +397,9 @@ def get_batch_calendar(request, batch_id):
             coaching_sessions_result.append(
                 {
                     **coaching_session,
-                    "available_slots_count": len(availabilities)
-                    if availabilities is not None
-                    else 0,
+                    "available_slots_count": len(result)
+                    if session_duration > '30'
+                    else (len(availabilities) if availabilities is not None else 0),
                     "booked_session_count": booked_session_count,
                     "participants_not_booked": GetSchedularParticipantsSerializer(
                         participants, many=True
