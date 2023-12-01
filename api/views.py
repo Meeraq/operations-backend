@@ -53,6 +53,8 @@ from .serializers import (
     TemplateSerializer,
     ProjectContractSerializer,
     CoachContractSerializer,
+    UpdateSerializer,
+    UpdateDepthOneSerializer,
 )
 
 from rest_framework import generics
@@ -95,6 +97,7 @@ from .models import (
     CoachProfileTemplate,
     StandardizedField,
     StandardizedFieldRequest,
+    Update,
     SessionRequestedActivity,
     DeleteCoachProfileActivity,
     RemoveCoachActivity,
@@ -103,7 +106,7 @@ from .models import (
     CoachContract,
     ProjectContract,
 )
-from rest_framework.views import APIView
+
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
@@ -811,7 +814,7 @@ def create_project_cass(request):
                 final_coaches={"status": "pending"},
                 project_live="pending",
             ),
-            status="active",
+            status="presales",
         )
         project.save()
     except IntegrityError:
@@ -1055,8 +1058,42 @@ def create_learners(learners_data):
 def get_ongoing_projects(request):
     projects = Project.objects.filter(steps__project_live="pending")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
+    for project_data in serializer.data:
+        latest_update = (
+            Update.objects.filter(project__id=project_data["id"])
+            .order_by("-created_at")
+            .first()
+        )
+        project_data["latest_update"] = latest_update.message if latest_update else None
     return Response(serializer.data)
 
+
+@api_view(["GET"])
+def get_project_updates(request, project_id):
+    updates = Update.objects.filter(project__id=project_id).order_by("-created_at")
+    serializer = UpdateDepthOneSerializer(updates, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+def add_project_update(request, project_id):
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        return Response({"error": "Project not found"}, status=404)
+    # Assuming your request data has a "message" field for the update message
+    update_data = {
+        "pmo": request.data.get(
+            "pmo", ""
+        ),  # Assuming the PMO is associated with the user
+        "project": project.id,
+        "message": request.data.get("message", ""),
+    }
+    serializer = UpdateSerializer(data=update_data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({'message': "Update added to project successfully!"}, status=201)
+    return Response(serializer.errors, status=400)
 
 # @api_view(['GET'])
 # def get_completed_projects(request):

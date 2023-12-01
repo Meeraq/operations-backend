@@ -30,6 +30,7 @@ from .models import (
     Template,
     ProjectContract,
     CoachContract,
+    Update,
 )
 
 # Register your models here.
@@ -68,3 +69,4 @@ admin.site.register(Template)
 admin.site.register(ProjectContract)
 admin.site.register(CoachContract)
 
+admin.site.register(Update)
