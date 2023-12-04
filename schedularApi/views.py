@@ -353,7 +353,6 @@ def generate_slots(start, end, duration):
             }
         )
         current_time += timedelta(minutes=15)
-    print(slots)
     return slots
 
 
@@ -371,14 +370,12 @@ def get_batch_calendar(request, batch_id):
         coaching_sessions_result = []
         for coaching_session in coaching_sessions_serializer.data:
             session_duration = coaching_session["duration"]
-            # print(type(session_duration))
             booked_session_count = SchedularSessions.objects.filter(
                 coaching_session__id=coaching_session["id"]
             ).count()
             availabilities = get_upcoming_availabilities_of_coaching_session(
                 coaching_session["id"]
             )
-            # print("avail",availabilities)
             result = []
             slots = []
             if availabilities is not None and len(availabilities):
@@ -390,15 +387,12 @@ def get_batch_calendar(request, batch_id):
                     startT = slot["start_time"]
                     endT = slot["end_time"]
                     small_session_duration = int(session_duration)
-                    result = generate_slots(startT, endT, small_session_duration)
-                    # print(len(result))    
+                    result += generate_slots(startT, endT, small_session_duration)
 
             # Retrieve participants who have not booked this session
             participants = SchedularParticipants.objects.filter(
                 schedularbatch__id=batch_id
             ).exclude(schedularsessions__coaching_session__id=coaching_session["id"])
-            # print(len(availabilities))
-            # print(session_duration >'30')  
             coaching_sessions_result.append(
                 {
                     **coaching_session,
@@ -411,7 +405,6 @@ def get_batch_calendar(request, batch_id):
                     ).data,
                 }
             )
-            # print(coaching_sessions_result)
 
         participants = SchedularParticipants.objects.filter(schedularbatch__id=batch_id)
         participants_serializer = GetSchedularParticipantsSerializer(
