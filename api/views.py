@@ -3132,8 +3132,8 @@ def accept_coach_caas_hr(request):
 
             if contract_serializer.is_valid():
                 contract_serializer.save()
-        except CoachContract.DoesNotExist:
-            pass
+        except Exception as e:
+            print(str(e))
 
         try:
             pmo_user = User.objects.filter(profile__type="pmo").first()
