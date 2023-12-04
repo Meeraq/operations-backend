@@ -340,6 +340,7 @@ def timestamp_to_datetime(timestamp):
 
 
 def generate_slots(start, end, duration):
+    print(type(duration))
     slots = []
     current_time = timestamp_to_datetime(start)
 
@@ -352,6 +353,7 @@ def generate_slots(start, end, duration):
             }
         )
         current_time += timedelta(minutes=15)
+    print(slots)
     return slots
 
 
@@ -369,6 +371,7 @@ def get_batch_calendar(request, batch_id):
         coaching_sessions_result = []
         for coaching_session in coaching_sessions_serializer.data:
             session_duration = coaching_session["duration"]
+            # print(type(session_duration))
             booked_session_count = SchedularSessions.objects.filter(
                 coaching_session__id=coaching_session["id"]
             ).count()
@@ -388,12 +391,14 @@ def get_batch_calendar(request, batch_id):
                     endT = slot["end_time"]
                     small_session_duration = int(session_duration)
                     result = generate_slots(startT, endT, small_session_duration)
+                    # print(len(result))    
 
             # Retrieve participants who have not booked this session
             participants = SchedularParticipants.objects.filter(
                 schedularbatch__id=batch_id
             ).exclude(schedularsessions__coaching_session__id=coaching_session["id"])
-
+            # print(len(availabilities))
+            # print(session_duration >'30')  
             coaching_sessions_result.append(
                 {
                     **coaching_session,
@@ -406,6 +411,7 @@ def get_batch_calendar(request, batch_id):
                     ).data,
                 }
             )
+            # print(coaching_sessions_result)
 
         participants = SchedularParticipants.objects.filter(schedularbatch__id=batch_id)
         participants_serializer = GetSchedularParticipantsSerializer(
@@ -1297,7 +1303,7 @@ def get_requests_of_coach(request, coach_id):
             "new": new_requests_serializer.data,
             "active": active_requests_serializer.data,
         },
-        status=status.HTTP_200_OK,
+        status=status.HTTP_200_OK,  
     )
 
 
@@ -1411,7 +1417,7 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
             coach__id=coach_id,
             start_time__gte=start_timestamp,
             end_time__lte=end_timestamp,
-            is_confirmed=False,
+            is_confirmed=True,
         )
         coach_availabilities_date_wise[date] = CoachSchedularAvailibiltySerializer(
             coach_availabilities, many=True
