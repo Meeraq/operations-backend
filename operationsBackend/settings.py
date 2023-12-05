@@ -214,3 +214,5 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=3, minute=0, day_of_week="*"),
     },
 }
+
+

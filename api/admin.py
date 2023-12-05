@@ -31,6 +31,8 @@ from .models import (
     ProjectContract,
     CoachContract,
     Update,
+    UserToken,
+    CalendarEvent,
 )
 
 # Register your models here.
@@ -68,5 +70,6 @@ admin.site.register(PastSessionActivity)
 admin.site.register(Template)
 admin.site.register(ProjectContract)
 admin.site.register(CoachContract)
-
 admin.site.register(Update)
+admin.site.register(UserToken)
+admin.site.register(CalendarEvent)
