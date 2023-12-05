@@ -242,6 +242,7 @@ class Project(models.Model):
     STATUS_CHOICES = (
         ("active", "Active"),
         ("completed", "Completed"),
+        ("presales", "Presales"),
     )
     project_type_choice = [("COD", "COD"), ("4+2", "4+2"), ("CAAS", "CAAS")]
     name = models.CharField(max_length=100, unique=True)
@@ -280,13 +281,24 @@ class Project(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, blank=True, null=True
     )
-    coach_consent_mandatory=models.BooleanField(default=True)
-    
+    coach_consent_mandatory = models.BooleanField(default=True)
+
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self):
         return self.name
+
+
+class Update(models.Model):
+    pmo = models.ForeignKey(Pmo, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    message = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.project.name} update by {self.pmo.name}"
 
 
 class OTP(models.Model):
@@ -445,7 +457,6 @@ class ActionItem(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
 
-
 class ProfileEditActivity(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
@@ -591,3 +602,48 @@ class PastSessionActivity(models.Model):
         return f"{self.user_who_added} added past session."
 
 
+
+
+class Template(models.Model):
+    title = models.CharField(max_length=100)
+    description = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.title
+
+    
+class ProjectContract(models.Model):
+    template_id = models.IntegerField(null=True)
+    title = models.CharField(max_length=100,blank=True)
+    content = models.TextField(blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE,blank=True)
+    created_at = models.DateTimeField(auto_now_add=True,blank=True)
+    updated_at = models.DateTimeField(auto_now=True,blank=True)
+    reminder_timestamp = models.CharField(max_length=30,blank=True)
+    def __str__(self):
+        return f"Contract '{self.title}' for Project '{self.project.name}'"
+    
+    
+class CoachContract(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+    
+    project_contract = models.ForeignKey(ProjectContract, on_delete=models.CASCADE,blank=True)
+    name_inputed = models.CharField(max_length=100,blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE,blank=True)
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default="pending",blank=True)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    send_date = models.DateField(auto_now_add=True ,blank=True)
+    response_date = models.DateField(blank=True,null=True)
+    created_at = models.DateTimeField(auto_now_add=True ,blank=True)
+    
+
+    def __str__(self):
+        return f"{self.coach.first_name}'s Contract for {self.project.name}"
+    
+    
