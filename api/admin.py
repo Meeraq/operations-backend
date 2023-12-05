@@ -31,6 +31,9 @@ from .models import (
     ProjectContract,
     CoachContract,
     Update,
+    FinalizeCoachActivity,
+    ShareCoachProfileActivity,
+    CreateProjectActivity,
 )
 
 # Register your models here.
@@ -70,3 +73,6 @@ admin.site.register(ProjectContract)
 admin.site.register(CoachContract)
 
 admin.site.register(Update)
+admin.site.register(ShareCoachProfileActivity)
+admin.site.register(CreateProjectActivity)
+admin.site.register(FinalizeCoachActivity)

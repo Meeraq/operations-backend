@@ -596,6 +596,7 @@ class PastSessionActivity(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.SET_NULL, null=True)
     coachee = models.ForeignKey(Learner, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
+    session_name = models.CharField(max_length=225, blank=True, null=True)
     
 
     def __str__(self):
@@ -647,3 +648,37 @@ class CoachContract(models.Model):
         return f"{self.coach.first_name}'s Contract for {self.project.name}"
     
     
+
+
+class ShareCoachProfileActivity(models.Model):
+    user_who_shared = models.ForeignKey(User, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    coaches = models.ManyToManyField(Coach, blank=True)
+    timestamp = models.DateTimeField()
+
+ 
+    def __str__(self):
+        return f"{self.user_who_shared.username} shared coach profiles."
+
+
+
+class CreateProjectActivity(models.Model):
+    user_who_created = models.ForeignKey(User, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+ 
+    def __str__(self):
+        return f"{self.user_who_created.username} created project."
+    
+
+
+class FinalizeCoachActivity(models.Model):
+    user_who_finalized = models.ForeignKey(User, on_delete=models.CASCADE, blank=True)
+    coach_who_got_finalized = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
+    timestamp = models.DateTimeField()
+
+ 
+    def __str__(self):
+        return f"{self.user_who_finalized.username} finalized the coach."
