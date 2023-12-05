@@ -7528,3 +7528,16 @@ def microsoft_callback(request):
         print(f"An exception occurred: {str(e)}")
         # You might want to return an error response or redirect to an error page.
         return JsonResponse({"error": "An error occurred"}, status=500)
+
+
+
+class UserTokenAvaliableCheck(APIView):
+    def get(self, request, user_mail, format=None):
+        user_token_present=False
+        try:
+            user_token = UserToken.objects.get(user_profile__user__username=user_mail)
+            if user_token:
+                user_token_present=True
+        except Exception as e:
+            pass
+        return Response({'user_token_present': user_token_present})
