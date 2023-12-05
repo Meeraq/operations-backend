@@ -463,11 +463,6 @@ def delete_microsoft_calendar_event(access_token, event_id):
         return {"error": "An error occurred", "details": str(e)}
 
 
-def is_gmail(email):
-    # Check if the email address ends with "@gmail.com"
-    return email.lower().endswith("@gmail.com")
-
-
 def create_notification(user, path, message):
     notification = Notification.objects.create(user=user, path=path, message=message)
     return notification
