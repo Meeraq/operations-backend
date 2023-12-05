@@ -33,8 +33,8 @@
 								view other projects.
 							</p>
  {% if email %}
-  {% comment %} <p class="child-para"><a href="http://127.0.0.1:8000/api/google/oauth/{{email}}/" style="text-decoration: underline;">Add to Google Calendar</a></p> {% endcomment %}
-  <p class="child-para"><a href="http://127.0.0.1:8000/api/microsoft/oauth/{{email}}/" style="text-decoration: underline;">Add to Outlook Calendar</a></p>
+  {% comment %} <p class="child-para"><a href="https://api.meeraq.com/api/google/oauth/{{email}}/" style="text-decoration: underline;">Add to Google Calendar</a></p> {% endcomment %}
+  <p class="child-para"><a href="{{microsoft_auth_url}}" style="text-decoration: underline;">Add to Outlook Calendar</a></p>
 {% endif %}
 							<p><br /></p>
 							<p>Best regards,</p>

@@ -283,11 +283,11 @@ def create_google_calendar_event(access_token, event_details, attendee_email, se
 
         start_time = convert_to_24hr_format(event_details.get("startTime"))
         end_time = convert_to_24hr_format(event_details.get("endTime"))
-        
+
         event_details_title = event_details.get("title")
         if event_details.get("title") == "Coaching Session Session":
             event_details_title = "Coaching Session"
-        
+
         event_data = {
             "summary": event_details_title,
             "description": event_details.get("description"),
@@ -368,7 +368,7 @@ def create_microsoft_calendar_event(
     event_details_title = event_details["title"]
     if event_details["title"] == "Coaching Session Session":
         event_details_title = "Coaching Session"
-            
+
     event_payload = {
         "subject": event_details_title,
         "body": {"contentType": "HTML", "content": event_details["description"]},
@@ -1379,8 +1379,11 @@ def add_project_update(request, project_id):
     serializer = UpdateSerializer(data=update_data)
     if serializer.is_valid():
         serializer.save()
-        return Response({'message': "Update added to project successfully!"}, status=201)
+        return Response(
+            {"message": "Update added to project successfully!"}, status=201
+        )
     return Response(serializer.errors, status=400)
+
 
 # @api_view(['GET'])
 # def get_completed_projects(request):
@@ -2160,12 +2163,16 @@ def add_coach(request):
             coach_add.save()
 
             full_name = coach_user.first_name + " " + coach_user.last_name
-
+            microsoft_auth_url = f'{env("BACKEND_URL")}/{coach_user.email}/'
             send_mail_templates(
                 "coach_templates/pmo-adds-coach-as-user.html",
                 [coach_user.email],
                 "Meeraq Coaching | New Beginning !",
-                {"name": coach_user.first_name, "email": coach_user.email},
+                {
+                    "name": coach_user.first_name,
+                    "email": coach_user.email,
+                    "microsoft_auth_url": microsoft_auth_url,
+                },
                 [],  # no bcc emails
             )
             # Send email notification to the coach
@@ -2427,11 +2434,17 @@ def generate_otp(request):
             f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
         )
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
+        microsoft_auth_url = f'{env("BACKEND_URL")}/{request.data["email"]}/'
         send_mail_templates(
             "hr_emails/login_with_otp.html",
             [user],
             subject,
-            {"name": name, "otp": created_otp.otp, "email": request.data["email"]},
+            {
+                "name": name,
+                "otp": created_otp.otp,
+                "email": request.data["email"],
+                "microsoft_auth_url": microsoft_auth_url,
+            },
             [],  # no bcc
         )
         return Response({"message": f"OTP has been sent to {user.username}!"})
@@ -2840,14 +2853,18 @@ def send_consent(request):
         for status in coach_status:
             if project.coach_consent_mandatory:
                 create_notification(status.coach.user.user, path, message)
-    
+            microsoft_auth_url = f'{env("BACKEND_URL")}/{coach.email}/'
             send_mail_templates(
-                    "coach_templates/pmo_ask_for_consent.html",
-                    [status.coach.email],
-                    "Meeraq Coaching | New Project!",
-                    {"name": status.coach.first_name, "email": coach.email},
-                    [],  # no bcc
-                )
+                "coach_templates/pmo_ask_for_consent.html",
+                [status.coach.email],
+                "Meeraq Coaching | New Project!",
+                {
+                    "name": status.coach.first_name,
+                    "email": coach.email,
+                    "microsoft_auth_url": microsoft_auth_url,
+                },
+                [],  # no bcc
+            )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     for coach_id in coach_list:
@@ -3245,6 +3262,7 @@ def book_session_caas(request):
             message += slot_message
             create_notification(pmo_user, path, message)
             if coachee:
+                microsoft_auth_url = f'{env("BACKEND_URL")}/{coachee.email}/'
                 send_mail_templates(
                     "coachee_emails/session_booked.html",
                     [coachee.email],
@@ -3256,9 +3274,11 @@ def book_session_caas(request):
                         "slot_date": session_date,
                         "slot_time": session_time,
                         "email": coachee.email,
+                        "microsoft_auth_url": microsoft_auth_url,
                     },
                     [],  # no bcc
                 )
+                # add microsoft auth url before uncommenting
 
                 # send_mail_templates(
                 #     "pmo_emails/session_scheduled.html",
@@ -3272,7 +3292,7 @@ def book_session_caas(request):
                 #         "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
                 #         "slot_date": session_date,
                 #         "slot_time": session_time,
-                        # "email": pmo.email,
+                # "email": pmo.email,
                 #     },
                 #     [],  # no bcc
                 # )
@@ -3573,7 +3593,7 @@ def accept_coach_caas_hr(request):
                     },
                     [],  # no bcc
                 )
-
+                microsoft_auth_url = f'{env("BACKEND_URL")}/{coach.email}/'
                 send_mail_templates(
                     "coach_templates/intro_mail_to_coach.html",
                     [coach.email],
@@ -3582,6 +3602,7 @@ def accept_coach_caas_hr(request):
                         "name": coach.first_name,
                         "orgName": project.organisation.name,
                         "email": coach.email,
+                        "microsoft_auth_url": microsoft_auth_url,
                     },
                     [env("BCC_EMAIL")],
                 )
@@ -3620,7 +3641,7 @@ def add_learner_to_project(request):
                 message = f"You have been added to Project - {project.name}"
                 create_notification(learner.user.user, path, message)
                 coacheeCounts = coacheeCounts + 1
-
+                microsoft_auth_url = f'{env("BACKEND_URL")}/{learner.email}/'
                 send_mail_templates(
                     "coachee_emails/add_coachee.html",
                     [learner.email],
@@ -3629,6 +3650,7 @@ def add_learner_to_project(request):
                         "name": learner.name,
                         "orgname": project.organisation.name,
                         "email": learner.email,
+                        "microsoft_auth_url": microsoft_auth_url,
                     },
                     [],
                 )
@@ -3990,7 +4012,7 @@ def send_list_to_hr(request):
         for hr_user in hr_users:
             hr_email = hr_user.email
             hr_name = hr_user.first_name
-
+            microsoft_auth_url = f'{env("BACKEND_URL")}/{hr_email}/'
             send_mail_templates(
                 "hr_emails/pmo_share_coach_list.html",
                 [hr_email],
@@ -3998,6 +4020,7 @@ def send_list_to_hr(request):
                 {
                     "name": hr_name,
                     "email": hr_email,
+                    "microsoft_auth_url": microsoft_auth_url,
                 },
                 json.loads(env("BCC_EMAIL_SALES_TEAM")),  # bcc
             )
@@ -5451,6 +5474,7 @@ def schedule_session_directly(request, session_id):
     if request.data["user_type"] == "coach":
         coach = Coach.objects.get(id=request.data["user_id"])
     if coachee:
+        microsoft_auth_url = f'{env("BACKEND_URL")}/{coachee.email}/'
         send_mail_templates(
             "coachee_emails/session_booked.html",
             [coachee.email],
@@ -5462,6 +5486,7 @@ def schedule_session_directly(request, session_id):
                 "slot_date": session_date,
                 "slot_time": session_time,
                 "email": coachee.email,
+                "microsoft_auth_url": microsoft_auth_url,
             },
             [],  # no bcc
         )
@@ -5509,7 +5534,6 @@ def schedule_session_directly(request, session_id):
                 )
 
                 if microsoft_calendar_event:
-                
                     delete_microsoft_calendar_event(
                         coachee_access_token, microsoft_calendar_event.event_id
                     )
@@ -6036,10 +6060,10 @@ def remove_coach_from_project(request, project_id):
             project.coaches.remove(coach)
             project.save()
             coach_status.delete()
-            
+
             user = "default user"
             time_of_removal = timezone.now()
-            removed_coach = coach   
+            removed_coach = coach
             removed_from_project = project
 
             removeCoachProfile = RemoveCoachActivity.objects.create(
