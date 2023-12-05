@@ -2159,6 +2159,13 @@ def add_coach(request):
 
             full_name = coach_user.first_name + " " + coach_user.last_name
             microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach_user.email}/'
+            user_token_present=False
+            try:
+                user_token = UserToken.objects.get(user_profile__user__username=coach_user.email)
+                if user_token:
+                    user_token_present=True
+            except Exception as e:
+                pass
             send_mail_templates(
                 "coach_templates/pmo-adds-coach-as-user.html",
                 [coach_user.email],
@@ -2167,6 +2174,7 @@ def add_coach(request):
                     "name": coach_user.first_name,
                     "email": coach_user.email,
                     "microsoft_auth_url": microsoft_auth_url,
+                    "user_token_present":user_token_present,
                 },
                 [],  # no bcc emails
             )
@@ -2430,6 +2438,13 @@ def generate_otp(request):
         )
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
         microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{request.data["email"]}/'
+        user_token_present=False
+        try:
+            user_token = UserToken.objects.get(user_profile__user__username=request.data["email"])
+            if user_token:
+                user_token_present=True
+        except Exception as e:
+            pass
         send_mail_templates(
             "hr_emails/login_with_otp.html",
             [user],
@@ -2439,6 +2454,7 @@ def generate_otp(request):
                 "otp": created_otp.otp,
                 "email": request.data["email"],
                 "microsoft_auth_url": microsoft_auth_url,
+                "user_token_present":user_token_present,
             },
             [],  # no bcc
         )
@@ -2849,6 +2865,14 @@ def send_consent(request):
             if project.coach_consent_mandatory:
                 create_notification(status.coach.user.user, path, message)
             microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach.email}/'
+            user_token_present=False
+            try:
+                user_token = UserToken.objects.get(user_profile__user__username=coach.email)
+                if user_token:
+                    user_token_present=True
+            except Exception as e:
+                pass
+            
             send_mail_templates(
                 "coach_templates/pmo_ask_for_consent.html",
                 [status.coach.email],
@@ -2857,6 +2881,7 @@ def send_consent(request):
                     "name": status.coach.first_name,
                     "email": coach.email,
                     "microsoft_auth_url": microsoft_auth_url,
+                    "user_token_present":user_token_present,
                 },
                 [],  # no bcc
             )
@@ -3258,6 +3283,13 @@ def book_session_caas(request):
             create_notification(pmo_user, path, message)
             if coachee:
                 microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
+                user_token_present=False
+                try:
+                    user_token = UserToken.objects.get(user_profile__user__username=coachee.email)
+                    if user_token:
+                        user_token_present=True
+                except Exception as e:
+                    pass
                 send_mail_templates(
                     "coachee_emails/session_booked.html",
                     [coachee.email],
@@ -3270,6 +3302,7 @@ def book_session_caas(request):
                         "slot_time": session_time,
                         "email": coachee.email,
                         "microsoft_auth_url": microsoft_auth_url,
+                        "user_token_present":user_token_present,
                     },
                     [],  # no bcc
                 )
@@ -3589,6 +3622,13 @@ def accept_coach_caas_hr(request):
                     [],  # no bcc
                 )
                 microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach.email}/'
+                user_token_present=False
+                try:
+                    user_token = UserToken.objects.get(user_profile__user__username=coach.email)
+                    if user_token:
+                        user_token_present=True
+                except Exception as e:
+                    pass
                 send_mail_templates(
                     "coach_templates/intro_mail_to_coach.html",
                     [coach.email],
@@ -3598,6 +3638,7 @@ def accept_coach_caas_hr(request):
                         "orgName": project.organisation.name,
                         "email": coach.email,
                         "microsoft_auth_url": microsoft_auth_url,
+                        "user_token_present":user_token_present,
                     },
                     [env("BCC_EMAIL")],
                 )
@@ -3637,6 +3678,13 @@ def add_learner_to_project(request):
                 create_notification(learner.user.user, path, message)
                 coacheeCounts = coacheeCounts + 1
                 microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{learner.email}/'
+                user_token_present=False
+                try:
+                    user_token = UserToken.objects.get(user_profile__user__username=learner.email)
+                    if user_token:
+                        user_token_present=True
+                except Exception as e:
+                    pass
                 send_mail_templates(
                     "coachee_emails/add_coachee.html",
                     [learner.email],
@@ -3646,6 +3694,7 @@ def add_learner_to_project(request):
                         "orgname": project.organisation.name,
                         "email": learner.email,
                         "microsoft_auth_url": microsoft_auth_url,
+                        "user_token_present":user_token_present,
                     },
                     [],
                 )
@@ -4008,6 +4057,13 @@ def send_list_to_hr(request):
             hr_email = hr_user.email
             hr_name = hr_user.first_name
             microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{hr_email}/'
+            user_token_present=False
+            try:
+                user_token = UserToken.objects.get(user_profile__user__username=hr_email)
+                if user_token:
+                    user_token_present=True
+            except Exception as e:
+                pass
             send_mail_templates(
                 "hr_emails/pmo_share_coach_list.html",
                 [hr_email],
@@ -4016,6 +4072,7 @@ def send_list_to_hr(request):
                     "name": hr_name,
                     "email": hr_email,
                     "microsoft_auth_url": microsoft_auth_url,
+                    "user_token_present":user_token_present,
                 },
                 json.loads(env("BCC_EMAIL_SALES_TEAM")),  # bcc
             )
@@ -5470,6 +5527,13 @@ def schedule_session_directly(request, session_id):
         coach = Coach.objects.get(id=request.data["user_id"])
     if coachee:
         microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
+        user_token_present=False
+        try:
+            user_token = UserToken.objects.get(user_profile__user__username=coachee.email)
+            if user_token:
+                user_token_present=True
+        except Exception as e:
+            pass
         send_mail_templates(
             "coachee_emails/session_booked.html",
             [coachee.email],
@@ -5482,6 +5546,7 @@ def schedule_session_directly(request, session_id):
                 "slot_time": session_time,
                 "email": coachee.email,
                 "microsoft_auth_url": microsoft_auth_url,
+                "user_token_present":user_token_present,
             },
             [],  # no bcc
         )

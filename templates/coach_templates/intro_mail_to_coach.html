@@ -30,8 +30,10 @@
 							</p>
 							 {% if email %}
   					{% comment %} <p class="child-para"><a href="https://api.meeraq.com/api/google/oauth/{{email}}/" style="text-decoration: underline;">Add to Google Calendar</a></p> {% endcomment %}
-
-						<p class="child-para"><a href="{{microsoft_auth_url}}" style="text-decoration: underline;">Add to Outlook Calendar</a></p>
+	 				{% if not user_token_present %}
+						<p class="child-para">You haven't integrated your calendar with Meeraq. Please <a href="{{microsoft_auth_url}}" style="text-decoration: underline;">click here</a> to integrate your outlook calendar with Meeraq system. </p>
+						<p>Once you do this, all your sessions will be automatically added into your outlook calendar.</p>
+						{% endif %}
 						{% endif %}
 							<p>
 								Click
