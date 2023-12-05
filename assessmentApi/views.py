@@ -40,7 +40,7 @@ import json
 import string
 import random
 from django.contrib.auth.models import User
-from api.models import Profile, Learner, Organisation, HR, SentEmailActivity
+from api.models import Profile, Learner, Organisation, HR, SentEmailActivity, Role
 from api.serializers import OrganisationSerializer
 from django.core.mail import EmailMessage, BadHeaderError
 from api.serializers import LearnerSerializer
@@ -66,6 +66,7 @@ import matplotlib
 import os
 from django.http import HttpResponse
 import io
+
 matplotlib.use("Agg")
 env = environ.Env()
 
@@ -157,10 +158,14 @@ def create_learner(learner_name, learner_email):
             user = User.objects.filter(username=learner_email).first()
             learner = None
             if user:
-                learner_profile = Profile.objects.filter(
-                    user=user, type="learner"
-                ).first()
-                learner = Learner.objects.get(email=learner_email)
+                learner = Learner.objects.filter(user__user=user).first()
+                if learner:
+                    profile = Profile.objects.get(user=user)
+                    learner_role, created = Role.objects.get_or_create(name="learner")
+                    profile.roles.add(learner_role)
+                    return learner
+                else:
+                    profile = Profile.objects.get(user=user)
             else:
                 temp_password = "".join(
                     random.choices(
@@ -175,14 +180,15 @@ def create_learner(learner_name, learner_email):
                 )
 
                 user.save()
-
-                learner_profile = Profile.objects.create(user=user, type="learner")
-
-                learner = Learner.objects.create(
-                    user=learner_profile,
-                    name=learner_name,
-                    email=learner_email,
-                )
+                profile = Profile.objects.create(user=user, type="learner")
+            learner_role, created = Role.objects.get_or_create(name="learner")
+            profile.roles.add(learner_role)
+            profile.save()
+            learner = Learner.objects.create(
+                user=profile,
+                name=learner_name,
+                email=learner_email,
+            )
             return learner
     except ValueError as e:
         raise ValueError(str(e))
@@ -603,23 +609,23 @@ class AddParticipantObserverToAssessment(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            user = User.objects.filter(
-                username=participants[0]["participantEmail"]
-            ).first()
-            if user:
-                user_profile = Profile.objects.filter(user=user).first()
+            # user = User.objects.filter(
+            #     username=participants[0]["participantEmail"]
+            # ).first()
+            # if user:
+            #     user_profile = Profile.objects.filter(user=user).first()
 
-                if (
-                    user_profile.type == "hr"
-                    or user_profile.type == "pmo"
-                    or user_profile.type == "coach"
-                ):
-                    return Response(
-                        {
-                            "error": "Email Already exist as another user. Please try using another email.",
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+            #     if (
+            #         user_profile.type == "hr"
+            #         or user_profile.type == "pmo"
+            #         or user_profile.type == "coach"
+            #     ):
+            #         return Response(
+            #             {
+            #                 "error": "Email Already exist as another user. Please try using another email.",
+            #             },
+            #             status=status.HTTP_400_BAD_REQUEST,
+            #         )
 
             participant = create_learner(
                 participants[0]["participantName"], participants[0]["participantEmail"]
@@ -1628,22 +1634,20 @@ class AddMultipleParticipants(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-                user = User.objects.filter(username=participant["email"]).first()
-
-                if user:
-                    user_profile = Profile.objects.filter(user=user).first()
-
-                    if (
-                        user_profile.type == "hr"
-                        or user_profile.type == "pmo"
-                        or user_profile.type == "coach"
-                    ):
-                        return Response(
-                            {
-                                "error": f"Email {participant['email']} already exist as another user. Please try using another email.",
-                            },
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
+                # user = User.objects.filter(username=participant["email"]).first()
+                # if user:
+                #     user_profile = Profile.objects.filter(user=user).first()
+                #     if (
+                #         user_profile.type == "hr"
+                #         or user_profile.type == "pmo"
+                #         or user_profile.type == "coach"
+                #     ):
+                #         return Response(
+                #             {
+                #                 "error": f"Email {participant['email']} already exist as another user. Please try using another email.",
+                #             },
+                #             status=status.HTTP_400_BAD_REQUEST,
+                #         )
 
                 new_participant = create_learner(
                     participant["name"], participant["email"]
@@ -1763,19 +1767,18 @@ def calculate_average(question_with_answers, assessment_type):
 
     return competency_averages
 
+
 def delete_previous_graphs():
-    
     graph_directory = "graphsAndReports"
     files = os.listdir(graph_directory)
     previous_graphs = [file for file in files if file.startswith("average_responses")]
-    
+
     for graph in previous_graphs:
         file_path = os.path.join(graph_directory, graph)
         os.remove(file_path)
 
-def generate_graph(data, assessment_type):
-    
 
+def generate_graph(data, assessment_type):
     bar_width = 0.1
     competency_names = [competency["competency_name"] for competency in data]
     num_competencies = len(competency_names)
@@ -1790,10 +1793,14 @@ def generate_graph(data, assessment_type):
 
         fig, ax = plt.subplots(figsize=(10, 6))
         index = np.arange(len(subset_data))
-        participant_responses = [comp["average_participant_response"] for comp in subset_data]
+        participant_responses = [
+            comp["average_participant_response"] for comp in subset_data
+        ]
 
         if assessment_type != "self":
-            observer_responses = [comp["average_observer_responses"] for comp in subset_data]
+            observer_responses = [
+                comp["average_observer_responses"] for comp in subset_data
+            ]
             bar2 = ax.bar(
                 index + bar_width,
                 observer_responses,
@@ -1825,37 +1832,33 @@ def generate_graph(data, assessment_type):
 
         # Save the image data to a BytesIO object
         image_stream = io.BytesIO()
-        plt.savefig(image_stream, format='png')
+        plt.savefig(image_stream, format="png")
         plt.close()
 
         # Convert the image data to base64
-        encoded_image = base64.b64encode(image_stream.getvalue()).decode('utf-8')
+        encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
         encoded_images.append(encoded_image)
 
     return encoded_images
 
 
-
-def generate_report_for_participant(
-    file_name, content
-):
+def generate_report_for_participant(file_name, content):
     try:
-        
-
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
-        
-        image_url = org_serializer.data.get('image_url')
-        
+
+        image_url = org_serializer.data.get("image_url")
+
         if image_url is not None:
             image_response = requests.get(image_url)
             image_response.raise_for_status()
 
-            image_organisation_base64 = base64.b64encode(image_response.content).decode('utf-8')
+            image_organisation_base64 = base64.b64encode(image_response.content).decode(
+                "utf-8"
+            )
             content["image_organisation_base64"] = image_organisation_base64
         else:
-            
-            content["image_organisation_base64"] = None  
+            content["image_organisation_base64"] = None
 
         email_message = render_to_string(file_name, content)
 
@@ -1870,24 +1873,22 @@ def generate_report_for_participant(
 
 def html_for_pdf_preview(file_name, user_email, email_subject, content, body_message):
     try:
-        
-
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
 
-        
-        image_url = org_serializer.data.get('image_url')
-        
+        image_url = org_serializer.data.get("image_url")
+
         if image_url is not None:
             image_response = requests.get(image_url)
             image_response.raise_for_status()
 
-            image_organisation_base64 = base64.b64encode(image_response.content).decode('utf-8')
+            image_organisation_base64 = base64.b64encode(image_response.content).decode(
+                "utf-8"
+            )
             content["image_organisation_base64"] = image_organisation_base64
         else:
-            
-            content["image_organisation_base64"] = None  
-        
+            content["image_organisation_base64"] = None
+
         html_message = render_to_string(file_name, content)
 
         return html_message
@@ -2135,7 +2136,7 @@ class DownloadParticipantResultReport(APIView):
                 question_with_answers, assessment.assessment_type
             )
 
-            graph_images=generate_graph(averages, assessment.assessment_type)
+            graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers
@@ -2155,7 +2156,7 @@ class DownloadParticipantResultReport(APIView):
                     "data_for_score_analysis": data_for_score_analysis,
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
-                    "image_base64_array":graph_images
+                    "image_base64_array": graph_images,
                 },
                 f"This new report generated for {participant.name}",
             )
@@ -2260,7 +2261,7 @@ class DownloadParticipantResultReport(APIView):
                 question_with_answers, assessment.assessment_type
             )
 
-            graph_images=generate_graph(averages, assessment.assessment_type)
+            graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers
@@ -2278,14 +2279,16 @@ class DownloadParticipantResultReport(APIView):
                     "data_for_score_analysis": data_for_score_analysis,
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
-                    "image_base64_array":graph_images
+                    "image_base64_array": graph_images,
                 },
             )
             pdf_path = "graphsAndReports/Report.pdf"
 
             with open(pdf_path, "rb") as pdf_file:
                 response = HttpResponse(pdf_file.read(), content_type="application/pdf")
-                response["Content-Disposition"] = f'attachment; filename={f"{participant.name} Report.pdf"}'
+                response[
+                    "Content-Disposition"
+                ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
             # Close the file after reading
             pdf_file.close()
 
@@ -2335,7 +2338,10 @@ class MarkNotificationAsRead(APIView):
         notifications.update(read_status=True)
         return Response("Notifications marked as read.")
 
+
 class GetUnreadNotificationCount(APIView):
     def get(self, request, user_id):
-        count = AssessmentNotification.objects.filter(user__id=user_id, read_status=False).count()
+        count = AssessmentNotification.objects.filter(
+            user__id=user_id, read_status=False
+        ).count()
         return Response({"count": count})

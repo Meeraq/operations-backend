@@ -947,7 +947,7 @@ def create_coach_availabilities(request):
                 datetime_obj = datetime.strptime(date, "%Y-%m-%d")
                 formatted_date = datetime_obj.strftime("%d-%m-%Y")
                 formatted_dates.append(formatted_date)
-            pmo_user = User.objects.filter(profile__type="pmo").first()
+            pmo_user = User.objects.filter(profile__roles__name="pmo").first()
             send_mail_templates(
                 "create_coach_availibilities.html",
                 [pmo_user.email],

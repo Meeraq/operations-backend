@@ -50,37 +50,18 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
 def password_reset_token_created(
     sender, instance, reset_password_token, *args, **kwargs
 ):
-    print(reset_password_token.key)
+    user = reset_password_token.user
     email_plaintext_message = "{}?token={}".format(
         reverse("password_reset:reset-password-request"), reset_password_token.key
     )
     subject = "Meeraq - Forgot Password"
-
-    user_type = reset_password_token.user.profile.type
-    not_approved_coach = False
-    if user_type == "pmo":
-        user = Pmo.objects.get(email=reset_password_token.user.email)
-        name = user.name
-    elif user_type == "coach":
-        user = Coach.objects.get(email=reset_password_token.user.email)
-        name = user.first_name
-        if not user.is_approved:
-            not_approved_coach = True
-    elif user_type == "learner":
-        user = Learner.objects.get(email=reset_password_token.user.email)
-        name = user.name
-    elif user_type == "hr":
-        user = HR.objects.get(email=reset_password_token.user.email)
-        name = user.first_name
-    else:
-        name = "User"
-
-    if not_approved_coach == True:
-        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+    if (
+        user.profile.roles.all().count() == 1
+        and user.profile.roles.all().first().name == "coach"
+        and user.profile.coach.is_approved == False
+    ):
         link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
-        # send_mail(
-        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
-        # )
+        name = user.profile.coach.first_name
         send_mail_templates(
             "coach_templates/create_new_password.html",
             [reset_password_token.user.email],
@@ -89,11 +70,8 @@ def password_reset_token_created(
             [],  # no bcc
         )
     else:
-        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+        name = "User"
         link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
-        # send_mail(
-        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
-        # )
         send_mail_templates(
             "hr_emails/forgot_password.html",
             [reset_password_token.user.email],
@@ -101,6 +79,13 @@ def password_reset_token_created(
             {"name": name, "resetPassword": link},
             [],  # no bcc
         )
+
+
+class Role(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
 
 
 class Profile(models.Model):
@@ -111,7 +96,7 @@ class Profile(models.Model):
         ("hr", "hr"),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    type = models.CharField(max_length=50, choices=user_types)
+    roles = models.ManyToManyField(Role)
 
     def __str__(self):
         return self.user.username
@@ -457,6 +442,7 @@ class ActionItem(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
 
+
 class ProfileEditActivity(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
@@ -558,24 +544,21 @@ class StandardizedFieldRequest(models.Model):
         return f"{self.coach.email} - {self.standardized_field_name} - {self.status}"
 
 
-class SessionRequestedActivity(models.Model): 
-    
+class SessionRequestedActivity(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     time_of_request = models.DateTimeField()
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     coachee = models.ForeignKey(Learner, on_delete=models.CASCADE)
     session_name = models.CharField(max_length=225, blank=True, null=True)
 
-    
 
 class DeleteCoachProfileActivity(models.Model):
-    user_who_got_deleted =  models.CharField(max_length=225, blank=True, null=True)
+    user_who_got_deleted = models.CharField(max_length=225, blank=True, null=True)
     user_who_deleted = models.ForeignKey(User, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
 
     def __str__(self):
         return f"{self.user_who_deleted} deleted coach profile."
-
 
 
 class RemoveCoachActivity(models.Model):
@@ -584,10 +567,8 @@ class RemoveCoachActivity(models.Model):
     removed_coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     removed_from_project = models.ForeignKey(Project, on_delete=models.CASCADE)
 
-
     def __str__(self):
         return f"{self.user} removed coach profile."
-
 
 
 class PastSessionActivity(models.Model):
@@ -596,12 +577,9 @@ class PastSessionActivity(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.SET_NULL, null=True)
     coachee = models.ForeignKey(Learner, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
-    
 
     def __str__(self):
         return f"{self.user_who_added} added past session."
-
-
 
 
 class Template(models.Model):
@@ -613,37 +591,39 @@ class Template(models.Model):
     def __str__(self):
         return self.title
 
-    
+
 class ProjectContract(models.Model):
     template_id = models.IntegerField(null=True)
-    title = models.CharField(max_length=100,blank=True)
+    title = models.CharField(max_length=100, blank=True)
     content = models.TextField(blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE,blank=True)
-    created_at = models.DateTimeField(auto_now_add=True,blank=True)
-    updated_at = models.DateTimeField(auto_now=True,blank=True)
-    reminder_timestamp = models.CharField(max_length=30,blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, blank=True)
+    reminder_timestamp = models.CharField(max_length=30, blank=True)
+
     def __str__(self):
         return f"Contract '{self.title}' for Project '{self.project.name}'"
-    
-    
+
+
 class CoachContract(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),
         ("approved", "Approved"),
         ("rejected", "Rejected"),
     ]
-    
-    project_contract = models.ForeignKey(ProjectContract, on_delete=models.CASCADE,blank=True)
-    name_inputed = models.CharField(max_length=100,blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE,blank=True)
-    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default="pending",blank=True)
+
+    project_contract = models.ForeignKey(
+        ProjectContract, on_delete=models.CASCADE, blank=True
+    )
+    name_inputed = models.CharField(max_length=100, blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
+    status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="pending", blank=True
+    )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-    send_date = models.DateField(auto_now_add=True ,blank=True)
-    response_date = models.DateField(blank=True,null=True)
-    created_at = models.DateTimeField(auto_now_add=True ,blank=True)
-    
+    send_date = models.DateField(auto_now_add=True, blank=True)
+    response_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
 
     def __str__(self):
         return f"{self.coach.first_name}'s Contract for {self.project.name}"
-    
-    

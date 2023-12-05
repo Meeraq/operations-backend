@@ -323,8 +323,6 @@ class StandardizedFieldRequestDepthOneSerializer(serializers.ModelSerializer):
 
 
 class SessionRequestedActivitySerializer(serializers.ModelSerializer):
-    
-
     class Meta:
         model = SessionRequestedActivity
         fields = "__all__"
@@ -336,7 +334,6 @@ class DeleteCoachProfileActivitySerializer(serializers.ModelSerializer):
         model = DeleteCoachProfileActivity
         fields = "__all__"
         depth = 1
-        
 
 
 class RemoveCoachActivitySerializer(serializers.ModelSerializer):
@@ -346,13 +343,13 @@ class RemoveCoachActivitySerializer(serializers.ModelSerializer):
         depth = 1
 
 
-
 class PastSessionActivitySerializer(serializers.ModelSerializer):
     class Meta:
         model = PastSessionActivity
         fields = "__all__"
         depth = 1
-        
+
+
 class TemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template

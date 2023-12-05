@@ -31,6 +31,8 @@ from .models import (
     ProjectContract,
     CoachContract,
     Update,
+    PastSessionActivity,
+    Role,
 )
 
 # Register your models here.
@@ -70,3 +72,4 @@ admin.site.register(ProjectContract)
 admin.site.register(CoachContract)
 
 admin.site.register(Update)
+admin.site.register(Role)
