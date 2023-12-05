@@ -455,7 +455,7 @@ class ActionItem(models.Model):
     )
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
-    competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+    competency = models.ForeignKey(Competency, on_delete=models.CASCADE)    
 
 class ProfileEditActivity(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -646,6 +646,44 @@ class CoachContract(models.Model):
 
     def __str__(self):
         return f"{self.coach.first_name}'s Contract for {self.project.name}"
+    
+    
+
+class UserToken(models.Model):
+    
+    ACCOUNT_TYPE_CHOICES = [
+        ("google", "Google"),
+        ("microsoft", "Microsoft"),
+    ]
+    
+    user_profile = models.OneToOneField(Profile, on_delete=models.CASCADE)
+    access_token = models.TextField(blank=True) 
+    refresh_token = models.TextField(blank=True)  
+    access_token_expiry = models.TextField(blank=True)
+    authorization_code = models.TextField(blank=True)
+    account_type = models.CharField(max_length=50, choices=ACCOUNT_TYPE_CHOICES,blank=True)
+    updated_at = models.DateTimeField(auto_now=True) 
+    created_at = models.DateTimeField(auto_now_add=True) 
+
+    def __str__(self):
+        return self.user_profile.user.username
+    
+class CalendarEvent(models.Model):
+    
+    ACCOUNT_TYPE_CHOICES = [
+        ("google", "Google"),
+        ("microsoft", "Microsoft"),
+    ]
+    
+    event_id =models.TextField(blank=True, null=True) 
+    title = models.CharField(max_length=255,blank=True, null=True)
+    description = models.CharField(max_length=255,blank=True, null=True)
+    start_datetime = models.CharField(max_length=255,blank=True, null=True)
+    end_datetime = models.CharField(max_length=255,blank=True, null=True)
+    attendee = models.CharField(max_length=255,blank=True, null=True)
+    creator = models.CharField(max_length=255,blank=True, null=True)
+    session = models.ForeignKey(SessionRequestCaas, on_delete=models.CASCADE, blank=True, null=True)
+    account_type = models.CharField(max_length=50, choices=ACCOUNT_TYPE_CHOICES,blank=True)
     
     
 

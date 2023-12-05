@@ -30,6 +30,8 @@ from .models import (
     ProjectContract,
     CoachContract,
     Update,
+    UserToken,
+    CalendarEvent,
     ShareCoachProfileActivity,
     CreateProjectActivity,
     FinalizeCoachActivity,
@@ -372,6 +374,16 @@ class CoachContractSerializer(serializers.ModelSerializer):
     class Meta:
         model = CoachContract
         fields = "__all__"
+        
+class UserTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserToken
+        fields = '__all__'
+        
+class CalendarEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CalendarEvent
+        fields = '__all__'
 
 
 
