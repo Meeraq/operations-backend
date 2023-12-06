@@ -1107,21 +1107,21 @@ def create_project_cass(request):
 
         
         project.save()
+        try:
+            userId = request.data.get("user_id")
+            user_who_created = User.objects.get(id=userId)
+            project = project
+            timestamp = timezone.now()
 
-        userId = request.data.get("user_id")
-        user_who_created = User.objects.get(id=userId)
-        project = project
-        timestamp = timezone.now()
+            createProject = CreateProjectActivity.objects.create(
+                user_who_created = user_who_created,
+                project = project,
+                timestamp = timestamp
+            )
 
-        createProject = CreateProjectActivity.objects.create(
-            user_who_created = user_who_created,
-            project = project,
-            timestamp = timestamp
-        )
-
-        createProject.save()
-
-
+            createProject.save()
+        except Exception as e:
+            pass
 
     except IntegrityError:
         return Response({"error": "Project with this name already exists"}, status=400)
@@ -3594,23 +3594,24 @@ def accept_coach_caas_hr(request):
             coaches_selected_count += 1
 
     project.save()
+    try:
+        userId = request.data.get("user_id")
+        coachId = request.data.get("coach_id")
+        user_who_finalized = User.objects.get(id=userId)
+        coach_who_got_finalized = Coach.objects.get(id=coachId)
+        project = project
+        timestamp = timezone.now()
 
-    userId = request.data.get("user_id")
-    coachId = request.data.get("coach_id")
-    user_who_finalized = User.objects.get(id=userId)
-    coach_who_got_finalized = Coach.objects.get(id=coachId)
-    project = project
-    timestamp = timezone.now()
+        finalizeCoach = FinalizeCoachActivity.objects.create(
+            user_who_finalized = user_who_finalized,
+            coach_who_got_finalized = coach_who_got_finalized,
+            project = project,
+            timestamp = timestamp
+        )
 
-    finalizeCoach = FinalizeCoachActivity.objects.create(
-        user_who_finalized = user_who_finalized,
-        coach_who_got_finalized = coach_who_got_finalized,
-        project = project,
-        timestamp = timestamp
-    )
-
-    finalizeCoach.save()
-
+        finalizeCoach.save()
+    except Exception as e:
+        pass
     # for i in range(0,len(project.coaches_status)):
     #     print(project.coaches_status[i])
     #     status=project.coaches_status[i].status.hr.status
@@ -4093,23 +4094,24 @@ def send_list_to_hr(request):
 
         
     project.save()
-
-    user_who_shared = User.objects.get(id=request.data.get("user_id", ""))
-    project_name = project
-    coaches = coaches
-    timestamp = timezone.now()
-    
-
-    shareCoachProfile = ShareCoachProfileActivity.objects.create(
-        user_who_shared = user_who_shared,
-        project = project_name,
+    try:
+        user_who_shared = User.objects.get(id=request.data.get("user_id", ""))
+        project_name = project
+        coaches = coaches
+        timestamp = timezone.now()
         
-        timestamp = timestamp
-    )
 
-    shareCoachProfile.coaches.set(coaches)
-    shareCoachProfile.save()
+        shareCoachProfile = ShareCoachProfileActivity.objects.create(
+            user_who_shared = user_who_shared,
+            project = project_name,
+            
+            timestamp = timestamp
+        )
 
+        shareCoachProfile.coaches.set(coaches)
+        shareCoachProfile.save()
+    except Exception as e:
+        pass
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Admin has shared {len(request.data['coach_list'])} coach profile with you for the Project - {project.name}."
