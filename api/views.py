@@ -58,6 +58,9 @@ from .serializers import (
     UpdateDepthOneSerializer,
     UserTokenSerializer,
     CalendarEventSerializer,
+    ShareCoachProfileActivitySerializer,
+    CreateProjectActivitySerializer,
+    FinalizeCoachActivitySerializer,
 )
 
 from rest_framework import generics
@@ -110,6 +113,9 @@ from .models import (
     ProjectContract,
     UserToken,
     CalendarEvent,
+    ShareCoachProfileActivity,
+    CreateProjectActivity,
+    FinalizeCoachActivity,
 )
 
 from rest_framework.authtoken.models import Token
@@ -1098,7 +1104,25 @@ def create_project_cass(request):
             ),
             status="presales",
         )
+
+        
         project.save()
+        try:
+            userId = request.data.get("user_id")
+            user_who_created = User.objects.get(id=userId)
+            project = project
+            timestamp = timezone.now()
+
+            createProject = CreateProjectActivity.objects.create(
+                user_who_created = user_who_created,
+                project = project,
+                timestamp = timestamp
+            )
+
+            createProject.save()
+        except Exception as e:
+            pass
+
     except IntegrityError:
         return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
@@ -2607,7 +2631,7 @@ def add_hr(request):
             {"message": "HR added successfully", "details": serializer.data}, status=200
         )
     except Exception as e:
-        return Response({"error": str(e)}, status=400)
+        return Response({"error": "User email already exist."}, status=400)
 
 
 @api_view(["PUT"])
@@ -3570,8 +3594,24 @@ def accept_coach_caas_hr(request):
             coaches_selected_count += 1
 
     project.save()
+    try:
+        userId = request.data.get("user_id")
+        coachId = request.data.get("coach_id")
+        user_who_finalized = User.objects.get(id=userId)
+        coach_who_got_finalized = Coach.objects.get(id=coachId)
+        project = project
+        timestamp = timezone.now()
 
-    print(coaches_selected_count)
+        finalizeCoach = FinalizeCoachActivity.objects.create(
+            user_who_finalized = user_who_finalized,
+            coach_who_got_finalized = coach_who_got_finalized,
+            project = project,
+            timestamp = timestamp
+        )
+
+        finalizeCoach.save()
+    except Exception as e:
+        pass
     # for i in range(0,len(project.coaches_status)):
     #     print(project.coaches_status[i])
     #     status=project.coaches_status[i].status.hr.status
@@ -4043,12 +4083,35 @@ def send_list_to_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     # project.status['coach_list_to_hr'] = 'pending'
 
+    coaches = []
+
     for coach_id in request.data["coach_list"]:
         coach_status = project.coaches_status.get(coach__id=coach_id)
         print(coach_status.status)
         coach_status.status["hr"]["status"] = "sent"
+        coaches.append(Coach.objects.get(id=coach_id))
         coach_status.save()
+
+        
     project.save()
+    try:
+        user_who_shared = User.objects.get(id=request.data.get("user_id", ""))
+        project_name = project
+        coaches = coaches
+        timestamp = timezone.now()
+        
+
+        shareCoachProfile = ShareCoachProfileActivity.objects.create(
+            user_who_shared = user_who_shared,
+            project = project_name,
+            
+            timestamp = timestamp
+        )
+
+        shareCoachProfile.coaches.set(coaches)
+        shareCoachProfile.save()
+    except Exception as e:
+        pass
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Admin has shared {len(request.data['coach_list'])} coach profile with you for the Project - {project.name}."
@@ -4076,6 +4139,8 @@ def send_list_to_hr(request):
                 },
                 json.loads(env("BCC_EMAIL_SALES_TEAM")),  # bcc
             )
+
+
 
         for hr_user in project.hr.all():
             create_notification(hr_user.user.user, path, message)
@@ -5941,6 +6006,7 @@ def add_past_session(request, session_id):
         coach=coach,
         coachee=coachee,
         timestamp=timestamp,
+        session_name=session.session_type
     )
     addPastSession.save()
 
@@ -6786,8 +6852,8 @@ class ActivitySummary(APIView):
                 remove_coach_profile_activities, many=True
             )
         except Exception as e:
-            print("delete_coach_activities", str(e))
-            delete_coach_profile_serializer = []
+            print("remove_coach_profile_activities", str(e))
+            remove_coach_profile_serializer = []
 
         try:
             add_past_session_activities = PastSessionActivity.objects.all()
@@ -6796,8 +6862,40 @@ class ActivitySummary(APIView):
                 add_past_session_activities, many=True
             )
         except Exception as e:
-            print("delete_coach_activities", str(e))
-            delete_coach_profile_serializer = []
+            print("add_past_session_activities", str(e))
+            past_session_activity_serializer = []
+
+        try:
+            share_coach_profile_activities = ShareCoachProfileActivity.objects.all()
+            total_share_coach_profile_count = share_coach_profile_activities.count()
+            share_coach_profile_serializer = ShareCoachProfileActivitySerializer(
+                share_coach_profile_activities, many=True
+            )
+        except Exception as e:
+            print("share_coach_profile_activities", str(e))
+            share_coach_profile_serializer = []
+
+        
+        try:
+            create_project_activities = CreateProjectActivity.objects.all()
+            total_create_project_count = create_project_activities.count()
+            create_project_serializer = CreateProjectActivitySerializer(
+                create_project_activities, many=True
+            )
+        except Exception as e:
+            print("share_coach_profile_activities", str(e))
+            create_project_serializer = []
+
+        
+        try:
+            finalize_coach_activities = FinalizeCoachActivity.objects.all()
+            total_finalized_coach_activity_count = finalize_coach_activities.count()
+            finalize_coach_serializer = FinalizeCoachActivitySerializer(
+                finalize_coach_activities, many=True
+            )
+        except Exception as e:
+            print("share_coach_profile_activities", str(e))
+            finalize_coach_serializer = []
 
         response_data = {
             "user_login": {
@@ -6835,6 +6933,18 @@ class ActivitySummary(APIView):
             "add_past_session": {
                 "total_count": total_past_session_count,
                 "activity": past_session_activity_serializer.data,
+            },
+            "share_coach_profile": {
+                "total_count": total_share_coach_profile_count,
+                "activity": share_coach_profile_serializer.data,
+            },
+            "create_project": {
+                "total_count": total_create_project_count,
+                "activity": create_project_serializer.data,
+            },
+            "finalize_coach": {
+                "total_count": total_finalized_coach_activity_count,
+                "activity": finalize_coach_serializer.data,
             },
         }
 
