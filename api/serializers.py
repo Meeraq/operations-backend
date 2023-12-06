@@ -22,6 +22,19 @@ from .models import (
     CoachProfileTemplate,
     StandardizedField,
     StandardizedFieldRequest,
+    SessionRequestedActivity,
+    DeleteCoachProfileActivity,
+    RemoveCoachActivity,
+    PastSessionActivity,
+    Template,
+    ProjectContract,
+    CoachContract,
+    Update,
+    UserToken,
+    CalendarEvent,
+    ShareCoachProfileActivity,
+    CreateProjectActivity,
+    FinalizeCoachActivity,
 )
 from django.contrib.auth.models import User
 
@@ -83,6 +96,19 @@ class ProjectDepthTwoSerializer(serializers.ModelSerializer):
         model = Project
         fields = "__all__"
         depth = 2
+
+
+class UpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Update
+        fields = "__all__"
+
+
+class UpdateDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Update
+        fields = "__all__"
+        depth = 1
 
 
 class AvailibilitySerializer(serializers.ModelSerializer):
@@ -298,4 +324,88 @@ class StandardizedFieldRequestDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = StandardizedFieldRequest
         fields = "__all__"
+        depth = 1
+
+
+class SessionRequestedActivitySerializer(serializers.ModelSerializer):
+    
+
+    class Meta:
+        model = SessionRequestedActivity
+        fields = "__all__"
+        depth = 1
+
+
+class DeleteCoachProfileActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DeleteCoachProfileActivity
+        fields = "__all__"
+        depth = 1
+        
+
+
+class RemoveCoachActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RemoveCoachActivity
+        fields = "__all__"
+        depth = 1
+
+
+
+class PastSessionActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PastSessionActivity
+        fields = "__all__"
+        depth = 1
+        
+class TemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Template
+        fields = "__all__"
+
+
+class ProjectContractSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProjectContract
+        fields = "__all__"
+
+
+class CoachContractSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachContract
+        fields = "__all__"
+        
+class UserTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserToken
+        fields = '__all__'
+        
+class CalendarEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CalendarEvent
+        fields = '__all__'
+
+
+
+class ShareCoachProfileActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShareCoachProfileActivity
+        fields = "__all__"
+        depth = 1
+
+
+
+class CreateProjectActivitySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = CreateProjectActivity
+        fields= "__all__"
+        depth = 1
+
+
+class FinalizeCoachActivitySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = FinalizeCoachActivity
+        fields= "__all__"
         depth = 1
