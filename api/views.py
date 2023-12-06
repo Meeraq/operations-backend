@@ -1119,8 +1119,6 @@ def create_project_cass(request):
             timestamp = timestamp
         )
 
-        print("createProject", createProject)
-
         createProject.save()
 
 
@@ -3598,7 +3596,6 @@ def accept_coach_caas_hr(request):
     project.save()
 
     userId = request.data.get("user_id")
-    print("userId", userId)
     coachId = request.data.get("coach_id")
     user_who_finalized = User.objects.get(id=userId)
     coach_who_got_finalized = Coach.objects.get(id=coachId)
@@ -3614,7 +3611,6 @@ def accept_coach_caas_hr(request):
 
     finalizeCoach.save()
 
-    print(coaches_selected_count)
     # for i in range(0,len(project.coaches_status)):
     #     print(project.coaches_status[i])
     #     status=project.coaches_status[i].status.hr.status
@@ -4102,7 +4098,7 @@ def send_list_to_hr(request):
     project_name = project
     coaches = coaches
     timestamp = timezone.now()
-    print("coaches",coaches)
+    
 
     shareCoachProfile = ShareCoachProfileActivity.objects.create(
         user_who_shared = user_who_shared,
