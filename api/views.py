@@ -46,8 +46,18 @@ from .serializers import (
     StandardizedFieldSerializer,
     StandardizedFieldRequestSerializer,
     StandardizedFieldRequestDepthOneSerializer,
+    SessionRequestedActivitySerializer,
+    DeleteCoachProfileActivitySerializer,
+    RemoveCoachActivitySerializer,
+    PastSessionActivitySerializer,
+    TemplateSerializer,
+    ProjectContractSerializer,
+    CoachContractSerializer,
+    UpdateSerializer,
+    UpdateDepthOneSerializer,
 )
 
+from rest_framework import generics
 from django.utils.crypto import get_random_string
 import jwt
 import jwt
@@ -87,7 +97,16 @@ from .models import (
     CoachProfileTemplate,
     StandardizedField,
     StandardizedFieldRequest,
+    Update,
+    SessionRequestedActivity,
+    DeleteCoachProfileActivity,
+    RemoveCoachActivity,
+    PastSessionActivity,
+    Template,
+    CoachContract,
+    ProjectContract,
 )
+
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
@@ -796,7 +815,7 @@ def create_project_cass(request):
                 final_coaches={"status": "pending"},
                 project_live="pending",
             ),
-            status="active",
+            status="presales",
         )
         project.save()
     except IntegrityError:
@@ -805,7 +824,7 @@ def create_project_cass(request):
         return Response({"error": "Failed to create project."}, status=400)
     hr_emails = []
     project_name = project.name
-    print(request.data["hr"], "HR ID")
+
     for hr in request.data["hr"]:
         single_hr = HR.objects.get(id=hr)
         # print(single_hr)
@@ -1040,8 +1059,42 @@ def create_learners(learners_data):
 def get_ongoing_projects(request):
     projects = Project.objects.filter(steps__project_live="pending")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
+    for project_data in serializer.data:
+        latest_update = (
+            Update.objects.filter(project__id=project_data["id"])
+            .order_by("-created_at")
+            .first()
+        )
+        project_data["latest_update"] = latest_update.message if latest_update else None
     return Response(serializer.data)
 
+
+@api_view(["GET"])
+def get_project_updates(request, project_id):
+    updates = Update.objects.filter(project__id=project_id).order_by("-created_at")
+    serializer = UpdateDepthOneSerializer(updates, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+def add_project_update(request, project_id):
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        return Response({"error": "Project not found"}, status=404)
+    # Assuming your request data has a "message" field for the update message
+    update_data = {
+        "pmo": request.data.get(
+            "pmo", ""
+        ),  # Assuming the PMO is associated with the user
+        "project": project.id,
+        "message": request.data.get("message", ""),
+    }
+    serializer = UpdateSerializer(data=update_data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({'message': "Update added to project successfully!"}, status=201)
+    return Response(serializer.errors, status=400)
 
 # @api_view(['GET'])
 # def get_completed_projects(request):
@@ -1858,11 +1911,24 @@ def add_coach(request):
 @api_view(["POST"])
 def delete_coach(request):
     coach_id = request.data.get("coach_id", None)
+
+    user_id = request.data.get("user_id")
     if coach_id:
         try:
             coach = Coach.objects.get(id=coach_id)
+            coach_name = coach.first_name + " " + coach.last_name
             user = coach.user.user
             user.delete()
+            timestamp = timezone.now()
+            # data = request.data
+            current_user = User.objects.get(id=user_id)
+
+            deleteCoachProfile = DeleteCoachProfileActivity.objects.create(
+                user_who_got_deleted=coach_name,
+                user_who_deleted=current_user,
+                timestamp=timestamp,
+            )
+            deleteCoachProfile.save()
             return Response({"message": "Coach deleted."}, status=200)
         except ObjectDoesNotExist:
             return Response({"message": "Failed to delete coach profile"}, status=400)
@@ -2463,17 +2529,25 @@ def send_consent(request):
             f"Admin has requested your consent to share profile for a new project."
         )
         for status in coach_status:
-            create_notification(status.coach.user.user, path, message)
-            send_mail_templates(
-                "coach_templates/pmo_ask_for_consent.html",
-                [status.coach.email],
-                "Meeraq Coaching | New Project!",
-                {"name": status.coach.first_name},
-                [],  # no bcc
-            )
+            if project.coach_consent_mandatory:
+                create_notification(status.coach.user.user, path, message)
+                send_mail_templates(
+                    "coach_templates/pmo_ask_for_consent.html",
+                    [status.coach.email],
+                    "Meeraq Coaching | New Project!",
+                    {"name": status.coach.first_name},
+                    [],  # no bcc
+                )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-
+    for coach_id in coach_list:
+        if not project.coach_consent_mandatory:
+            for coach_status in project.coaches_status.all():
+                if coach_status.coach.id == coach.id:
+                    coach_status.status["consent"]["status"] = "select"
+                    if project.steps["project_structure"]["status"] == "complete":
+                        coach_status.status["project_structure"]["status"] = "select"
+                    coach_status.save()
     return Response({"message": "Consent sent successfully", "details": ""}, status=200)
 
 
@@ -2867,21 +2941,21 @@ def book_session_caas(request):
                     },
                     [],  # no bcc
                 )
-                send_mail_templates(
-                    "pmo_emails/session_scheduled.html",
-                    [pmo.email],
-                    "Meeraq Coaching | Session Booked",
-                    {
-                        "projectName": session_request.project.name,
-                        "name": pmo.name,
-                        "coachee_name": coachee.name,
-                        "coach_name": coach_name,
-                        "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
-                        "slot_date": session_date,
-                        "slot_time": session_time,
-                    },
-                    [],  # no bcc
-                )
+                # send_mail_templates(
+                #     "pmo_emails/session_scheduled.html",
+                #     [pmo.email],
+                #     "Meeraq Coaching | Session Booked",
+                #     {
+                #         "projectName": session_request.project.name,
+                #         "name": pmo.name,
+                #         "coachee_name": coachee.name,
+                #         "coach_name": coach_name,
+                #         "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
+                #         "slot_date": session_date,
+                #         "slot_time": session_time,
+                #     },
+                #     [],  # no bcc
+                # )
 
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -3018,6 +3092,7 @@ def accept_coach_caas_hr(request):
             ):
                 coach.status["hr"]["status"] = request.data["status"]
                 coach.save()
+
             else:
                 return Response({"error": "Failed to update status."}, status=400)
             # print(coach.id)
@@ -3044,6 +3119,23 @@ def accept_coach_caas_hr(request):
 
     message = ""
     if request.data.get("status") == "select":
+        # Project
+        try:
+            contract = ProjectContract.objects.get(project=project.id)
+            contract_data = {
+                "project_contract": contract.id,
+                "project": project.id,
+                "status": "pending",
+                "coach": request.data["coach_id"],
+            }
+
+            contract_serializer = CoachContractSerializer(data=contract_data)
+
+            if contract_serializer.is_valid():
+                contract_serializer.save()
+        except Exception as e:
+            print(str(e))
+
         try:
             pmo_user = User.objects.filter(profile__type="pmo").first()
             pmo = Pmo.objects.get(email=pmo_user.email)
@@ -3483,7 +3575,7 @@ def send_list_to_hr(request):
                 [hr_email],
                 "Welcome to the Meeraq Platform",
                 {"name": hr_name},
-                [env("BCC_EMAIL")],  # bcc
+                json.loads(env("BCC_EMAIL_SALES_TEAM")),  # bcc
             )
 
         for hr_user in project.hr.all():
@@ -4388,6 +4480,22 @@ def request_chemistry_session(request, project_id, learner_id):
         slot_message = get_slot_message(request.data["availibility"])
         message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {session_to_update.project.name}. Please book one of the requested slots now"
         create_notification(coach.user.user, path_for_coach, message_for_coach)
+
+        project = Project.objects.get(id=project_id)
+        time_of_request = timezone.now()
+        coachee = Learner.objects.get(id=learner_id)
+        session_name = "chemistry"
+
+        session_request = SessionRequestedActivity.objects.create(
+            project=project,
+            time_of_request=time_of_request,
+            coach=coach,
+            coachee=coachee,
+            session_name=session_name,
+        )
+
+    session_request.save()
+
     return Response({"message": "Session requested successfully"}, status=200)
 
 
@@ -4409,6 +4517,22 @@ def request_session(request, session_id, coach_id):
     session.coach = coach
     session.status = "requested"
     session.save()
+
+    project = session.project
+    time_of_request = timezone.now()
+    coachee = session.learner
+    session_name = session.session_type
+
+    session_request = SessionRequestedActivity.objects.create(
+        project=project,
+        time_of_request=time_of_request,
+        coach=coach,
+        coachee=coachee,
+        session_name=session_name,
+    )
+
+    session_request.save()
+
     return Response({"message": "Session requested successfully"}, status=200)
 
 
@@ -5137,6 +5261,7 @@ def select_coach_for_coachee(request):
 
 @api_view(["POST"])
 def add_past_session(request, session_id):
+    # print("request data",request.data)
     try:
         session = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
@@ -5156,6 +5281,7 @@ def add_past_session(request, session_id):
             try:
                 coach = Coach.objects.get(id=coach_id)
                 session.coach = coach
+
             except Coach.DoesNotExist:
                 return Response({"error": "Coach not found."}, status=404)
 
@@ -5163,6 +5289,23 @@ def add_past_session(request, session_id):
     session.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session.status_updated_at = datetime.now()
     session.save()
+
+    coach = session.coach
+    coachee = session.learner
+    project = session.project
+    timestamp = timezone.now()
+    user_id = request.data.get("userId")
+    user_who_added = User.objects.get(id=user_id)
+
+    addPastSession = PastSessionActivity.objects.create(
+        project=project,
+        user_who_added=user_who_added,
+        coach=coach,
+        coachee=coachee,
+        timestamp=timestamp,
+    )
+    addPastSession.save()
+
     return Response({"message": "Session booked successfully."})
 
 
@@ -5193,6 +5336,12 @@ def get_all_competencies_of_hr(request, hr_id):
         coachee_name = (
             goal.engagement.learner.name
             if goal.engagement and goal.engagement.learner
+            else "N/A"
+        )
+
+        coach_name = (
+            goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
+            if goal.engagement and goal.engagement.coach
             else "N/A"
         )
 
@@ -5290,6 +5439,9 @@ def remove_coach_from_project(request, project_id):
         project = Project.objects.get(id=project_id)
         coach_id = request.data.get("coachIdToDelete")
         coach = Coach.objects.get(id=coach_id)
+        currentuser_id = request.data.get("currentUserId")
+        currentuser = User.objects.get(id=currentuser_id)
+
     except Project.DoesNotExist:
         return Response(
             {"message": "Project not found"}, status=status.HTTP_404_NOT_FOUND
@@ -5327,6 +5479,21 @@ def remove_coach_from_project(request, project_id):
             project.coaches_status.remove(coach_status)
             project.coaches.remove(coach)
             project.save()
+            coach_status.delete()
+            
+            user = "default user"
+            time_of_removal = timezone.now()
+            removed_coach = coach   
+            removed_from_project = project
+
+            removeCoachProfile = RemoveCoachActivity.objects.create(
+                user=currentuser,
+                time_of_removal=time_of_removal,
+                removed_coach=removed_coach,
+                removed_from_project=removed_from_project,
+            )
+
+            removeCoachProfile.save()
 
             return Response(
                 {"message": "Coach has been removed from the project."},
@@ -5825,6 +5992,9 @@ def edit_project_caas(request, project_id):
         project.project_description = request.data.get(
             "project_description", project.project_description
         )
+        project.coach_consent_mandatory = request.data.get(
+            "coach_consent_mandatory", project.coach_consent_mandatory
+        )
         project.hr.clear()
         for hr in request.data["hr"]:
             single_hr = HR.objects.get(id=hr)
@@ -5949,6 +6119,46 @@ class ActivitySummary(APIView):
             print("sent_email_activities", str(e))
             sent_email_serializer = []
 
+        try:
+            session_requested_activities = SessionRequestedActivity.objects.all()
+            total_session_requested_count = session_requested_activities.count()
+            session_requested_serializer = SessionRequestedActivitySerializer(
+                session_requested_activities, many=True
+            )
+        except Exception as e:
+            print("session_requested_activities", str(e))
+            session_requested_serializer = []
+
+        try:
+            delete_coach_profile_activities = DeleteCoachProfileActivity.objects.all()
+            total_coach_profile_delete_count = delete_coach_profile_activities.count()
+            delete_coach_profile_serializer = DeleteCoachProfileActivitySerializer(
+                delete_coach_profile_activities, many=True
+            )
+        except Exception as e:
+            print("delete_coach_activities", str(e))
+            delete_coach_profile_serializer = []
+
+        try:
+            remove_coach_profile_activities = RemoveCoachActivity.objects.all()
+            total_remove_coach_count = remove_coach_profile_activities.count()
+            remove_coach_profile_serializer = RemoveCoachActivitySerializer(
+                remove_coach_profile_activities, many=True
+            )
+        except Exception as e:
+            print("delete_coach_activities", str(e))
+            delete_coach_profile_serializer = []
+
+        try:
+            add_past_session_activities = PastSessionActivity.objects.all()
+            total_past_session_count = add_past_session_activities.count()
+            past_session_activity_serializer = PastSessionActivitySerializer(
+                add_past_session_activities, many=True
+            )
+        except Exception as e:
+            print("delete_coach_activities", str(e))
+            delete_coach_profile_serializer = []
+
         response_data = {
             "user_login": {
                 "total_count": total_login_count,
@@ -5969,6 +6179,22 @@ class ActivitySummary(APIView):
             "sent_email": {
                 "total_count": total_sent_email_count,
                 "activity": sent_email_serializer.data,
+            },
+            "session_requested": {
+                "total_count": total_session_requested_count,
+                "activity": session_requested_serializer.data,
+            },
+            "delete_coach_profile": {
+                "total_count": total_coach_profile_delete_count,
+                "activity": delete_coach_profile_serializer.data,
+            },
+            "remove_coach_profile": {
+                "total_count": total_remove_coach_count,
+                "activity": remove_coach_profile_serializer.data,
+            },
+            "add_past_session": {
+                "total_count": total_past_session_count,
+                "activity": past_session_activity_serializer.data,
             },
         }
 
@@ -6197,3 +6423,323 @@ class StandardFieldDeleteValue(APIView):
             {"message": f"Value deleted from {FIELD_NAME_VALUES[field_name]} field."},
             status=200,
         )
+
+
+@api_view(["GET", "POST"])
+def template_list_create_view(request):
+    if request.method == "GET":
+        templates = Template.objects.all()
+        serializer = TemplateSerializer(templates, many=True)
+        return Response(serializer.data)
+
+    elif request.method == "POST":
+        serializer = TemplateSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET", "PUT", "DELETE"])
+def template_retrieve_update_destroy_view(request, pk):
+    try:
+        template = Template.objects.get(pk=pk)
+    except Template.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "GET":
+        serializer = TemplateSerializer(template)
+        return Response(serializer.data)
+
+    elif request.method == "PUT":
+        serializer = TemplateSerializer(template, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    elif request.method == "DELETE":
+        template.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["POST"])
+def create_project_contract(request):
+    serializer = ProjectContractSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"message": "Contract Assigned Successfully."})
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ProjectContractAPIView(APIView):
+    def get(self, request, format=None):
+        contracts = ProjectContract.objects.all()
+        serializer = ProjectContractSerializer(contracts, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ProjectContractDetailView(APIView):
+    def get(self, request, project_id, format=None):
+        print(project_id)
+        try:
+            project_contract = ProjectContract.objects.get(project=project_id)
+        except ProjectContract.DoesNotExist:
+            return Response(
+                {"error": "Project contract not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = ProjectContractSerializer(project_contract)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class CoachContractList(APIView):
+    def get(self, request, format=None):
+        contracts = CoachContract.objects.all()
+        serializer = CoachContractSerializer(contracts, many=True)
+        return Response(serializer.data)
+
+    def post(self, request, format=None):
+        serializer = CoachContractSerializer(data=request.data)
+        if serializer.is_valid():
+            coach = serializer.validated_data["coach"]
+            project = serializer.validated_data["project"]
+
+            if CoachContract.objects.filter(coach=coach, project=project).exists():
+                return Response(
+                    {
+                        "message": f"Coach {coach.username} already has a contract for {project.name}"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            serializer.save()
+            return Response(
+                {"message": "Contract created successfully", "data": serializer.data},
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(
+            {"message": "Invalid data", "errors": serializer.errors},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+class CoachContractDetail(APIView):
+    def get_object(self, pk):
+        try:
+            return CoachContract.objects.get(pk=pk)
+        except CoachContract.DoesNotExist:
+            return None
+
+    def get(self, request, pk, format=None):
+        contract = self.get_object(pk)
+        if contract is not None:
+            serializer = CoachContractSerializer(contract)
+            return Response(serializer.data)
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    def put(self, request, pk, format=None):
+        contract = self.get_object(pk)
+        if contract is not None:
+            serializer = CoachContractSerializer(contract, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(
+                    {
+                        "message": "Contract updated successfully",
+                        "data": serializer.data,
+                    }
+                )
+            return Response(
+                {"message": "Invalid data", "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {"message": "Contract not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    def delete(self, request, pk, format=None):
+        contract = self.get_object(pk)
+        if contract is not None:
+            contract.delete()
+            return Response(
+                {"message": "Contract deleted successfully"},
+                status=status.HTTP_204_NO_CONTENT,
+            )
+        return Response(
+            {"message": "Contract not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+
+class UpdateCoachContract(APIView):
+    def put(self, request, format=None):
+        coach_id = request.data.get("coach")
+        project_id = request.data.get("project")
+        try:
+            contract = CoachContract.objects.get(coach=coach_id, project=project_id)
+        except CoachContract.DoesNotExist:
+            return Response(
+                {"error": "Coach Contract not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        coach_name = (
+            f"{contract.coach.first_name.strip()} {contract.coach.last_name.strip()}"
+        )
+        provided_name_inputed = request.data.get("name_inputed").strip()
+
+        if provided_name_inputed.lower() != coach_name.lower():
+            return Response(
+                {"error": "Provided name input does not match coach's name."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = CoachContractSerializer(contract, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Contract Accepted Successfully", "data": serializer.data},
+                status=status.HTTP_200_OK,
+            )
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AssignCoachContractAndProjectContract(APIView):
+    def post(self, request, format=None):
+        project_id = request.data.get("project")
+        existing_contract = ProjectContract.objects.filter(project=project_id).first()
+
+        if not existing_contract:
+            serializer = ProjectContractSerializer(data=request.data)
+            if serializer.is_valid():
+                contract = serializer.save()
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            contract = existing_contract
+
+        current_date = timezone.now().date()
+
+        project_id = request.data.get("project")
+
+        try:
+            project = Project.objects.get(id=project_id)
+        except Project.DoesNotExist:
+            return Response(
+                {"message": "Project not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        coaches = project.coaches_status.all()
+
+        for coach_status in coaches:
+            hr_status = coach_status.status.get("hr", {}).get("status")
+
+            if hr_status == "select":
+                coach = coach_status.coach
+
+                existing_coach_contract = CoachContract.objects.filter(
+                    project=project_id, coach=coach.id
+                ).exists()
+
+                if not existing_coach_contract:
+                    contract_data = {
+                        "project_contract": contract.id,
+                        "project": project_id,
+                        "status": "pending",
+                        "coach": coach.id,
+                    }
+                    contract_serializer = CoachContractSerializer(data=contract_data)
+
+                    if contract_serializer.is_valid():
+                        contract_serializer.save()
+                    else:
+                        return Response(
+                            contract_serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+        return Response(
+            {
+                "message": "Project Contract Saved and Coach contracts assigned successfully."
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ApprovedCoachContract(APIView):
+    def get(self, request, project_id, coach_id, format=None):
+        try:
+            coach_contract = CoachContract.objects.get(
+                project=project_id, coach=coach_id, status="approved"
+            )
+        except CoachContract.DoesNotExist:
+            return Response(
+                {"error": "Coach contract not found1."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = CoachContractSerializer(coach_contract)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class CoachWithApprovedContractsInProject(APIView):
+    def get(self, request, project_id, format=None):
+        try:
+            coach_contracts = CoachContract.objects.filter(
+                project=project_id, status="approved"
+            )
+
+            coach_ids = [contract.coach.id for contract in coach_contracts]
+
+            coaches = Coach.objects.filter(id__in=coach_ids)
+
+            serializer = CoachSerializer(coaches, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except CoachContract.DoesNotExist:
+            return Response(
+                {"error": "Coach contracts not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+
+class SendContractReminder(APIView):
+    def post(self, request, format=None):
+        try:
+            coachs_data = request.data["pending_coaches"]
+
+            timestamp = request.data["timestamp"]
+
+            project_id = request.data["project_id"]
+
+            if not coachs_data:
+                raise ValueError("No pending coaches available")
+
+            for coach_data in coachs_data:
+                coach = Coach.objects.get(id=coach_data["id"])
+
+                send_mail_templates(
+                    "coach_templates/contract_reminder.html",
+                    [coach.email],
+                    "Meeraq Coaching | Coach Contract Reminder",
+                    {"name": coach.first_name},
+                    [],  # no bcc emails
+                )
+
+            notification_message = "This is a reminder to accept the Coach contract."
+            create_notification(coach.user.user, "/projects", notification_message)
+
+            project_contract = ProjectContract.objects.get(project=project_id)
+            project_contract.reminder_timestamp = timestamp
+            project_contract.save()
+
+            return Response(
+                {"message": "Emails and notifications sent successfully"},
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

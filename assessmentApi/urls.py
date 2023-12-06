@@ -31,6 +31,21 @@ from .views import (
     GetParticipantObserversUniqueIds,
     StartAssessmentDisabled,
     ReleaseResults,
+    AssessmentsOfHr,
+    GetParticipantResponseForAllAssessment,
+    GetObserverResponseForAllAssessment,
+    ReminderMailForObserverByPmoAndParticipant,
+    GetObserverResponseForAllAssessments,
+    GetParticipantResponseForAllAssessments,
+    AddMultipleQuestions,
+    AddMultipleParticipants,
+    CreateObserverType,
+    GetObserverTypes,
+    DownloadParticipantResultReport,
+    GetAssessmentNotification,
+    MarkAllNotificationAsRead,
+    MarkNotificationAsRead,
+    GetUnreadNotificationCount,
 )
 
 
@@ -125,9 +140,18 @@ urlpatterns = [
         GetParticipantObserversUniqueIds.as_view(),
     ),
     path(
-        "start-assessment-disabled/<str:unique_id>/",StartAssessmentDisabled.as_view(),
+        "start-assessment-disabled/<str:unique_id>/",
+        StartAssessmentDisabled.as_view(),
     ),
     path(
-        "release-assessment-result/<int:assessment_id>/",ReleaseResults.as_view(),
+        "release-assessment-result/<int:assessment_id>/",
+        ReleaseResults.as_view(),
+    ),
+    path("notifications/all/<int:user_id>/", GetAssessmentNotification.as_view()),
+    path("notifications/mark-as-read/", MarkNotificationAsRead.as_view()),
+    path("notifications/mark-all-as-read/", MarkAllNotificationAsRead.as_view()),
+    path(
+        "notifications/unread-count/<int:user_id>/",
+        GetUnreadNotificationCount.as_view(),
     ),
 ]
