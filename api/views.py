@@ -1818,16 +1818,26 @@ def add_coach(request):
 @api_view(["POST"])
 def delete_coach(request):
     coach_id = request.data.get("coach_id", None)
-
     user_id = request.data.get("user_id")
     if coach_id:
         try:
             coach = Coach.objects.get(id=coach_id)
             coach_name = coach.first_name + " " + coach.last_name
-            user = coach.user.user
-            user.delete()
+            coach_user_profile=coach.user
+            is_delete_user = True
+            for role in coach_user_profile.roles.all():
+                if not role.name == "coach":
+                    # don't delete user if any other role exists
+                    is_delete_user = False
+                else:
+                    coach_user_profile.roles.remove(role)
+                    coach_user_profile.save()
+            if is_delete_user:
+                user = coach.user.user
+                user.delete()
+            else:
+                coach.delete()
             timestamp = timezone.now()
-            # data = request.data
             current_user = User.objects.get(id=user_id)
 
             deleteCoachProfile = DeleteCoachProfileActivity.objects.create(
