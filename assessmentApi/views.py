@@ -2,6 +2,8 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.template.loader import render_to_string
+from operationsBackend import settings
 from .models import (
     Competency,
     Question,
@@ -13,32 +15,138 @@ from .models import (
     ObserverResponse,
     ParticipantObserverType,
     ObserverUniqueId,
+    Behavior,
+    ObserverTypes,
+    AssessmentNotification,
 )
 from .serializers import (
-    CompetencySerializer,
+    CompetencySerializerDepthOne,
     QuestionSerializer,
     QuestionnaireSerializer,
-    QuestionSerializerDepthOne,
-    QuestionnaireSerializerDepthTwo,
+    QuestionSerializerDepthTwo,
+    QuestionnaireSerializerDepthThree,
     AssessmentSerializer,
-    AssessmentSerializerDepthThree,
-    AssessmentAnsweredSerializerDepthThree,
-    ParticipantResponseSerializer,
-    ObserverResponseSerializer,
-    ParticipantObserverTypeSerializer,
-    ObserverUniqueIdSerializerDepthOne,
+    AssessmentSerializerDepthFour,
+    AssessmentAnsweredSerializerDepthFour,
+    ParticipantResponseSerializerDepthFive,
+    ObserverResponseSerializerDepthFour,
+    ParticipantObserverTypeSerializerDepthTwo,
+    ObserverUniqueIdSerializerDepthTwo,
+    ObserverTypeSerializer,
+    AssessmentNotificationSerializer,
 )
 from django.db import transaction, IntegrityError
 import json
 import string
 import random
 from django.contrib.auth.models import User
-from api.models import Profile, Learner, Organisation, HR
+from api.models import Profile, Learner, Organisation, HR, SentEmailActivity
+from api.serializers import OrganisationSerializer
+from django.core.mail import EmailMessage, BadHeaderError
 from api.serializers import LearnerSerializer
 from collections import defaultdict
 from django.db.models import BooleanField, F, Exists, OuterRef
 from django.db.models import Q
+from django.dispatch import receiver
+from django_rest_passwordreset.signals import reset_password_token_created
+from django.utils import timezone
+from django_rest_passwordreset.tokens import get_token_generator
+from django_rest_passwordreset.models import ResetPasswordToken
+import requests
 import uuid
+from django.db.models import Q, Prefetch, Exists, OuterRef, Count
+import environ
+import base64
+from django.core.mail import EmailMessage
+from xhtml2pdf import pisa
+import pdfkit
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib
+import os
+from django.http import HttpResponse
+import io
+
+matplotlib.use("Agg")
+env = environ.Env()
+
+wkhtmltopdf_path = os.environ.get(
+    "WKHTMLTOPDF_PATH", r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+)
+
+pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
+
+class EmailSendingError(Exception):
+    pass
+
+
+def send_reset_password_link(users):
+    # Assuming you are sending a POST request with a list of emails in the body
+    for user_data in users:
+        try:
+            user = User.objects.get(username=user_data["email"])
+            # Replace YourUserModel with your actual user model
+            token = get_token_generator().generate_token()
+            # Save the token to the database
+            ResetPasswordToken.objects.create(user=user, key=token)
+            # def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
+            reset_password_link = (
+                f"https://assessment.meeraq.com/create-password/{token}"
+            )
+            send_mail_templates(
+                "assessment/assessment_email_to_participant.html",
+                [user_data["email"]],
+                "Meeraq - Welcome to Assessment Platform !",
+                {
+                    "participant_name": user_data["name"],
+                    "link": reset_password_link,
+                },
+                [],
+            )
+        except Exception as e:
+            print(f"Error sending link to {user_data['email']}: {str(e)}")
+
+
+def create_send_email(user_email, file_name):
+    user_email = user_email
+    file_name = file_name
+    try:
+        user = User.objects.get(username=user_email)
+        sent_email = SentEmailActivity.objects.create(
+            user=user,
+            email_subject=file_name,
+            timestamp=timezone.now(),
+        )
+        sent_email.save()
+    except Exception as e:
+        pass
+
+
+def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
+    email_message = render_to_string(file_name, content)
+
+    email = EmailMessage(
+        f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
+        email_message,
+        settings.DEFAULT_FROM_EMAIL,
+        user_email,
+        bcc_emails,
+    )
+    email.content_subtype = "html"
+
+    try:
+        email.send(fail_silently=False)
+        for email in user_email:
+            create_send_email(email, file_name)
+    except BadHeaderError as e:
+        print(f"Error occurred while sending emails: {str(e)}")
+        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
+
+
+# def create_notification(user, path, message):
+#     notification = Notification.objects.create(user=user, path=path, message=message)
+#     return notification
 
 
 def create_learner(learner_name, learner_email):
@@ -87,25 +195,49 @@ def create_learner(learner_name, learner_email):
 class CompetencyView(APIView):
     def get(self, request):
         competencies = Competency.objects.all()
-        serializer = CompetencySerializer(competencies, many=True)
+        serializer = CompetencySerializerDepthOne(competencies, many=True)
         return Response(serializer.data)
 
     def post(self, request):
-        serializer = CompetencySerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
+        try:
+            behaviors = request.data.get("behaviors")
+            behavior_ids = []
+
+            # Create and save individual behaviors
+            for behavior_data in behaviors:
+                single_behavior = Behavior(
+                    name=behavior_data.get("name"),
+                    description=behavior_data.get("description"),
+                )
+                single_behavior.save()
+                behavior_ids.append(single_behavior.id)
+
+            # Create the competency with associated behaviors
+            competency = Competency(
+                name=request.data.get("name"),
+                description=request.data.get("description"),
+            )
+            competency.save()
+            competency.behaviors.set(behavior_ids)
+
             return Response(
-                {"message": "Competency created successfully"},
+                {
+                    "message": "Competency and associated behaviors created successfully.",
+                },
                 status=status.HTTP_201_CREATED,
             )
-        return Response(
-            {
-                "error": "Failed to create Competency.",
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+
+        except Exception as e:
+            return Response(
+                {
+                    "error": f"Failed to create Competency: {str(e)}",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     def put(self, request):
+        behaviors = request.data.get("behaviors")
+        behavior_ids = []
         competency_id = request.data.get("id")
         try:
             competency = Competency.objects.get(id=competency_id)
@@ -114,19 +246,29 @@ class CompetencyView(APIView):
                 {"message": "Competency not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = CompetencySerializer(competency, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
+        try:
+            for behavior_data in behaviors:
+                single_behavior, created = Behavior.objects.get_or_create(
+                    name=behavior_data.get("name"),
+                    description=behavior_data.get("description"),
+                )
+                single_behavior.save()
+                behavior_ids.append(single_behavior.id)
+
+            competency.behaviors.set(behavior_ids)
+            competency.name = request.data.get("name")
+            competency.description = request.data.get("description")
+            competency.save()
+
             return Response(
                 {"message": "Competency updated successfully"},
                 status=status.HTTP_200_OK,
             )
-        return Response(
-            {
-                "error": "Failed to update Competency.",
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        except Exception as e:
+            return Response(
+                {"error": f"Failed to update Competency"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     def delete(self, request):
         competency_id = request.data.get("id")
@@ -154,14 +296,14 @@ class OneCompetencyDetail(APIView):
                 {"message": "Competency not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = CompetencySerializer(competency)
+        serializer = CompetencySerializerDepthOne(competency)
         return Response(serializer.data)
 
 
 class QuestionView(APIView):
     def get(self, request):
         questions = Question.objects.all()
-        serializer = QuestionSerializerDepthOne(questions, many=True)
+        serializer = QuestionSerializerDepthTwo(questions, many=True)
 
         return Response(serializer.data)
 
@@ -193,7 +335,7 @@ class QuestionView(APIView):
             )
         serializer = None
         if isinstance(competency, dict):
-            serializer = QuestionSerializerDepthOne(question, data=request.data)
+            serializer = QuestionSerializerDepthTwo(question, data=request.data)
         else:
             serializer = QuestionSerializer(question, data=request.data)
 
@@ -235,14 +377,14 @@ class OneQuestionDetail(APIView):
                 {"message": "Question not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = QuestionSerializerDepthOne(question)
+        serializer = QuestionSerializerDepthTwo(question)
         return Response(serializer.data)
 
 
 class QuestionnaireView(APIView):
     def get(self, request):
         questionnaires = Questionnaire.objects.all()
-        serializer = QuestionnaireSerializerDepthTwo(questionnaires, many=True)
+        serializer = QuestionnaireSerializerDepthThree(questionnaires, many=True)
         return Response(serializer.data)
 
     def post(self, request):
@@ -313,14 +455,14 @@ class OneQuestionnaireDetail(APIView):
                 {"message": "Questionnaire not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
-        serializer = QuestionnaireSerializerDepthTwo(questionnaire)
+        serializer = QuestionnaireSerializerDepthThree(questionnaire)
         return Response(serializer.data)
 
 
 class AssessmentView(APIView):
     def get(self, request):
         assessments = Assessment.objects.all()
-        serializer = AssessmentSerializerDepthThree(assessments, many=True)
+        serializer = AssessmentSerializerDepthFour(assessments, many=True)
         return Response(serializer.data)
 
     def post(self, request):
@@ -359,7 +501,13 @@ class AssessmentView(APIView):
             for hr_id in request.data.get("hr"):
                 one_hr = HR.objects.get(id=hr_id)
                 hr.append(one_hr)
+            observer_types = []
+            for observer_type_id in request.data.get("observer_types"):
+                one_observer_type = ObserverTypes.objects.get(id=observer_type_id)
+                observer_types.append(one_observer_type)
+
             assessment.name = request.data.get("name")
+            assessment.participant_view_name = request.data.get("participant_view_name")
             assessment.assessment_type = request.data.get("assessment_type")
             if request.data.get("assessment_type") == "self":
                 assessment.number_of_observers = 0
@@ -371,9 +519,10 @@ class AssessmentView(APIView):
             assessment.descriptive_questions = request.data.get("descriptive_questions")
             assessment.organisation = organisation
             assessment.hr.set(hr)
+            assessment.observer_types.set(observer_types)
             assessment.save()
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "message": "Assessment updated successfully",
@@ -415,7 +564,7 @@ class AssessmentStatusOrEndDataChange(APIView):
             assessment.status = request.data.get("status")
             assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {"message": "Update successfully.", "assessment_data": serializer.data},
                 status=status.HTTP_200_OK,
@@ -458,7 +607,6 @@ class AddParticipantObserverToAssessment(APIView):
             user = User.objects.filter(
                 username=participants[0]["participantEmail"]
             ).first()
-
             if user:
                 user_profile = Profile.objects.filter(user=user).first()
 
@@ -469,7 +617,7 @@ class AddParticipantObserverToAssessment(APIView):
                 ):
                     return Response(
                         {
-                            "error": "Email Already exist. Please try using another email.",
+                            "error": "Email Already exist as another user. Please try using another email.",
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
@@ -477,7 +625,6 @@ class AddParticipantObserverToAssessment(APIView):
             participant = create_learner(
                 participants[0]["participantName"], participants[0]["participantEmail"]
             )
-
             mapping = ParticipantObserverMapping.objects.create(participant=participant)
 
             # if assessment.assessment_type == "360":
@@ -505,7 +652,9 @@ class AddParticipantObserverToAssessment(APIView):
             assessment.participants_observers.add(mapping)
             assessment.save()
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            particpant_data = [{"name": participant.name, "email": participant.email}]
+            send_reset_password_link(particpant_data)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "message": "Participant added successfully.",
@@ -542,7 +691,7 @@ class AssessmentsOfParticipant(APIView):
                 )
             )
 
-            serializer = AssessmentAnsweredSerializerDepthThree(assessments, many=True)
+            serializer = AssessmentAnsweredSerializerDepthFour(assessments, many=True)
 
             return Response(serializer.data)
 
@@ -570,6 +719,7 @@ class QuestionsForAssessment(APIView):
                 full_question = {
                     "id": question.id,
                     "self_question": question.self_question,
+                    "label": question.label,
                     "rating_type": question.rating_type,
                 }
 
@@ -604,6 +754,7 @@ class QuestionsForObserverAssessment(APIView):
                 full_question = {
                     "id": question.id,
                     "observer_question": question.observer_question,
+                    "label": question.label,
                     "rating_type": question.rating_type,
                 }
 
@@ -657,7 +808,7 @@ class ObserverAssessment(APIView):
                 participants_observers__observers__email=email, status="ongoing"
             ).distinct()
 
-            serializer = AssessmentSerializerDepthThree(assessments, many=True)
+            serializer = AssessmentSerializerDepthFour(assessments, many=True)
             return Response(serializer.data)
         except Assessment.DoesNotExist:
             return Response(
@@ -693,6 +844,7 @@ class CreateParticipantResponseView(APIView):
                 assessment=assessment,
                 participant_response=response,
             )
+            serializer = AssessmentAnsweredSerializerDepthFour(assessment)
             return Response(
                 {"message": "Submit Successfully."},
                 status=status.HTTP_200_OK,
@@ -758,7 +910,9 @@ class GetParticipantResponseForParticipant(APIView):
                 participant=participant,
             )
 
-            serializer = ParticipantResponseSerializer(participant_responses, many=True)
+            serializer = ParticipantResponseSerializerDepthFive(
+                participant_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -776,7 +930,9 @@ class GetParticipantResponseFormAssessment(APIView):
                 assessment=assessment,
             )
 
-            serializer = ParticipantResponseSerializer(participant_responses, many=True)
+            serializer = ParticipantResponseSerializerDepthFive(
+                participant_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -794,7 +950,9 @@ class GetObserverResponseForObserver(APIView):
                 observer=observer,
             )
 
-            serializer = ObserverResponseSerializer(observer_responses, many=True)
+            serializer = ObserverResponseSerializerDepthFour(
+                observer_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -812,7 +970,9 @@ class GetObserverResponseFormAssessment(APIView):
                 assessment=assessment,
             )
 
-            serializer = ObserverResponseSerializer(observer_responses, many=True)
+            serializer = ObserverResponseSerializerDepthFour(
+                observer_responses, many=True
+            )
 
             return Response(serializer.data)
         except Exception as e:
@@ -824,7 +984,7 @@ class GetObserverResponseFormAssessment(APIView):
 class ParticipantObserverTypeList(APIView):
     def get(self, request):
         participant_observer_types = ParticipantObserverType.objects.all()
-        serializer = ParticipantObserverTypeSerializer(
+        serializer = ParticipantObserverTypeSerializerDepthTwo(
             participant_observer_types, many=True
         )
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -843,7 +1003,7 @@ class DeleteParticipantFromAssessment(APIView):
                 participant__id=participant_observers["participant"]["id"]
             ).delete()
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "message": "Successfully removed participant from assessment.",
@@ -880,7 +1040,7 @@ class DeleteObserverFromAssessment(APIView):
 
             participants_observer.observers.remove(observer_to_remove)
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
 
             return Response(
                 {
@@ -909,27 +1069,39 @@ class AddObserverToParticipant(APIView):
             observerName = request.data.get("observerName")
             observerEmail = request.data.get("observerEmail")
             observerType = request.data.get("observerType")
+
             assessment = Assessment.objects.get(id=assessment_id)
+            observer_type = ObserverTypes.objects.get(id=observerType)
 
             if participants_observer.observers.filter(email=observerEmail).exists():
                 return Response(
                     {"error": f"Observer with email '{observerEmail}' already exists."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            if participants_observer.participant.email == observerEmail:
+                return Response(
+                    {
+                        "error": f"Cannot add the same email observer to a participant with the same email address: {observerEmail}"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             observer, created = Observer.objects.get_or_create(
                 email=observerEmail,
             )
+
             observer.name = observerName
             observer.save()
+
             (
                 participant_observer_type,
                 created1,
             ) = ParticipantObserverType.objects.get_or_create(
                 participant=participants_observer.participant,
                 observers=observer,
+                type=observer_type,
             )
-            participant_observer_type.type = observerType
+
             participant_observer_type.save()
             participants_observer.observers.add(observer)
             participants_observer.save()
@@ -941,8 +1113,21 @@ class AddObserverToParticipant(APIView):
             )
             observer_unique_id.unique_id = str(uuid.uuid4())
             observer_unique_id.save()
+            observer_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+            send_mail_templates(
+                "assessment/assessment_email_to_observer.html",
+                [observer.email],
+                "Meeraq - Welcome to Assessment Platform !",
+                {
+                    "assessment_name": assessment.name,
+                    "participant_name": participants_observer.participant.name,
+                    "observer_name": observer.name,
+                    "link": observer_link,
+                },
+                [],
+            )
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "message": "Observer added successfully.",
@@ -1040,10 +1225,18 @@ class ParticipantAddsObserverToAssessment(APIView):
                 observerName = observer_data["observerName"]
                 observerEmail = observer_data["observerEmail"]
                 observerType = observer_data["observerType"]
+                observer_type = ObserverTypes.objects.get(id=observerType)
                 if participants_observer.observers.filter(email=observerEmail).exists():
                     return Response(
                         {
                             "error": f"Observer with email '{observerEmail}' already exists."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if participants_observer.participant.email == observerEmail:
+                    return Response(
+                        {
+                            "error": f"Cannot add the same email observer to a participant with the same email address: {observerEmail}"
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
@@ -1059,8 +1252,8 @@ class ParticipantAddsObserverToAssessment(APIView):
                 ) = ParticipantObserverType.objects.get_or_create(
                     participant=participants_observer.participant,
                     observers=observer,
+                    type=observer_type,
                 )
-                participant_observer_type.type = observerType
                 participant_observer_type.save()
                 participants_observer.observers.add(observer)
                 participants_observer.save()
@@ -1072,6 +1265,19 @@ class ParticipantAddsObserverToAssessment(APIView):
                 )
                 observer_unique_id.unique_id = str(uuid.uuid4())
                 observer_unique_id.save()
+                observer_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+                send_mail_templates(
+                    "assessment/assessment_email_to_observer.html",
+                    [observer.email],
+                    "Meeraq - Welcome to Assessment Platform !",
+                    {
+                        "assessment_name": assessment.name,
+                        "participant_name": participants_observer.participant.name,
+                        "observer_name": observer.name,
+                        "link": observer_link,
+                    },
+                    [],
+                )
 
             return Response(
                 {
@@ -1092,7 +1298,7 @@ class StartAssessmentDataForObserver(APIView):
         try:
             observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
 
-            serializer = AssessmentSerializerDepthThree(observer_unique_id.assessment)
+            serializer = AssessmentSerializerDepthFour(observer_unique_id.assessment)
 
             return Response(
                 {
@@ -1117,7 +1323,7 @@ class GetObserversUniqueIds(APIView):
                 assessment__id=assessment_id
             )
 
-            serializer = ObserverUniqueIdSerializerDepthOne(
+            serializer = ObserverUniqueIdSerializerDepthTwo(
                 observers_unique_id, many=True
             )
 
@@ -1138,7 +1344,7 @@ class GetParticipantObserversUniqueIds(APIView):
                 participant__email=participant_email
             )
 
-            serializer = ObserverUniqueIdSerializerDepthOne(
+            serializer = ObserverUniqueIdSerializerDepthTwo(
                 observers_unique_id, many=True
             )
 
@@ -1184,7 +1390,7 @@ class ReleaseResults(APIView):
             assessment.result_released = True
             assessment.save()
 
-            serializer = AssessmentSerializerDepthThree(assessment)
+            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "success": "Successfully Released Results",
@@ -1196,6 +1402,281 @@ class ReleaseResults(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to retrieve Observer Response Data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class AssessmentsOfHr(APIView):
+    def get(self, request, hr_email):
+        try:
+            hr = HR.objects.get(email=hr_email)
+
+            assessments = Assessment.objects.filter(
+                Q(hr=hr) & (Q(status="ongoing") | Q(status="completed"))
+            )
+
+            serializer = AssessmentSerializerDepthFour(assessments, many=True)
+
+            return Response(serializer.data)
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetParticipantResponseForAllAssessment(APIView):
+    def get(self, request, hr_email):
+        try:
+            participant_responses = ParticipantResponse.objects.filter(
+                assessment__hr__email=hr_email,
+            )
+
+            serializer = ParticipantResponseSerializerDepthFive(
+                participant_responses, many=True
+            )
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetObserverResponseForAllAssessment(APIView):
+    def get(self, request, hr_email):
+        try:
+            observer_responses = ObserverResponse.objects.filter(
+                assessment__hr__email=hr_email,
+            )
+
+            serializer = ObserverResponseSerializerDepthFour(
+                observer_responses, many=True
+            )
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class ReminderMailForObserverByPmoAndParticipant(APIView):
+    def put(self, request):
+        try:
+            assessment_id = request.data.get("assessment_id")
+            assessment = Assessment.objects.get(id=assessment_id)
+            participant_observers_id = request.data.get("participant_observers_id")
+            participants_observer = ParticipantObserverMapping.objects.get(
+                id=participant_observers_id
+            )
+            for observer in participants_observer.observers.all():
+                observer_response_data = ObserverResponse.objects.filter(
+                    participant__id=participants_observer.participant.id,
+                    observer__id=observer.id,
+                    assessment__id=assessment.id,
+                )
+                observer_unique_id = ObserverUniqueId.objects.get(
+                    participant=participants_observer.participant,
+                    observer=observer,
+                    assessment=assessment,
+                )
+
+                if not observer_response_data:
+                    observer_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+                    send_mail_templates(
+                        "assessment/reminder_mail_for_observer_by_pmo_and_participant.html",
+                        [observer.email],
+                        "Meeraq - Welcome to Assessment Platform !",
+                        {
+                            "assessment_name": assessment.name,
+                            "participant_name": participants_observer.participant.name,
+                            "observer_name": observer.name,
+                            "link": observer_link,
+                        },
+                        [],
+                    )
+
+            return Response(
+                {
+                    "message": "Reminders are Send Successfully",
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to send Notification."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetParticipantResponseForAllAssessments(APIView):
+    def get(self, request):
+        try:
+            participant_responses = ParticipantResponse.objects.all()
+
+            serializer = ParticipantResponseSerializerDepthFive(
+                participant_responses, many=True
+            )
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetObserverResponseForAllAssessments(APIView):
+    def get(self, request):
+        try:
+            observer_responses = ObserverResponse.objects.all()
+            serializer = ObserverResponseSerializerDepthFour(
+                observer_responses, many=True
+            )
+
+            return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class AddMultipleQuestions(APIView):
+    @transaction.atomic
+    def post(self, request):
+        try:
+            questions = request.data.get("questions")
+
+            for question in questions:
+                behavior, created = Behavior.objects.get_or_create(
+                    name=question["behaviour"],
+                )
+                behavior.save()
+                competency, created = Competency.objects.get_or_create(
+                    name=question["compentency_name"]
+                )
+
+                competency.behaviors.add(behavior)
+                competency.save()
+
+                if question["rating_type"] == "1-5":
+                    labels = {
+                        "1": question["label1"],
+                        "2": question["label2"],
+                        "3": question["label3"],
+                        "4": question["label4"],
+                        "5": question["label5"],
+                    }
+                elif question["rating_type"] == "1-10":
+                    labels = {
+                        "1": question["label1"],
+                        "2": question["label2"],
+                        "3": question["label3"],
+                        "4": question["label4"],
+                        "5": question["label5"],
+                        "6": question["label6"],
+                        "7": question["label7"],
+                        "8": question["label8"],
+                        "9": question["label9"],
+                        "10": question["label10"],
+                    }
+
+                new_question, created = Question.objects.get_or_create(
+                    type=question["type"],
+                    reverse_question=True
+                    if question["reverse_question"] == "Yes"
+                    else False,
+                    behavior=behavior,
+                    competency=competency,
+                    self_question=question["self_question"],
+                    observer_question=question["observer_question"],
+                    rating_type=question["rating_type"],
+                    label=labels,
+                )
+                new_question.save()
+
+            return Response(
+                {
+                    "message": "Questions created successfully.",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to add questions."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class AddMultipleParticipants(APIView):
+    @transaction.atomic
+    def post(self, request):
+        try:
+            participants = request.data.get("participants")
+            assessment_id = request.data.get("assessment_id")
+            assessment = Assessment.objects.get(id=assessment_id)
+            for participant in participants:
+                if assessment.participants_observers.filter(
+                    participant__email=participant["email"]
+                ).exists():
+                    return Response(
+                        {
+                            "error": f"Participant with email {participant['email']} already exists in the assessment."
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                user = User.objects.filter(username=participant["email"]).first()
+
+                if user:
+                    user_profile = Profile.objects.filter(user=user).first()
+
+                    if (
+                        user_profile.type == "hr"
+                        or user_profile.type == "pmo"
+                        or user_profile.type == "coach"
+                    ):
+                        return Response(
+                            {
+                                "error": f"Email {participant['email']} already exist as another user. Please try using another email.",
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                new_participant = create_learner(
+                    participant["name"], participant["email"]
+                )
+
+                mapping = ParticipantObserverMapping.objects.create(
+                    participant=new_participant
+                )
+
+                mapping.save()
+                assessment.participants_observers.add(mapping)
+                assessment.save()
+
+                particpant_data = [
+                    {"name": participant["name"], "email": participant["email"]}
+                ]
+
+                send_reset_password_link(particpant_data)
+
+            serializer = AssessmentSerializerDepthFour(assessment)
+            return Response(
+                {
+                    "message": "Participants added successfully.",
+                    "assessment_data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to add participants."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -1363,15 +1844,18 @@ def generate_report_for_participant(file_name, content):
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
 
-        image_url = f"{org_serializer.data.get('image_url')}"
-        image_response = requests.get(image_url)
-        image_response.raise_for_status()
+        image_url = org_serializer.data.get("image_url")
 
-        image_organisation_base64 = base64.b64encode(image_response.content).decode(
-            "utf-8"
-        )
+        if image_url is not None:
+            image_response = requests.get(image_url)
+            image_response.raise_for_status()
 
-        content["image_organisation_base64"] = image_organisation_base64
+            image_organisation_base64 = base64.b64encode(image_response.content).decode(
+                "utf-8"
+            )
+            content["image_organisation_base64"] = image_organisation_base64
+        else:
+            content["image_organisation_base64"] = None
 
         email_message = render_to_string(file_name, content)
 
@@ -1389,15 +1873,18 @@ def html_for_pdf_preview(file_name, user_email, email_subject, content, body_mes
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
 
-        image_url = f"{org_serializer.data.get('image_url')}"
-        image_response = requests.get(image_url)
-        image_response.raise_for_status()
+        image_url = org_serializer.data.get("image_url")
 
-        image_organisation_base64 = base64.b64encode(image_response.content).decode(
-            "utf-8"
-        )
+        if image_url is not None:
+            image_response = requests.get(image_url)
+            image_response.raise_for_status()
 
-        content["image_organisation_base64"] = image_organisation_base64
+            image_organisation_base64 = base64.b64encode(image_response.content).decode(
+                "utf-8"
+            )
+            content["image_organisation_base64"] = image_organisation_base64
+        else:
+            content["image_organisation_base64"] = None
 
         html_message = render_to_string(file_name, content)
 
@@ -1796,8 +2283,9 @@ class DownloadParticipantResultReport(APIView):
 
             with open(pdf_path, "rb") as pdf_file:
                 response = HttpResponse(pdf_file.read(), content_type="application/pdf")
-                response["Content-Disposition"] = 'attachment; filename="Report.pdf"'
-
+                response[
+                    "Content-Disposition"
+                ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
             # Close the file after reading
             pdf_file.close()
 
@@ -1846,3 +2334,11 @@ class MarkNotificationAsRead(APIView):
 
         notifications.update(read_status=True)
         return Response("Notifications marked as read.")
+
+
+class GetUnreadNotificationCount(APIView):
+    def get(self, request, user_id):
+        count = AssessmentNotification.objects.filter(
+            user__id=user_id, read_status=False
+        ).count()
+        return Response({"count": count})
