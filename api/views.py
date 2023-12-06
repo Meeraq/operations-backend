@@ -2631,7 +2631,7 @@ def add_hr(request):
             {"message": "HR added successfully", "details": serializer.data}, status=200
         )
     except Exception as e:
-        return Response({"error": str(e)}, status=400)
+        return Response({"error": "User email already exist."}, status=400)
 
 
 @api_view(["PUT"])
