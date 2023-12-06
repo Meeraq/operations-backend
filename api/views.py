@@ -509,12 +509,23 @@ def update_coach_profile(request, id):
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
-
-        return Response(
-            {**depth_serializer.data, "last_login": coach.user.user.last_login},
-            status=200,
-        )
-
+        is_caas_allowed = Project.objects.filter(
+            coaches_status__coach=user.profile.coach
+        ).exists()
+        is_seeq_allowed = SchedularBatch.objects.filter(
+            coaches=user.profile.coach
+        ).exists()
+        roles = []
+        for role in roles:
+            roles.append(role.name)
+        return Response({
+            **depth_serializer.data,
+            "is_caas_allowed": is_caas_allowed,
+            "is_seeq_allowed": is_seeq_allowed,
+            "roles": roles,
+            "last_login": coach.user.user.last_login,
+            "user": {**depth_serializer.data["user"], "type": "coach"}
+            })
     return Response(serializer.errors, status=400)
 
 
