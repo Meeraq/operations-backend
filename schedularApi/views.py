@@ -397,7 +397,7 @@ def get_batch_calendar(request, batch_id):
                 {
                     **coaching_session,
                     "available_slots_count": len(result)
-                    if session_duration > '30'
+                    if session_duration > "30"
                     else (len(availabilities) if availabilities is not None else 0),
                     "booked_session_count": booked_session_count,
                     "participants_not_booked": GetSchedularParticipantsSerializer(
@@ -901,7 +901,7 @@ def schedule_session(request):
             end_time=end_time,
             is_confirmed=False,
         )
-        
+
         coach_availability.save()
         coach_availability_id = coach_availability.id
 
@@ -1217,7 +1217,7 @@ def get_sessions_by_type(request, sessions_type):
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
             "session_type": session.coaching_session.session_type,
-            "end_time":session.availibility.end_time,
+            "end_time": session.availibility.end_time,
         }
         session_details.append(session_detail)
     return Response(session_details, status=status.HTTP_200_OK)
@@ -1296,7 +1296,7 @@ def get_requests_of_coach(request, coach_id):
             "new": new_requests_serializer.data,
             "active": active_requests_serializer.data,
         },
-        status=status.HTTP_200_OK,  
+        status=status.HTTP_200_OK,
     )
 
 
