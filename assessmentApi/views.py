@@ -66,8 +66,11 @@ import matplotlib
 import os
 from django.http import HttpResponse
 import io
+
 matplotlib.use("Agg")
 env = environ.Env()
+from pdf2docx import parse
+from io import BytesIO
 
 wkhtmltopdf_path = os.environ.get(
     "WKHTMLTOPDF_PATH", r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
@@ -1763,19 +1766,18 @@ def calculate_average(question_with_answers, assessment_type):
 
     return competency_averages
 
+
 def delete_previous_graphs():
-    
     graph_directory = "graphsAndReports"
     files = os.listdir(graph_directory)
     previous_graphs = [file for file in files if file.startswith("average_responses")]
-    
+
     for graph in previous_graphs:
         file_path = os.path.join(graph_directory, graph)
         os.remove(file_path)
 
-def generate_graph(data, assessment_type):
-    
 
+def generate_graph(data, assessment_type):
     bar_width = 0.1
     competency_names = [competency["competency_name"] for competency in data]
     num_competencies = len(competency_names)
@@ -1790,10 +1792,14 @@ def generate_graph(data, assessment_type):
 
         fig, ax = plt.subplots(figsize=(10, 6))
         index = np.arange(len(subset_data))
-        participant_responses = [comp["average_participant_response"] for comp in subset_data]
+        participant_responses = [
+            comp["average_participant_response"] for comp in subset_data
+        ]
 
         if assessment_type != "self":
-            observer_responses = [comp["average_observer_responses"] for comp in subset_data]
+            observer_responses = [
+                comp["average_observer_responses"] for comp in subset_data
+            ]
             bar2 = ax.bar(
                 index + bar_width,
                 observer_responses,
@@ -1825,37 +1831,33 @@ def generate_graph(data, assessment_type):
 
         # Save the image data to a BytesIO object
         image_stream = io.BytesIO()
-        plt.savefig(image_stream, format='png')
+        plt.savefig(image_stream, format="png")
         plt.close()
 
         # Convert the image data to base64
-        encoded_image = base64.b64encode(image_stream.getvalue()).decode('utf-8')
+        encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
         encoded_images.append(encoded_image)
 
     return encoded_images
 
 
-
-def generate_report_for_participant(
-    file_name, content
-):
+def generate_report_for_participant(file_name, content):
     try:
-        
-
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
-        
-        image_url = org_serializer.data.get('image_url')
-        
+
+        image_url = org_serializer.data.get("image_url")
+
         if image_url is not None:
             image_response = requests.get(image_url)
             image_response.raise_for_status()
 
-            image_organisation_base64 = base64.b64encode(image_response.content).decode('utf-8')
+            image_organisation_base64 = base64.b64encode(image_response.content).decode(
+                "utf-8"
+            )
             content["image_organisation_base64"] = image_organisation_base64
         else:
-            
-            content["image_organisation_base64"] = None  
+            content["image_organisation_base64"] = None
 
         email_message = render_to_string(file_name, content)
 
@@ -1870,24 +1872,22 @@ def generate_report_for_participant(
 
 def html_for_pdf_preview(file_name, user_email, email_subject, content, body_message):
     try:
-        
-
         organisation = Organisation.objects.get(id=content["organisation_id"])
         org_serializer = OrganisationSerializer(organisation)
 
-        
-        image_url = org_serializer.data.get('image_url')
-        
+        image_url = org_serializer.data.get("image_url")
+
         if image_url is not None:
             image_response = requests.get(image_url)
             image_response.raise_for_status()
 
-            image_organisation_base64 = base64.b64encode(image_response.content).decode('utf-8')
+            image_organisation_base64 = base64.b64encode(image_response.content).decode(
+                "utf-8"
+            )
             content["image_organisation_base64"] = image_organisation_base64
         else:
-            
-            content["image_organisation_base64"] = None  
-        
+            content["image_organisation_base64"] = None
+
         html_message = render_to_string(file_name, content)
 
         return html_message
@@ -2135,7 +2135,7 @@ class DownloadParticipantResultReport(APIView):
                 question_with_answers, assessment.assessment_type
             )
 
-            graph_images=generate_graph(averages, assessment.assessment_type)
+            graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers
@@ -2155,7 +2155,7 @@ class DownloadParticipantResultReport(APIView):
                     "data_for_score_analysis": data_for_score_analysis,
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
-                    "image_base64_array":graph_images
+                    "image_base64_array": graph_images,
                 },
                 f"This new report generated for {participant.name}",
             )
@@ -2260,7 +2260,7 @@ class DownloadParticipantResultReport(APIView):
                 question_with_answers, assessment.assessment_type
             )
 
-            graph_images=generate_graph(averages, assessment.assessment_type)
+            graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers
@@ -2278,14 +2278,16 @@ class DownloadParticipantResultReport(APIView):
                     "data_for_score_analysis": data_for_score_analysis,
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
-                    "image_base64_array":graph_images
+                    "image_base64_array": graph_images,
                 },
             )
             pdf_path = "graphsAndReports/Report.pdf"
 
             with open(pdf_path, "rb") as pdf_file:
                 response = HttpResponse(pdf_file.read(), content_type="application/pdf")
-                response["Content-Disposition"] = f'attachment; filename={f"{participant.name} Report.pdf"}'
+                response[
+                    "Content-Disposition"
+                ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
             # Close the file after reading
             pdf_file.close()
 
@@ -2335,7 +2337,149 @@ class MarkNotificationAsRead(APIView):
         notifications.update(read_status=True)
         return Response("Notifications marked as read.")
 
+
 class GetUnreadNotificationCount(APIView):
     def get(self, request, user_id):
-        count = AssessmentNotification.objects.filter(user__id=user_id, read_status=False).count()
+        count = AssessmentNotification.objects.filter(
+            user__id=user_id, read_status=False
+        ).count()
         return Response({"count": count})
+
+
+class DownloadWordReport(APIView):
+    def get(self, request, assessment_id, participant_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+            participant = Learner.objects.get(id=participant_id)
+            participant_observer = assessment.participants_observers.filter(
+                participant__id=participant_id
+            ).first()
+            participant_response = ParticipantResponse.objects.get(
+                participant__id=participant_id, assessment__id=assessment_id
+            )
+
+            question_with_answers = []
+
+            frequency_analysis_data = get_frequency_analysis_data(
+                assessment.questionnaire.questions,
+                participant_response,
+                participant_observer,
+                participant_id,
+                assessment_id,
+            )
+            # Group questions by competency
+            for competency in assessment.questionnaire.questions.values(
+                "competency"
+            ).distinct():
+                competency_id = competency["competency"]
+                competency_questions = assessment.questionnaire.questions.filter(
+                    competency__id=competency_id
+                )
+
+                competency_object = {
+                    "competency_name": Competency.objects.get(id=competency_id).name,
+                    "questions": [],
+                }
+
+                for question in competency_questions:
+                    question_object = None
+
+                    question_object = {
+                        "question": question.self_question,
+                        "participant_response": participant_response.participant_response.get(
+                            str(question.id)
+                        ),
+                    }
+
+                    count = 1
+                    observer_types_total = get_total_observer_types(
+                        participant_observer, participant_id
+                    )
+                    # Collect observer responses
+                    for observer in participant_observer.observers.all():
+                        observer_response = ObserverResponse.objects.get(
+                            participant__id=participant_id,
+                            observer__id=observer.id,
+                            assessment__id=assessment_id,
+                        )
+
+                        observer_question_response = (
+                            observer_response.observer_response.get(str(question.id))
+                        )
+                        observer_type = (
+                            ParticipantObserverType.objects.filter(
+                                participant__id=participant_id,
+                                observers__id=observer.id,
+                            )
+                            .first()
+                            .type.type
+                        )
+
+                        if observer_type in question_object:
+                            existing_responses = question_object[observer_type]
+                            new_response = observer_question_response
+                            averaged_response = existing_responses + new_response
+                            question_object[observer_type] = averaged_response
+                        else:
+                            question_object[observer_type] = observer_question_response
+
+                        count = count + 1
+                    for key, value in observer_types_total.items():
+                        question_object[key] = question_object[key] / value
+
+                    competency_object["questions"].append(question_object)
+
+                question_with_answers.append(competency_object)
+
+            averages = calculate_average(
+                question_with_answers, assessment.assessment_type
+            )
+
+            graph_images = generate_graph(averages, assessment.assessment_type)
+
+            data_for_assessment_overview_table = process_question_data(
+                question_with_answers
+            )
+            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+
+            generate_report_for_participant(
+                "assessment/report/assessment_report.html",
+                {
+                    "name": participant.name,
+                    "assessment_name": assessment.name,
+                    "organisation_name": assessment.organisation.name,
+                    "assessment_type": assessment.assessment_type,
+                    "organisation_id": assessment.organisation.id,
+                    "data_for_score_analysis": data_for_score_analysis,
+                    "data_for_assessment_overview_table": data_for_assessment_overview_table,
+                    "frequency_analysis_data": frequency_analysis_data,
+                    "image_base64_array": graph_images,
+                },
+            )
+            pdf_path = "graphsAndReports/Report.pdf"
+            parse(pdf_path, "graphsAndReports/WordReport.docx", start=0, end=None)
+
+            # Open the Word file for reading
+            with open("graphsAndReports/WordReport.docx", "rb") as word_file:
+                # Create an in-memory output stream for the Word document
+                output_stream = BytesIO(word_file.read())
+
+            # Set the response headers for a Word document
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+            response[
+                "Content-Disposition"
+            ] = f'attachment; filename="{participant.name} Report.docx"'
+
+            # Write the Word document to the response
+            response.write(output_stream.getvalue())
+
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download report."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

@@ -46,6 +46,7 @@ from .views import (
     MarkAllNotificationAsRead,
     MarkNotificationAsRead,
     GetUnreadNotificationCount,
+    DownloadWordReport,
 )
 
 
@@ -200,4 +201,8 @@ urlpatterns = [
     path("notifications/mark-as-read/", MarkNotificationAsRead.as_view()),
     path("notifications/mark-all-as-read/", MarkAllNotificationAsRead.as_view()),
     path("notifications/unread-count/<int:user_id>/", GetUnreadNotificationCount.as_view()),
+    path(
+        "download-word-report/<int:assessment_id>/<int:participant_id>/",
+        DownloadWordReport.as_view(),
+    ),
 ]
