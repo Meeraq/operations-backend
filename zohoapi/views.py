@@ -950,17 +950,18 @@ class DownloadInvoice(APIView):
                 "due_date": due_date,
                 "line_items": line_items,
             }
-           
-            image_url = f"{invoice_data['signature']}"
+            try:
+                image_url = f"{invoice_data['signature']}"
             
-            # Attempt to send the email
-            image_response = requests.get(image_url)
+                # Attempt to send the email
+                image_response = requests.get(image_url)
             
-            image_response.raise_for_status()
-            
-            # Convert the downloaded image to base64
-            image_base64 = base64.b64encode(image_response.content).decode("utf-8")
-
+                image_response.raise_for_status()
+                
+                # Convert the downloaded image to base64
+                image_base64 = base64.b64encode(image_response.content).decode("utf-8")
+            except Exception as e:
+                pass
             email_message = render_to_string("invoice_pdf.html", {"invoice":invoice_data,"image_base64":image_base64})
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
             response = HttpResponse(pdf, content_type="application/pdf")
