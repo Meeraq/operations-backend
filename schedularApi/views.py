@@ -22,6 +22,8 @@ from openpyxl import Workbook
 from django.http import HttpResponse
 import pandas as pd
 from django.db.models import Q
+import json
+
 
 from django.shortcuts import render
 from api.models import Organisation, HR, Coach, User
@@ -66,6 +68,7 @@ from .models import (
 
 from api.views import create_notification, send_mail_templates
 import io
+
 
 
 # Create your views here.
@@ -318,8 +321,47 @@ def get_schedular_project(request, project_id):
             {"error": "Couldn't find project to add project structure."}, status=400
         )
 
+   # print(slots_by_coach)
+    # res = []
+    # for key,slots_of_coach in slots_by_coach.items():
+    #     # print(slots_of_coach)
+    #     # return slots_of_coach
+    #     slots_of_coach.sort(key=lambda x: x["start_time"])
+    #     merged_slots_of_coach = []
+    #     for i in range(len(slots_of_coach)):
+    #         if (
+    #         len(merged_slots_of_coach) == 0
+    #         or slots_of_coach[i]["start_time"] > merged_slots_of_coach[-1]["end_time"]
+    #     ):
+    #             merged_slots_of_coach.append(slots_of_coach[i])
+    #         else:
+    #             merged_slots_of_coach[-1]["end_time"] = max(
+    #             merged_slots_of_coach[-1]["end_time"], slots_of_coach[i]["end_time"]
+    #         )
+    #     res.append([*merged_slots_of_coach])
+    # return res
 
-def merge_time_slots(slots):
+def merge_time_slots(slots, slots_by_coach):
+    res = []
+    for key in slots_by_coach:
+        sorted_slots = sorted(slots_by_coach[key], key=lambda x: x["start_time"])
+        merged_slots = []
+        
+        for i in range(len(sorted_slots)):
+            if len(merged_slots) == 0 or sorted_slots[i]["start_time"] > merged_slots[-1]["end_time"]:
+                merged_slots.append(sorted_slots[i])
+            else:
+                merged_slots[-1]["end_time"] = max(
+                    merged_slots[-1]["end_time"],
+                    sorted_slots[i]["end_time"]
+                )
+        res.extend(merged_slots)
+    
+    return res
+
+
+
+
     slots.sort(key=lambda x: x["start_time"])
     merged_slots = []
     for i in range(len(slots)):
@@ -340,7 +382,6 @@ def timestamp_to_datetime(timestamp):
 
 
 def generate_slots(start, end, duration):
-    print(type(duration))
     slots = []
     current_time = timestamp_to_datetime(start)
 
@@ -377,12 +418,13 @@ def get_batch_calendar(request, batch_id):
                 coaching_session["id"]
             )
             result = []
-            slots = []
             if availabilities is not None and len(availabilities):
                 slots = []
+                slots_by_coach = {}
                 for availability in availabilities:
+                    slots_by_coach[availability['coach']] =  [*slots_by_coach[availability['coach']], availability] if availability['coach'] in  slots_by_coach else [availability]
                     slots.append(availability)
-                final_merge_slots = merge_time_slots(slots)
+                final_merge_slots = merge_time_slots(slots, slots_by_coach)
                 for slot in final_merge_slots:
                     startT = slot["start_time"]
                     endT = slot["end_time"]
@@ -396,9 +438,9 @@ def get_batch_calendar(request, batch_id):
             coaching_sessions_result.append(
                 {
                     **coaching_session,
-                    "available_slots_count": len(result)
-                    if session_duration > '30'
-                    else (len(availabilities) if availabilities is not None else 0),
+                    "available_slots_count":len(result) if availabilities is not None else 0,
+                    # if session_duration > '30'
+                    # else (len(availabilities) if availabilities is not None else 0),
                     "booked_session_count": booked_session_count,
                     "participants_not_booked": GetSchedularParticipantsSerializer(
                         participants, many=True
