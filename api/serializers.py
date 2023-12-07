@@ -30,6 +30,11 @@ from .models import (
     ProjectContract,
     CoachContract,
     Update,
+    UserToken,
+    CalendarEvent,
+    ShareCoachProfileActivity,
+    CreateProjectActivity,
+    FinalizeCoachActivity,
 )
 from django.contrib.auth.models import User
 
@@ -369,3 +374,38 @@ class CoachContractSerializer(serializers.ModelSerializer):
     class Meta:
         model = CoachContract
         fields = "__all__"
+        
+class UserTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserToken
+        fields = '__all__'
+        
+class CalendarEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CalendarEvent
+        fields = '__all__'
+
+
+
+class ShareCoachProfileActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShareCoachProfileActivity
+        fields = "__all__"
+        depth = 1
+
+
+
+class CreateProjectActivitySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = CreateProjectActivity
+        fields= "__all__"
+        depth = 1
+
+
+class FinalizeCoachActivitySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = FinalizeCoachActivity
+        fields= "__all__"
+        depth = 1

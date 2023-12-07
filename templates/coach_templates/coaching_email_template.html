@@ -36,10 +36,10 @@ Coaching{%endblock%} {% block content %}
               >
                 Greetings from Meeraq!!
               </p>
-              <p >Coaching Session Booking Confirmation</p>
+              <p >{{session_type}} Session Booking Confirmation</p>
 
               <p >
-                Your coaching session has been successfully booked for the
+                Your {{session_type|lower}} session has been successfully booked for the
                 following details:
               </p>
 
@@ -49,7 +49,7 @@ Coaching{%endblock%} {% block content %}
               </p>
 
               <p >
-                You can join your coaching session using the given link:
+                You can join your {{session_type|lower}} session using the given link:
                 <a href="{{ meeting_link }}" target="_blank"
                   >{{ meeting_link }}</a
                 >

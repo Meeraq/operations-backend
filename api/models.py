@@ -68,9 +68,20 @@ def password_reset_token_created(
             not_approved_coach = True
     elif user_type == "learner":
         user = Learner.objects.get(email=reset_password_token.user.email)
+        engagements = Engagement.objects.filter(
+            learner=user,
+            project__enable_emails_to_hr_and_coachee=False,
+        )
+        if engagements.exists():
+            return None
         name = user.name
     elif user_type == "hr":
         user = HR.objects.get(email=reset_password_token.user.email)
+        projects = Project.objects.filter(
+            hr=user, enable_emails_to_hr_and_coachee=False
+        )
+        if projects.exists():
+            return None
         name = user.first_name
     else:
         name = "User"
@@ -282,6 +293,7 @@ class Project(models.Model):
         max_length=20, choices=STATUS_CHOICES, blank=True, null=True
     )
     coach_consent_mandatory = models.BooleanField(default=True)
+    enable_emails_to_hr_and_coachee = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -457,6 +469,7 @@ class ActionItem(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
 
+
 class ProfileEditActivity(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
@@ -558,24 +571,21 @@ class StandardizedFieldRequest(models.Model):
         return f"{self.coach.email} - {self.standardized_field_name} - {self.status}"
 
 
-class SessionRequestedActivity(models.Model): 
-    
+class SessionRequestedActivity(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     time_of_request = models.DateTimeField()
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     coachee = models.ForeignKey(Learner, on_delete=models.CASCADE)
     session_name = models.CharField(max_length=225, blank=True, null=True)
 
-    
 
 class DeleteCoachProfileActivity(models.Model):
-    user_who_got_deleted =  models.CharField(max_length=225, blank=True, null=True)
+    user_who_got_deleted = models.CharField(max_length=225, blank=True, null=True)
     user_who_deleted = models.ForeignKey(User, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
 
     def __str__(self):
         return f"{self.user_who_deleted} deleted coach profile."
-
 
 
 class RemoveCoachActivity(models.Model):
@@ -584,10 +594,8 @@ class RemoveCoachActivity(models.Model):
     removed_coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     removed_from_project = models.ForeignKey(Project, on_delete=models.CASCADE)
 
-
     def __str__(self):
         return f"{self.user} removed coach profile."
-
 
 
 class PastSessionActivity(models.Model):
@@ -596,12 +604,10 @@ class PastSessionActivity(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.SET_NULL, null=True)
     coachee = models.ForeignKey(Learner, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
-    
+    session_name = models.CharField(max_length=225, blank=True, null=True)
 
     def __str__(self):
         return f"{self.user_who_added} added past session."
-
-
 
 
 class Template(models.Model):
@@ -613,37 +619,112 @@ class Template(models.Model):
     def __str__(self):
         return self.title
 
-    
+
 class ProjectContract(models.Model):
     template_id = models.IntegerField(null=True)
-    title = models.CharField(max_length=100,blank=True)
+    title = models.CharField(max_length=100, blank=True)
     content = models.TextField(blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE,blank=True)
-    created_at = models.DateTimeField(auto_now_add=True,blank=True)
-    updated_at = models.DateTimeField(auto_now=True,blank=True)
-    reminder_timestamp = models.CharField(max_length=30,blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, blank=True)
+    reminder_timestamp = models.CharField(max_length=30, blank=True)
+
     def __str__(self):
         return f"Contract '{self.title}' for Project '{self.project.name}'"
-    
-    
+
+
 class CoachContract(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),
         ("approved", "Approved"),
         ("rejected", "Rejected"),
     ]
-    
-    project_contract = models.ForeignKey(ProjectContract, on_delete=models.CASCADE,blank=True)
-    name_inputed = models.CharField(max_length=100,blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE,blank=True)
-    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default="pending",blank=True)
+
+    project_contract = models.ForeignKey(
+        ProjectContract, on_delete=models.CASCADE, blank=True
+    )
+    name_inputed = models.CharField(max_length=100, blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
+    status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="pending", blank=True
+    )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-    send_date = models.DateField(auto_now_add=True ,blank=True)
-    response_date = models.DateField(blank=True,null=True)
-    created_at = models.DateTimeField(auto_now_add=True ,blank=True)
-    
+    send_date = models.DateField(auto_now_add=True, blank=True)
+    response_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
 
     def __str__(self):
         return f"{self.coach.first_name}'s Contract for {self.project.name}"
-    
-    
+
+
+class UserToken(models.Model):
+    ACCOUNT_TYPE_CHOICES = [
+        ("google", "Google"),
+        ("microsoft", "Microsoft"),
+    ]
+
+    user_profile = models.OneToOneField(Profile, on_delete=models.CASCADE)
+    access_token = models.TextField(blank=True)
+    refresh_token = models.TextField(blank=True)
+    access_token_expiry = models.TextField(blank=True)
+    authorization_code = models.TextField(blank=True)
+    account_type = models.CharField(
+        max_length=50, choices=ACCOUNT_TYPE_CHOICES, blank=True
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.user_profile.user.username
+
+
+class CalendarEvent(models.Model):
+    ACCOUNT_TYPE_CHOICES = [
+        ("google", "Google"),
+        ("microsoft", "Microsoft"),
+    ]
+
+    event_id = models.TextField(blank=True, null=True)
+    title = models.CharField(max_length=255, blank=True, null=True)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    start_datetime = models.CharField(max_length=255, blank=True, null=True)
+    end_datetime = models.CharField(max_length=255, blank=True, null=True)
+    attendee = models.CharField(max_length=255, blank=True, null=True)
+    creator = models.CharField(max_length=255, blank=True, null=True)
+    session = models.ForeignKey(
+        SessionRequestCaas, on_delete=models.CASCADE, blank=True, null=True
+    )
+    account_type = models.CharField(
+        max_length=50, choices=ACCOUNT_TYPE_CHOICES, blank=True
+    )
+
+
+class ShareCoachProfileActivity(models.Model):
+    user_who_shared = models.ForeignKey(User, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    coaches = models.ManyToManyField(Coach, blank=True)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user_who_shared.username} shared coach profiles."
+
+
+class CreateProjectActivity(models.Model):
+    user_who_created = models.ForeignKey(User, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user_who_created.username} created project."
+
+
+class FinalizeCoachActivity(models.Model):
+    user_who_finalized = models.ForeignKey(User, on_delete=models.CASCADE, blank=True)
+    coach_who_got_finalized = models.ForeignKey(
+        Coach, on_delete=models.CASCADE, blank=True
+    )
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user_who_finalized.username} finalized the coach."
