@@ -21,6 +21,7 @@ from .views import (
     ApprovedCoachContract,
     SendContractReminder,
     CoachWithApprovedContractsInProject,
+    SessionData,
 )
 
 urlpatterns = [
@@ -316,4 +317,5 @@ urlpatterns = [
         "coaches-with-approved-contracts-in-project/<int:project_id>/",
         CoachWithApprovedContractsInProject.as_view(),
     ),
+    path('session-data/', SessionData.as_view(),),
 ]

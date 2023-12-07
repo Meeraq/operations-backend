@@ -369,3 +369,8 @@ class CoachContractSerializer(serializers.ModelSerializer):
     class Meta:
         model = CoachContract
         fields = "__all__"
+
+class SessionDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SessionRequestCaas
+        fields = '__all__'
