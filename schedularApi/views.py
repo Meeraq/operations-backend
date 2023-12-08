@@ -69,7 +69,6 @@ from api.views import create_notification, send_mail_templates
 import io
 
 
-
 # Create your views here.
 
 import environ
@@ -1044,7 +1043,7 @@ def schedule_session(request):
                     int(availability_c.start_time)
                     < p_block_from
                     < int(availability_c.end_time)
-                ) and (int(availability_c.start_time)  < p_block_from):
+                ) and (int(availability_c.start_time) < p_block_from):
                     new_slot = {
                         "start_time": int(availability_c.start_time),
                         "end_time": p_block_from,
@@ -1064,7 +1063,7 @@ def schedule_session(request):
                     }
                     unblock_slots.append(new_slot)
                     availability_c.delete()
-            for unblock_slot in unblock_slots:  
+            for unblock_slot in unblock_slots:
                 slot_created = CoachSchedularAvailibilty.objects.create(
                     request=request_avail,
                     coach=coach,
@@ -1116,6 +1115,204 @@ def schedule_session(request):
         print(str(e))
         return Response(
             {"error": "Failed to book the session."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+TIME_INTERVAL = 900000
+
+
+@api_view(["POST"])
+def schedule_session_fixed(request):
+    try:
+        with transaction.atomic():
+            booking_link_id = request.data.get("booking_link_id", "")
+            booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+            participant_email = request.data.get("participant_email", "")
+            timestamp = request.data.get("timestamp", "")
+            end_time = request.data.get("end_time", "")
+            coach_id = request.data.get("coach_id", "")
+            request_id = request.data.get("request_id", "")
+
+            request_avail = RequestAvailibilty.objects.get(id=request_id)
+            coach = Coach.objects.get(id=coach_id)
+            coach_availability = CoachSchedularAvailibilty.objects.create(
+                request=request_avail,
+                coach=coach,
+                start_time=timestamp,
+                end_time=end_time,
+                is_confirmed=False,
+            )
+            coach_availability.save()
+            coach_availability_id = coach_availability.id
+
+            new_timestamp = int(timestamp) / 1000
+            date_obj = datetime.fromtimestamp(new_timestamp, timezone.utc)
+            formatted_date = date_obj.strftime("%d %B %Y")
+
+            p_booking_start_time_stamp = timestamp
+            p_booking_end_time_stamp = end_time
+            p_block_from = int(p_booking_start_time_stamp) - TIME_INTERVAL
+            p_block_till = int(p_booking_end_time_stamp) + TIME_INTERVAL
+
+            date_for_mail = get_date(int(timestamp))
+            start_time_for_mail = get_time(int(timestamp))
+            end_time_for_mail = get_time(int(end_time))
+            session_time = f"{start_time_for_mail} - {end_time_for_mail} IST"
+            all_coach_availability = CoachSchedularAvailibilty.objects.filter(
+                (
+                    Q(start_time__gte=p_block_from, start_time__lt=p_block_till)
+                    | Q(end_time__gt=p_block_from, end_time__lte=p_block_till)
+                ),
+                request=request_avail,
+                coach=coach,
+                is_confirmed=False,
+            ).exclude(id=coach_availability.id)
+            unblock_slots_to_delete = []
+            coaching_session = get_object_or_404(
+                CoachingSession, booking_link=booking_link
+            )
+            batch = coaching_session.batch
+            session_type = coaching_session.session_type
+
+            participant = get_object_or_404(
+                SchedularParticipants, email=participant_email
+            )
+            if participant not in batch.participants.all():
+                return Response(
+                    {"error": "Email not found. Please use the registered Email"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            existing_session = SchedularSessions.objects.filter(
+                enrolled_participant=participant, coaching_session=coaching_session
+            ).first()
+
+            if existing_session:
+                return Response(
+                    {
+                        "error": "You have already booked the session for the same coaching session"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            coach_availability = get_object_or_404(
+                CoachSchedularAvailibilty, id=coach_availability_id
+            )
+
+            if (
+                coaching_session.expiry_date
+                and coaching_session.expiry_date < timezone.now().date()
+            ):
+                return Response(
+                    {"error": "Coaching session has expired"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if coach_availability.is_confirmed:
+                return Response(
+                    {"error": "This slot is already booked. Please try again."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            session_data = {
+                "enrolled_participant": participant.id,
+                "availibility": coach_availability.id,
+                "coaching_session": coaching_session.id,
+                "status": "pending",
+            }
+
+            serializer = SchedularSessionsSerializer(data=session_data)
+            if serializer.is_valid():
+                serializer.save()
+                coach_availability.is_confirmed = True
+                coach_availability.save()
+                coach_name = f"{coach_availability.coach.first_name} {coach_availability.coach.last_name}"
+                unblock_slots = []
+
+                for availability_c in all_coach_availability:
+                    print("conflicting", availability_c.id)
+                    availability_c.is_confirmed = True
+                    availability_c.save()
+                    if (
+                        int(availability_c.start_time)
+                        < p_block_from
+                        < int(availability_c.end_time)
+                    ) and (int(availability_c.start_time) < p_block_from):
+                        new_slot = {
+                            "start_time": int(availability_c.start_time),
+                            "end_time": p_block_from,
+                            "conflict": False,
+                        }
+                        unblock_slots.append(new_slot)
+                        unblock_slots_to_delete.append(availability_c)
+                    if (
+                        int(availability_c.start_time)
+                        < p_block_till
+                        < int(availability_c.end_time)
+                    ) and (int(availability_c.end_time) > p_block_till):
+                        new_slot = {
+                            "start_time": p_block_till,
+                            "end_time": int(availability_c.end_time),
+                            "conflict": False,
+                        }
+                        unblock_slots.append(new_slot)
+                        unblock_slots_to_delete.append(availability_c)
+
+                for availability_c in unblock_slots_to_delete:
+                    print("deleted", availability_c.id)
+                    availability_c.delete()
+
+                for unblock_slot in unblock_slots:
+                    created_availability = CoachSchedularAvailibilty.objects.create(
+                        request=request_avail,
+                        coach=coach,
+                        start_time=unblock_slot["start_time"],
+                        end_time=unblock_slot["end_time"],
+                        is_confirmed=False,
+                    )
+                    print("created", created_availability.id)
+
+                send_mail_templates(
+                    "schedule_session.html",
+                    [coach_availability.coach.email],
+                    "Meeraq - Participant booked session",
+                    {
+                        "name": coach_name,
+                        "date": date_for_mail,
+                        "time": session_time,
+                    },
+                    [],
+                )
+
+                send_mail_templates(
+                    "coach_templates/coaching_email_template.html",
+                    [participant_email],
+                    "Meeraq - Laser Coaching Session Booked"
+                    if session_type == "laser_coaching_session"
+                    else "Meeraq - Mentoring Session Booked",
+                    {
+                        "name": coach_name,
+                        "date": date_for_mail,
+                        "time": session_time,
+                        "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                        "session_type": "Mentoring"
+                        if session_type == "mentoring_session"
+                        else "Laser Coaching",
+                    },
+                    [],
+                )
+
+                return Response(
+                    {"message": "Session scheduled successfully."},
+                    status=status.HTTP_201_CREATED,
+                )
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    except Exception as e:
+        return Response(
+            {"error": f"Failed to book the session. {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -1344,7 +1541,7 @@ def get_requests_of_coach(request, coach_id):
             "new": new_requests_serializer.data,
             "active": active_requests_serializer.data,
         },
-        status=status.HTTP_200_OK,  
+        status=status.HTTP_200_OK,
     )
 
 
@@ -1871,3 +2068,26 @@ def get_facilitator_field_values(request):
         },
         status=200,
     )
+
+
+# conflicting 5
+# conflicting 6
+# conflicting 7
+# conflicting 8
+# conflicting 9
+# conflicting 10
+# conflicting 11
+# conflicting 12
+# conflicting 13
+# deleted 5
+# deleted 6
+# deleted 7
+# deleted 11
+# deleted 12
+# deleted 13
+# created 36
+# created 37
+# created 38
+# created 39
+# created 40
+# created 41
