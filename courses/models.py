@@ -4,6 +4,19 @@ from api.models import Learner
 # Create your models here.
 
 
+class CourseTemplate(models.Model):
+    STATUS_CHOICES = (
+        ("draft", "Draft"),
+        ("public", "Public"),
+    )
+    name = models.TextField()
+    description = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+
+    def __str__(self):
+        return self.name
+
+
 class Course(models.Model):
     STATUS_CHOICES = (
         ("draft", "Draft"),
@@ -12,6 +25,7 @@ class Course(models.Model):
     name = models.TextField()
     description = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    course_template = models.ForeignKey(CourseTemplate, on_delete=models.CASCADE)
 
     def __str__(self):
         return self.name
@@ -31,8 +45,10 @@ class Lesson(models.Model):
         ("draft", "Draft"),
         ("public", "Public"),
     )
-
-    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, blank=True, null=True)
+    course_template = models.ForeignKey(
+        CourseTemplate, on_delete=models.CASCADE, blank=True, null=True
+    )
     name = models.CharField(max_length=255)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     lesson_type = models.CharField(max_length=20, choices=LESSON_TYPES)

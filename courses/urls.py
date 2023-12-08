@@ -2,10 +2,13 @@ from django.urls import path, include
 from . import views
 from .views import (
     CourseListView,
+    CourseTemplateListView,
     CourseDetailView,
+    CourseTemplateDetailView,
     TextLessonCreateView,
     TextLessonEditView,
     LessonListView,
+    CourseTemplateLessonListView,
     LessonDetailView,
     CertificateListAPIView,
     GetFilteredCoursesForCertificate,
@@ -27,9 +30,18 @@ urlpatterns = [
         name="course-detail",
     ),
     path(
+        "course-templates/<int:pk>/",
+        CourseTemplateDetailView.as_view(),
+        name="course-detail",
+    ),
+    path(
         "courses/",
         CourseListView.as_view(),
         name="course-list-create-update-destroy",
+    ),
+    path(
+        "course-templates/",
+        CourseTemplateListView.as_view(),
     ),
     path(
         "courses/<int:course_id>/duplicate/",
@@ -51,6 +63,11 @@ urlpatterns = [
     ),
     path(
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
+    ),
+    path(
+        "course-templates/<int:course_template_id>/lessons/",
+        CourseTemplateLessonListView.as_view(),
+        name="course-template-lesson-list",
     ),
     path(
         "lessons/<str:lesson_type>/<int:lesson_id>/",
@@ -94,11 +111,11 @@ urlpatterns = [
         views.create_assessment_and_lesson,
     ),
     path(
-        "courses/<int:course_id>/lessons/<int:lesson_id>/assessment-lesson/",
+        "lessons/<int:lesson_id>/assessment-lesson/",
         views.get_assessment_lesson,
     ),
     path(
-        "courses/<int:course_id>/lessons/<int:lesson_id>/assessment-lesson/<int:session_id>/",
+        "lessons/<int:lesson_id>/assessment-lesson/<int:session_id>/",
         views.update_assessment_lesson,
     ),
     path(

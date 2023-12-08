@@ -17,12 +17,14 @@ from .models import (
     Certificate,
     QuizLessonResponse,
     FeedbackLessonResponse,
+    CourseTemplate,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializers import (
     CourseSerializer,
+    CourseTemplateSerializer,
     TextLessonCreateSerializer,
     TextLessonSerializer,
     LessonSerializer,
@@ -102,6 +104,19 @@ class CourseListView(generics.ListCreateAPIView):
         serializer.save()
 
 
+class CourseTemplateListView(generics.ListCreateAPIView):
+    queryset = CourseTemplate.objects.all()
+    serializer_class = CourseTemplateSerializer
+
+    def perform_create(self, serializer):
+        name = serializer.validated_data.get("name", None)
+        if name and CourseTemplate.objects.filter(name=name.strip()).exists():
+            raise serializers.ValidationError(
+                "Course template with this name already exists."
+            )
+        serializer.save()
+
+
 class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
@@ -116,6 +131,25 @@ class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
             .exists()
         ):
             raise serializers.ValidationError("Course with this name already exists.")
+        serializer.save()
+
+
+class CourseTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = CourseTemplate.objects.all()
+    serializer_class = CourseTemplateSerializer
+
+    def perform_update(self, serializer):
+        name = serializer.validated_data.get("name", None)
+        instance = self.get_object()
+        if (
+            name
+            and CourseTemplate.objects.exclude(pk=instance.pk)
+            .filter(name=name.strip())
+            .exists()
+        ):
+            raise serializers.ValidationError(
+                "Course template with this name already exists."
+            )
         serializer.save()
 
 
@@ -231,6 +265,20 @@ class LessonListView(generics.ListAPIView):
         return queryset
 
 
+class CourseTemplateLessonListView(generics.ListAPIView):
+    queryset = Lesson.objects.all()
+    serializer_class = LessonSerializer
+
+    def get_queryset(self):
+        # Retrieve lessons for a specific course based on the course ID in the URL
+        course_template_id = self.kwargs.get("course_template_id")
+        queryset = Lesson.objects.filter(course_template__id=course_template_id)
+        status = self.request.query_params.get("status", None)
+        if status:
+            queryset = queryset.filter(status=status)
+        return queryset
+
+
 class LessonDetailView(generics.RetrieveAPIView):
     def get(self, request, *args, **kwargs):
         lesson_id = self.kwargs.get("lesson_id", None)
@@ -285,10 +333,16 @@ class DeleteLessonAPIView(APIView):
             return Response(
                 {"error": "Lesson not found"}, status=status.HTTP_404_NOT_FOUND
             )
-        course_enrollment = CourseEnrollment.objects.filter(completed_lessons__contains=lesson.id)
+        course_enrollment = CourseEnrollment.objects.filter(
+            completed_lessons__contains=lesson.id
+        )
         for enrollment in course_enrollment:
-            enrollment.completed_lessons = [lesson_id for lesson_id in enrollment.completed_lessons if lesson_id != lesson.id]
-            enrollment.save() 
+            enrollment.completed_lessons = [
+                lesson_id
+                for lesson_id in enrollment.completed_lessons
+                if lesson_id != lesson.id
+            ]
+            enrollment.save()
         lesson.delete()
         return Response(
             {"message": "Lesson deleted successfully"},
@@ -685,45 +739,28 @@ def update_laser_coaching_session(request, course_id, lesson_id, session_id):
     )
 
 
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.decorators import api_view
-from .models import Course, Lesson
-from .serializers import LessonSerializer
-
-
 @api_view(["POST"])
 def create_assessment_and_lesson(request):
     lesson_data = request.data.get("lesson")
-    # coaching_session_data = request.data.get("assessment_lesson")
-
-    # Create a Lesson instance
-    lesson = Lesson.objects.create(
-        course_id=lesson_data["course"],
-        name=lesson_data["name"],
-        status=lesson_data["status"],
-        lesson_type=lesson_data["lesson_type"],
-        order=lesson_data["order"],
-    )
-
-    # Create a LaserCoachingSession instance associated with the created Lesson
-    assessment = Assessment.objects.create(
-        lesson=lesson,
-        # message=coaching_session_data["message"],
-    )
-
-    # Optionally, return a success response
-    return Response(
+    lesson_serializer = LessonSerializer(data=lesson_data)
+    if lesson_serializer.is_valid():
+        lesson = lesson_serializer.save()
+        assessment = Assessment.objects.create(
+            lesson=lesson,
+        )
+        return Response(
         "Assessment lesson created successfully", status=status.HTTP_201_CREATED
     )
+    else:
+        return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
 
 
 @api_view(["GET"])
-def get_assessment_lesson(request, lesson_id, course_id):
+def get_assessment_lesson(request, lesson_id):
     try:
         assessment = Assessment.objects.filter(
-            lesson__id=lesson_id, lesson__course__id=course_id
-        )
+            lesson__id=lesson_id)
         serializer = AssessmentSerializerDepthOne(assessment, many=True)
         return Response(serializer.data)
     except Assessment.DoesNotExist:
@@ -731,10 +768,9 @@ def get_assessment_lesson(request, lesson_id, course_id):
 
 
 @api_view(["PUT"])
-def update_assessment_lesson(request, course_id, lesson_id, session_id):
-    print(course_id, lesson_id, session_id)
+def update_assessment_lesson(request, lesson_id, session_id):
     try:
-        lesson = Lesson.objects.get(course_id=course_id, id=lesson_id)
+        lesson = Lesson.objects.get(id=lesson_id)
         assessment = Assessment.objects.get(lesson_id=lesson_id, id=session_id)
     except (Lesson.DoesNotExist, Assessment.DoesNotExist):
         return Response(

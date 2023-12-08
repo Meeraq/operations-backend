@@ -15,12 +15,19 @@ from .models import (
     Certificate,
     Video,
     VideoLesson,
+    CourseTemplate,
 )
 
 
 class CourseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Course
+        fields = "__all__"
+
+
+class CourseTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CourseTemplate
         fields = "__all__"
 
 
@@ -70,7 +77,15 @@ class TextLessonSerializer(serializers.ModelSerializer):
 class LessonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lesson
-        fields = ["id", "course", "name", "status", "lesson_type", "order"]
+        fields = [
+            "id",
+            "course",
+            "name",
+            "status",
+            "lesson_type",
+            "order",
+            "course_template",
+        ]
 
 
 class QuestionSerializer(serializers.ModelSerializer):
