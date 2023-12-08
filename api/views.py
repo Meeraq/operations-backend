@@ -3473,7 +3473,7 @@ def book_session_caas(request):
                                 {"address": coach.email, "name": coach_name},
                                 session_request,
                             )
-                    except ObjectDoesNotExist:
+                    except Exception as e:
                         print(f"Coachee calendar error {str(e)}")
 
     except Exception as e:
