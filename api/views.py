@@ -4965,12 +4965,10 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             if coach_id is None
             else None,
             "project_name": session.coaching_session.batch.project.name,
-            "project":session.coaching_session.batch.project,
             "organisation_name":session.coaching_session.batch.project.organisation.name,
             "project_id": session.coaching_session.batch.project.id
             if coach_id is None
             else None,
-            "coach":session.availibility.coach,
             "coach_name": session.availibility.coach.first_name
             + " "
             + session.availibility.coach.last_name,
@@ -5114,14 +5112,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             else None,
             "project_name": session.coaching_session.batch.project.name,
             "organisation_name":session.coaching_session.batch.project.organisation.name,
-             "project":session.coaching_session.batch.project,
             "project_id": session.coaching_session.batch.project.id
             if coach_id is None
             else None,
             "coach_name": session.availibility.coach.first_name
             + " "
             + session.availibility.coach.last_name,
-            "coach":session.availibility.coach,
             "coach_email": session.availibility.coach.email,
             "coach_phone": "+"
             + session.availibility.coach.phone_country_code
