@@ -152,7 +152,14 @@ urlpatterns = [
         views.get_upcoming_sessions_of_user,
     ),
     path(
+        "new/sessions/upcoming/<str:user_type>/<int:user_id>/",
+        views.new_get_upcoming_sessions_of_user,
+    ),
+    path(
         "sessions/past/<str:user_type>/<int:user_id>/", views.get_past_sessions_of_user
+    ),
+     path(
+        "new/sessions/past/<str:user_type>/<int:user_id>/", views.new_get_past_sessions_of_user
     ),
     path("sessions/edit/<int:session_id>/", views.edit_session_availability),
     path("learners/<str:user_type>/<int:user_id>/", views.get_coachee_of_user),
