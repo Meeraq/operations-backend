@@ -3434,8 +3434,8 @@ def book_session_caas(request):
                             session_request,
                         )
 
-                except ObjectDoesNotExist:
-                    print("Coach Does not exist")
+                except Exception as e:
+                    print(f"Coach calendar error {str(e)}")
                 if session_request.project.enable_emails_to_hr_and_coachee:
                     try:
                         coachee_user_token = UserToken.objects.get(
@@ -3474,7 +3474,7 @@ def book_session_caas(request):
                                 session_request,
                             )
                     except ObjectDoesNotExist:
-                        print("Coachee Does not exist")
+                        print(f"Coachee calendar error {str(e)}")
 
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -3745,7 +3745,7 @@ def add_learner_to_project(request):
     except Project.DoesNotExist:
         return Response({"error": "Project does not exist."}, status=404)
     try:
-        learners = create_learners(request.data["learners"])  
+        learners = create_learners(request.data["learners"])
         for learner in learners:
             create_engagement(learner, project)
             if project.enable_emails_to_hr_and_coachee:
@@ -3759,7 +3759,9 @@ def add_learner_to_project(request):
                     )
                     user_token_present = False
                     try:
-                        user_token = UserToken.objects.get(user_profile__user__username=learner.email)
+                        user_token = UserToken.objects.get(
+                            user_profile__user__username=learner.email
+                        )
                         if user_token:
                             user_token_present = True
                     except Exception as e:
@@ -5624,6 +5626,14 @@ def schedule_session_directly(request, session_id):
     if request.data["user_type"] == "coach":
         coach = Coach.objects.get(id=request.data["user_id"])
     if coachee:
+        event_detail = {
+            "title": f"{SESSION_TYPE_VALUE[session.session_type]} Session",
+            "description": "Session Scheduled",
+            "startDate": session_date,
+            "startTime": start_time,
+            "endDate": session_date,
+            "endTime": end_time,
+        }
         if session.project.enable_emails_to_hr_and_coachee:
             microsoft_auth_url = (
                 f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
@@ -5637,6 +5647,7 @@ def schedule_session_directly(request, session_id):
                     user_token_present = True
             except Exception as e:
                 pass
+
             send_mail_templates(
                 "coachee_emails/session_booked.html",
                 [coachee.email],
@@ -5653,14 +5664,6 @@ def schedule_session_directly(request, session_id):
                 },
                 [],  # no bcc
             )
-            event_detail = {
-                "title": f"{SESSION_TYPE_VALUE[session.session_type]} Session",
-                "description": "Session Scheduled",
-                "startDate": session_date,
-                "startTime": start_time,
-                "endDate": session_date,
-                "endTime": end_time,
-            }
 
             try:
                 coachee_user_token = UserToken.objects.get(
@@ -5721,8 +5724,8 @@ def schedule_session_directly(request, session_id):
                             {"address": "No Data", "name": "No Data"},
                             session,
                         )
-            except ObjectDoesNotExist:
-                print("Coachee Does not exist")
+            except Exception as e:
+                print(f"Coachee calendar error {str(e)}")
 
         if request.data["user_type"] == "coach":
             coach = Coach.objects.get(id=request.data["user_id"])
@@ -5763,8 +5766,8 @@ def schedule_session_directly(request, session_id):
                         {"address": coachee.email, "name": coachee.name},
                         session,
                     )
-            except ObjectDoesNotExist:
-                print("Coach Does not exist")
+            except Exception as e:
+                print(f"Coach calendar error {str(e)}")
 
     return Response({"message": "Session booked successfully."})
 
