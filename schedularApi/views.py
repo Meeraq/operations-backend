@@ -23,8 +23,7 @@ from django.http import HttpResponse
 import pandas as pd
 from django.db.models import Q
 import json
-
-
+from api.views import get_date, get_time
 from django.shortcuts import render
 from api.models import Organisation, HR, Coach, User
 from .serializers import (
@@ -321,46 +320,46 @@ def get_schedular_project(request, project_id):
             {"error": "Couldn't find project to add project structure."}, status=400
         )
 
-   # print(slots_by_coach)
-    # res = []
-    # for key,slots_of_coach in slots_by_coach.items():
-    #     # print(slots_of_coach)
-    #     # return slots_of_coach
-    #     slots_of_coach.sort(key=lambda x: x["start_time"])
-    #     merged_slots_of_coach = []
-    #     for i in range(len(slots_of_coach)):
-    #         if (
-    #         len(merged_slots_of_coach) == 0
-    #         or slots_of_coach[i]["start_time"] > merged_slots_of_coach[-1]["end_time"]
-    #     ):
-    #             merged_slots_of_coach.append(slots_of_coach[i])
-    #         else:
-    #             merged_slots_of_coach[-1]["end_time"] = max(
-    #             merged_slots_of_coach[-1]["end_time"], slots_of_coach[i]["end_time"]
-    #         )
-    #     res.append([*merged_slots_of_coach])
-    # return res
+
+# print(slots_by_coach)
+# res = []
+# for key,slots_of_coach in slots_by_coach.items():
+#     # print(slots_of_coach)
+#     # return slots_of_coach
+#     slots_of_coach.sort(key=lambda x: x["start_time"])
+#     merged_slots_of_coach = []
+#     for i in range(len(slots_of_coach)):
+#         if (
+#         len(merged_slots_of_coach) == 0
+#         or slots_of_coach[i]["start_time"] > merged_slots_of_coach[-1]["end_time"]
+#     ):
+#             merged_slots_of_coach.append(slots_of_coach[i])
+#         else:
+#             merged_slots_of_coach[-1]["end_time"] = max(
+#             merged_slots_of_coach[-1]["end_time"], slots_of_coach[i]["end_time"]
+#         )
+#     res.append([*merged_slots_of_coach])
+# return res
+
 
 def merge_time_slots(slots, slots_by_coach):
     res = []
     for key in slots_by_coach:
         sorted_slots = sorted(slots_by_coach[key], key=lambda x: x["start_time"])
         merged_slots = []
-        
         for i in range(len(sorted_slots)):
-            if len(merged_slots) == 0 or sorted_slots[i]["start_time"] > merged_slots[-1]["end_time"]:
+            if (
+                len(merged_slots) == 0
+                or sorted_slots[i]["start_time"] > merged_slots[-1]["end_time"]
+            ):
                 merged_slots.append(sorted_slots[i])
             else:
                 merged_slots[-1]["end_time"] = max(
-                    merged_slots[-1]["end_time"],
-                    sorted_slots[i]["end_time"]
+                    merged_slots[-1]["end_time"], sorted_slots[i]["end_time"]
                 )
         res.extend(merged_slots)
-    
+
     return res
-
-
-
 
     slots.sort(key=lambda x: x["start_time"])
     merged_slots = []
@@ -422,7 +421,11 @@ def get_batch_calendar(request, batch_id):
                 slots = []
                 slots_by_coach = {}
                 for availability in availabilities:
-                    slots_by_coach[availability['coach']] =  [*slots_by_coach[availability['coach']], availability] if availability['coach'] in  slots_by_coach else [availability]
+                    slots_by_coach[availability["coach"]] = (
+                        [*slots_by_coach[availability["coach"]], availability]
+                        if availability["coach"] in slots_by_coach
+                        else [availability]
+                    )
                     slots.append(availability)
                 final_merge_slots = merge_time_slots(slots, slots_by_coach)
                 for slot in final_merge_slots:
@@ -438,7 +441,9 @@ def get_batch_calendar(request, batch_id):
             coaching_sessions_result.append(
                 {
                     **coaching_session,
-                    "available_slots_count":len(result) if availabilities is not None else 0,
+                    "available_slots_count": len(result)
+                    if availabilities is not None
+                    else 0,
                     # if session_duration > '30'
                     # else (len(availabilities) if availabilities is not None else 0),
                     "booked_session_count": booked_session_count,
@@ -936,17 +941,16 @@ def schedule_session(request):
 
         request_avail = RequestAvailibilty.objects.get(id=request_id)
         coach = Coach.objects.get(id=coach_id)
-        coach_availability, created = CoachSchedularAvailibilty.objects.get_or_create(
+        coach_availability = CoachSchedularAvailibilty.objects.create(
             request=request_avail,
             coach=coach,
             start_time=timestamp,
             end_time=end_time,
             is_confirmed=False,
         )
-        
         coach_availability.save()
         coach_availability_id = coach_availability.id
-
+        print("coach avail", coach_availability_id)
         new_timestamp = int(timestamp) / 1000
         date_obj = datetime.fromtimestamp(new_timestamp)
         date_str = date_obj.strftime("%Y-%m-%d")
@@ -958,9 +962,10 @@ def schedule_session(request):
         p_block_from = int(p_booking_start_time_stamp) - 900000
         p_block_till = int(p_booking_end_time_stamp) + 900000
 
-        start_time_for_mail = (
-            datetime.fromtimestamp((int(timestamp) / 1000) + 19800).timestamp() * 1000
-        )
+        date_for_mail = get_date(int(timestamp))
+        start_time_for_mail = get_time(int(timestamp))
+        end_time_for_mail = get_time(int(end_time))
+        session_time = f"{start_time_for_mail} - {end_time_for_mail} IST"
         all_coach_availability = CoachSchedularAvailibilty.objects.filter(
             (
                 Q(start_time__gte=p_block_from, start_time__lt=p_block_till)
@@ -1033,11 +1038,13 @@ def schedule_session(request):
             coach_name = f"{coach_availability.coach.first_name} {coach_availability.coach.last_name}"
             for availability_c in all_coach_availability:
                 availability_c.is_confirmed = True
+                print(availability_c.id)
+                availability_c.save()
                 if (
                     int(availability_c.start_time)
                     < p_block_from
                     < int(availability_c.end_time)
-                ) and (int(availability_c.start_time) + 15 * 60 * 1000 < p_block_from):
+                ) and (int(availability_c.start_time)  < p_block_from):
                     new_slot = {
                         "start_time": int(availability_c.start_time),
                         "end_time": p_block_from,
@@ -1049,7 +1056,7 @@ def schedule_session(request):
                     int(availability_c.start_time)
                     < p_block_till
                     < int(availability_c.end_time)
-                ) and (int(availability_c.end_time) - 15 * 60 * 1000 > p_block_till):
+                ) and (int(availability_c.end_time) > p_block_till):
                     new_slot = {
                         "start_time": p_block_till,
                         "end_time": int(availability_c.end_time),
@@ -1057,26 +1064,25 @@ def schedule_session(request):
                     }
                     unblock_slots.append(new_slot)
                     availability_c.delete()
-                for unblock_slot in unblock_slots:
-                    (
-                        slot_created,
-                        created,
-                    ) = CoachSchedularAvailibilty.objects.get_or_create(
-                        request=request_avail,
-                        coach=coach,
-                        start_time=unblock_slot["start_time"],
-                        end_time=unblock_slot["end_time"],
-                        is_confirmed=False,
-                    )
-                availability_c.save()
+            for unblock_slot in unblock_slots:  
+                slot_created = CoachSchedularAvailibilty.objects.create(
+                    request=request_avail,
+                    coach=coach,
+                    start_time=unblock_slot["start_time"],
+                    end_time=unblock_slot["end_time"],
+                    is_confirmed=False,
+                )
+                print(slot_created)
+
+            print(json.dumps(unblock_slots))
             send_mail_templates(
                 "schedule_session.html",
                 [coach_availability.coach.email],
                 "Meeraq - Participant booked session",
                 {
                     "name": coach_name,
-                    "date": formatted_date,
-                    "time": start_time_for_mail,
+                    "date": date_for_mail,
+                    "time": session_time,
                 },
                 [],
             )
@@ -1089,8 +1095,8 @@ def schedule_session(request):
                 else "Meeraq - Mentoring Session Booked",
                 {
                     "name": coach_name,
-                    "date": formatted_date,
-                    "time": start_time_for_mail,
+                    "date": date_for_mail,
+                    "time": session_time,
                     "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
                     "session_type": "Mentoring"
                     if session_type == "mentoring_session"
@@ -1259,7 +1265,7 @@ def get_sessions_by_type(request, sessions_type):
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
             "session_type": session.coaching_session.session_type,
-            "end_time":session.availibility.end_time,
+            "end_time": session.availibility.end_time,
         }
         session_details.append(session_detail)
     return Response(session_details, status=status.HTTP_200_OK)
