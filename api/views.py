@@ -140,10 +140,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from rest_framework import generics
 from django.db.models import Subquery, OuterRef, Value, BooleanField
-from schedularApi.models import SchedularBatch ,SchedularSessions
+from schedularApi.models import SchedularBatch, SchedularSessions,SchedularProject,SchedularBatch ,SchedularSessions
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
+from courses.models import CourseEnrollment
 
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
@@ -5210,6 +5211,18 @@ def get_coachee_of_user(request, user_type, user_id):
         }
         if user_type == "pmo":
             projects = Project.objects.filter(engagement__learner=learner)
+            # print("dd",learner)
+            # schedular_projects=SchedularProject.objects.filter(schedularbatch__participants__email=learner.email)
+            schedular_batches=SchedularBatch.objects.filter(participants__email=learner.email)
+            print(schedular_batches)
+            # print(schedular_projects.schedularbatch)
+            # return Response([])
+
+            course_enrollments = CourseEnrollment.objects.filter(learner__id=learner.id)
+            courses_names = []
+            for course_enrollment in course_enrollments:
+                courses_names.append(course_enrollment.course.name)
+            learner_dict["coursesEnrolled"] = courses_names
         elif user_type == "coach":
             projects = Project.objects.filter(
                 Q(engagement__learner=learner) & Q(engagement__coach__id=user_id)
@@ -5223,10 +5236,20 @@ def get_coachee_of_user(request, user_type, user_id):
         for project in projects:
             project_dict = {
                 "name": project.name,
+                "type":"CAAS"
             }
             learner_dict["organisation"].add(project.organisation.name)
             learner_dict["projects"].append(project_dict)
+        for batch in schedular_batches:
+            project_dict = {
+                "name": batch.project.name,
+                "type":"SEEQ"
+            }
+            learner_dict["organisation"].add(project.organisation.name)
+            if project_dict["name"] not in [proj["name"] for proj in learner_dict["projects"]]:
+                learner_dict["projects"].append(project_dict)
         learners_data.append(learner_dict)
+    print(learner_dict)
     # serializer = LearnerSerializer(learners,many=True)
     return Response(learners_data)
 
@@ -5687,6 +5710,16 @@ def get_current_session(request, user_type, room_id, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
+
+        if sessions.count() == 0:
+            learner = Learner.objects.get(id=user_id)
+            sessions = SchedularSessions.objects.filter(
+                availibility__start_time__lt=five_minutes_plus_current_time,
+                availibility__end_time__gt=current_time,
+                enrolled_participant__email=learner.email,
+                availibility__coach__room_id=room_id,
+            )
+
     elif user_type == "hr":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),

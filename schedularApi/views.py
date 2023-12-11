@@ -63,6 +63,8 @@ from .models import (
     SchedularSessions,
     Facilitator,
 )
+from courses.models import Course
+from courses.serializers import CourseSerializer
 
 
 from api.views import create_notification, send_mail_templates
@@ -460,11 +462,17 @@ def get_batch_calendar(request, batch_id):
         coaches_serializer = CoachBasicDetailsSerializer(coaches, many=True)
         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
+        try:
+            course = Course.objects.get(batch__id=batch_id)
+            course_serailizer = CourseSerializer(course)
+        except Exception as e:
+            course = None
         return Response(
             {
                 "sessions": sorted_sessions,
                 "participants": participants_serializer.data,
                 "coaches": coaches_serializer.data,
+                "course" : course_serailizer.data if course else None
             }
         )
     except SchedularProject.DoesNotExist:
