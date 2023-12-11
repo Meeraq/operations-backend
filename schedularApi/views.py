@@ -2069,25 +2069,3 @@ def get_facilitator_field_values(request):
         status=200,
     )
 
-
-# conflicting 5
-# conflicting 6
-# conflicting 7
-# conflicting 8
-# conflicting 9
-# conflicting 10
-# conflicting 11
-# conflicting 12
-# conflicting 13
-# deleted 5
-# deleted 6
-# deleted 7
-# deleted 11
-# deleted 12
-# deleted 13
-# created 36
-# created 37
-# created 38
-# created 39
-# created 40
-# created 41
