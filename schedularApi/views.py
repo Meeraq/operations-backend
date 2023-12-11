@@ -21,8 +21,9 @@ from django.utils import timezone
 from openpyxl import Workbook
 from django.http import HttpResponse
 import pandas as pd
-
-
+from django.db.models import Q
+import json
+from api.views import get_date, get_time
 from django.shortcuts import render
 from api.models import Organisation, HR, Coach, User
 from .serializers import (
@@ -319,6 +320,81 @@ def get_schedular_project(request, project_id):
         )
 
 
+# print(slots_by_coach)
+# res = []
+# for key,slots_of_coach in slots_by_coach.items():
+#     # print(slots_of_coach)
+#     # return slots_of_coach
+#     slots_of_coach.sort(key=lambda x: x["start_time"])
+#     merged_slots_of_coach = []
+#     for i in range(len(slots_of_coach)):
+#         if (
+#         len(merged_slots_of_coach) == 0
+#         or slots_of_coach[i]["start_time"] > merged_slots_of_coach[-1]["end_time"]
+#     ):
+#             merged_slots_of_coach.append(slots_of_coach[i])
+#         else:
+#             merged_slots_of_coach[-1]["end_time"] = max(
+#             merged_slots_of_coach[-1]["end_time"], slots_of_coach[i]["end_time"]
+#         )
+#     res.append([*merged_slots_of_coach])
+# return res
+
+
+def merge_time_slots(slots, slots_by_coach):
+    res = []
+    for key in slots_by_coach:
+        sorted_slots = sorted(slots_by_coach[key], key=lambda x: x["start_time"])
+        merged_slots = []
+        for i in range(len(sorted_slots)):
+            if (
+                len(merged_slots) == 0
+                or sorted_slots[i]["start_time"] > merged_slots[-1]["end_time"]
+            ):
+                merged_slots.append(sorted_slots[i])
+            else:
+                merged_slots[-1]["end_time"] = max(
+                    merged_slots[-1]["end_time"], sorted_slots[i]["end_time"]
+                )
+        res.extend(merged_slots)
+
+    return res
+
+    slots.sort(key=lambda x: x["start_time"])
+    merged_slots = []
+    for i in range(len(slots)):
+        if (
+            len(merged_slots) == 0
+            or slots[i]["start_time"] > merged_slots[-1]["end_time"]
+        ):
+            merged_slots.append(slots[i])
+        else:
+            merged_slots[-1]["end_time"] = max(
+                merged_slots[-1]["end_time"], slots[i]["end_time"]
+            )
+    return merged_slots
+
+
+def timestamp_to_datetime(timestamp):
+    return datetime.utcfromtimestamp(int(timestamp) / 1000.0)
+
+
+def generate_slots(start, end, duration):
+    slots = []
+    current_time = timestamp_to_datetime(start)
+
+    while current_time + timedelta(minutes=duration) <= timestamp_to_datetime(end):
+        new_end_time = current_time + timedelta(minutes=duration)
+        slots.append(
+            {
+                "start_time": int(current_time.timestamp() * 1000),
+                "end_time": int(new_end_time.timestamp() * 1000),
+            }
+        )
+        current_time += timedelta(minutes=15)
+    return slots
+
+
 @api_view(["GET"])
 def get_batch_calendar(request, batch_id):
     try:
@@ -332,24 +408,43 @@ def get_batch_calendar(request, batch_id):
         )
         coaching_sessions_result = []
         for coaching_session in coaching_sessions_serializer.data:
+            session_duration = coaching_session["duration"]
             booked_session_count = SchedularSessions.objects.filter(
                 coaching_session__id=coaching_session["id"]
             ).count()
             availabilities = get_upcoming_availabilities_of_coaching_session(
                 coaching_session["id"]
             )
+            result = []
+            if availabilities is not None and len(availabilities):
+                slots = []
+                slots_by_coach = {}
+                for availability in availabilities:
+                    slots_by_coach[availability["coach"]] = (
+                        [*slots_by_coach[availability["coach"]], availability]
+                        if availability["coach"] in slots_by_coach
+                        else [availability]
+                    )
+                    slots.append(availability)
+                final_merge_slots = merge_time_slots(slots, slots_by_coach)
+                for slot in final_merge_slots:
+                    startT = slot["start_time"]
+                    endT = slot["end_time"]
+                    small_session_duration = int(session_duration)
+                    result += generate_slots(startT, endT, small_session_duration)
 
             # Retrieve participants who have not booked this session
             participants = SchedularParticipants.objects.filter(
                 schedularbatch__id=batch_id
             ).exclude(schedularsessions__coaching_session__id=coaching_session["id"])
-
             coaching_sessions_result.append(
                 {
                     **coaching_session,
-                    "available_slots_count": len(availabilities)
+                    "available_slots_count": len(result)
                     if availabilities is not None
                     else 0,
+                    # if session_duration > '30'
+                    # else (len(availabilities) if availabilities is not None else 0),
                     "booked_session_count": booked_session_count,
                     "participants_not_booked": GetSchedularParticipantsSerializer(
                         participants, many=True
@@ -710,7 +805,10 @@ def add_batch(request, project_id):
                     )
                 elif session_type == "laser_coaching_session":
                     coaching_session_number = (
-                        CoachingSession.objects.filter(batch=batch).count() + 1
+                        CoachingSession.objects.filter(
+                            batch=batch, session_type=session_type
+                        ).count()
+                        + 1
                     )
                     booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                     coaching_session = CoachingSession.objects.create(
@@ -719,6 +817,28 @@ def add_batch(request, project_id):
                         order=order,
                         duration=duration,
                         booking_link=booking_link,
+                        session_type=session_type,
+                    )
+                elif session_type == "mentoring_session":
+                    coaching_session_number = (
+                        CoachingSession.objects.filter(
+                            batch=batch, session_type=session_type
+                        ).count()
+                        + 1
+                    )
+                    print(
+                        CoachingSession.objects.filter(
+                            batch=batch, session_type=session_type
+                        )
+                    )
+                    booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                    coaching_session = CoachingSession.objects.create(
+                        batch=batch,
+                        coaching_session_number=coaching_session_number,
+                        order=order,
+                        duration=duration,
+                        booking_link=booking_link,
+                        session_type=session_type,
                     )
 
         # Check if participant with the same email exists
@@ -770,6 +890,10 @@ def get_coach_availabilities_booking_link(request):
                 and coaching_session.expiry_date < current_date
             ):
                 return Response({"error": "The booking link has expired."})
+
+            session_duration = coaching_session.duration
+            session_type = coaching_session.session_type
+
             coaches_in_batch = coaching_session.batch.coaches.all()
             start_date = datetime.combine(
                 coaching_session.start_date, datetime.min.time()
@@ -789,7 +913,13 @@ def get_coach_availabilities_booking_link(request):
                 is_confirmed=False,
             )
             serializer = AvailabilitySerializer(coach_availabilities, many=True)
-            return Response({"slots": serializer.data})
+            return Response(
+                {
+                    "slots": serializer.data,
+                    "session_duration": session_duration,
+                    "session_type": session_type,
+                }
+            )
         except Exception as e:
             return Response({"error": "Unable to get slots"}, status=400)
     else:
@@ -802,23 +932,53 @@ def schedule_session(request):
         booking_link_id = request.data.get("booking_link_id", "")
         booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
         participant_email = request.data.get("participant_email", "")
-        coach_availability_id = request.data.get("availability_id", "")
+        # coach_availability_id = request.data.get("availability_id", "")
         timestamp = request.data.get("timestamp", "")
+        end_time = request.data.get("end_time", "")
+        coach_id = request.data.get("coach_id", "")
+        request_id = request.data.get("request_id", "")
 
+        request_avail = RequestAvailibilty.objects.get(id=request_id)
+        coach = Coach.objects.get(id=coach_id)
+        coach_availability = CoachSchedularAvailibilty.objects.create(
+            request=request_avail,
+            coach=coach,
+            start_time=timestamp,
+            end_time=end_time,
+            is_confirmed=False,
+        )
+        coach_availability.save()
+        coach_availability_id = coach_availability.id
+        print("coach avail", coach_availability_id)
         new_timestamp = int(timestamp) / 1000
         date_obj = datetime.fromtimestamp(new_timestamp)
         date_str = date_obj.strftime("%Y-%m-%d")
         date_obj = datetime.strptime(date_str, "%Y-%m-%d")
         formatted_date = date_obj.strftime("%d %B %Y")
 
-        start_time_for_mail = datetime.fromtimestamp(
-            (int(timestamp) / 1000) + 19800
-        ).strftime("%I:%M %p")
+        p_booking_start_time_stamp = timestamp
+        p_booking_end_time_stamp = end_time
+        p_block_from = int(p_booking_start_time_stamp) - 900000
+        p_block_till = int(p_booking_end_time_stamp) + 900000
 
-        # Retrieve coaching session using the provided booking link
+        date_for_mail = get_date(int(timestamp))
+        start_time_for_mail = get_time(int(timestamp))
+        end_time_for_mail = get_time(int(end_time))
+        session_time = f"{start_time_for_mail} - {end_time_for_mail} IST"
+        all_coach_availability = CoachSchedularAvailibilty.objects.filter(
+            (
+                Q(start_time__gte=p_block_from, start_time__lt=p_block_till)
+                | Q(end_time__gt=p_block_from, end_time__lte=p_block_till)
+            ),
+            request=request_avail,
+            coach=coach,
+            is_confirmed=False,
+        )
+        unblock_slots = []
         coaching_session = get_object_or_404(CoachingSession, booking_link=booking_link)
         # Retrieve batch from the coaching session
         batch = coaching_session.batch
+        session_type = coaching_session.session_type
 
         # Check if the participant is in the batch
         participant = get_object_or_404(SchedularParticipants, email=participant_email)
@@ -875,15 +1035,53 @@ def schedule_session(request):
             coach_availability.is_confirmed = True
             coach_availability.save()
             coach_name = f"{coach_availability.coach.first_name} {coach_availability.coach.last_name}"
+            for availability_c in all_coach_availability:
+                availability_c.is_confirmed = True
+                print(availability_c.id)
+                availability_c.save()
+                if (
+                    int(availability_c.start_time)
+                    < p_block_from
+                    < int(availability_c.end_time)
+                ) and (int(availability_c.start_time) < p_block_from):
+                    new_slot = {
+                        "start_time": int(availability_c.start_time),
+                        "end_time": p_block_from,
+                        "conflict": False,
+                    }
+                    unblock_slots.append(new_slot)
+                    availability_c.delete()
+                if (
+                    int(availability_c.start_time)
+                    < p_block_till
+                    < int(availability_c.end_time)
+                ) and (int(availability_c.end_time) > p_block_till):
+                    new_slot = {
+                        "start_time": p_block_till,
+                        "end_time": int(availability_c.end_time),
+                        "conflict": False,
+                    }
+                    unblock_slots.append(new_slot)
+                    availability_c.delete()
+            for unblock_slot in unblock_slots:
+                slot_created = CoachSchedularAvailibilty.objects.create(
+                    request=request_avail,
+                    coach=coach,
+                    start_time=unblock_slot["start_time"],
+                    end_time=unblock_slot["end_time"],
+                    is_confirmed=False,
+                )
+                print(slot_created)
 
+            print(json.dumps(unblock_slots))
             send_mail_templates(
                 "schedule_session.html",
                 [coach_availability.coach.email],
                 "Meeraq - Participant booked session",
                 {
                     "name": coach_name,
-                    "date": formatted_date,
-                    "time": start_time_for_mail,
+                    "date": date_for_mail,
+                    "time": session_time,
                 },
                 [],
             )
@@ -891,12 +1089,17 @@ def schedule_session(request):
             send_mail_templates(
                 "coach_templates/coaching_email_template.html",
                 [participant_email],
-                "Meeraq - Laser Coaching Session Booked",
+                "Meeraq - Laser Coaching Session Booked"
+                if session_type == "laser_coaching_session"
+                else "Meeraq - Mentoring Session Booked",
                 {
                     "name": coach_name,
-                    "date": formatted_date,
-                    "time": start_time_for_mail,
+                    "date": date_for_mail,
+                    "time": session_time,
                     "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                    "session_type": "Mentoring"
+                    if session_type == "mentoring_session"
+                    else "Laser Coaching",
                 },
                 [],
             )
@@ -912,6 +1115,204 @@ def schedule_session(request):
         print(str(e))
         return Response(
             {"error": "Failed to book the session."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+TIME_INTERVAL = 900000
+
+
+@api_view(["POST"])
+def schedule_session_fixed(request):
+    try:
+        with transaction.atomic():
+            booking_link_id = request.data.get("booking_link_id", "")
+            booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+            participant_email = request.data.get("participant_email", "")
+            timestamp = request.data.get("timestamp", "")
+            end_time = request.data.get("end_time", "")
+            coach_id = request.data.get("coach_id", "")
+            request_id = request.data.get("request_id", "")
+
+            request_avail = RequestAvailibilty.objects.get(id=request_id)
+            coach = Coach.objects.get(id=coach_id)
+            coach_availability = CoachSchedularAvailibilty.objects.create(
+                request=request_avail,
+                coach=coach,
+                start_time=timestamp,
+                end_time=end_time,
+                is_confirmed=False,
+            )
+            coach_availability.save()
+            coach_availability_id = coach_availability.id
+
+            new_timestamp = int(timestamp) / 1000
+            date_obj = datetime.fromtimestamp(new_timestamp, timezone.utc)
+            formatted_date = date_obj.strftime("%d %B %Y")
+
+            p_booking_start_time_stamp = timestamp
+            p_booking_end_time_stamp = end_time
+            p_block_from = int(p_booking_start_time_stamp) - TIME_INTERVAL
+            p_block_till = int(p_booking_end_time_stamp) + TIME_INTERVAL
+
+            date_for_mail = get_date(int(timestamp))
+            start_time_for_mail = get_time(int(timestamp))
+            end_time_for_mail = get_time(int(end_time))
+            session_time = f"{start_time_for_mail} - {end_time_for_mail} IST"
+            all_coach_availability = CoachSchedularAvailibilty.objects.filter(
+                (
+                    Q(start_time__gte=p_block_from, start_time__lt=p_block_till)
+                    | Q(end_time__gt=p_block_from, end_time__lte=p_block_till)
+                ),
+                request=request_avail,
+                coach=coach,
+                is_confirmed=False,
+            ).exclude(id=coach_availability.id)
+            unblock_slots_to_delete = []
+            coaching_session = get_object_or_404(
+                CoachingSession, booking_link=booking_link
+            )
+            batch = coaching_session.batch
+            session_type = coaching_session.session_type
+
+            participant = get_object_or_404(
+                SchedularParticipants, email=participant_email
+            )
+            if participant not in batch.participants.all():
+                return Response(
+                    {"error": "Email not found. Please use the registered Email"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            existing_session = SchedularSessions.objects.filter(
+                enrolled_participant=participant, coaching_session=coaching_session
+            ).first()
+
+            if existing_session:
+                return Response(
+                    {
+                        "error": "You have already booked the session for the same coaching session"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            coach_availability = get_object_or_404(
+                CoachSchedularAvailibilty, id=coach_availability_id
+            )
+
+            if (
+                coaching_session.expiry_date
+                and coaching_session.expiry_date < timezone.now().date()
+            ):
+                return Response(
+                    {"error": "Coaching session has expired"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if coach_availability.is_confirmed:
+                return Response(
+                    {"error": "This slot is already booked. Please try again."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            session_data = {
+                "enrolled_participant": participant.id,
+                "availibility": coach_availability.id,
+                "coaching_session": coaching_session.id,
+                "status": "pending",
+            }
+
+            serializer = SchedularSessionsSerializer(data=session_data)
+            if serializer.is_valid():
+                serializer.save()
+                coach_availability.is_confirmed = True
+                coach_availability.save()
+                coach_name = f"{coach_availability.coach.first_name} {coach_availability.coach.last_name}"
+                unblock_slots = []
+
+                for availability_c in all_coach_availability:
+                    print("conflicting", availability_c.id)
+                    availability_c.is_confirmed = True
+                    availability_c.save()
+                    if (
+                        int(availability_c.start_time)
+                        < p_block_from
+                        < int(availability_c.end_time)
+                    ) and (int(availability_c.start_time) < p_block_from):
+                        new_slot = {
+                            "start_time": int(availability_c.start_time),
+                            "end_time": p_block_from,
+                            "conflict": False,
+                        }
+                        unblock_slots.append(new_slot)
+                        unblock_slots_to_delete.append(availability_c)
+                    if (
+                        int(availability_c.start_time)
+                        < p_block_till
+                        < int(availability_c.end_time)
+                    ) and (int(availability_c.end_time) > p_block_till):
+                        new_slot = {
+                            "start_time": p_block_till,
+                            "end_time": int(availability_c.end_time),
+                            "conflict": False,
+                        }
+                        unblock_slots.append(new_slot)
+                        unblock_slots_to_delete.append(availability_c)
+
+                for availability_c in unblock_slots_to_delete:
+                    print("deleted", availability_c.id)
+                    availability_c.delete()
+
+                for unblock_slot in unblock_slots:
+                    created_availability = CoachSchedularAvailibilty.objects.create(
+                        request=request_avail,
+                        coach=coach,
+                        start_time=unblock_slot["start_time"],
+                        end_time=unblock_slot["end_time"],
+                        is_confirmed=False,
+                    )
+                    print("created", created_availability.id)
+
+                send_mail_templates(
+                    "schedule_session.html",
+                    [coach_availability.coach.email],
+                    "Meeraq - Participant booked session",
+                    {
+                        "name": coach_name,
+                        "date": date_for_mail,
+                        "time": session_time,
+                    },
+                    [],
+                )
+
+                send_mail_templates(
+                    "coach_templates/coaching_email_template.html",
+                    [participant_email],
+                    "Meeraq - Laser Coaching Session Booked"
+                    if session_type == "laser_coaching_session"
+                    else "Meeraq - Mentoring Session Booked",
+                    {
+                        "name": coach_name,
+                        "date": date_for_mail,
+                        "time": session_time,
+                        "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                        "session_type": "Mentoring"
+                        if session_type == "mentoring_session"
+                        else "Laser Coaching",
+                    },
+                    [],
+                )
+
+                return Response(
+                    {"message": "Session scheduled successfully."},
+                    status=status.HTTP_201_CREATED,
+                )
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    except Exception as e:
+        return Response(
+            {"error": f"Failed to book the session. {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -1060,6 +1461,8 @@ def get_sessions_by_type(request, sessions_type):
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
+            "session_type": session.coaching_session.session_type,
+            "end_time": session.availibility.end_time,
         }
         session_details.append(session_detail)
     return Response(session_details, status=status.HTTP_200_OK)
@@ -1189,12 +1592,14 @@ def get_participants(request):
 
 @api_view(["POST"])
 def send_unbooked_coaching_session_mail(request):
+    print(request.data)
     batch_name = request.data.get("batchName", "")
     participants = request.data.get("participants", [])
     booking_link = request.data.get("bookingLink", "")
     expiry_date = request.data.get("expiry_date", "")
     date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
     formatted_date = date_obj.strftime("%d %B %Y")
+    session_type = request.data.get("session_type", "")
 
     for participant in participants:
         try:
@@ -1206,11 +1611,16 @@ def send_unbooked_coaching_session_mail(request):
         send_mail_templates(
             "seteventlink.html",
             [participant],
-            "Meeraq -Book Coaching Session",
+            "Meeraq -Book Laser Coaching Session"
+            if session_type == "laser_coaching_session"
+            else "Meeraq - Book Mentoring Session",
             {
                 "name": participant_name,
                 "event_link": booking_link,
                 "expiry_date": formatted_date,
+                "session_type": "mentoring"
+                if session_type == "mentoring_session"
+                else "laser coaching",
             },
             [],
         )
@@ -1245,7 +1655,7 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
             coach__id=coach_id,
             start_time__gte=start_timestamp,
             end_time__lte=end_timestamp,
-            is_confirmed=False,
+            is_confirmed=True,
         )
         coach_availabilities_date_wise[date] = CoachSchedularAvailibiltySerializer(
             coach_availabilities, many=True
@@ -1658,3 +2068,4 @@ def get_facilitator_field_values(request):
         },
         status=200,
     )
+

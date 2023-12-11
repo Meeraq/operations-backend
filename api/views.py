@@ -1,5 +1,7 @@
 from datetime import date
 import requests
+from django.http import JsonResponse
+import calendar
 from os import name
 from django.shortcuts import render, get_object_or_404
 from django.template.loader import render_to_string
@@ -55,6 +57,12 @@ from .serializers import (
     CoachContractSerializer,
     UpdateSerializer,
     UpdateDepthOneSerializer,
+    UserTokenSerializer,
+    CalendarEventSerializer,
+    ShareCoachProfileActivitySerializer,
+    CreateProjectActivitySerializer,
+    FinalizeCoachActivitySerializer,
+    SessionDataSerializer,
 )
 
 from rest_framework import generics
@@ -72,6 +80,7 @@ from django.core.mail import EmailMessage, BadHeaderError
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.forms.models import model_to_dict
 from .models import (
     Profile,
     Pmo,
@@ -106,6 +115,11 @@ from .models import (
     CoachContract,
     ProjectContract,
     Role,
+    UserToken,
+    CalendarEvent,
+    ShareCoachProfileActivity,
+    CreateProjectActivity,
+    FinalizeCoachActivity,
 )
 
 from rest_framework.authtoken.models import Token
@@ -135,6 +149,10 @@ from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
 from zohoapi.models import Vendor
 
+from urllib.parse import urlencode
+from django.http import HttpResponseRedirect
+
+import os
 
 # Create your views here.
 from collections import defaultdict
@@ -181,6 +199,279 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
     except BadHeaderError as e:
         print(f"Error occurred while sending emails: {str(e)}")
         raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
+
+
+def convert_to_24hr_format(time_str):
+    time_obj = datetime.strptime(time_str, "%I:%M %p")
+    time_24hr = time_obj.strftime("%H:%M")
+    return time_24hr
+
+
+def refresh_google_access_token(user_token):
+    if not user_token:
+        return None
+
+    refresh_token = user_token.refresh_token
+    access_token_expiry = user_token.access_token_expiry
+    auth_code = user_token.authorization_code
+    if not refresh_token:
+        return None
+
+    access_token_expiry = int(access_token_expiry)
+
+    expiration_timestamp = user_token.updated_at + timezone.timedelta(
+        seconds=access_token_expiry
+    )
+
+    if expiration_timestamp <= timezone.now():
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            "refresh_token": refresh_token,
+            "client_id": env("GOOGLE_OAUTH2_CLIENT_ID"),
+            "client_secret": env("GOOGLE_OAUTH2_CLIENT_SECRET"),
+            "grant_type": "refresh_token",
+        }
+
+        response = requests.post(token_url, data=token_data)
+        token_json = response.json()
+
+        if "access_token" in token_json:
+            user_token.access_token = token_json["access_token"]
+            user_token.access_token_expiry = token_json.get("expires_in")
+            user_token.updated_at = timezone.now()
+            user_token.save()
+
+            return user_token.access_token
+
+    return user_token.access_token
+
+
+def refresh_microsoft_access_token(user_token):
+    if not user_token:
+        return None
+
+    refresh_token = user_token.refresh_token
+    access_token_expiry = user_token.access_token_expiry
+    auth_code = user_token.authorization_code
+    if not refresh_token:
+        return None
+
+    access_token_expiry = int(access_token_expiry)
+
+    expiration_timestamp = user_token.updated_at + timezone.timedelta(
+        seconds=access_token_expiry
+    )
+
+    if expiration_timestamp <= timezone.now():
+        token_url = f"https://login.microsoftonline.com/common/oauth2/v2.0/token"
+
+        token_data = {
+            "client_id": env("MICROSOFT_CLIENT_ID"),
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+            "client_secret": env("MICROSOFT_CLIENT_SECRET"),
+        }
+
+        response = requests.post(token_url, data=token_data)
+        token_json = response.json()
+
+        if "access_token" in token_json:
+            user_token.access_token = token_json["access_token"]
+            user_token.access_token_expiry = token_json.get("expires_in")
+            user_token.updated_at = timezone.now()
+            user_token.save()
+
+            return user_token.access_token
+
+    return user_token.access_token
+
+
+def create_google_calendar_event(access_token, event_details, attendee_email, session):
+    try:
+        formatted_date = datetime.strptime(
+            event_details.get("startDate"), "%d-%m-%Y"
+        ).strftime("%Y-%m-%d")
+
+        start_time = convert_to_24hr_format(event_details.get("startTime"))
+        end_time = convert_to_24hr_format(event_details.get("endTime"))
+
+        event_details_title = event_details.get("title")
+        if event_details.get("title") == "Coaching Session Session":
+            event_details_title = "Coaching Session"
+
+        event_data = {
+            "summary": event_details_title,
+            "description": event_details.get("description"),
+            "start": {
+                "dateTime": f"{formatted_date}T{start_time}:00",
+                "timeZone": "IST",
+            },
+            "end": {
+                "dateTime": f"{formatted_date}T{end_time}:00",
+                "timeZone": "IST",
+            },
+            "attendees": [
+                {"email": attendee_email},
+            ],
+        }
+
+        user_token = UserToken.objects.get(access_token=access_token)
+        new_access_token = refresh_google_access_token(user_token)
+        if not new_access_token:
+            new_access_token = access_token
+
+        # Make a POST request to the Google Calendar API
+        response = requests.post(
+            "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+            json=event_data,
+            headers={
+                "Authorization": f"Bearer {new_access_token}",
+                "Content-Type": "application/json",
+            },
+        )
+
+        if response.status_code == 200:
+            response_data = response.json()
+
+            calendar_event = CalendarEvent(
+                event_id=response_data.get("id"),
+                title=event_details_title,
+                description=event_details.get("description"),
+                start_datetime=f"{formatted_date}T{start_time}:00",
+                end_datetime=f"{formatted_date}T{end_time}:00",
+                attendee=attendee_email,
+                creator=response_data.get("creator", {}).get("email", ""),
+                session=session,
+                account_type="google",
+            )
+            calendar_event.save()
+
+            return {
+                "message": "Event created successfully",
+                "event_data": response_data,
+            }
+        else:
+            return {
+                "error": "Failed to create event",
+                "status_code": response.status_code,
+            }
+
+    except Exception as e:
+        return {"error": "An error occurred", "details": str(e)}
+
+
+def create_microsoft_calendar_event(
+    access_token, event_details, attendee_email_name, session
+):
+    event_create_url = "https://graph.microsoft.com/v1.0/me/events"
+
+    formatted_date = datetime.strptime(event_details["startDate"], "%d-%m-%Y").strftime(
+        "%Y-%m-%d"
+    )
+
+    start_datetime = (
+        f"{formatted_date}T{convert_to_24hr_format(event_details['startTime'])}:00"
+    )
+    end_datetime = (
+        f"{formatted_date}T{convert_to_24hr_format(event_details['endTime'])}:00"
+    )
+
+    event_details_title = event_details["title"]
+    if event_details["title"] == "Coaching Session Session":
+        event_details_title = "Coaching Session"
+
+    event_payload = {
+        "subject": event_details_title,
+        "body": {"contentType": "HTML", "content": event_details["description"]},
+        "start": {"dateTime": start_datetime, "timeZone": "Asia/Kolkata"},
+        "end": {"dateTime": end_datetime, "timeZone": "Asia/Kolkata"},
+        "attendees": [{"emailAddress": attendee_email_name, "type": "required"}],
+    }
+
+    user_token = UserToken.objects.get(access_token=access_token)
+    new_access_token = refresh_microsoft_access_token(user_token)
+    if not new_access_token:
+        new_access_token = access_token
+
+    headers = {
+        "Authorization": f"Bearer {new_access_token}",
+        "Content-Type": "application/json",
+    }
+
+    response = requests.post(event_create_url, json=event_payload, headers=headers)
+
+    if response.status_code == 201:
+        microsoft_response_data = response.json()
+
+        calendar_event = CalendarEvent(
+            event_id=microsoft_response_data.get("id"),
+            title=event_details_title,
+            description=event_details.get("description"),
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            attendee=attendee_email_name.get("address"),
+            creator=microsoft_response_data.get("organizer", {})
+            .get("emailAddress", {})
+            .get("address", ""),
+            session=session,
+            account_type="microsoft",
+        )
+        calendar_event.save()
+
+        print("Event created successfully.")
+        return True
+    else:
+        print(f"Event creation failed. Status code: {response.status_code}")
+        print(response.text)
+        return False
+
+
+def delete_google_calendar_event(access_token, event_id):
+    try:
+        response = requests.delete(
+            f"https://www.googleapis.com/calendar/v3/calendars/primary/events/{event_id}",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+        )
+
+        if response.status_code == 204:
+            return {"message": "Event deleted successfully"}
+        elif response.status_code == 404:
+            return {"error": "Event not found"}
+        else:
+            return {
+                "error": "Failed to delete event",
+                "status_code": response.status_code,
+            }
+
+    except Exception as e:
+        return {"error": "An error occurred", "details": str(e)}
+
+
+def delete_microsoft_calendar_event(access_token, event_id):
+    try:
+        event_delete_url = f"https://graph.microsoft.com/v1.0/me/events/{event_id}"
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+        }
+
+        response = requests.delete(event_delete_url, headers=headers)
+
+        if response.status_code == 204:
+            return {"message": "Event deleted successfully"}
+        elif response.status_code == 404:
+            return {"error": "Event not found"}
+        else:
+            return {
+                "error": "Failed to delete event",
+                "status_code": response.status_code,
+            }
+
+    except Exception as e:
+        return {"error": "An error occurred", "details": str(e)}
 
 
 def create_notification(user, path, message):
@@ -733,6 +1024,9 @@ def create_project_cass(request):
             project_description=desc,
             # updated_to_sold= request.data['updated_to_sold'],
             location=json.loads(request.data["location"]),
+            enable_emails_to_hr_and_coachee=request.data.get(
+                "enable_emails_to_hr_and_coachee", True
+            ),
             steps=dict(
                 project_structure={"status": "pending"},
                 coach_list={"status": "pending"},
@@ -748,10 +1042,26 @@ def create_project_cass(request):
             ),
             status="presales",
         )
+
         project.save()
-    except IntegrityError:
+        try:
+            userId = request.data.get("user_id")
+            user_who_created = User.objects.get(id=userId)
+            project = project
+            timestamp = timezone.now()
+
+            createProject = CreateProjectActivity.objects.create(
+                user_who_created=user_who_created, project=project, timestamp=timestamp
+            )
+
+            createProject.save()
+        except Exception as e:
+            pass
+
+    except IntegrityError as e:
         return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
+        print(str(e))
         return Response({"error": "Failed to create project."}, status=400)
     hr_emails = []
     project_name = project.name
@@ -1803,12 +2113,29 @@ def add_coach(request):
 
             # Send email notification to the coach
             full_name = coach_user.first_name + " " + coach_user.last_name
+            microsoft_auth_url = (
+                f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach_user.email}/'
+            )
+            user_token_present = False
+            try:
+                user_token = UserToken.objects.get(
+                    user_profile__user__username=coach_user.email
+                )
+                if user_token:
+                    user_token_present = True
+            except Exception as e:
+                pass
             send_mail_templates(
                 "coach_templates/pmo-adds-coach-as-user.html",
                 [coach_user.email],
                 "Meeraq Coaching | New Beginning !",
-                {"name": coach_user.first_name},
-                [],
+                {
+                    "name": coach_user.first_name,
+                    "email": coach_user.email,
+                    "microsoft_auth_url": microsoft_auth_url,
+                    "user_token_present": user_token_present,
+                },
+                [],  # no bcc emails
             )
 
         return Response({"message": "Coach added successfully."}, status=201)
@@ -1968,6 +2295,17 @@ def login_view(request):
         UserLoginActivity.objects.create(
             user=user, timestamp=login_timestamp, platform=platform
         )
+        user_token = None
+        try:
+            user_token = UserToken.objects.get(user_profile__user__username=username)
+            if user_token.account_type == "google":
+                refresh_google_access_token(user_token)
+            else:
+                refresh_microsoft_access_token(user_token)
+
+        except ObjectDoesNotExist:
+            print("Does not exist")
+
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -2051,6 +2389,26 @@ def get_user_data(user):
 def generate_otp(request):
     try:
         user = User.objects.get(username=request.data["email"])
+        learner_roles = user.profile.roles.all().filter(name="learner")
+        hr_roles = user.profile.roles.all().filter(name="hr")
+        # for hr and coachee not allowing login when they are added in caas project where hr and coachee's platform is not provided/needed
+        if learner_roles.exists():
+            engagements = Engagement.objects.filter(
+                learner=user.profile.learner,
+                project__enable_emails_to_hr_and_coachee=False,
+            )
+            if engagements.exists():
+                return Response(
+                    {"error": "User with the given email does not exist."}, status=400
+                )
+        elif hr_roles.exists():
+            projects = Project.objects.filter(
+                hr=user.profile.hr, enable_emails_to_hr_and_coachee=False
+            )
+            if projects.exists():
+                return Response(
+                    {"error": "User with the given email does not exist."}, status=400
+                )
         try:
             # Check if OTP already exists for the user
             otp_obj = OTP.objects.get(user=user)
@@ -2069,11 +2427,29 @@ def generate_otp(request):
             f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
         )
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
+        microsoft_auth_url = (
+            f'{env("BACKEND_URL")}/api/microsoft/oauth/{request.data["email"]}/'
+        )
+        user_token_present = False
+        try:
+            user_token = UserToken.objects.get(
+                user_profile__user__username=request.data["email"]
+            )
+            if user_token:
+                user_token_present = True
+        except Exception as e:
+            pass
         send_mail_templates(
             "hr_emails/login_with_otp.html",
             [user],
             subject,
-            {"name": name, "otp": created_otp.otp},
+            {
+                "name": name,
+                "otp": created_otp.otp,
+                "email": request.data["email"],
+                "microsoft_auth_url": microsoft_auth_url,
+                "user_token_present": user_token_present,
+            },
             [],  # no bcc
         )
         return Response({"message": f"OTP has been sent to {user.username}!"})
@@ -2108,6 +2484,7 @@ def validate_otp(request):
     user = otp_obj.user
     # token, created = Token.objects.get_or_create(user=learner.user.user)
     # Delete the OTP object after it has been validated
+    user_email = request.data["email"]
     otp_obj.delete()
     last_login = user.last_login
     login(request, user)
@@ -2117,6 +2494,16 @@ def validate_otp(request):
         UserLoginActivity.objects.create(
             user=user, timestamp=login_timestamp, platform=platform
         )
+        user_token = None
+        try:
+            user_token = UserToken.objects.get(user_profile__user__username=user_email)
+            if user_token.account_type == "google":
+                refresh_google_access_token(user_token)
+            else:
+                refresh_microsoft_access_token(user_token)
+        except ObjectDoesNotExist:
+            print("Does not exist")
+
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -2217,7 +2604,7 @@ def add_hr(request):
             )
 
     except Exception as e:
-        return Response({"error": str(e)}, status=400)
+        return Response({"error": "User email already exist."}, status=400)
 
 
 @api_view(["PUT"])
@@ -2492,13 +2879,31 @@ def send_consent(request):
         for status in coach_status:
             if project.coach_consent_mandatory:
                 create_notification(status.coach.user.user, path, message)
-                send_mail_templates(
-                    "coach_templates/pmo_ask_for_consent.html",
-                    [status.coach.email],
-                    "Meeraq Coaching | New Project!",
-                    {"name": status.coach.first_name},
-                    [],  # no bcc
+            microsoft_auth_url = (
+                f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach.email}/'
+            )
+            user_token_present = False
+            try:
+                user_token = UserToken.objects.get(
+                    user_profile__user__username=coach.email
                 )
+                if user_token:
+                    user_token_present = True
+            except Exception as e:
+                pass
+
+            send_mail_templates(
+                "coach_templates/pmo_ask_for_consent.html",
+                [status.coach.email],
+                "Meeraq Coaching | New Project!",
+                {
+                    "name": status.coach.first_name,
+                    "email": coach.email,
+                    "microsoft_auth_url": microsoft_auth_url,
+                    "user_token_present": user_token_present,
+                },
+                [],  # no bcc
+            )
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
     for coach_id in coach_list:
@@ -2804,10 +3209,17 @@ def get_upcoming_booked_session_of_coach(request, coach_id):
 
 @api_view(["POST"])
 def book_session_caas(request):
-    print(request.data)
     session_request = SessionRequestCaas.objects.get(
         id=request.data.get("session_request")
     )
+
+    google_calendar_event = CalendarEvent.objects.filter(
+        session=session_request, account_type="google"
+    ).first()
+    microsoft_calendar_event = CalendarEvent.objects.filter(
+        session=session_request, account_type="microsoft"
+    ).first()
+
     session_request.confirmed_availability = Availibility.objects.get(
         id=request.data.get("confirmed_availability")
     )
@@ -2891,19 +3303,39 @@ def book_session_caas(request):
             message += slot_message
             create_notification(pmo_user, path, message)
             if coachee:
-                send_mail_templates(
-                    "coachee_emails/session_booked.html",
-                    [coachee.email],
-                    "Meeraq Coaching | Session Booked",
-                    {
-                        "projectName": session_request.project.name,
-                        "name": coachee.name,
-                        "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
-                        "slot_date": session_date,
-                        "slot_time": session_time,
-                    },
-                    [],  # no bcc
+                microsoft_auth_url = (
+                    f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
                 )
+                user_token_present = False
+                try:
+                    user_token = UserToken.objects.get(
+                        user_profile__user__username=coachee.email
+                    )
+                    if user_token:
+                        user_token_present = True
+                except Exception as e:
+                    pass
+                if session_request.project.enable_emails_to_hr_and_coachee:
+                    send_mail_templates(
+                        "coachee_emails/session_booked.html",
+                        [coachee.email],
+                        "Meeraq Coaching | Session Booked",
+                        {
+                            "projectName": session_request.project.name,
+                            "name": coachee.name,
+                            "sessionName": SESSION_TYPE_VALUE[
+                                session_request.session_type
+                            ],
+                            "slot_date": session_date,
+                            "slot_time": session_time,
+                            "email": coachee.email,
+                            "microsoft_auth_url": microsoft_auth_url,
+                            "user_token_present": user_token_present,
+                        },
+                        [],  # no bcc
+                    )
+                # add microsoft auth url before uncommenting
+
                 # send_mail_templates(
                 #     "pmo_emails/session_scheduled.html",
                 #     [pmo.email],
@@ -2916,9 +3348,99 @@ def book_session_caas(request):
                 #         "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
                 #         "slot_date": session_date,
                 #         "slot_time": session_time,
+                # "email": pmo.email,
                 #     },
                 #     [],  # no bcc
                 # )
+
+                event_detail = {
+                    "title": f"{SESSION_TYPE_VALUE[session_request.session_type]} Session",
+                    "description": "Session Scheduled",
+                    "startDate": session_date,
+                    "startTime": start_time,
+                    "endDate": session_date,
+                    "endTime": end_time,
+                }
+                try:
+                    coach_user_token = UserToken.objects.get(
+                        user_profile__user__username=coach.email
+                    )
+                    coach_access_token = coach_user_token.access_token
+                    if coach_user_token.account_type == "google":
+                        coach_access_token = refresh_google_access_token(
+                            coach_user_token
+                        )
+
+                        if google_calendar_event:
+                            delete_google_calendar_event(
+                                coach_access_token, google_calendar_event.event_id
+                            )
+                            google_calendar_event.delete()
+
+                        create_google_calendar_event(
+                            coach_access_token,
+                            event_detail,
+                            coachee.email,
+                            session_request,
+                        )
+                    else:
+                        coach_access_token = refresh_microsoft_access_token(
+                            coach_user_token
+                        )
+                        if microsoft_calendar_event:
+                            delete_microsoft_calendar_event(
+                                coach_access_token, microsoft_calendar_event.event_id
+                            )
+                            microsoft_calendar_event.delete()
+
+                        create_microsoft_calendar_event(
+                            coach_access_token,
+                            event_detail,
+                            {"address": coachee.email, "name": coachee.name},
+                            session_request,
+                        )
+
+                except Exception as e:
+                    print(f"Coach calendar error {str(e)}")
+                if session_request.project.enable_emails_to_hr_and_coachee:
+                    try:
+                        coachee_user_token = UserToken.objects.get(
+                            user_profile__user__username=coachee.email
+                        )
+                        coachee_access_token = coachee_user_token.access_token
+                        if coachee_user_token.account_type == "google":
+                            coachee_access_token = refresh_google_access_token(
+                                coachee_user_token
+                            )
+                            if google_calendar_event:
+                                delete_google_calendar_event(
+                                    coachee_access_token, google_calendar_event.event_id
+                                )
+                                google_calendar_event.delete()
+                            create_google_calendar_event(
+                                coachee_access_token,
+                                event_detail,
+                                coach.email,
+                                session_request,
+                            )
+                        else:
+                            coachee_access_token = refresh_microsoft_access_token(
+                                coachee_user_token
+                            )
+                            if microsoft_calendar_event:
+                                delete_microsoft_calendar_event(
+                                    coachee_access_token,
+                                    microsoft_calendar_event.event_id,
+                                )
+                                microsoft_calendar_event.delete()
+                            create_microsoft_calendar_event(
+                                coachee_access_token,
+                                event_detail,
+                                {"address": coach.email, "name": coach_name},
+                                session_request,
+                            )
+                    except Exception as e:
+                        print(f"Coachee calendar error {str(e)}")
 
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -3072,8 +3594,24 @@ def accept_coach_caas_hr(request):
             coaches_selected_count += 1
 
     project.save()
+    try:
+        userId = request.data.get("user_id")
+        coachId = request.data.get("coach_id")
+        user_who_finalized = User.objects.get(id=userId)
+        coach_who_got_finalized = Coach.objects.get(id=coachId)
+        project = project
+        timestamp = timezone.now()
 
-    print(coaches_selected_count)
+        finalizeCoach = FinalizeCoachActivity.objects.create(
+            user_who_finalized=user_who_finalized,
+            coach_who_got_finalized=coach_who_got_finalized,
+            project=project,
+            timestamp=timestamp,
+        )
+
+        finalizeCoach.save()
+    except Exception as e:
+        pass
     # for i in range(0,len(project.coaches_status)):
     #     print(project.coaches_status[i])
     #     status=project.coaches_status[i].status.hr.status
@@ -3123,6 +3661,18 @@ def accept_coach_caas_hr(request):
                     },
                     [],  # no bcc
                 )
+                microsoft_auth_url = (
+                    f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach.email}/'
+                )
+                user_token_present = False
+                try:
+                    user_token = UserToken.objects.get(
+                        user_profile__user__username=coach.email
+                    )
+                    if user_token:
+                        user_token_present = True
+                except Exception as e:
+                    pass
                 send_mail_templates(
                     "coach_templates/intro_mail_to_coach.html",
                     [coach.email],
@@ -3130,6 +3680,9 @@ def accept_coach_caas_hr(request):
                     {
                         "name": coach.first_name,
                         "orgName": project.organisation.name,
+                        "email": coach.email,
+                        "microsoft_auth_url": microsoft_auth_url,
+                        "user_token_present": user_token_present,
                     },
                     [env("BCC_EMAIL")],
                 )
@@ -3161,23 +3714,39 @@ def add_learner_to_project(request):
         learners = create_learners(request.data["learners"])
         for learner in learners:
             create_engagement(learner, project)
-            # project.learner.add(learner)
-
-            try:
-                path = f"/projects/caas/progress/{project.id}"
-                message = f"You have been added to Project - {project.name}"
-                create_notification(learner.user.user, path, message)
-                coacheeCounts = coacheeCounts + 1
-                send_mail_templates(
-                    "coachee_emails/add_coachee.html",
-                    [learner.email],
-                    "Meeraq Coaching | Welcome to Meeraq",
-                    {"name": learner.name, "orgname": project.organisation.name},
-                    [env("BCC_EMAIL")],
-                )
-
-            except Exception as e:
-                print(f"Error occurred while creating notification: {str(e)}")
+            if project.enable_emails_to_hr_and_coachee:
+                try:
+                    path = f"/projects/caas/progress/{project.id}"
+                    message = f"You have been added to Project - {project.name}"
+                    create_notification(learner.user.user, path, message)
+                    coacheeCounts = coacheeCounts + 1
+                    microsoft_auth_url = (
+                        f'{env("BACKEND_URL")}/api/microsoft/oauth/{learner.email}/'
+                    )
+                    user_token_present = False
+                    try:
+                        user_token = UserToken.objects.get(
+                            user_profile__user__username=learner.email
+                        )
+                        if user_token:
+                            user_token_present = True
+                    except Exception as e:
+                        pass
+                    send_mail_templates(
+                        "coachee_emails/add_coachee.html",
+                        [learner.email],
+                        "Meeraq Coaching | Welcome to Meeraq",
+                        {
+                            "name": learner.name,
+                            "orgname": project.organisation.name,
+                            "email": learner.email,
+                            "microsoft_auth_url": microsoft_auth_url,
+                            "user_token_present": user_token_present,
+                        },
+                        [],
+                    )
+                except Exception as e:
+                    print(f"Error occurred while creating notification: {str(e)}")
                 continue
     except Exception as e:
         # Handle any exceptions from create_learners
@@ -3520,31 +4089,64 @@ def send_list_to_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     # project.status['coach_list_to_hr'] = 'pending'
 
+    coaches = []
+
     for coach_id in request.data["coach_list"]:
         coach_status = project.coaches_status.get(coach__id=coach_id)
-        print(coach_status.status)
         coach_status.status["hr"]["status"] = "sent"
+        coaches.append(Coach.objects.get(id=coach_id))
         coach_status.save()
+
     project.save()
     try:
-        path = f"/projects/caas/progress/{project.id}"
-        message = f"Admin has shared {len(request.data['coach_list'])} coach profile with you for the Project - {project.name}."
-        hr_users = project.hr.all()
-        for hr_user in hr_users:
-            hr_email = hr_user.email
-            hr_name = hr_user.first_name
-            send_mail_templates(
-                "hr_emails/pmo_share_coach_list.html",
-                [hr_email],
-                "Welcome to the Meeraq Platform",
-                {"name": hr_name},
-                json.loads(env("BCC_EMAIL_SALES_TEAM")),  # bcc
-            )
+        user_who_shared = User.objects.get(id=request.data.get("user_id", ""))
+        project_name = project
+        coaches = coaches
+        timestamp = timezone.now()
+        shareCoachProfile = ShareCoachProfileActivity.objects.create(
+            user_who_shared=user_who_shared, project=project_name, timestamp=timestamp
+        )
 
-        for hr_user in project.hr.all():
-            create_notification(hr_user.user.user, path, message)
+        shareCoachProfile.coaches.set(coaches)
+        shareCoachProfile.save()
     except Exception as e:
-        print(f"Error occurred while creating notification: {str(e)}")
+        pass
+    if project.enable_emails_to_hr_and_coachee:
+        try:
+            path = f"/projects/caas/progress/{project.id}"
+            message = f"Admin has shared {len(request.data['coach_list'])} coach profile with you for the Project - {project.name}."
+            hr_users = project.hr.all()
+            for hr_user in hr_users:
+                hr_email = hr_user.email
+                hr_name = hr_user.first_name
+                microsoft_auth_url = (
+                    f'{env("BACKEND_URL")}/api/microsoft/oauth/{hr_email}/'
+                )
+                user_token_present = False
+                try:
+                    user_token = UserToken.objects.get(
+                        user_profile__user__username=hr_email
+                    )
+                    if user_token:
+                        user_token_present = True
+                except Exception as e:
+                    pass
+                send_mail_templates(
+                    "hr_emails/pmo_share_coach_list.html",
+                    [hr_email],
+                    "Welcome to the Meeraq Platform",
+                    {
+                        "name": hr_name,
+                        "email": hr_email,
+                        "microsoft_auth_url": microsoft_auth_url,
+                        "user_token_present": user_token_present,
+                    },
+                    json.loads(env("BCC_EMAIL_SALES_TEAM")),  # bcc
+                )
+            for hr_user in project.hr.all():
+                create_notification(hr_user.user.user, path, message)
+        except Exception as e:
+            print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Sent Successfully", "details": {}}, status=200)
 
 
@@ -4344,10 +4946,22 @@ def edit_session_availability(request, session_id):
     try:
         # changing availability - edit request.
         session = SessionRequestCaas.objects.get(id=session_id)
+        google_calendar_event = CalendarEvent.objects.filter(
+            session=session, account_type="google"
+        ).first()
+        microsoft_calendar_event = CalendarEvent.objects.filter(
+            session=session, account_type="microsoft"
+        ).first()
         if session.is_booked:
             return Response({"message": "Session edit failed."}, status=401)
         session.availibility.set(time_arr)
         session.save()
+        if google_calendar_event:
+            google_calendar_event.session = session
+            google_calendar_event.save()
+        if microsoft_calendar_event:
+            microsoft_calendar_event.session = session
+            microsoft_calendar_event.save()
         return Response({"message": "Session updated successfully."}, status=201)
     except:
         return Response({"message": "Session edit failed."}, status=401)
@@ -4488,7 +5102,16 @@ def request_session(request, session_id, coach_id):
 @api_view(["POST"])
 def reschedule_session_of_coachee(request, session_id):
     session = SessionRequestCaas.objects.get(id=session_id)
+
+    google_calendar_event = CalendarEvent.objects.filter(
+        session=session, account_type="google"
+    ).first()
+    microsoft_calendar_event = CalendarEvent.objects.filter(
+        session=session, account_type="microsoft"
+    ).first()
+
     session.is_archive = True
+
     time_arr = create_time_arr(request.data["availibility"])
     new_session = SessionRequestCaas.objects.create(
         learner=session.learner,
@@ -4503,6 +5126,14 @@ def reschedule_session_of_coachee(request, session_id):
     new_session.availibility.set(time_arr)
     new_session.save()
     session.save()
+
+    if google_calendar_event:
+        google_calendar_event.session = new_session
+        google_calendar_event.save()
+    if microsoft_calendar_event:
+        microsoft_calendar_event.session = new_session
+        microsoft_calendar_event.save()
+
     return Response({"message": "Session reschedule successfully"}, status=200)
 
 
@@ -4914,6 +5545,14 @@ def schedule_session_directly(request, session_id):
         session = SessionRequestCaas.objects.get(id=session_id)
     except SessionRequestCaas.DoesNotExist:
         return Response({"error": "Session not found."}, status=404)
+
+    google_calendar_event = CalendarEvent.objects.filter(
+        session=session, account_type="google"
+    ).first()
+    microsoft_calendar_event = CalendarEvent.objects.filter(
+        session=session, account_type="microsoft"
+    ).first()
+
     if session.learner:
         coachee = session.learner
 
@@ -4945,6 +5584,7 @@ def schedule_session_directly(request, session_id):
     start_time = format_timestamp(int(session.confirmed_availability.start_time))
     end_time = format_timestamp(int(session.confirmed_availability.end_time))
     slot_message = f"{start_time} - {end_time}"
+
     session_date = get_date(int(session.confirmed_availability.start_time))
     start_time = get_time(int(session.confirmed_availability.start_time))
     end_time = get_time(int(session.confirmed_availability.end_time))
@@ -4956,20 +5596,153 @@ def schedule_session_directly(request, session_id):
     session.status = "booked"
     session.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session.save()
+    coach = None
+    if request.data["user_type"] == "coach":
+        coach = Coach.objects.get(id=request.data["user_id"])
     if coachee:
-        send_mail_templates(
-            "coachee_emails/session_booked.html",
-            [coachee.email],
-            "Meeraq Coaching | Session Booked",
-            {
-                "projectName": session.project.name,
-                "name": coachee.name,
-                "sessionName": SESSION_TYPE_VALUE[session.session_type],
-                "slot_date": session_date,
-                "slot_time": session_time,
-            },
-            [],  # no bcc
-        )
+        event_detail = {
+            "title": f"{SESSION_TYPE_VALUE[session.session_type]} Session",
+            "description": "Session Scheduled",
+            "startDate": session_date,
+            "startTime": start_time,
+            "endDate": session_date,
+            "endTime": end_time,
+        }
+        if session.project.enable_emails_to_hr_and_coachee:
+            microsoft_auth_url = (
+                f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
+            )
+            user_token_present = False
+            try:
+                user_token = UserToken.objects.get(
+                    user_profile__user__username=coachee.email
+                )
+                if user_token:
+                    user_token_present = True
+            except Exception as e:
+                pass
+
+            send_mail_templates(
+                "coachee_emails/session_booked.html",
+                [coachee.email],
+                "Meeraq Coaching | Session Booked",
+                {
+                    "projectName": session.project.name,
+                    "name": coachee.name,
+                    "sessionName": SESSION_TYPE_VALUE[session.session_type],
+                    "slot_date": session_date,
+                    "slot_time": session_time,
+                    "email": coachee.email,
+                    "microsoft_auth_url": microsoft_auth_url,
+                    "user_token_present": user_token_present,
+                },
+                [],  # no bcc
+            )
+
+            try:
+                coachee_user_token = UserToken.objects.get(
+                    user_profile__user__username=coachee.email
+                )
+
+                coachee_access_token = coachee_user_token.access_token
+                if coachee_user_token.account_type == "google":
+                    coachee_access_token = refresh_google_access_token(
+                        coachee_user_token
+                    )
+
+                    if google_calendar_event:
+                        delete_google_calendar_event(
+                            coachee_access_token, google_calendar_event.event_id
+                        )
+                        google_calendar_event.delete()
+
+                    if request.data["user_type"] == "coach":
+                        create_google_calendar_event(
+                            coachee_access_token,
+                            event_detail,
+                            coach.email,
+                            session,
+                        )
+                    else:
+                        create_google_calendar_event(
+                            coachee_access_token,
+                            event_detail,
+                            "No Data",
+                            session,
+                        )
+                else:
+                    coachee_access_token = refresh_microsoft_access_token(
+                        coachee_user_token
+                    )
+
+                    if microsoft_calendar_event:
+                        delete_microsoft_calendar_event(
+                            coachee_access_token, microsoft_calendar_event.event_id
+                        )
+                        microsoft_calendar_event.delete()
+
+                    if request.data["user_type"] == "coach":
+                        create_microsoft_calendar_event(
+                            coachee_access_token,
+                            event_detail,
+                            {
+                                "address": coach.email,
+                                "name": coach.first_name + " " + coach.last_name,
+                            },
+                            session,
+                        )
+                    else:
+                        create_microsoft_calendar_event(
+                            coachee_access_token,
+                            event_detail,
+                            {"address": "No Data", "name": "No Data"},
+                            session,
+                        )
+            except Exception as e:
+                print(f"Coachee calendar error {str(e)}")
+
+        if request.data["user_type"] == "coach":
+            coach = Coach.objects.get(id=request.data["user_id"])
+
+            try:
+                coach_user_token = UserToken.objects.get(
+                    user_profile__user__username=coach.email
+                )
+                coach_access_token = coach_user_token.access_token
+                if coach_user_token.account_type == "google":
+                    coach_access_token = refresh_google_access_token(coach_user_token)
+
+                    if google_calendar_event:
+                        delete_google_calendar_event(
+                            coach_access_token, google_calendar_event.event_id
+                        )
+                        google_calendar_event.delete()
+
+                    create_google_calendar_event(
+                        coach_access_token,
+                        event_detail,
+                        coachee.email,
+                        session,
+                    )
+                else:
+                    coach_access_token = refresh_microsoft_access_token(
+                        coach_user_token
+                    )
+                    if microsoft_calendar_event:
+                        delete_microsoft_calendar_event(
+                            coach_access_token, microsoft_calendar_event.event_id
+                        )
+                        microsoft_calendar_event.delete()
+
+                    create_microsoft_calendar_event(
+                        coach_access_token,
+                        event_detail,
+                        {"address": coachee.email, "name": coachee.name},
+                        session,
+                    )
+            except Exception as e:
+                print(f"Coach calendar error {str(e)}")
+
     return Response({"message": "Session booked successfully."})
 
 
@@ -5249,6 +6022,7 @@ def add_past_session(request, session_id):
         coach=coach,
         coachee=coachee,
         timestamp=timestamp,
+        session_name=session.session_type,
     )
     addPastSession.save()
 
@@ -5903,15 +6677,43 @@ def get_all_engagements(request):
             is_archive=False,
         ).count()
 
+        completed_sessions = SessionRequestCaas.objects.filter(
+            project__id=engagement.project.id,
+            learner=engagement.learner,
+            status="completed",
+            is_archive=False,
+        ).exclude(billable_session_number__isnull=True, session_type="chemistry")
+
+        sessions_data = [
+            {
+                "start_time": datetime.utcfromtimestamp(int(session.confirmed_availability.start_time) / 1000),
+                "end_time": datetime.utcfromtimestamp(int(session.confirmed_availability.end_time) / 1000)
+            }
+            for session in completed_sessions
+        ]
+        print(sessions_data)
+
+        # Sort the availabilities_data based on start time in descending order
+        sorted_availabilities = sorted(
+            sessions_data,
+            key=lambda availability: availability["start_time"],
+            reverse=True
+        )
+
+        # Extract the date of the most recent completed session
+        last_session_date = sorted_availabilities[0]["start_time"].date() if sorted_availabilities else None
+
         # Serialize the engagement along with session counts
         serialized_engagement = EngagementSerializer(engagement).data
         serialized_engagement["completed_sessions_count"] = completed_sessions_count
         serialized_engagement["total_sessions_count"] = total_sessions_count
+        serialized_engagement["last_completed_session_date"] = last_session_date
 
         # Add serialized engagement data to the list
         engagement_data_list.append(serialized_engagement)
 
     # Return the list of serialized engagement data with session counts
+    # print("engagement_data_list--------------------------------",engagement_data_list)
     return Response(engagement_data_list)
 
 
@@ -5951,6 +6753,9 @@ def edit_project_caas(request, project_id):
         )
         project.coach_consent_mandatory = request.data.get(
             "coach_consent_mandatory", project.coach_consent_mandatory
+        )
+        project.enable_emails_to_hr_and_coachee = request.data.get(
+            "enable_emails_to_hr_and_coachee", project.enable_emails_to_hr_and_coachee
         )
         project.hr.clear()
         for hr in request.data["hr"]:
@@ -6103,8 +6908,8 @@ class ActivitySummary(APIView):
                 remove_coach_profile_activities, many=True
             )
         except Exception as e:
-            print("delete_coach_activities", str(e))
-            delete_coach_profile_serializer = []
+            print("remove_coach_profile_activities", str(e))
+            remove_coach_profile_serializer = []
 
         try:
             add_past_session_activities = PastSessionActivity.objects.all()
@@ -6113,8 +6918,38 @@ class ActivitySummary(APIView):
                 add_past_session_activities, many=True
             )
         except Exception as e:
-            print("delete_coach_activities", str(e))
-            delete_coach_profile_serializer = []
+            print("add_past_session_activities", str(e))
+            past_session_activity_serializer = []
+
+        try:
+            share_coach_profile_activities = ShareCoachProfileActivity.objects.all()
+            total_share_coach_profile_count = share_coach_profile_activities.count()
+            share_coach_profile_serializer = ShareCoachProfileActivitySerializer(
+                share_coach_profile_activities, many=True
+            )
+        except Exception as e:
+            print("share_coach_profile_activities", str(e))
+            share_coach_profile_serializer = []
+
+        try:
+            create_project_activities = CreateProjectActivity.objects.all()
+            total_create_project_count = create_project_activities.count()
+            create_project_serializer = CreateProjectActivitySerializer(
+                create_project_activities, many=True
+            )
+        except Exception as e:
+            print("share_coach_profile_activities", str(e))
+            create_project_serializer = []
+
+        try:
+            finalize_coach_activities = FinalizeCoachActivity.objects.all()
+            total_finalized_coach_activity_count = finalize_coach_activities.count()
+            finalize_coach_serializer = FinalizeCoachActivitySerializer(
+                finalize_coach_activities, many=True
+            )
+        except Exception as e:
+            print("share_coach_profile_activities", str(e))
+            finalize_coach_serializer = []
 
         response_data = {
             "user_login": {
@@ -6152,6 +6987,18 @@ class ActivitySummary(APIView):
             "add_past_session": {
                 "total_count": total_past_session_count,
                 "activity": past_session_activity_serializer.data,
+            },
+            "share_coach_profile": {
+                "total_count": total_share_coach_profile_count,
+                "activity": share_coach_profile_serializer.data,
+            },
+            "create_project": {
+                "total_count": total_create_project_count,
+                "activity": create_project_serializer.data,
+            },
+            "finalize_coach": {
+                "total_count": total_finalized_coach_activity_count,
+                "activity": finalize_coach_serializer.data,
             },
         }
 
@@ -6767,3 +7614,277 @@ def get_users(request):
         email = profile.user.email
         res.append({"id": profile.id, "email": email, "roles": existing_roles})
     return Response(res)
+
+def get_weeks_for_current_month():
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    current_date = datetime.now()
+    first_day_of_current_month = current_date.replace(day=1)
+    cal = calendar.monthcalendar(current_year, current_month)
+    weeks = []
+
+    for week in cal:
+        days_in_week = [day for day in week if day != 0]
+        if days_in_week:
+            start_day = min(days_in_week)
+            end_day = max(days_in_week)
+
+            # Check if Saturday is the last day of the week
+            if calendar.weekday(current_year, current_month, end_day) == calendar.SATURDAY:
+                end_day += 1
+
+            start_date = datetime(current_year, current_month, start_day)
+            end_date = datetime(current_year, current_month, end_day)
+
+            weeks.append({
+                "start_day": start_day,
+                "end_day": end_day,
+                "start_date": start_date,
+                "end_date": end_date,
+            })
+
+    return weeks
+
+class SessionData(APIView):
+    def get(self, request, format=None):
+        now = date.today()
+        current_datetime = datetime.now()
+        first_day_of_current_month = datetime(
+            current_datetime.year, current_datetime.month, 1
+        )
+        last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
+        first_day_of_previous_month = datetime(
+            last_day_of_previous_month.year, last_day_of_previous_month.month, 1
+        )
+        start_timestamp_prev_month = int(first_day_of_previous_month.timestamp() * 1000)
+        end_timestamp_prev_month = int(
+            last_day_of_previous_month.timestamp() * 1000 + 86400000
+        )
+        if now.month == 12:
+            last_day_of_current_month = datetime(now.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            last_day_of_current_month = datetime(now.year, now.month + 1, 1) - timedelta(days=1)
+
+        start_timestamp_current_month = int(first_day_of_current_month.timestamp() * 1000)
+        end_timestamp_current_month = int(last_day_of_current_month.timestamp() * 1000)
+
+
+        start_str_prev_mon = str(start_timestamp_prev_month)
+        end_str_prev_mon = str(end_timestamp_prev_month)
+
+        start_str_current_mon = str(start_timestamp_current_month)
+        end_str_current_mon = str(end_timestamp_current_month )
+
+        projects=Project.objects.all()
+        sessiondata=[]
+        weeks = get_weeks_for_current_month()
+        for project in projects:
+            res_obj = {}
+            is_involved_in_sessions = SessionRequestCaas.objects.filter(
+                project=project, is_booked=True
+            ).exists()
+            if is_involved_in_sessions:
+                res_obj['project_name'] = project.name
+            else: 
+                continue
+            previous_month_sessions = SessionRequestCaas.objects.filter(
+                confirmed_availability__start_time__gte=start_str_prev_mon,
+                confirmed_availability__end_time__lte=end_str_prev_mon,    
+                project__id = project.id
+            )
+            res_obj['last_month'] = previous_month_sessions.count()
+
+            current_month_sessions=SessionRequestCaas.objects.filter(
+                confirmed_availability__start_time__gte=start_str_current_mon,
+                confirmed_availability__end_time__lte=end_str_current_mon,    
+                project__id = project.id
+            )
+            res_obj['current_month']=current_month_sessions.count()
+
+            for i, week in enumerate(weeks, start=1):
+                start_timestamp = int(week["start_date"].timestamp())
+                end_timestamp = int(week["end_date"].timestamp())
+                start_day_of_ith_week_of_curr_month=str(start_timestamp)
+                last_day_of_ith_week_of_curr_month=str(end_timestamp)
+                weekly_sessions = SessionRequestCaas.objects.filter(
+                    confirmed_availability__start_time__gte=start_day_of_ith_week_of_curr_month,
+                    confirmed_availability__end_time__lte=last_day_of_ith_week_of_curr_month,    
+                    project__id = project.id
+                )
+                key = f"current_month_week_{i}"
+                res_obj[key] = weekly_sessions.count()
+            actual_sessions_in_current_month=SessionRequestCaas.objects.filter(
+                confirmed_availability__start_time__gte=start_str_current_mon,
+                confirmed_availability__end_time__lte=end_str_current_mon,    
+                project__id = project.id,
+                status='completed'
+            )
+            res_obj['total_actuals']=actual_sessions_in_current_month.count()
+            balance=current_month_sessions.count()-actual_sessions_in_current_month.count()
+            res_obj['balance']=balance
+            sessiondata.append(res_obj)
+        
+        return Response(
+            {
+                "sessiondata":sessiondata,
+                "weeks":weeks
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+@api_view(["GET"])
+def google_oauth(request, user_email):
+    oauth2_endpoint = "https://accounts.google.com/o/oauth2/v2/auth"
+
+    auth_params = {
+        "client_id": env("GOOGLE_OAUTH2_CLIENT_ID"),
+        "redirect_uri": env("GOOGLE_OAUTH2_REDIRECT_URI"),
+        "response_type": "code",
+        "scope": "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email",
+        "access_type": "offline",
+        "login_hint": user_email,
+    }
+
+    auth_url = f"{oauth2_endpoint}?{urlencode(auth_params)}"
+
+    return HttpResponseRedirect(auth_url)
+
+
+@api_view(["GET"])
+def google_auth_callback(request):
+    code = request.GET.get("code")
+
+    if code:
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            "code": code,
+            "client_id": env("GOOGLE_OAUTH2_CLIENT_ID"),
+            "client_secret": env("GOOGLE_OAUTH2_CLIENT_SECRET"),
+            "redirect_uri": env("GOOGLE_OAUTH2_REDIRECT_URI"),
+            "grant_type": "authorization_code",
+        }
+
+        response = requests.post(token_url, data=token_data)
+        token_json = response.json()
+
+        if "access_token" in token_json and "refresh_token" in token_json:
+            access_token = token_json["access_token"]
+            refresh_token = token_json["refresh_token"]
+            expires_in = token_json["expires_in"]
+            auth_code = code
+            user_info_url = "https://www.googleapis.com/oauth2/v3/userinfo"
+            headers = {"Authorization": f"Bearer {access_token}"}
+            user_info_response = requests.get(user_info_url, headers=headers)
+
+            if user_info_response.status_code == 200:
+                user_info_data = user_info_response.json()
+
+                user_email = user_info_data.get("email", "")
+
+                user = User.objects.get(username=user_email)
+                user_profile = Profile.objects.get(user=user)
+
+                user_token, created = UserToken.objects.get_or_create(
+                    user_profile=user_profile
+                )
+                user_token.access_token = access_token
+                user_token.refresh_token = refresh_token
+                user_token.access_token_expiry = expires_in
+                user_token.authorization_code = auth_code
+                user_token.account_type = "google"
+                user_token.save()
+
+            return HttpResponseRedirect(env("APP_URL"))
+        else:
+            return JsonResponse({"error": "Token exchange failed."}, status=400)
+    else:
+        return JsonResponse(
+            {"error": "Authentication failed. Code not found."}, status=400
+        )
+
+
+@api_view(["GET"])
+def microsoft_auth(request, user_mail_address):
+    oauth2_endpoint = f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+
+    auth_params = {
+        "client_id": env("MICROSOFT_CLIENT_ID"),
+        "response_type": "code",
+        "redirect_uri": env("MICROSOFT_REDIRECT_URI"),
+        "response_mode": "query",
+        "scope": "openid offline_access User.Read Calendars.ReadWrite profile email",
+        "state": "shashankmeeraq",
+        "login_hint": user_mail_address,
+    }
+
+    auth_url = f"{oauth2_endpoint}?{urlencode(auth_params)}"
+
+    return HttpResponseRedirect(auth_url)
+
+
+@api_view(["POST", "GET"])
+def microsoft_callback(request):
+    try:
+        authorization_code = request.GET.get("code")
+
+        token_url = f"https://login.microsoftonline.com/common/oauth2/v2.0/token"
+        token_data = {
+            "client_id": env("MICROSOFT_CLIENT_ID"),
+            "scope": "User.Read",
+            "code": authorization_code,
+            "redirect_uri": env("MICROSOFT_REDIRECT_URI"),
+            "grant_type": "authorization_code",
+            "client_secret": env("MICROSOFT_CLIENT_SECRET"),
+        }
+
+        response = requests.post(token_url, data=token_data)
+
+        token_json = response.json()
+
+        if "access_token" in token_json and "refresh_token" in token_json:
+            access_token = token_json["access_token"]
+            refresh_token = token_json["refresh_token"]
+            expires_in = token_json["expires_in"]
+            auth_code = authorization_code
+            user_email_url = "https://graph.microsoft.com/v1.0/me"
+            headers = {"Authorization": f"Bearer {access_token}"}
+
+            user_email_response = requests.get(user_email_url, headers=headers)
+
+            if user_email_response.status_code == 200:
+                user_info_data = user_email_response.json()
+                user_email = user_info_data.get("mail", "")
+                user = User.objects.get(username=user_email)
+                user_profile = Profile.objects.get(user=user)
+                user_token, created = UserToken.objects.get_or_create(
+                    user_profile=user_profile
+                )
+                user_token.access_token = access_token
+                user_token.refresh_token = refresh_token
+                user_token.access_token_expiry = expires_in
+                user_token.authorization_code = auth_code
+                user_token.account_type = "microsoft"
+                user_token.save()
+            return HttpResponseRedirect(env("APP_URL"))
+        else:
+            error_json = response.json()
+            return JsonResponse(error_json, status=response.status_code)
+
+    except Exception as e:
+        # Handle exceptions here, you can log the exception for debugging
+        print(f"An exception occurred: {str(e)}")
+        # You might want to return an error response or redirect to an error page.
+        return JsonResponse({"error": "An error occurred"}, status=500)
+
+
+class UserTokenAvaliableCheck(APIView):
+    def get(self, request, user_mail, format=None):
+        user_token_present = False
+        try:
+            user_token = UserToken.objects.get(user_profile__user__username=user_mail)
+            if user_token:
+                user_token_present = True
+        except Exception as e:
+            pass
+        return Response({"user_token_present": user_token_present})

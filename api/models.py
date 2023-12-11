@@ -70,15 +70,31 @@ def password_reset_token_created(
             [],  # no bcc
         )
     else:
-        name = "User"
-        link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
-        send_mail_templates(
-            "hr_emails/forgot_password.html",
-            [reset_password_token.user.email],
-            "Meeraq Platform | Password Reset",
-            {"name": name, "resetPassword": link},
-            [],  # no bcc
-        )
+        learner_roles = user.profile.roles.all().filter(name="learner")
+        hr_roles = user.profile.roles.all().filter(name="hr")
+        if learner_roles.exists():
+            engagements = Engagement.objects.filter(
+                learner=user.profile.learner,
+                project__enable_emails_to_hr_and_coachee=False,
+            )
+            if engagements.exists():
+                return None
+        elif hr_roles.exists():
+            projects = Project.objects.filter(
+                hr=user.profile.hr, enable_emails_to_hr_and_coachee=False
+            )
+            if projects.exists():
+                return None
+        else:
+            name = "User"
+            link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
+            send_mail_templates(
+                "hr_emails/forgot_password.html",
+                [reset_password_token.user.email],
+                "Meeraq Platform | Password Reset",
+                {"name": name, "resetPassword": link},
+                [],  # no bcc
+            )
 
 
 class Role(models.Model):
@@ -267,6 +283,7 @@ class Project(models.Model):
         max_length=20, choices=STATUS_CHOICES, blank=True, null=True
     )
     coach_consent_mandatory = models.BooleanField(default=True)
+    enable_emails_to_hr_and_coachee = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -577,6 +594,7 @@ class PastSessionActivity(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.SET_NULL, null=True)
     coachee = models.ForeignKey(Learner, on_delete=models.CASCADE)
     timestamp = models.DateTimeField()
+    session_name = models.CharField(max_length=225, blank=True, null=True)
 
     def __str__(self):
         return f"{self.user_who_added} added past session."
@@ -625,5 +643,82 @@ class CoachContract(models.Model):
     response_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True)
 
+    send_date = models.DateField(auto_now_add=True, blank=True)
+    response_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
+
     def __str__(self):
         return f"{self.coach.first_name}'s Contract for {self.project.name}"
+
+
+class UserToken(models.Model):
+    ACCOUNT_TYPE_CHOICES = [
+        ("google", "Google"),
+        ("microsoft", "Microsoft"),
+    ]
+
+    user_profile = models.OneToOneField(Profile, on_delete=models.CASCADE)
+    access_token = models.TextField(blank=True)
+    refresh_token = models.TextField(blank=True)
+    access_token_expiry = models.TextField(blank=True)
+    authorization_code = models.TextField(blank=True)
+    account_type = models.CharField(
+        max_length=50, choices=ACCOUNT_TYPE_CHOICES, blank=True
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.user_profile.user.username
+
+
+class CalendarEvent(models.Model):
+    ACCOUNT_TYPE_CHOICES = [
+        ("google", "Google"),
+        ("microsoft", "Microsoft"),
+    ]
+
+    event_id = models.TextField(blank=True, null=True)
+    title = models.CharField(max_length=255, blank=True, null=True)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    start_datetime = models.CharField(max_length=255, blank=True, null=True)
+    end_datetime = models.CharField(max_length=255, blank=True, null=True)
+    attendee = models.CharField(max_length=255, blank=True, null=True)
+    creator = models.CharField(max_length=255, blank=True, null=True)
+    session = models.ForeignKey(
+        SessionRequestCaas, on_delete=models.CASCADE, blank=True, null=True
+    )
+    account_type = models.CharField(
+        max_length=50, choices=ACCOUNT_TYPE_CHOICES, blank=True
+    )
+
+
+class ShareCoachProfileActivity(models.Model):
+    user_who_shared = models.ForeignKey(User, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    coaches = models.ManyToManyField(Coach, blank=True)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user_who_shared.username} shared coach profiles."
+
+
+class CreateProjectActivity(models.Model):
+    user_who_created = models.ForeignKey(User, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user_who_created.username} created project."
+
+
+class FinalizeCoachActivity(models.Model):
+    user_who_finalized = models.ForeignKey(User, on_delete=models.CASCADE, blank=True)
+    coach_who_got_finalized = models.ForeignKey(
+        Coach, on_delete=models.CASCADE, blank=True
+    )
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
+    timestamp = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.user_who_finalized.username} finalized the coach."
