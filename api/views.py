@@ -1089,6 +1089,9 @@ def create_project_cass(request):
             project_description=desc,
             # updated_to_sold= request.data['updated_to_sold'],
             location=json.loads(request.data["location"]),
+            enable_emails_to_hr_and_coachee=request.data.get(
+                "enable_emails_to_hr_and_coachee", True
+            ),
             steps=dict(
                 project_structure={"status": "pending"},
                 coach_list={"status": "pending"},
@@ -1105,7 +1108,6 @@ def create_project_cass(request):
             status="presales",
         )
 
-        
         project.save()
         try:
             userId = request.data.get("user_id")
@@ -1114,18 +1116,17 @@ def create_project_cass(request):
             timestamp = timezone.now()
 
             createProject = CreateProjectActivity.objects.create(
-                user_who_created = user_who_created,
-                project = project,
-                timestamp = timestamp
+                user_who_created=user_who_created, project=project, timestamp=timestamp
             )
 
             createProject.save()
         except Exception as e:
             pass
 
-    except IntegrityError:
+    except IntegrityError as e:
         return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
+        print(str(e))
         return Response({"error": "Failed to create project."}, status=400)
     hr_emails = []
     project_name = project.name
@@ -2182,12 +2183,16 @@ def add_coach(request):
             coach_add.save()
 
             full_name = coach_user.first_name + " " + coach_user.last_name
-            microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach_user.email}/'
-            user_token_present=False
+            microsoft_auth_url = (
+                f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach_user.email}/'
+            )
+            user_token_present = False
             try:
-                user_token = UserToken.objects.get(user_profile__user__username=coach_user.email)
+                user_token = UserToken.objects.get(
+                    user_profile__user__username=coach_user.email
+                )
                 if user_token:
-                    user_token_present=True
+                    user_token_present = True
             except Exception as e:
                 pass
             send_mail_templates(
@@ -2198,7 +2203,7 @@ def add_coach(request):
                     "name": coach_user.first_name,
                     "email": coach_user.email,
                     "microsoft_auth_url": microsoft_auth_url,
-                    "user_token_present":user_token_present,
+                    "user_token_present": user_token_present,
                 },
                 [],  # no bcc emails
             )
@@ -2443,6 +2448,24 @@ def get_user_data(user):
 def generate_otp(request):
     try:
         user = User.objects.get(username=request.data["email"])
+        # for hr and coachee not allowing login when they are added in caas project where hr and coachee's platform is not provided/needed
+        if user.profile.type == "hr":
+            projects = Project.objects.filter(
+                hr=user.profile.hr, enable_emails_to_hr_and_coachee=False
+            )
+            if projects.exists():
+                return Response(
+                    {"error": "User with the given email does not exist."}, status=400
+                )
+        elif user.profile.type == "learner":
+            engagements = Engagement.objects.filter(
+                learner=user.profile.learner,
+                project__enable_emails_to_hr_and_coachee=False,
+            )
+            if engagements.exists():
+                return Response(
+                    {"error": "User with the given email does not exist."}, status=400
+                )
         try:
             # Check if OTP already exists for the user
             otp_obj = OTP.objects.get(user=user)
@@ -2461,12 +2484,16 @@ def generate_otp(request):
             f"Dear {name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}"
         )
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.username])
-        microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{request.data["email"]}/'
-        user_token_present=False
+        microsoft_auth_url = (
+            f'{env("BACKEND_URL")}/api/microsoft/oauth/{request.data["email"]}/'
+        )
+        user_token_present = False
         try:
-            user_token = UserToken.objects.get(user_profile__user__username=request.data["email"])
+            user_token = UserToken.objects.get(
+                user_profile__user__username=request.data["email"]
+            )
             if user_token:
-                user_token_present=True
+                user_token_present = True
         except Exception as e:
             pass
         send_mail_templates(
@@ -2478,7 +2505,7 @@ def generate_otp(request):
                 "otp": created_otp.otp,
                 "email": request.data["email"],
                 "microsoft_auth_url": microsoft_auth_url,
-                "user_token_present":user_token_present,
+                "user_token_present": user_token_present,
             },
             [],  # no bcc
         )
@@ -2888,15 +2915,19 @@ def send_consent(request):
         for status in coach_status:
             if project.coach_consent_mandatory:
                 create_notification(status.coach.user.user, path, message)
-            microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach.email}/'
-            user_token_present=False
+            microsoft_auth_url = (
+                f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach.email}/'
+            )
+            user_token_present = False
             try:
-                user_token = UserToken.objects.get(user_profile__user__username=coach.email)
+                user_token = UserToken.objects.get(
+                    user_profile__user__username=coach.email
+                )
                 if user_token:
-                    user_token_present=True
+                    user_token_present = True
             except Exception as e:
                 pass
-            
+
             send_mail_templates(
                 "coach_templates/pmo_ask_for_consent.html",
                 [status.coach.email],
@@ -2905,7 +2936,7 @@ def send_consent(request):
                     "name": status.coach.first_name,
                     "email": coach.email,
                     "microsoft_auth_url": microsoft_auth_url,
-                    "user_token_present":user_token_present,
+                    "user_token_present": user_token_present,
                 },
                 [],  # no bcc
             )
@@ -3306,30 +3337,37 @@ def book_session_caas(request):
             message += slot_message
             create_notification(pmo_user, path, message)
             if coachee:
-                microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
-                user_token_present=False
+                microsoft_auth_url = (
+                    f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
+                )
+                user_token_present = False
                 try:
-                    user_token = UserToken.objects.get(user_profile__user__username=coachee.email)
+                    user_token = UserToken.objects.get(
+                        user_profile__user__username=coachee.email
+                    )
                     if user_token:
-                        user_token_present=True
+                        user_token_present = True
                 except Exception as e:
                     pass
-                send_mail_templates(
-                    "coachee_emails/session_booked.html",
-                    [coachee.email],
-                    "Meeraq Coaching | Session Booked",
-                    {
-                        "projectName": session_request.project.name,
-                        "name": coachee.name,
-                        "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
-                        "slot_date": session_date,
-                        "slot_time": session_time,
-                        "email": coachee.email,
-                        "microsoft_auth_url": microsoft_auth_url,
-                        "user_token_present":user_token_present,
-                    },
-                    [],  # no bcc
-                )
+                if session_request.project.enable_emails_to_hr_and_coachee:
+                    send_mail_templates(
+                        "coachee_emails/session_booked.html",
+                        [coachee.email],
+                        "Meeraq Coaching | Session Booked",
+                        {
+                            "projectName": session_request.project.name,
+                            "name": coachee.name,
+                            "sessionName": SESSION_TYPE_VALUE[
+                                session_request.session_type
+                            ],
+                            "slot_date": session_date,
+                            "slot_time": session_time,
+                            "email": coachee.email,
+                            "microsoft_auth_url": microsoft_auth_url,
+                            "user_token_present": user_token_present,
+                        },
+                        [],  # no bcc
+                    )
                 # add microsoft auth url before uncommenting
 
                 # send_mail_templates(
@@ -3396,51 +3434,47 @@ def book_session_caas(request):
                             session_request,
                         )
 
-                except ObjectDoesNotExist:
-                    print("Coach Does not exist")
-
-                try:
-                    coachee_user_token = UserToken.objects.get(
-                        user_profile__user__username=coachee.email
-                    )
-
-                    coachee_access_token = coachee_user_token.access_token
-                    if coachee_user_token.account_type == "google":
-                        coachee_access_token = refresh_google_access_token(
-                            coachee_user_token
+                except Exception as e:
+                    print(f"Coach calendar error {str(e)}")
+                if session_request.project.enable_emails_to_hr_and_coachee:
+                    try:
+                        coachee_user_token = UserToken.objects.get(
+                            user_profile__user__username=coachee.email
                         )
-
-                        if google_calendar_event:
-                            delete_google_calendar_event(
-                                coachee_access_token, google_calendar_event.event_id
+                        coachee_access_token = coachee_user_token.access_token
+                        if coachee_user_token.account_type == "google":
+                            coachee_access_token = refresh_google_access_token(
+                                coachee_user_token
                             )
-                            google_calendar_event.delete()
-
-                        create_google_calendar_event(
-                            coachee_access_token,
-                            event_detail,
-                            coach.email,
-                            session_request,
-                        )
-                    else:
-                        coachee_access_token = refresh_microsoft_access_token(
-                            coachee_user_token
-                        )
-
-                        if microsoft_calendar_event:
-                            delete_microsoft_calendar_event(
-                                coachee_access_token, microsoft_calendar_event.event_id
+                            if google_calendar_event:
+                                delete_google_calendar_event(
+                                    coachee_access_token, google_calendar_event.event_id
+                                )
+                                google_calendar_event.delete()
+                            create_google_calendar_event(
+                                coachee_access_token,
+                                event_detail,
+                                coach.email,
+                                session_request,
                             )
-                            microsoft_calendar_event.delete()
-
-                        create_microsoft_calendar_event(
-                            coachee_access_token,
-                            event_detail,
-                            {"address": coach.email, "name": coach_name},
-                            session_request,
-                        )
-                except ObjectDoesNotExist:
-                    print("Coachee Does not exist")
+                        else:
+                            coachee_access_token = refresh_microsoft_access_token(
+                                coachee_user_token
+                            )
+                            if microsoft_calendar_event:
+                                delete_microsoft_calendar_event(
+                                    coachee_access_token,
+                                    microsoft_calendar_event.event_id,
+                                )
+                                microsoft_calendar_event.delete()
+                            create_microsoft_calendar_event(
+                                coachee_access_token,
+                                event_detail,
+                                {"address": coach.email, "name": coach_name},
+                                session_request,
+                            )
+                    except Exception as e:
+                        print(f"Coachee calendar error {str(e)}")
 
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -3603,10 +3637,10 @@ def accept_coach_caas_hr(request):
         timestamp = timezone.now()
 
         finalizeCoach = FinalizeCoachActivity.objects.create(
-            user_who_finalized = user_who_finalized,
-            coach_who_got_finalized = coach_who_got_finalized,
-            project = project,
-            timestamp = timestamp
+            user_who_finalized=user_who_finalized,
+            coach_who_got_finalized=coach_who_got_finalized,
+            project=project,
+            timestamp=timestamp,
         )
 
         finalizeCoach.save()
@@ -3661,12 +3695,16 @@ def accept_coach_caas_hr(request):
                     },
                     [],  # no bcc
                 )
-                microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach.email}/'
-                user_token_present=False
+                microsoft_auth_url = (
+                    f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach.email}/'
+                )
+                user_token_present = False
                 try:
-                    user_token = UserToken.objects.get(user_profile__user__username=coach.email)
+                    user_token = UserToken.objects.get(
+                        user_profile__user__username=coach.email
+                    )
                     if user_token:
-                        user_token_present=True
+                        user_token_present = True
                 except Exception as e:
                     pass
                 send_mail_templates(
@@ -3678,7 +3716,7 @@ def accept_coach_caas_hr(request):
                         "orgName": project.organisation.name,
                         "email": coach.email,
                         "microsoft_auth_url": microsoft_auth_url,
-                        "user_token_present":user_token_present,
+                        "user_token_present": user_token_present,
                     },
                     [env("BCC_EMAIL")],
                 )
@@ -3710,37 +3748,39 @@ def add_learner_to_project(request):
         learners = create_learners(request.data["learners"])
         for learner in learners:
             create_engagement(learner, project)
-            # project.learner.add(learner)
-
-            try:
-                path = f"/projects/caas/progress/{project.id}"
-                message = f"You have been added to Project - {project.name}"
-                create_notification(learner.user.user, path, message)
-                coacheeCounts = coacheeCounts + 1
-                microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{learner.email}/'
-                user_token_present=False
+            if project.enable_emails_to_hr_and_coachee:
                 try:
-                    user_token = UserToken.objects.get(user_profile__user__username=learner.email)
-                    if user_token:
-                        user_token_present=True
+                    path = f"/projects/caas/progress/{project.id}"
+                    message = f"You have been added to Project - {project.name}"
+                    create_notification(learner.user.user, path, message)
+                    coacheeCounts = coacheeCounts + 1
+                    microsoft_auth_url = (
+                        f'{env("BACKEND_URL")}/api/microsoft/oauth/{learner.email}/'
+                    )
+                    user_token_present = False
+                    try:
+                        user_token = UserToken.objects.get(
+                            user_profile__user__username=learner.email
+                        )
+                        if user_token:
+                            user_token_present = True
+                    except Exception as e:
+                        pass
+                    send_mail_templates(
+                        "coachee_emails/add_coachee.html",
+                        [learner.email],
+                        "Meeraq Coaching | Welcome to Meeraq",
+                        {
+                            "name": learner.name,
+                            "orgname": project.organisation.name,
+                            "email": learner.email,
+                            "microsoft_auth_url": microsoft_auth_url,
+                            "user_token_present": user_token_present,
+                        },
+                        [],
+                    )
                 except Exception as e:
-                    pass
-                send_mail_templates(
-                    "coachee_emails/add_coachee.html",
-                    [learner.email],
-                    "Meeraq Coaching | Welcome to Meeraq",
-                    {
-                        "name": learner.name,
-                        "orgname": project.organisation.name,
-                        "email": learner.email,
-                        "microsoft_auth_url": microsoft_auth_url,
-                        "user_token_present":user_token_present,
-                    },
-                    [],
-                )
-
-            except Exception as e:
-                print(f"Error occurred while creating notification: {str(e)}")
+                    print(f"Error occurred while creating notification: {str(e)}")
                 continue
     except Exception as e:
         # Handle any exceptions from create_learners
@@ -4087,65 +4127,60 @@ def send_list_to_hr(request):
 
     for coach_id in request.data["coach_list"]:
         coach_status = project.coaches_status.get(coach__id=coach_id)
-        print(coach_status.status)
         coach_status.status["hr"]["status"] = "sent"
         coaches.append(Coach.objects.get(id=coach_id))
         coach_status.save()
 
-        
     project.save()
     try:
         user_who_shared = User.objects.get(id=request.data.get("user_id", ""))
         project_name = project
         coaches = coaches
         timestamp = timezone.now()
-        
-
         shareCoachProfile = ShareCoachProfileActivity.objects.create(
-            user_who_shared = user_who_shared,
-            project = project_name,
-            
-            timestamp = timestamp
+            user_who_shared=user_who_shared, project=project_name, timestamp=timestamp
         )
 
         shareCoachProfile.coaches.set(coaches)
         shareCoachProfile.save()
     except Exception as e:
         pass
-    try:
-        path = f"/projects/caas/progress/{project.id}"
-        message = f"Admin has shared {len(request.data['coach_list'])} coach profile with you for the Project - {project.name}."
-        hr_users = project.hr.all()
-        for hr_user in hr_users:
-            hr_email = hr_user.email
-            hr_name = hr_user.first_name
-            microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{hr_email}/'
-            user_token_present=False
-            try:
-                user_token = UserToken.objects.get(user_profile__user__username=hr_email)
-                if user_token:
-                    user_token_present=True
-            except Exception as e:
-                pass
-            send_mail_templates(
-                "hr_emails/pmo_share_coach_list.html",
-                [hr_email],
-                "Welcome to the Meeraq Platform",
-                {
-                    "name": hr_name,
-                    "email": hr_email,
-                    "microsoft_auth_url": microsoft_auth_url,
-                    "user_token_present":user_token_present,
-                },
-                json.loads(env("BCC_EMAIL_SALES_TEAM")),  # bcc
-            )
-
-
-
-        for hr_user in project.hr.all():
-            create_notification(hr_user.user.user, path, message)
-    except Exception as e:
-        print(f"Error occurred while creating notification: {str(e)}")
+    if project.enable_emails_to_hr_and_coachee:
+        try:
+            path = f"/projects/caas/progress/{project.id}"
+            message = f"Admin has shared {len(request.data['coach_list'])} coach profile with you for the Project - {project.name}."
+            hr_users = project.hr.all()
+            for hr_user in hr_users:
+                hr_email = hr_user.email
+                hr_name = hr_user.first_name
+                microsoft_auth_url = (
+                    f'{env("BACKEND_URL")}/api/microsoft/oauth/{hr_email}/'
+                )
+                user_token_present = False
+                try:
+                    user_token = UserToken.objects.get(
+                        user_profile__user__username=hr_email
+                    )
+                    if user_token:
+                        user_token_present = True
+                except Exception as e:
+                    pass
+                send_mail_templates(
+                    "hr_emails/pmo_share_coach_list.html",
+                    [hr_email],
+                    "Welcome to the Meeraq Platform",
+                    {
+                        "name": hr_name,
+                        "email": hr_email,
+                        "microsoft_auth_url": microsoft_auth_url,
+                        "user_token_present": user_token_present,
+                    },
+                    json.loads(env("BCC_EMAIL_SALES_TEAM")),  # bcc
+                )
+            for hr_user in project.hr.all():
+                create_notification(hr_user.user.user, path, message)
+        except Exception as e:
+            print(f"Error occurred while creating notification: {str(e)}")
     return Response({"message": "Sent Successfully", "details": {}}, status=200)
 
 
@@ -5591,30 +5626,6 @@ def schedule_session_directly(request, session_id):
     if request.data["user_type"] == "coach":
         coach = Coach.objects.get(id=request.data["user_id"])
     if coachee:
-        microsoft_auth_url = f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
-        user_token_present=False
-        try:
-            user_token = UserToken.objects.get(user_profile__user__username=coachee.email)
-            if user_token:
-                user_token_present=True
-        except Exception as e:
-            pass
-        send_mail_templates(
-            "coachee_emails/session_booked.html",
-            [coachee.email],
-            "Meeraq Coaching | Session Booked",
-            {
-                "projectName": session.project.name,
-                "name": coachee.name,
-                "sessionName": SESSION_TYPE_VALUE[session.session_type],
-                "slot_date": session_date,
-                "slot_time": session_time,
-                "email": coachee.email,
-                "microsoft_auth_url": microsoft_auth_url,
-                "user_token_present":user_token_present,
-            },
-            [],  # no bcc
-        )
         event_detail = {
             "title": f"{SESSION_TYPE_VALUE[session.session_type]} Session",
             "description": "Session Scheduled",
@@ -5623,67 +5634,98 @@ def schedule_session_directly(request, session_id):
             "endDate": session_date,
             "endTime": end_time,
         }
+        if session.project.enable_emails_to_hr_and_coachee:
+            microsoft_auth_url = (
+                f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
+            )
+            user_token_present = False
+            try:
+                user_token = UserToken.objects.get(
+                    user_profile__user__username=coachee.email
+                )
+                if user_token:
+                    user_token_present = True
+            except Exception as e:
+                pass
 
-        try:
-            coachee_user_token = UserToken.objects.get(
-                user_profile__user__username=coachee.email
+            send_mail_templates(
+                "coachee_emails/session_booked.html",
+                [coachee.email],
+                "Meeraq Coaching | Session Booked",
+                {
+                    "projectName": session.project.name,
+                    "name": coachee.name,
+                    "sessionName": SESSION_TYPE_VALUE[session.session_type],
+                    "slot_date": session_date,
+                    "slot_time": session_time,
+                    "email": coachee.email,
+                    "microsoft_auth_url": microsoft_auth_url,
+                    "user_token_present": user_token_present,
+                },
+                [],  # no bcc
             )
 
-            coachee_access_token = coachee_user_token.access_token
-            if coachee_user_token.account_type == "google":
-                coachee_access_token = refresh_google_access_token(coachee_user_token)
-
-                if google_calendar_event:
-                    delete_google_calendar_event(
-                        coachee_access_token, google_calendar_event.event_id
-                    )
-                    google_calendar_event.delete()
-
-                if request.data["user_type"] == "coach":
-                    create_google_calendar_event(
-                        coachee_access_token,
-                        event_detail,
-                        coach.email,
-                        session,
-                    )
-                else:
-                    create_google_calendar_event(
-                        coachee_access_token,
-                        event_detail,
-                        "No Data",
-                        session,
-                    )
-            else:
-                coachee_access_token = refresh_microsoft_access_token(
-                    coachee_user_token
+            try:
+                coachee_user_token = UserToken.objects.get(
+                    user_profile__user__username=coachee.email
                 )
 
-                if microsoft_calendar_event:
-                    delete_microsoft_calendar_event(
-                        coachee_access_token, microsoft_calendar_event.event_id
+                coachee_access_token = coachee_user_token.access_token
+                if coachee_user_token.account_type == "google":
+                    coachee_access_token = refresh_google_access_token(
+                        coachee_user_token
                     )
-                    microsoft_calendar_event.delete()
 
-                if request.data["user_type"] == "coach":
-                    create_microsoft_calendar_event(
-                        coachee_access_token,
-                        event_detail,
-                        {
-                            "address": coach.email,
-                            "name": coach.first_name + " " + coach.last_name,
-                        },
-                        session,
-                    )
+                    if google_calendar_event:
+                        delete_google_calendar_event(
+                            coachee_access_token, google_calendar_event.event_id
+                        )
+                        google_calendar_event.delete()
+
+                    if request.data["user_type"] == "coach":
+                        create_google_calendar_event(
+                            coachee_access_token,
+                            event_detail,
+                            coach.email,
+                            session,
+                        )
+                    else:
+                        create_google_calendar_event(
+                            coachee_access_token,
+                            event_detail,
+                            "No Data",
+                            session,
+                        )
                 else:
-                    create_microsoft_calendar_event(
-                        coachee_access_token,
-                        event_detail,
-                        {"address": "No Data", "name": "No Data"},
-                        session,
+                    coachee_access_token = refresh_microsoft_access_token(
+                        coachee_user_token
                     )
 
-        except ObjectDoesNotExist:
-            print("Coachee Does not exist")
+                    if microsoft_calendar_event:
+                        delete_microsoft_calendar_event(
+                            coachee_access_token, microsoft_calendar_event.event_id
+                        )
+                        microsoft_calendar_event.delete()
+
+                    if request.data["user_type"] == "coach":
+                        create_microsoft_calendar_event(
+                            coachee_access_token,
+                            event_detail,
+                            {
+                                "address": coach.email,
+                                "name": coach.first_name + " " + coach.last_name,
+                            },
+                            session,
+                        )
+                    else:
+                        create_microsoft_calendar_event(
+                            coachee_access_token,
+                            event_detail,
+                            {"address": "No Data", "name": "No Data"},
+                            session,
+                        )
+            except Exception as e:
+                print(f"Coachee calendar error {str(e)}")
 
         if request.data["user_type"] == "coach":
             coach = Coach.objects.get(id=request.data["user_id"])
@@ -5724,8 +5766,8 @@ def schedule_session_directly(request, session_id):
                         {"address": coachee.email, "name": coachee.name},
                         session,
                     )
-            except ObjectDoesNotExist:
-                print("Coach Does not exist")
+            except Exception as e:
+                print(f"Coach calendar error {str(e)}")
 
     return Response({"message": "Session booked successfully."})
 
@@ -6006,7 +6048,7 @@ def add_past_session(request, session_id):
         coach=coach,
         coachee=coachee,
         timestamp=timestamp,
-        session_name=session.session_type
+        session_name=session.session_type,
     )
     addPastSession.save()
 
@@ -6701,6 +6743,9 @@ def edit_project_caas(request, project_id):
         project.coach_consent_mandatory = request.data.get(
             "coach_consent_mandatory", project.coach_consent_mandatory
         )
+        project.enable_emails_to_hr_and_coachee = request.data.get(
+            "enable_emails_to_hr_and_coachee", project.enable_emails_to_hr_and_coachee
+        )
         project.hr.clear()
         for hr in request.data["hr"]:
             single_hr = HR.objects.get(id=hr)
@@ -6875,7 +6920,6 @@ class ActivitySummary(APIView):
             print("share_coach_profile_activities", str(e))
             share_coach_profile_serializer = []
 
-        
         try:
             create_project_activities = CreateProjectActivity.objects.all()
             total_create_project_count = create_project_activities.count()
@@ -6886,7 +6930,6 @@ class ActivitySummary(APIView):
             print("share_coach_profile_activities", str(e))
             create_project_serializer = []
 
-        
         try:
             finalize_coach_activities = FinalizeCoachActivity.objects.all()
             total_finalized_coach_activity_count = finalize_coach_activities.count()
@@ -7640,14 +7683,13 @@ def microsoft_callback(request):
         return JsonResponse({"error": "An error occurred"}, status=500)
 
 
-
 class UserTokenAvaliableCheck(APIView):
     def get(self, request, user_mail, format=None):
-        user_token_present=False
+        user_token_present = False
         try:
             user_token = UserToken.objects.get(user_profile__user__username=user_mail)
             if user_token:
-                user_token_present=True
+                user_token_present = True
         except Exception as e:
             pass
-        return Response({'user_token_present': user_token_present})
+        return Response({"user_token_present": user_token_present})
