@@ -7697,17 +7697,41 @@ class UserTokenAvaliableCheck(APIView):
 class DownloadCoachContract(APIView):
     def get(self, request, coach_contract_id, format=None):
         try:
+           
             coach_contract = CoachContract.objects.get(id=coach_contract_id)
+            coach_contract.project_contract.project.project_structure
+            data = coach_contract.project_contract.project.project_structure
+            for item in data:
+                if "session_type" in item and item["session_type"] in SESSION_TYPE_VALUE:
+                    item["session_type"] = SESSION_TYPE_VALUE[item["session_type"]]
 
+            total_sessions = sum(session['no_of_sessions'] for session in data)
+            total_duration = sum(int(session['session_duration']) for session in data)
+            total_coach_fees = sum(int(session['coach_price']) for session in data)
+
+            html_content = render_to_string(
+                "contract/contract_template.html",
+                {
+                    "name": coach_contract.coach.first_name
+                    + " " +  coach_contract.coach.last_name,
+                    "data": data,
+                    "content":coach_contract.project_contract.content,
+                    "name_inputed":coach_contract.name_inputed.capitalize(),
+                    "signed_date":coach_contract.response_date.strftime('%d-%m-%Y'),
+                    "total_sessions": total_sessions,
+                    "total_duration": total_duration,
+                    "total_coach_fees": total_coach_fees,
+                },
+            )
             pdf = pdfkit.from_string(
-                coach_contract.project_contract.content,
+                html_content,
                 False,
                 configuration=pdfkit_config,
             )
             response = HttpResponse(pdf, content_type="application/pdf")
             response[
                 "Content-Disposition"
-            ] = f'attachment; filename={f"{coach_contract.coach.first_name + coach_contract.coach.last_name} Contract.pdf"}'
+            ] = f'attachment; filename={f"Contract.pdf"}'
             return response
 
         except Exception as e:
