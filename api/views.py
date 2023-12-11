@@ -146,20 +146,20 @@ from django_rest_passwordreset.tokens import get_token_generator
 
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
-
+import pdfkit
 import os
 
 # Create your views here.
 from collections import defaultdict
 import pandas as pd
-
+from django.http import HttpResponse
 import environ
 
 env = environ.Env()
 
+wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
-class EmailSendingError(Exception):
-    pass
+pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
 
 def create_send_email(user_email, file_name):
@@ -176,24 +176,23 @@ def create_send_email(user_email, file_name):
 
 
 def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
-    email_message = render_to_string(file_name, content)
-
-    email = EmailMessage(
-        f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
-        email_message,
-        settings.DEFAULT_FROM_EMAIL,
-        user_email,
-        bcc_emails,
-    )
-    email.content_subtype = "html"
-
     try:
+        email_message = render_to_string(file_name, content)
+
+        email = EmailMessage(
+            f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
+            email_message,
+            settings.DEFAULT_FROM_EMAIL,
+            user_email,
+            bcc_emails,
+        )
+        email.content_subtype = "html"
+
         email.send(fail_silently=False)
         for email in user_email:
             create_send_email(email, file_name)
-    except BadHeaderError as e:
+    except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
 
 def convert_to_24hr_format(time_str):
@@ -7693,3 +7692,27 @@ class UserTokenAvaliableCheck(APIView):
         except Exception as e:
             pass
         return Response({"user_token_present": user_token_present})
+
+
+class DownloadCoachContract(APIView):
+    def get(self, request, coach_contract_id, format=None):
+        try:
+            coach_contract = CoachContract.objects.get(id=coach_contract_id)
+
+            pdf = pdfkit.from_string(
+                coach_contract.project_contract.content,
+                False,
+                configuration=pdfkit_config,
+            )
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response[
+                "Content-Disposition"
+            ] = f'attachment; filename={f"{coach_contract.coach.first_name + coach_contract.coach.last_name} Contract.pdf"}'
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to downlaod Contract."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

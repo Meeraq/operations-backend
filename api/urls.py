@@ -22,6 +22,7 @@ from .views import (
     SendContractReminder,
     CoachWithApprovedContractsInProject,
     UserTokenAvaliableCheck,
+    DownloadCoachContract,
 )
 
 urlpatterns = [
@@ -324,6 +325,10 @@ urlpatterns = [
     path(
         "user-token-avaliable-check/<str:user_mail>/",
         UserTokenAvaliableCheck.as_view(),
+    ),
+    path(
+        "download-coach-contract/<int:coach_contract_id>/",
+        DownloadCoachContract.as_view(),
     ),
 
 

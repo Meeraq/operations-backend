@@ -55,10 +55,6 @@ def get_line_items_details(invoices):
     return res
 
 
-class EmailSendingError(Exception):
-    pass
-
-
 def generate_access_token_from_refresh_token(refresh_token):
     token_url = env("ZOHO_TOKEN_URL")
     client_id = env("ZOHO_CLIENT_ID")
@@ -104,9 +100,9 @@ def get_access_token(refresh_token):
 
 
 def send_mail_templates(file_name, user_email, email_subject, content):
-    email_message = render_to_string(file_name, content)
-
     try:
+        email_message = render_to_string(file_name, content)
+
         # Attempt to send the email
         send_mail_result = send_mail(
             f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
@@ -123,14 +119,14 @@ def send_mail_templates(file_name, user_email, email_subject, content):
             )
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
 
 def send_mail_templates_with_attachment(
     file_name, user_email, email_subject, content, body_message
 ):
-    image_url = f"{content['invoice']['signature']}"
     try:
+        image_url = f"{content['invoice']['signature']}"
+
         # Attempt to send the email
         image_response = requests.get(image_url)
         image_response.raise_for_status()
@@ -309,9 +305,7 @@ def validate_otp(request):
         .first()
     )
     data = request.data
-    platform = data.get("platform","unknown")
-    
-
+    platform = data.get("platform", "unknown")
 
     if otp_obj is None:
         raise AuthenticationFailed("Invalid OTP")
@@ -327,7 +321,9 @@ def validate_otp(request):
         organization = get_organization_data()
         zoho_vendor = get_vendor(user_data["vendor_id"])
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=platform)
+        UserLoginActivity.objects.create(
+            user=user, timestamp=login_timestamp, platform=platform
+        )
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -370,14 +366,12 @@ def login_view(request):
     data = request.data
     username = data.get("username")
     password = data.get("password")
-    platform = data.get("platform","unknown")
+    platform = data.get("platform", "unknown")
     if username is None or password is None:
         raise ValidationError({"detail": "Please provide username and password."})
     user = authenticate(request, username=username, password=password)
     if user is None:
         raise AuthenticationFailed({"detail": "Invalid credentials."})
-    
-    
 
     last_login = user.last_login
     login(request, user)
@@ -386,7 +380,9 @@ def login_view(request):
         organization = get_organization_data()
         zoho_vendor = get_vendor(user_data["vendor_id"])
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=platform)
+        UserLoginActivity.objects.create(
+            user=user, timestamp=login_timestamp, platform=platform
+        )
         return Response(
             {
                 "detail": "Successfully logged in.",

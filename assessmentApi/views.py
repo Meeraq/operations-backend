@@ -76,8 +76,6 @@ wkhtmltopdf_path = os.environ.get(
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
 
-class EmailSendingError(Exception):
-    pass
 
 
 def send_reset_password_link(users):
@@ -123,24 +121,25 @@ def create_send_email(user_email, file_name):
 
 
 def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
-    email_message = render_to_string(file_name, content)
-
-    email = EmailMessage(
-        f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
-        email_message,
-        settings.DEFAULT_FROM_EMAIL,
-        user_email,
-        bcc_emails,
-    )
-    email.content_subtype = "html"
-
     try:
+        email_message = render_to_string(file_name, content)
+
+        email = EmailMessage(
+            f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
+            email_message,
+            settings.DEFAULT_FROM_EMAIL,
+            user_email,
+            bcc_emails,
+        )
+        email.content_subtype = "html"
+
+   
         email.send(fail_silently=False)
         for email in user_email:
             create_send_email(email, file_name)
-    except BadHeaderError as e:
+    except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
+        
 
 
 # def create_notification(user, path, message):
