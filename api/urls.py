@@ -21,6 +21,7 @@ from .views import (
     ApprovedCoachContract,
     SendContractReminder,
     CoachWithApprovedContractsInProject,
+    UserTokenAvaliableCheck,
     SessionData,
 )
 
@@ -316,6 +317,14 @@ urlpatterns = [
     path(
         "coaches-with-approved-contracts-in-project/<int:project_id>/",
         CoachWithApprovedContractsInProject.as_view(),
+    ),
+    path('google/oauth/<str:user_email>/', views.google_oauth, name='google_oauth'),
+    path('google-auth-callback/', views.google_auth_callback, name='google_auth_callback'),
+    path('microsoft/oauth/<str:user_mail_address>/', views.microsoft_auth),
+    path('microsoft-auth-callback/', views.microsoft_callback),
+    path(
+        "user-token-avaliable-check/<str:user_mail>/",
+        UserTokenAvaliableCheck.as_view(),
     ),
     path('session-data/', SessionData.as_view(),),
 ]
