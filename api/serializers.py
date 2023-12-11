@@ -409,3 +409,8 @@ class FinalizeCoachActivitySerializer(serializers.ModelSerializer):
         model = FinalizeCoachActivity
         fields= "__all__"
         depth = 1
+
+class SessionDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SessionRequestCaas
+        fields = '__all__'
