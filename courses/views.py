@@ -6,7 +6,7 @@ from .models import (
     Course,
     TextLesson,
     Lesson,
-    LiveSession,
+    LiveSessionLesson,
     LaserCoachingSession,
     Question,
     QuizLesson,
@@ -44,7 +44,11 @@ from .serializers import (
 )
 from rest_framework.views import APIView
 from api.models import User, Learner, Profile
-from schedularApi.models import SchedularParticipants, SchedularBatch
+from schedularApi.models import (
+    SchedularParticipants,
+    SchedularBatch,
+    LiveSession as LiveSessionSchedular,
+)
 from rest_framework.decorators import api_view, permission_classes
 from django.db import transaction
 import random
@@ -55,6 +59,7 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 import base64
 from openpyxl import Workbook
+from django.db.models import Max
 
 
 from schedularApi.models import CoachingSession, SchedularSessions
@@ -107,6 +112,14 @@ class CourseListView(generics.ListCreateAPIView):
 class CourseTemplateListView(generics.ListCreateAPIView):
     queryset = CourseTemplate.objects.all()
     serializer_class = CourseTemplateSerializer
+
+    def get_queryset(self):
+        queryset = CourseTemplate.objects.all()
+        # Get the status from the query parameters, if provided
+        status = self.request.query_params.get("status", None)
+        if status:
+            queryset = queryset.filter(status=status)
+        return queryset
 
     def perform_create(self, serializer):
         name = serializer.validated_data.get("name", None)
@@ -302,7 +315,7 @@ class LessonDetailView(generics.RetrieveAPIView):
             text_lesson = TextLesson.objects.get(lesson=lesson)
             serializer = TextLessonSerializer(text_lesson)
         elif lesson_type == "live_session":
-            live_session = LiveSession.objects.get(lesson=lesson)
+            live_session = LiveSessionLesson.objects.get(lesson=lesson)
             serializer = LiveSessionSerializer(live_session)
         elif lesson_type == "quiz":
             quiz_lesson = QuizLesson.objects.get(lesson=lesson)
@@ -607,12 +620,12 @@ def create_lesson_with_live_session(request):
 @api_view(["GET"])
 def get_live_sessions_for_lesson(request, lesson_id, course_id):
     try:
-        live_sessions = LiveSession.objects.filter(
+        live_sessions = LiveSessionLesson.objects.filter(
             lesson__id=lesson_id, lesson__course__id=course_id
         )
         serializer = LiveSessionSerializerDepthOne(live_sessions, many=True)
         return Response(serializer.data)
-    except LiveSession.DoesNotExist:
+    except LiveSessionLesson.DoesNotExist:
         return Response(status=404)
 
 
@@ -620,8 +633,8 @@ def get_live_sessions_for_lesson(request, lesson_id, course_id):
 def update_live_session(request, course_id, lesson_id):
     try:
         lesson = Lesson.objects.get(pk=lesson_id, course__id=course_id)
-        live_session = LiveSession.objects.get(lesson=lesson)
-    except (Lesson.DoesNotExist, LiveSession.DoesNotExist):
+        live_session = LiveSessionLesson.objects.get(lesson=lesson)
+    except (Lesson.DoesNotExist, LiveSessionLesson.DoesNotExist):
         return Response(
             {"message": "Live session does not exist for this lesson"},
             status=status.HTTP_404_NOT_FOUND,
@@ -749,18 +762,16 @@ def create_assessment_and_lesson(request):
             lesson=lesson,
         )
         return Response(
-        "Assessment lesson created successfully", status=status.HTTP_201_CREATED
-    )
+            "Assessment lesson created successfully", status=status.HTTP_201_CREATED
+        )
     else:
         return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
 
 
 @api_view(["GET"])
 def get_assessment_lesson(request, lesson_id):
     try:
-        assessment = Assessment.objects.filter(
-            lesson__id=lesson_id)
+        assessment = Assessment.objects.filter(lesson__id=lesson_id)
         serializer = AssessmentSerializerDepthOne(assessment, many=True)
         return Response(serializer.data)
     except Assessment.DoesNotExist:
@@ -1676,3 +1687,155 @@ def quiz_report_download(request, quiz_id):
     wb.save(response)
 
     return response
+
+
+class AssignCourseTemplateToBatch(APIView):
+    def post(self, request, course_template_id, batch_id):
+        try:
+            with transaction.atomic():
+                course_template = get_object_or_404(
+                    CourseTemplate, pk=course_template_id
+                )
+                batch = get_object_or_404(SchedularBatch, pk=batch_id)
+                # Duplicate the course
+                new_course = Course.objects.create(
+                    name=f"Copy of - {course_template.name}",
+                    description=course_template.description,
+                    status="draft",
+                    course_template=course_template,
+                    batch=batch,
+                )
+                # Duplicate lessons
+                original_lessons = Lesson.objects.filter(
+                    course_template=course_template
+                )
+                for original_lesson in original_lessons:
+                    new_lesson = None
+                    # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
+                    if original_lesson.lesson_type not in [
+                        "live_session",
+                        "laser_coaching",
+                    ]:
+                        new_lesson = Lesson.objects.create(
+                            course=new_course,
+                            name=original_lesson.name,
+                            status="draft",
+                            lesson_type=original_lesson.lesson_type,
+                            # Duplicate specific lesson types
+                            order=original_lesson.order,
+                        )
+                        if original_lesson.lesson_type == "text":
+                            TextLesson.objects.create(
+                                lesson=new_lesson,
+                                content=original_lesson.textlesson.content,
+                            )
+                        elif original_lesson.lesson_type == "video":
+                            VideoLesson.objects.create(
+                                lesson=new_lesson,
+                                video=original_lesson.videolesson.video,
+                            )
+                        elif original_lesson.lesson_type == "assessment":
+                            Assessment.objects.create(lesson=new_lesson)
+                        elif original_lesson.lesson_type == "quiz":
+                            new_quiz_lesson = QuizLesson.objects.create(
+                                lesson=new_lesson
+                            )
+                            for question in original_lesson.quizlesson.questions.all():
+                                new_question = Question.objects.create(
+                                    text=question.text,
+                                    options=question.options,
+                                    type=question.type,
+                                )
+                                new_quiz_lesson.questions.add(new_question)
+                        elif original_lesson.lesson_type == "feedback":
+                            new_feedback_lesson = FeedbackLesson.objects.create(
+                                lesson=new_lesson
+                            )
+                            for (
+                                question
+                            ) in original_lesson.feedbacklesson.questions.all():
+                                new_question = Question.objects.create(
+                                    text=question.text,
+                                    options=question.options,
+                                    type=question.type,
+                                )
+                                new_feedback_lesson.questions.add(new_question)
+                batch_participants = batch.participants.all()
+                learners = []
+                not_enrolled_learner_emails = []
+                for participant in batch_participants:
+                    # check if same email user exists or not
+                    user = User.objects.filter(username=participant.email).first()
+                    if user:
+                        if user.profile.type == "learner":
+                            learner = Learner.objects.get(user=user.profile)
+                            learners.append(learner)
+                        else:
+                            not_enrolled_learner_emails.append(participant.email)
+                    else:
+                        learner = create_learner(
+                            participant.name, participant.email, participant.phone
+                        )
+                        if learner:
+                            learners.append(learner)
+                        else:
+                            not_enrolled_learner_emails.append(participant.email)
+                for learner in learners:
+                    course_enrollments = CourseEnrollment.objects.filter(
+                        learner=learner, course=new_course
+                    )
+                    if not course_enrollments.exists():
+                        datetime = timezone.now()
+                        CourseEnrollment.objects.create(
+                            learner=learner, course=new_course, enrollment_date=datetime
+                        )
+                live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch_id)
+                coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
+                max_order = (
+                    Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
+                        "order__max"
+                    ]
+                    or 0
+                )
+                for live_session in live_sessions:
+                    max_order = max_order + 1
+                    new_lesson = Lesson.objects.create(
+                        course=new_course,
+                        name=f"Live session {live_session.live_session_number}",
+                        status="draft",
+                        lesson_type="live_session",
+                        order=max_order,
+                    )
+                    LiveSessionLesson.objects.create(
+                        lesson=new_lesson, live_session=live_session
+                    )
+                for coaching_session in coaching_sessions:
+                    max_order = max_order + 1
+                    session_name = None
+                    if coaching_session.session_type == "laser_coaching_session":
+                        session_name = "Laser coaching"
+                    elif coaching_session.session_type == "mentoring_session":
+                        session_name = "Mentoring session"
+                    new_lesson = Lesson.objects.create(
+                        course=new_course,
+                        name=f"{session_name} {coaching_session.coaching_session_number}",
+                        status="draft",
+                        lesson_type="laser_coaching",
+                        order=max_order,
+                    )
+                    LaserCoachingSession.objects.create(
+                        lesson=new_lesson, coaching_session=coaching_session
+                    )
+            return Response(
+                {
+                    "message": "Course assigned successfully.",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to assign course template."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

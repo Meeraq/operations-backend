@@ -1,5 +1,6 @@
 from django.db import models
 from api.models import Learner
+from schedularApi.models import SchedularBatch, LiveSession, CoachingSession
 
 # Create your models here.
 
@@ -26,6 +27,7 @@ class Course(models.Model):
     description = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     course_template = models.ForeignKey(CourseTemplate, on_delete=models.CASCADE)
+    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
 
     def __str__(self):
         return self.name
@@ -83,19 +85,19 @@ class FeedbackLesson(models.Model):
     questions = models.ManyToManyField(Question)
 
 
-class LiveSession(models.Model):
+class LiveSessionLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
-    description = models.TextField()
-    meeting_link = models.URLField()
-    date = models.DateField()
-    start_time = models.DateTimeField()
-    end_time = models.DateTimeField()
+    live_session = models.ForeignKey(LiveSession, on_delete=models.CASCADE)
+    # description = models.TextField()
+    # meeting_link = models.URLField()
+    # date = models.DateField()
+    # start_time = models.DateTimeField()
+    # end_time = models.DateTimeField()
 
 
 class LaserCoachingSession(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
-    description = models.TextField()
-    booking_link = models.URLField()
+    coaching_session = models.ForeignKey(CoachingSession, on_delete=models.CASCADE)
 
 
 class Assessment(models.Model):

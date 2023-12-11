@@ -6,7 +6,7 @@ from .models import (
     TextLesson,
     Question,
     QuizLesson,
-    LiveSession,
+    LiveSessionLesson,
     LaserCoachingSession,
     FeedbackLesson,
     Assessment,
@@ -110,13 +110,13 @@ class FeedbackLessonDepthOneSerializer(serializers.ModelSerializer):
 
 class LiveSessionSerializer(serializers.ModelSerializer):
     class Meta:
-        model = LiveSession
+        model = LiveSessionLesson
         fields = "__all__"
 
 
 class LiveSessionSerializerDepthOne(serializers.ModelSerializer):
     class Meta:
-        model = LiveSession
+        model = LiveSessionLesson
         fields = "__all__"
         depth = 1
 

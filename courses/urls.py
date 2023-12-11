@@ -18,6 +18,7 @@ from .views import (
     DownlaodLessonCertificate,
     GetCertificateForCourse,
     GetLaserCoachingTime,
+    AssignCourseTemplateToBatch,
 )
 import environ
 
@@ -199,5 +200,9 @@ urlpatterns = [
     path(
         "get-laser-coaching-time/<int:laser_coaching_id>/<str:participant_email>/",
         GetLaserCoachingTime.as_view(),
+    ),
+    path(
+        "assign-course-template-to-batch/<int:course_template_id>/<int:batch_id>/",
+        AssignCourseTemplateToBatch.as_view(),
     ),
 ]
