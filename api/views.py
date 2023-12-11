@@ -114,6 +114,7 @@ from .models import (
     Template,
     CoachContract,
     ProjectContract,
+    Role,
     UserToken,
     CalendarEvent,
     ShareCoachProfileActivity,
@@ -146,6 +147,7 @@ from schedularApi.models import SchedularBatch
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
+from zohoapi.models import Vendor
 
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
@@ -596,20 +598,33 @@ def create_pmo(request):
 
     try:
         with transaction.atomic():
-            user = User.objects.create_user(
-                username=username, password=password, email=email
-            )
+            # Check if the user already exists
+            user = User.objects.filter(email=email).first()
 
-            pmo_profile = Profile.objects.create(user=user, type="pmo")
+            if not user:
+                # If the user does not exist, create a new user
+                user = User.objects.create_user(
+                    username=username, password=password, email=email
+                )
+                profile = Profile.objects.create(user=user)
 
+            else:
+                profile = Profile.objects.get(user=user)
+
+            # Create or get the "pmo" role
+            pmo_role, created = Role.objects.get_or_create(name="pmo")
+            profile.roles.add(pmo_role)
+            profile.save()
+
+            # Create the PMO User using the Profile
             pmo_user = Pmo.objects.create(
-                user=pmo_profile, name=name, email=email, phone=phone, room_id=room_id
+                user=profile, name=name, email=email, phone=phone, room_id=room_id
             )
 
             # Return success response without room_id
             return Response({"message": "PMO added successfully."}, status=201)
 
-    except IntegrityError as ie:
+    except IntegrityError as e:
         return Response({"error": "User with this email already exists."}, status=400)
 
     except Exception as e:
@@ -670,108 +685,6 @@ def create_pmo(request):
 #         return Response({"error": str(e)}, status=500)
 
 
-@api_view(["POST"])
-def coach_signup(request):
-    # Get data from request
-    first_name = request.data.get("first_name")
-    last_name = request.data.get("last_name")
-    email = request.data.get("email")
-    age = request.data.get("age")
-    gender = request.data.get("gender")
-    domain = request.data.get("domain")
-    room_id = request.data.get("room_id")
-    phone = request.data.get("phone")
-    level = request.data.get("level")
-    education = request.data.get("education")
-    rating = request.data.get("rating")
-    area_of_expertise = request.data.get("area_of_expertise")
-    years_of_coaching_experience = request.data.get("years_of_coaching_experience")
-    years_of_corporate_experience = request.data.get("years_of_corporate_experience")
-    username = request.data.get("email")  # keeping username and email same
-    password = request.data.get("password")
-
-    # print(first_name, last_name, email, age, gender, domain, room_id, phone, level, area_of_expertise, username, password)
-
-    # Check if required data is provided
-    if not all(
-        [
-            first_name,
-            last_name,
-            email,
-            age,
-            gender,
-            domain,
-            room_id,
-            phone,
-            years_of_coaching_experience,
-            years_of_corporate_experience,
-            level,
-            education,
-            username,
-            password,
-        ]
-    ):
-        return Response({"error": "All required fields must be provided."}, status=400)
-
-    try:
-        # Create the Django User
-        with transaction.atomic():
-            user = User.objects.create_user(
-                username=username, password=password, email=email
-            )
-
-            # Create the Coach Profile linked to the User
-            coach_profile = Profile.objects.create(user=user, type="coach")
-
-            # Create the Coach User using the Profile
-            coach_user = Coach.objects.create(
-                user=coach_profile,
-                first_name=first_name,
-                domain=domain,
-                age=age,
-                gender=gender,
-                last_name=last_name,
-                email=email,
-                room_id=room_id,
-                phone=phone,
-                level=level,
-                education=education,
-                rating=rating,
-                area_of_expertise=area_of_expertise,
-                years_of_corporate_experience=years_of_corporate_experience,
-                years_of_coaching_experience=years_of_coaching_experience,
-            )
-
-            # approve coach
-            coach = Coach.objects.get(id=coach_user.id)
-            # Change the is_approved field to True
-            coach.is_approved = True
-            coach.save()
-
-            # Send email notification to the coach
-            subject = "Welcome to our coaching platform"
-            message = f"Dear {name},\n\nThank you for signing up to our coaching platform. Your profile has been registered and approved by PMO. Best of luck!"
-            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
-
-            # Send email notification to the admin
-            admin_email = "jatin@meeraq.com"
-            admin_message = f"A new coach {name} has signed up on our coaching platform. Please login to the admin portal to review and approve their profile."
-            send_mail(
-                subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email]
-            )
-
-            # Return success response
-        return Response({"message": "Signed up successfully."}, status=201)
-
-    except IntegrityError:
-        return Response({"error": "A user with this email already exists."}, status=400)
-    except Exception as e:
-        # Return error response if any other exception occurs
-        return Response(
-            {"error": "An error occurred while creating the coach user."}, status=500
-        )
-
-
 @api_view(["PUT"])
 def approve_coach(request):
     try:
@@ -825,10 +738,9 @@ def update_coach_profile(request, id):
 
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
-
     user = coach.user.user
     new_email = mutable_data.get("email")
-
+    #  other user exists with the new email
     if (
         new_email
         and User.objects.filter(username=new_email).exclude(id=user.id).exists()
@@ -838,10 +750,29 @@ def update_coach_profile(request, id):
             status=400,
         )
 
-    if new_email and new_email != user.email:
+    # no other user exists with the new email
+    elif new_email and new_email != user.email:
         user.email = new_email
         user.username = new_email
         user.save()
+        # updating emails in all user's
+        for role in user.profile.roles.all():
+            if role.name == "pmo":
+                pmo = Pmo.objects.get(user=user.profile)
+                pmo.email = new_email
+                pmo.save()
+            if role.name == "hr":
+                hr = HR.objects.get(user=user.profile)
+                hr.email = new_email
+                hr.save()
+            if role.name == "learner":
+                learner = Learner.objects.get(user=user.profile)
+                learner.email = new_email
+                learner.save()
+            if role.name == "vendor":
+                vendor = Vendor.objects.get(user=user.profile)
+                vendor.email = new_email
+                vendor.save()
 
     if internal_coach and not organization_of_coach:
         return Response(
@@ -850,8 +781,6 @@ def update_coach_profile(request, id):
             },
             status=400,
         )
-    pmo_user = User.objects.filter(profile__type="pmo").first()
-    pmo = Pmo.objects.get(email=pmo_user.username)
     profile_edit_start = ProfileEditActivity.objects.create(
         user=coach.user.user,
         timestamp=timezone.now(),
@@ -871,20 +800,23 @@ def update_coach_profile(request, id):
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
-
-        # send_mail_templates(
-        #     "pmo_emails/coach_update_profile.html",
-        #     [pmo.email],
-        #     f"Meeraq Coaching | {coach.first_name} {coach.last_name} updated their profile",
-        #     {"name": pmo.name, "coachName": coach.first_name},
-        # 		[] # no bcc emails
-        # )
-
-        return Response(
-            {**depth_serializer.data, "last_login": coach.user.user.last_login},
-            status=200,
-        )
-
+        is_caas_allowed = Project.objects.filter(
+            coaches_status__coach=user.profile.coach
+        ).exists()
+        is_seeq_allowed = SchedularBatch.objects.filter(
+            coaches=user.profile.coach
+        ).exists()
+        roles = []
+        for role in roles:
+            roles.append(role.name)
+        return Response({
+            **depth_serializer.data,
+            "is_caas_allowed": is_caas_allowed,
+            "is_seeq_allowed": is_seeq_allowed,
+            "roles": roles,
+            "last_login": coach.user.user.last_login,
+            "user": {**depth_serializer.data["user"], "type": "coach"}
+            })
     return Response(serializer.errors, status=400)
 
 
@@ -1243,16 +1175,16 @@ def create_learners(learners_data):
                 user = User.objects.filter(username=learner_data["email"]).first()
                 if user:
                     # If user exists, check if learner already exists
-                    learner_profile = Profile.objects.filter(
-                        user=user, type="learner"
-                    ).first()
-                    if learner_profile:
-                        learners.append(learner_profile.learner)
+                    learner = Learner.objects.filter(user__user=user).first()
+
+                    if learner:
+                        learners.append(learner)
                         continue
+                    else:
+                        profile = Profile.objects.get(user=user)
 
                 else:
                     # If learner does not exist, create the user object with an unusable password
-
                     temp_password = "".join(
                         random.choices(
                             string.ascii_uppercase
@@ -1268,21 +1200,19 @@ def create_learners(learners_data):
                     )
                     # user.set_unusable_password()
                     user.save()
-
                     # Create the learner profile
-                    learner_profile = Profile.objects.create(user=user, type="learner")
+                    profile = Profile.objects.create(user=user)
+                learner_role, created = Role.objects.get_or_create(name="learner")
+                profile.roles.add(learner_role)
+                profile.save()
 
-                    # Create the learner object
-                    # subject = 'Welcome to Meeraq'
-                    # message = f'Dear {learner_data.get("name")},\n\nYour Account has been created with Meeraq your username is {learner_data["email"]} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
-                    # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [learner_data['email']])
-                    learner = Learner.objects.create(
-                        user=learner_profile,
-                        name=learner_data.get("name"),
-                        email=learner_data["email"],
-                        phone=learner_data.get("phone"),
-                    )
-                    learners.append(learner)
+                learner = Learner.objects.create(
+                    user=profile,
+                    name=learner_data.get("name"),
+                    email=learner_data["email"],
+                    phone=learner_data.get("phone"),
+                )
+                learners.append(learner)
 
             # Return response with learners created or already existing
             serializer = LearnerSerializer(learners, many=True)
@@ -2062,8 +1992,6 @@ def add_coach(request):
     min_fees = request.data["min_fees"]
     fee_remark = request.data.get("fee_remark", "")
     coaching_hours = request.data.get("coaching_hours")
-    # created_at = request.data('created_at')
-    # edited_at = request.data('edited_at')
     linkedin_profile_link = request.data["linkedin_profile_link"]
     companies_worked_in = json.loads(request.data["companies_worked_in"])
     other_certification = json.loads(request.data["other_certification"])
@@ -2076,7 +2004,6 @@ def add_coach(request):
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
     username = request.data.get("email")  # keeping username and email same
-    # password = request.data.get('password')
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
@@ -2087,9 +2014,6 @@ def add_coach(request):
     education_pic = request.data.get("education_pic", None)
     educational_qualification = json.loads(request.data["educational_qualification"])
     education_upload_file = request.data.get("education_upload_file", None)
-    # return Response({'error': 'A coach user with this email already exists.'}, status=400)
-
-    # print('ctt not ctt', json.loads(  request.data['ctt_nctt']),type(json.loads(request.data['ctt_nctt'])))
 
     # Check if required data is provided
     if not all(
@@ -2114,27 +2038,35 @@ def add_coach(request):
             },
             status=400,
         )
+
     try:
-        # Create the Django User
-        if coach_exists(coach_id):
-            return Response({"error": "Coach with this ID already exists."}, status=400)
-
         with transaction.atomic():
-            temp_password = "".join(
-                random.choices(
-                    string.ascii_uppercase + string.ascii_lowercase + string.digits, k=8
-                )
-            )
-            user = User.objects.create_user(
-                username=username, password=temp_password, email=email
-            )
+            # Check if the user already exists
+            user = User.objects.filter(email=email).first()
 
-            # Create the Coach Profile linked to the User
-            coach_profile = Profile.objects.create(user=user, type="coach")
+            if not user:
+                # If the user does not exist, create a new user
+                temp_password = "".join(
+                    random.choices(
+                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
+                        k=8,
+                    )
+                )
+                user = User.objects.create_user(
+                    username=username, password=temp_password, email=email
+                )
+                profile = Profile.objects.create(user=user)
+            else:
+                profile = Profile.objects.get(user=user)
+
+            coach_role, created = Role.objects.get_or_create(name="coach")
+            # Create the Profile linked to the User
+            profile.roles.add(coach_role)
+            profile.save()
 
             # Create the Coach User using the Profile
             coach_user = Coach.objects.create(
-                user=coach_profile,
+                user=profile,
                 coach_id=coach_id,
                 room_id=room_id,
                 first_name=first_name,
@@ -2175,16 +2107,11 @@ def add_coach(request):
                 education_upload_file=education_upload_file,
             )
 
-            # approve coach
-            coach = Coach.objects.get(id=coach_user.id)
-            # Change the is_approved field to True
-            coach.is_approved = True
-            coach.save()
-            coach_add = AddCoachActivity.objects.create(
-                user=user, timestamp=timezone.now()
-            )
-            coach_add.save()
+            # Approve coach
+            coach_user.is_approved = True
+            coach_user.save()
 
+            # Send email notification to the coach
             full_name = coach_user.first_name + " " + coach_user.last_name
             microsoft_auth_url = (
                 f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach_user.email}/'
@@ -2210,17 +2137,7 @@ def add_coach(request):
                 },
                 [],  # no bcc emails
             )
-            # Send email notification to the coach
-            # subject = 'Welcome to our coaching platform'
-            # message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {temp_password}\n\n Click on the link to login or reset the password http://localhost:3003/'
-            # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
 
-            # # Send email notification to the admin
-            # admin_email = 'jatin@meeraq.com'
-            # admin_message = f'Dear PMO! \n\n A new coach {full_name} has been added on our coaching platform.'
-            # send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])
-
-            # Return success response
         return Response({"message": "Coach added successfully."}, status=201)
 
     except IntegrityError as e:
@@ -2230,7 +2147,6 @@ def add_coach(request):
         )
 
     except Exception as e:
-        # Return error response if any other exception occurs
         print(e)
         return Response(
             {"error": "An error occurred while creating the coach user."}, status=500
@@ -2240,16 +2156,26 @@ def add_coach(request):
 @api_view(["POST"])
 def delete_coach(request):
     coach_id = request.data.get("coach_id", None)
-
     user_id = request.data.get("user_id")
     if coach_id:
         try:
             coach = Coach.objects.get(id=coach_id)
             coach_name = coach.first_name + " " + coach.last_name
-            user = coach.user.user
-            user.delete()
+            coach_user_profile=coach.user
+            is_delete_user = True
+            for role in coach_user_profile.roles.all():
+                if not role.name == "coach":
+                    # don't delete user if any other role exists
+                    is_delete_user = False
+                else:
+                    coach_user_profile.roles.remove(role)
+                    coach_user_profile.save()
+            if is_delete_user:
+                user = coach.user.user
+                user.delete()
+            else:
+                coach.delete()
             timestamp = timezone.now()
-            # data = request.data
             current_user = User.objects.get(id=user_id)
 
             deleteCoachProfile = DeleteCoachProfileActivity.objects.create(
@@ -2422,7 +2348,13 @@ def session_view(request):
 def get_user_data(user):
     if not user.profile:
         return None
-    elif user.profile.type == "coach":
+    elif user.profile.roles.count() == 0:
+        return None
+    user_profile_role = user.profile.roles.all().first().name
+    roles = []
+    for role in user.profile.roles.all():
+        roles.append(role.name)
+    if user_profile_role == "coach":
         serializer = CoachDepthOneSerializer(user.profile.coach)
         is_caas_allowed = Project.objects.filter(
             coaches_status__coach=user.profile.coach
@@ -2434,16 +2366,22 @@ def get_user_data(user):
             **serializer.data,
             "is_caas_allowed": is_caas_allowed,
             "is_seeq_allowed": is_seeq_allowed,
+            "roles": roles,
+            "user": {**serializer.data["user"], "type": user_profile_role},
         }
-    elif user.profile.type == "pmo":
+    elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
-    elif user.profile.type == "learner":
+    elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
-    elif user.profile.type == "hr":
+    elif user_profile_role == "hr":
         serializer = HrDepthOneSerializer(user.profile.hr)
     else:
         return None
-    return serializer.data
+    return {
+        **serializer.data,
+        "roles": roles,
+        "user": {**serializer.data["user"], "type": user_profile_role},
+    }
 
 
 @api_view(["POST"])
@@ -2451,21 +2389,23 @@ def get_user_data(user):
 def generate_otp(request):
     try:
         user = User.objects.get(username=request.data["email"])
+        learner_roles = user.profile.roles.all().filter(name="learner")
+        hr_roles = user.profile.roles.all().filter(name="hr")
         # for hr and coachee not allowing login when they are added in caas project where hr and coachee's platform is not provided/needed
-        if user.profile.type == "hr":
-            projects = Project.objects.filter(
-                hr=user.profile.hr, enable_emails_to_hr_and_coachee=False
-            )
-            if projects.exists():
-                return Response(
-                    {"error": "User with the given email does not exist."}, status=400
-                )
-        elif user.profile.type == "learner":
+        if learner_roles.exists():
             engagements = Engagement.objects.filter(
                 learner=user.profile.learner,
                 project__enable_emails_to_hr_and_coachee=False,
             )
             if engagements.exists():
+                return Response(
+                    {"error": "User with the given email does not exist."}, status=400
+                )
+        elif hr_roles.exists():
+            projects = Project.objects.filter(
+                hr=user.profile.hr, enable_emails_to_hr_and_coachee=False
+            )
+            if projects.exists():
                 return Response(
                     {"error": "User with the given email does not exist."}, status=400
                 )
@@ -2621,45 +2561,48 @@ def update_organisation(request, org_id):
 @api_view(["POST"])
 def add_hr(request):
     try:
-        # Check if user with given email already exists
-        if User.objects.filter(email=request.data.get("email")).exists():
-            raise ValueError("User with given email already exists")
-        # Create the Django User
+        email = request.data.get("email")
+        with transaction.atomic():
+            user = User.objects.filter(email=email).first()
+            if not user:
+                temp_password = "".join(
+                    random.choices(
+                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
+                        k=8,
+                    )
+                )
+                user = User.objects.create_user(
+                    username=email,
+                    password=temp_password,
+                    email=email,
+                )
+                profile = Profile.objects.create(user=user)
+            else:
+                profile = Profile.objects.get(user=user)
 
-        temp_password = "".join(
-            random.choices(
-                string.ascii_uppercase + string.ascii_lowercase + string.digits, k=8
+            hr_role, created = Role.objects.get_or_create(name="hr")
+            profile.roles.add(hr_role)
+
+            organisation = Organisation.objects.filter(
+                id=request.data.get("organisation")
+            ).first()
+
+            hr = HR.objects.create(
+                user=profile,
+                first_name=request.data.get("first_name"),
+                last_name=request.data.get("last_name"),
+                email=email,
+                phone=request.data.get("phone"),
+                organisation=organisation,
             )
-        )
-        user = User.objects.create_user(
-            username=request.data.get("email"),
-            password=temp_password,
-            email=request.data.get("email"),
-        )
-        user.save()
-        # Create the PMO Profile linked to the User
-        hr_profile = Profile.objects.create(user=user, type="hr")
-        # Get organization
-        organisation = Organisation.objects.filter(
-            id=request.data.get("organisation")
-        ).first()
-        # Create the PMO User using the Profile
-        hr = HR.objects.create(
-            user=hr_profile,
-            first_name=request.data.get("first_name"),
-            last_name=request.data.get("last_name"),
-            email=request.data.get("email"),
-            phone=request.data.get("phone"),
-            organisation=organisation,
-        )
-        # subject = 'Welcome to Meeraq'
-        # message = f'Dear {request.data.get("first_name")},\n\nYour Account has been created with Meeraq your username is {request.data.get("email")} and temporary password is {temp_password} please log into our system and change your password to avoid any inconvenience'
-        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [request.data.get('email')])
-        hrs = HR.objects.all()
-        serializer = HrSerializer(hrs, many=True)
-        return Response(
-            {"message": "HR added successfully", "details": serializer.data}, status=200
-        )
+
+            hrs = HR.objects.all()
+            serializer = HrSerializer(hrs, many=True)
+            return Response(
+                {"message": "HR added successfully", "details": serializer.data},
+                status=200,
+            )
+
     except Exception as e:
         return Response({"error": "User email already exist."}, status=400)
 
@@ -2680,20 +2623,38 @@ def update_hr(request, hr_id):
             existing_user = (
                 User.objects.filter(email=new_email).exclude(username=hr.email).first()
             )
-
             if existing_user:
                 return Response(
-                    {"error": "User with this email already exists"},
+                    {"error": "User with this email already exists."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
             # saving hr
             updated_hr = serializer.save()
-            # updating email and username of user object of HR
             user = updated_hr.user.user
-            user.email = new_email
-            user.username = new_email
-            user.save()
 
+            # if email if getting updated -> updating email in all other user present
+            if not updated_hr.email == user.email:
+                user.email = new_email
+                user.username = new_email
+                user.save()
+                for role in user.profile.roles.all():
+                    if role.name == "pmo":
+                        pmo = Pmo.objects.get(user=user.profile)
+                        pmo.email = new_email
+                        pmo.save()
+                    if role.name == "coach":
+                        coach = Coach.objects.get(user=user.profile)
+                        coach.email = new_email
+                        coach.save()
+                    if role.name == "learner":
+                        learner = Learner.objects.get(user=user.profile)
+                        learner.email = new_email
+                        learner.save()
+                    if role.name == "vendor":
+                        vendor = Vendor.objects.get(user=user.profile)
+                        vendor.email = new_email
+                        vendor.save()
             return Response(
                 {"message": "HR updated successfully", "data": serializer.data}
             )
@@ -3010,7 +2971,7 @@ def receive_coach_consent(request):
                     ]
                 coach_status.save()
                 try:
-                    pmo_user = User.objects.filter(profile__type="pmo").first()
+                    pmo_user = User.objects.filter(profile__roles__name="pmo").first()
                     pmo = Pmo.objects.get(email=pmo_user.email)
                     if request.data["status"] == "select":
                         if pmo_user:
@@ -3078,7 +3039,9 @@ def update_project_structure_consent_by_coach(request):
                 coach_status.save()
                 try:
                     if request.data["status"] == "select":
-                        pmo_user = User.objects.filter(profile__type="pmo").first()
+                        pmo_user = User.objects.filter(
+                            profile__roles__name="pmo"
+                        ).first()
                         if pmo_user:
                             path = f"/projects/caas/progress/{project.id}"
                             coach_name = (
@@ -3300,7 +3263,7 @@ def book_session_caas(request):
         message = f"Dear {session_request.learner.name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!"
         # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.learner.email])
     try:
-        pmo_user = User.objects.filter(profile__type="pmo").first()
+        pmo_user = User.objects.filter(profile__roles__name="pmo").first()
         project = session_request.project
         coach = session_request.coach
         pmo = Pmo.objects.get(email=pmo_user)
@@ -3555,7 +3518,7 @@ def create_session_request_caas(request):
         if session_serilizer.is_valid():
             session_created = session_serilizer.save()
             try:
-                pmo_user = User.objects.filter(profile__type="pmo").first()
+                pmo_user = User.objects.filter(profile__roles__name="pmo").first()
                 project = Project.objects.get(id=request.data["project_id"])
                 coach = Coach.objects.get(id=request.data["coach_id"])
                 if pmo_user:
@@ -3675,7 +3638,7 @@ def accept_coach_caas_hr(request):
             print(str(e))
 
         try:
-            pmo_user = User.objects.filter(profile__type="pmo").first()
+            pmo_user = User.objects.filter(profile__roles__name="pmo").first()
             pmo = Pmo.objects.get(email=pmo_user.email)
             coach = Coach.objects.get(id=request.data["coach_id"])
             if pmo_user:
@@ -3789,7 +3752,7 @@ def add_learner_to_project(request):
         # Handle any exceptions from create_learners
         return Response({"error": str(e)}, status=500)
     try:
-        pmo_user = User.objects.filter(profile__type="pmo").first()
+        pmo_user = User.objects.filter(profile__roles__name="pmo").first()
         pmo = Pmo.objects.get(email=pmo_user.email)
 
         if pmo_user:
@@ -3915,7 +3878,7 @@ def accept_coach_caas_learner(request):
     message = ""
     if request.data.get("status") == "select":
         try:
-            pmo_user = User.objects.filter(profile__type="pmo").first()
+            pmo_user = User.objects.filter(profile__roles__name="pmo").first()
             coach = Coach.objects.get(id=request.data["coach_id"])
             if pmo_user:
                 path = f"/projects/caas/progress/{project.id}"
@@ -4078,7 +4041,7 @@ def request_more_profiles_by_hr(request):
     project.steps["coach_consent"]["status"] = "incomplete"
     project.save()
     try:
-        pmo_user = User.objects.filter(profile__type="pmo").first()
+        pmo_user = User.objects.filter(profile__roles__name="pmo").first()
         if pmo_user:
             path = f"/projects/caas/progress/{project.id}"
             message = (
@@ -4330,19 +4293,26 @@ def add_mulitple_coaches(request):
                         {"error": f"Coach with ID {coach_id} already exists."},
                         status=400,
                     )
-
-                temp_password = "".join(
-                    random.choices(
-                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
-                        k=8,
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    temp_password = "".join(
+                        random.choices(
+                            string.ascii_uppercase
+                            + string.ascii_lowercase
+                            + string.digits,
+                            k=8,
+                        )
                     )
-                )
-                user = User.objects.create_user(
-                    username=email, password=temp_password, email=email
-                )
+                    user = User.objects.create_user(
+                        username=email, password=temp_password, email=email
+                    )
+                    profile = Profile.objects.create(user=user)
+                else:
+                    profile = Profile.objects.get(user=user)
 
-                # Create the Coach Profile linked to the User
-                coach_profile = Profile.objects.create(user=user, type="coach")
+                coach_role, created = Role.objects.get_or_create(name="coach")
+                profile.roles.add(coach_role)
+                profile.save()
 
                 # api call
                 room_id = ""
@@ -4367,7 +4337,7 @@ def add_mulitple_coaches(request):
 
                 # Create the Coach User using the Profile
                 coach_user = Coach.objects.create(
-                    user=coach_profile,
+                    user=profile,
                     coach_id=coach_id,
                     first_name=first_name,
                     last_name=last_name,
@@ -4403,6 +4373,7 @@ def add_mulitple_coaches(request):
                 coach = Coach.objects.get(id=coach_user.id)
                 coach.is_approved = True
                 coach.save()
+
         return Response({"message": "Coaches added successfully."}, status=201)
     except IntegrityError as e:
         print(e)
@@ -4568,7 +4539,7 @@ def reschedule_session(request):
         if session_serilizer.is_valid():
             session_created = session_serilizer.save()
             try:
-                pmo_user = User.objects.filter(profile__type="pmo").first()
+                pmo_user = User.objects.filter(profile__roles__name="pmo").first()
                 project = Project.objects.get(id=request.data["project_id"])
                 coach = Coach.objects.get(id=request.data["coach_id"])
                 if pmo_user:
@@ -6476,22 +6447,33 @@ class AddRegisteredCoach(APIView):
                 )
 
             with transaction.atomic():
-                temp_password = "".join(
-                    random.choices(
-                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
-                        k=8,
+                # Check if the user already exists
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    temp_password = "".join(
+                        random.choices(
+                            string.ascii_uppercase
+                            + string.ascii_lowercase
+                            + string.digits,
+                            k=8,
+                        )
                     )
-                )
-                user = User.objects.create_user(
-                    username=email, password=temp_password, email=email
-                )
+                    user = User.objects.create_user(
+                        username=email, password=temp_password, email=email
+                    )
+                    profile = Profile.objects.create(user=user)
+                    print("createing new user and profile.")
+                else:
+                    print("hello.")
+                    profile = Profile.objects.get(user=user)
 
-                # Create the Coach Profile linked to the User
-                coach_profile = Profile.objects.create(user=user, type="coach")
+                coach_role, created = Role.objects.get_or_create(name="coach")
+                profile.roles.add(coach_role)
+                profile.save()
 
                 # Create the Coach User using the Profile
                 coach_user = Coach.objects.create(
-                    user=coach_profile,
+                    user=profile,
                     first_name=first_name,
                     last_name=last_name,
                     email=email,
@@ -6508,11 +6490,10 @@ class AddRegisteredCoach(APIView):
                 coach_serializer = CoachSerializer(coach)
 
                 path = f"/profile"
-
                 message = f"Welcome to Meeraq. As next step, you need to fill out your details. Admin will look into your profile and contact you for profile approval. Thank You!"
 
                 create_notification(coach.user.user, path, message)
-                pmo_user = User.objects.filter(profile__type="pmo").first()
+                pmo_user = User.objects.filter(profile__roles__name="pmo").first()
                 pmo = Pmo.objects.get(email=pmo_user.username)
                 create_notification(
                     pmo_user,
@@ -6543,7 +6524,6 @@ class AddRegisteredCoach(APIView):
             return Response({"coach": coach_serializer.data})
 
         except IntegrityError as e:
-            print(e)
             return Response(
                 {"error": "A user with this email already exists."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -7567,6 +7547,73 @@ class SendContractReminder(APIView):
                 {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["POST"])
+def change_user_role(request, user_id):
+    user_role = request.data.get("user_role", "")
+    user = User.objects.get(id=user_id)
+    if not user.profile:
+        print("hello")
+        return Response({"error": "No user profile."}, status=400)
+    elif user.profile.roles.count() == 0:
+        print("second")
+        return Response({"error": "No user role."}, status=400)
+    try:
+        user_profile_role = user.profile.roles.all().get(name=user_role).name
+    except Exception as e:
+        print(e)
+        return Response({"error": "User role not found."}, status=400)
+    roles = []
+    for role in user.profile.roles.all():
+        roles.append(role.name)
+    if user_profile_role == "coach":
+        serializer = CoachDepthOneSerializer(user.profile.coach)
+        is_caas_allowed = Project.objects.filter(
+            coaches_status__coach=user.profile.coach
+        ).exists()
+        is_seeq_allowed = SchedularBatch.objects.filter(
+            coaches=user.profile.coach
+        ).exists()
+        return Response(
+            {
+                **serializer.data,
+                "is_caas_allowed": is_caas_allowed,
+                "is_seeq_allowed": is_seeq_allowed,
+                "roles": roles,
+                "user": {**serializer.data["user"], "type": user_profile_role},
+                "last_login": user.last_login,
+                "message": "Role changed to Coach",
+            }
+        )
+    elif user_profile_role == "pmo":
+        serializer = PmoDepthOneSerializer(user.profile.pmo)
+    elif user_profile_role == "learner":
+        serializer = LearnerDepthOneSerializer(user.profile.learner)
+    elif user_profile_role == "hr":
+        serializer = HrDepthOneSerializer(user.profile.hr)
+    else:
+        return Response({"error": "Unknown user role."}, status=400)
+    return Response(
+        {
+            **serializer.data,
+            "roles": roles,
+            "user": {**serializer.data["user"], "type": user_profile_role},
+            "last_login": user.last_login,
+            "message": f"Role changed to {user_profile_role}",
+        }
+    )
+
+
+@api_view(["GET"])
+def get_users(request):
+    user_profiles = Profile.objects.all()
+    res = []
+    for profile in user_profiles:
+        existing_roles = [item.name for item in profile.roles.all()]
+        email = profile.user.email
+        res.append({"id": profile.id, "email": email, "roles": existing_roles})
+    return Response(res)
 
 def get_weeks_for_current_month():
     current_year = datetime.now().year

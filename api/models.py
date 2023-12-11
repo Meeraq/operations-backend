@@ -50,48 +50,18 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
 def password_reset_token_created(
     sender, instance, reset_password_token, *args, **kwargs
 ):
-    print(reset_password_token.key)
+    user = reset_password_token.user
     email_plaintext_message = "{}?token={}".format(
         reverse("password_reset:reset-password-request"), reset_password_token.key
     )
     subject = "Meeraq - Forgot Password"
-
-    user_type = reset_password_token.user.profile.type
-    not_approved_coach = False
-    if user_type == "pmo":
-        user = Pmo.objects.get(email=reset_password_token.user.email)
-        name = user.name
-    elif user_type == "coach":
-        user = Coach.objects.get(email=reset_password_token.user.email)
-        name = user.first_name
-        if not user.is_approved:
-            not_approved_coach = True
-    elif user_type == "learner":
-        user = Learner.objects.get(email=reset_password_token.user.email)
-        engagements = Engagement.objects.filter(
-            learner=user,
-            project__enable_emails_to_hr_and_coachee=False,
-        )
-        if engagements.exists():
-            return None
-        name = user.name
-    elif user_type == "hr":
-        user = HR.objects.get(email=reset_password_token.user.email)
-        projects = Project.objects.filter(
-            hr=user, enable_emails_to_hr_and_coachee=False
-        )
-        if projects.exists():
-            return None
-        name = user.first_name
-    else:
-        name = "User"
-
-    if not_approved_coach == True:
-        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
+    if (
+        user.profile.roles.all().count() == 1
+        and user.profile.roles.all().first().name == "coach"
+        and user.profile.coach.is_approved == False
+    ):
         link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
-        # send_mail(
-        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
-        # )
+        name = user.profile.coach.first_name
         send_mail_templates(
             "coach_templates/create_new_password.html",
             [reset_password_token.user.email],
@@ -100,18 +70,38 @@ def password_reset_token_created(
             [],  # no bcc
         )
     else:
-        # message = f'Dear {name},\n\nYour reset password link is {env("APP_URL")}/reset-password/{reset_password_token.key}'
-        link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
-        # send_mail(
-        #     subject, message, settings.DEFAULT_FROM_EMAIL, [reset_password_token.user.email]
-        # )
-        send_mail_templates(
-            "hr_emails/forgot_password.html",
-            [reset_password_token.user.email],
-            "Meeraq Platform | Password Reset",
-            {"name": name, "resetPassword": link},
-            [],  # no bcc
-        )
+        learner_roles = user.profile.roles.all().filter(name="learner")
+        hr_roles = user.profile.roles.all().filter(name="hr")
+        if learner_roles.exists():
+            engagements = Engagement.objects.filter(
+                learner=user.profile.learner,
+                project__enable_emails_to_hr_and_coachee=False,
+            )
+            if engagements.exists():
+                return None
+        elif hr_roles.exists():
+            projects = Project.objects.filter(
+                hr=user.profile.hr, enable_emails_to_hr_and_coachee=False
+            )
+            if projects.exists():
+                return None
+        else:
+            name = "User"
+            link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
+            send_mail_templates(
+                "hr_emails/forgot_password.html",
+                [reset_password_token.user.email],
+                "Meeraq Platform | Password Reset",
+                {"name": name, "resetPassword": link},
+                [],  # no bcc
+            )
+
+
+class Role(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
 
 
 class Profile(models.Model):
@@ -122,7 +112,7 @@ class Profile(models.Model):
         ("hr", "hr"),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    type = models.CharField(max_length=50, choices=user_types)
+    roles = models.ManyToManyField(Role)
 
     def __str__(self):
         return self.user.username
@@ -649,6 +639,10 @@ class CoachContract(models.Model):
         max_length=50, choices=STATUS_CHOICES, default="pending", blank=True
     )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    send_date = models.DateField(auto_now_add=True, blank=True)
+    response_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
+
     send_date = models.DateField(auto_now_add=True, blank=True)
     response_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True)

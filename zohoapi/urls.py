@@ -48,10 +48,10 @@ urlpatterns = [
         "get-bank-data/<str:vendor_id>/<str:bank_account_id>/",
         views.get_bank_account_data,
     ),
-    path("update-vendor-id-to-coaches/", views.update_vendor_id),
+    # path("update-vendor-id-to-coaches/", views.update_vendor_id),
     path(
         "get-vendors-existing-and-non-existing/",
-        views.get_coach_exists_and_not_existing_emails,
+        views.get_vendor_exists_and_not_existing_emails,
     ),
     path("import-invoices/", views.import_invoices_from_zoho),
     path("export-invoice-data/", views.export_invoice_data),

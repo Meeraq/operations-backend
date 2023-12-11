@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
-from .models import  InvoiceData
+from .models import InvoiceData, Vendor
 
 # UserModel=get_user_model()
 
@@ -9,6 +9,7 @@ class InvoiceDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = InvoiceData
         fields = "__all__"
+
 
 class InvoiceDataEditSerializer(serializers.ModelSerializer):
     class Meta:
@@ -25,3 +26,10 @@ class InvoiceDataEditSerializer(serializers.ModelSerializer):
             "iban",
             "swift_code",
         ]
+
+
+class VendorDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vendor
+        fields = "__all__"
+        depth = 1
