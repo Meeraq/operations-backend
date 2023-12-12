@@ -3660,12 +3660,24 @@ def accept_coach_caas_hr(request):
         # Project
         try:
             contract = ProjectContract.objects.get(project=project.id)
-            contract_data = {
-                "project_contract": contract.id,
-                "project": project.id,
-                "status": "pending",
-                "coach": request.data["coach_id"],
-            }
+            coach_for_contract = Coach.objects.get(id=request.data["coach_id"])
+            contract_data={}
+            if not project.coach_consent_mandatory:
+                contract_data = {
+                    "project_contract": contract.id,
+                    "project": project.id,
+                    "status": "approved",
+                    "coach": request.data["coach_id"],
+                    "name_inputed": coach_for_contract.first_name + " " + coach_for_contract.last_name,
+                    "response_date":timezone.now().date(),
+                }
+            else:
+                contract_data = {
+                    "project_contract": contract.id,
+                    "project": project.id,
+                    "status": "pending",
+                    "coach": request.data["coach_id"],
+                }
 
             contract_serializer = CoachContractSerializer(data=contract_data)
 
@@ -4018,6 +4030,13 @@ def send_project_strure_to_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.steps["project_structure"]["status"] = "complete"
     project.save()
+    if not project.coach_consent_mandatory:
+        for coach_status in project.coaches_status.all():
+            if not coach_status.status["consent"]["status"] == "reject":
+                coach_status.status["consent"]["status"] = "select"
+                if project.steps["project_structure"]["status"] == "complete":
+                    coach_status.status["project_structure"]["status"] = "select"
+            coach_status.save()
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Project structure has been added to the project - {project.name}."
@@ -7467,12 +7486,23 @@ class AssignCoachContractAndProjectContract(APIView):
                 ).exists()
 
                 if not existing_coach_contract:
-                    contract_data = {
-                        "project_contract": contract.id,
-                        "project": project_id,
-                        "status": "pending",
-                        "coach": coach.id,
-                    }
+                    contract_data={}
+                    if not project.coach_consent_mandatory:
+                        contract_data = {
+                            "project_contract": contract.id,
+                            "project": project_id,
+                            "status": "approved",
+                            "coach": coach.id,
+                            "name_inputed": coach.first_name + " " + coach.last_name,
+                            "response_date":timezone.now().date(),
+                        }
+                    else:
+                        contract_data = {
+                            "project_contract": contract.id,
+                            "project": project_id,
+                            "status": "pending",
+                            "coach": coach.id,
+                        }
                     contract_serializer = CoachContractSerializer(data=contract_data)
 
                     if contract_serializer.is_valid():
