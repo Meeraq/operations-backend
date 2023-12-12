@@ -957,23 +957,6 @@ def schedule_session(request):
         )
         coach_availability.save()
         coach_availability_id = coach_availability.id
-        print("coach avail", coach_availability_id)        end_time = request.data.get("end_time", "")
-        coach_id = request.data.get("coach_id", "")
-        request_id = request.data.get("request_id", "")
-
-        request_avail = RequestAvailibilty.objects.get(id=request_id)
-        coach = Coach.objects.get(id=coach_id)
-        coach_availability, created = CoachSchedularAvailibilty.objects.get_or_create(
-            request=request_avail,
-            coach=coach,
-            start_time=timestamp,
-            end_time=end_time,
-            is_confirmed=False,
-        )
-        
-        coach_availability.save()
-        coach_availability_id = coach_availability.id
-
         new_timestamp = int(timestamp) / 1000
         date_obj = datetime.fromtimestamp(new_timestamp)
         date_str = date_obj.strftime("%Y-%m-%d")
@@ -1097,44 +1080,7 @@ def schedule_session(request):
                 )
                 print(slot_created)
 
-            print(json.dumps(unblock_slots))            for availability_c in all_coach_availability:
-                availability_c.is_confirmed = True
-                if (
-                    int(availability_c.start_time)
-                    < p_block_from
-                    < int(availability_c.end_time)
-                ) and (int(availability_c.start_time) + 15 * 60 * 1000 < p_block_from):
-                    new_slot = {
-                        "start_time": int(availability_c.start_time),
-                        "end_time": p_block_from,
-                        "conflict": False,
-                    }
-                    unblock_slots.append(new_slot)
-                    availability_c.delete()
-                if (
-                    int(availability_c.start_time)
-                    < p_block_till
-                    < int(availability_c.end_time)
-                ) and (int(availability_c.end_time) - 15 * 60 * 1000 > p_block_till):
-                    new_slot = {
-                        "start_time": p_block_till,
-                        "end_time": int(availability_c.end_time),
-                        "conflict": False,
-                    }
-                    unblock_slots.append(new_slot)
-                    availability_c.delete()
-                for unblock_slot in unblock_slots:
-                    (
-                        slot_created,
-                        created,
-                    ) = CoachSchedularAvailibilty.objects.get_or_create(
-                        request=request_avail,
-                        coach=coach,
-                        start_time=unblock_slot["start_time"],
-                        end_time=unblock_slot["end_time"],
-                        is_confirmed=False,
-                    )
-                availability_c.save()
+            print(json.dumps(unblock_slots))
             send_mail_templates(
                 "schedule_session.html",
                 [coach_availability.coach.email],
