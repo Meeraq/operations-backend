@@ -2908,7 +2908,7 @@ def send_consent(request):
     for coach_id in coach_list:
         if not project.coach_consent_mandatory:
             for coach_status in project.coaches_status.all():
-                if coach_status.coach.id == coach.id:
+                if coach_status.coach.id == coach_id:
                     coach_status.status["consent"]["status"] = "select"
                     if project.steps["project_structure"]["status"] == "complete":
                         coach_status.status["project_structure"]["status"] = "select"
@@ -3992,6 +3992,13 @@ def send_project_strure_to_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.steps["project_structure"]["status"] = "complete"
     project.save()
+    if not project.coach_consent_mandatory:
+        for coach_status in project.coaches_status.all():
+            if not coach_status.status["consent"]["status"] == "reject":
+                coach_status.status["consent"]["status"] = "select"
+                if project.steps["project_structure"]["status"] == "complete":
+                    coach_status.status["project_structure"]["status"] = "select"
+            coach_status.save()
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Project structure has been added to the project - {project.name}."
