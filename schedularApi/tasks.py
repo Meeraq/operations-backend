@@ -284,7 +284,7 @@ def send_upcoming_session_pmo_at_10am():
             "session_time": start_time + " - " + end_time,
         }
         sessions_list.append(session_details)
-        pmo_user = User.objects.filter(profile__type="pmo").first()
+        pmo_user = User.objects.filter(profile__roles__name="pmo").first()
         send_mail_templates(
             "pmo_emails/daily_session.html",
             [pmo_user.email],
