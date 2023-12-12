@@ -1,8 +1,20 @@
 from django.db import models
 from django.utils import timezone
+from api.models import Profile
 
 
 # Create your models here.
+
+
+class Vendor(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=155)
+    phone = models.CharField(max_length=25)
+    email = models.EmailField()
+    vendor_id = models.CharField(max_length=255, blank=True, default="")
+
+    def __str__(self):
+        return self.name
 
 
 class InvoiceData(models.Model):

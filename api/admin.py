@@ -33,6 +33,10 @@ from .models import (
     Update,
     UserToken,
     CalendarEvent,
+    FinalizeCoachActivity,
+    ShareCoachProfileActivity,
+    CreateProjectActivity,
+    Role,
 )
 
 # Register your models here.
@@ -73,3 +77,7 @@ admin.site.register(CoachContract)
 admin.site.register(Update)
 admin.site.register(UserToken)
 admin.site.register(CalendarEvent)
+admin.site.register(ShareCoachProfileActivity)
+admin.site.register(CreateProjectActivity)
+admin.site.register(FinalizeCoachActivity)
+admin.site.register(Role)
