@@ -15,6 +15,7 @@ from api.models import Coach, OTP, UserLoginActivity
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 
+from rest_framework.views import APIView
 
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
@@ -35,8 +36,19 @@ from xhtml2pdf import pisa
 
 import environ
 import os
+import os
+from django.http import HttpResponse
+import io
+import pdfkit
 
 env = environ.Env()
+
+wkhtmltopdf_path = os.environ.get(
+    "WKHTMLTOPDF_PATH", r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+)
+
+pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
 
 base_url = os.environ.get("ZOHO_API_BASE_URL")
 organization_id = os.environ.get("ZOHO_ORGANIZATION_ID")
@@ -133,8 +145,8 @@ def send_mail_templates_with_attachment(
         image_base64 = base64.b64encode(image_response.content).decode("utf-8")
         content["image_base64"] = image_base64
         email_message = render_to_string(file_name, content)
-        result = BytesIO()
-        pdf = pisa.pisaDocument(BytesIO(email_message.encode("ISO-8859-1")), result)
+        pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+        result = BytesIO(pdf)
         email = EmailMessage(
             subject=f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
             body=body_message,
@@ -513,6 +525,18 @@ def get_purchase_order_data_pdf(request, purchaseorder_id):
         )
 
 
+def get_line_items_for_template(line_items):
+    res = [*line_items]
+    for line_item in res:
+        line_item["quantity_mul_rate"] = line_item["quantity_input"] * line_item["rate"]
+        line_item["quantity_mul_rate_include_tax"] = (
+            line_item["quantity_input"]
+            * line_item["rate"]
+            * (1 + line_item["tax_percentage"] / 100)
+        )
+    return res
+
+
 @api_view(["POST"])
 def add_invoice_data(request):
     invoices = InvoiceData.objects.filter(
@@ -527,15 +551,16 @@ def add_invoice_data(request):
     if serializer.is_valid():
         serializer.save()
         line_items = serializer.data["line_items"]
-        for line_item in line_items:
-            line_item["quantity_mul_rate"] = (
-                line_item["quantity_input"] * line_item["rate"]
-            )
-            line_item["quantity_mul_rate_include_tax"] = (
-                line_item["quantity_input"]
-                * line_item["rate"]
-                * (1 + line_item["tax_percentage"] / 100)
-            )
+        # for line_item in line_items:
+        #     line_item["quantity_mul_rate"] = (
+        #         line_item["quantity_input"] * line_item["rate"]
+        #     )
+        #     line_item["quantity_mul_rate_include_tax"] = (
+        #         line_item["quantity_input"]
+        #         * line_item["rate"]
+        #         * (1 + line_item["tax_percentage"] / 100)
+        #     )
+        line_items = get_line_items_for_template(serializer.data["line_items"])
         invoice_date = datetime.strptime(
             serializer.data["invoice_date"], "%Y-%m-%d"
         ).strftime("%d-%m-%Y")
@@ -549,6 +574,7 @@ def add_invoice_data(request):
             "due_date": due_date,
             "line_items": line_items,
         }
+        
         send_mail_templates_with_attachment(
             "invoice_pdf.html",
             [env("FINANCE_EMAIL")],
@@ -573,7 +599,7 @@ def edit_invoice(request, invoice_id):
     ):
         return Response({"error": "Invoice already exists with the invoice number"})
     serializer = InvoiceDataEditSerializer(data=request.data, instance=invoice)
-
+   
     if serializer.is_valid():
         serializer.save()
         line_items = serializer.data["line_items"]
@@ -893,3 +919,51 @@ def export_invoice_data(request):
     wb.save(response)
 
     return response
+
+
+class DownloadInvoice(APIView):
+    def get(self, request, record_id):
+        try:
+            invoice = get_object_or_404(InvoiceData, id=record_id)
+            serializer = InvoiceDataSerializer(invoice)
+            line_items = get_line_items_for_template(serializer.data["line_items"])
+            invoice_date = datetime.strptime(
+                serializer.data["invoice_date"], "%Y-%m-%d"
+            ).strftime("%d-%m-%Y")
+            due_date = datetime.strptime(
+                add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
+            ).strftime("%d-%m-%Y")
+            invoice_data = {
+                **serializer.data,
+                "invoice_date": invoice_date,
+                "due_date": due_date,
+                "line_items": line_items,
+            }
+            image_base64=None
+            try:
+                image_url = f"{invoice_data['signature']}"
+            
+                # Attempt to send the email
+                image_response = requests.get(image_url)
+            
+                image_response.raise_for_status()
+                
+                # Convert the downloaded image to base64
+                image_base64 = base64.b64encode(image_response.content).decode("utf-8")
+            except Exception as e:
+                pass
+            
+            email_message = render_to_string("invoice_pdf.html", {"invoice":invoice_data,"image_base64":image_base64})
+            pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response[
+                "Content-Disposition"
+            ] = f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download invoice."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
