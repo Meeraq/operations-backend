@@ -5185,13 +5185,7 @@ def get_coachee_of_user(request, user_type, user_id):
         }
         if user_type == "pmo":
             projects = Project.objects.filter(engagement__learner=learner)
-            # print("dd",learner)
-            # schedular_projects=SchedularProject.objects.filter(schedularbatch__participants__email=learner.email)
             schedular_batches=SchedularBatch.objects.filter(participants__email=learner.email)
-            print(schedular_batches)
-            # print(schedular_projects.schedularbatch)
-            # return Response([])
-
             course_enrollments = CourseEnrollment.objects.filter(learner__id=learner.id)
             courses_names = []
             for course_enrollment in course_enrollments:
@@ -5205,8 +5199,7 @@ def get_coachee_of_user(request, user_type, user_id):
             projects = Project.objects.filter(
                 Q(engagement__learner=learner) & Q(hr__id=user_id)
             )
-        # project_data = []
-        # organisation = set()
+
         for project in projects:
             project_dict = {
                 "name": project.name,
@@ -5219,12 +5212,10 @@ def get_coachee_of_user(request, user_type, user_id):
                 "name": batch.project.name,
                 "type":"SEEQ"
             }
-            learner_dict["organisation"].add(project.organisation.name)
+            learner_dict["organisation"].add(batch.project.organisation.name)
             if project_dict["name"] not in [proj["name"] for proj in learner_dict["projects"]]:
                 learner_dict["projects"].append(project_dict)
         learners_data.append(learner_dict)
-    print(learner_dict)
-    # serializer = LearnerSerializer(learners,many=True)
     return Response(learners_data)
 
 
