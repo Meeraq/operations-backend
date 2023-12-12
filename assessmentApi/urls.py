@@ -31,6 +31,21 @@ from .views import (
     GetParticipantObserversUniqueIds,
     StartAssessmentDisabled,
     ReleaseResults,
+    AssessmentsOfHr,
+    GetParticipantResponseForAllAssessment,
+    GetObserverResponseForAllAssessment,
+    ReminderMailForObserverByPmoAndParticipant,
+    GetObserverResponseForAllAssessments,
+    GetParticipantResponseForAllAssessments,
+    AddMultipleQuestions,
+    AddMultipleParticipants,
+    CreateObserverType,
+    GetObserverTypes,
+    DownloadParticipantResultReport,
+    GetAssessmentNotification,
+    MarkAllNotificationAsRead,
+    MarkNotificationAsRead,
+    GetUnreadNotificationCount,
 )
 
 
@@ -125,9 +140,64 @@ urlpatterns = [
         GetParticipantObserversUniqueIds.as_view(),
     ),
     path(
-        "start-assessment-disabled/<str:unique_id>/",StartAssessmentDisabled.as_view(),
+        "start-assessment-disabled/<str:unique_id>/",
+        StartAssessmentDisabled.as_view(),
     ),
     path(
-        "release-assessment-result/<int:assessment_id>/",ReleaseResults.as_view(),
+        "release-assessment-result/<int:assessment_id>/",
+        ReleaseResults.as_view(),
     ),
+    path(
+        "assessments-of-hr/<str:hr_email>/",
+        AssessmentsOfHr.as_view(),
+    ),
+    path(
+        "get-participants-response-result-for-all-assessment/<str:hr_email>/",
+        GetParticipantResponseForAllAssessment.as_view(),
+    ),
+    path(
+        "get-observer-assessment-response-result-for-all-assessment/<str:hr_email>/",
+        GetObserverResponseForAllAssessment.as_view(),
+    ),
+    path(
+        "reminder-mail-for-observer-by-pmo-and-participant/",
+        ReminderMailForObserverByPmoAndParticipant.as_view(),
+    ),
+    path(
+        "get-participants-response-result-for-all-assessments/",
+        GetParticipantResponseForAllAssessments.as_view(),
+    ),
+    path(
+        "get-observer-assessment-response-result-for-all-assessments/",
+        GetObserverResponseForAllAssessments.as_view(),
+    ),
+    path(
+        "add-multiple-questions/",
+        AddMultipleQuestions.as_view(),
+    ),
+    path(
+        "add-multiple-participants/",
+        AddMultipleParticipants.as_view(),
+    ),
+    path(
+        "create-observer-types/",
+        CreateObserverType.as_view(),
+    ),
+    path(
+        "get-observer-types/",
+        GetObserverTypes.as_view(),
+    ),
+    path(
+        "download-participant-result-report/",
+        DownloadParticipantResultReport.as_view(),
+    ),
+     path(
+        "download-participant-result-report/<int:assessment_id>/<int:participant_id>/",
+        DownloadParticipantResultReport.as_view(),
+    ),
+    
+    path("notifications/all/<int:user_id>/",  GetAssessmentNotification.as_view()),
+    path("notifications/mark-as-read/", MarkNotificationAsRead.as_view()),
+    path("notifications/mark-all-as-read/", MarkAllNotificationAsRead.as_view()),
+    path("notifications/unread-count/<int:user_id>/", GetUnreadNotificationCount.as_view()),
 ]

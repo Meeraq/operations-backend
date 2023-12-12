@@ -12,11 +12,21 @@ from .views import (
     StandardFieldEditValue,
     StandardFieldDeleteValue,
     StandardizedFieldRequestAcceptReject,
+    ProjectContractAPIView,
+    CoachContractList,
+    CoachContractDetail,
+    AssignCoachContractAndProjectContract,
+    ProjectContractDetailView,
+    UpdateCoachContract,
+    ApprovedCoachContract,
+    SendContractReminder,
+    CoachWithApprovedContractsInProject,
+    UserTokenAvaliableCheck,
+    SessionData,
 )
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
-    path("coaches/", views.coach_signup),
     path("coaches/all/", views.get_coaches),
     path("coaches/approve/", views.approve_coach),
     path("pmo-login/", views.pmo_login, name="pmo-login"),
@@ -26,6 +36,8 @@ urlpatterns = [
         include("django_rest_passwordreset.urls", namespace="password_reset"),
     ),
     path("projects/ongoing/", views.get_ongoing_projects),
+    path("projects/<int:project_id>/updates/", views.get_project_updates),
+    path("projects/<int:project_id>/updates/create/", views.add_project_update),
     path("projects/learner/<int:learner_id>/", views.get_projects_of_learner),
     path("management-token/", views.get_management_token),
     path(
@@ -43,6 +55,8 @@ urlpatterns = [
     path("session/", views.session_view, name="api-session"),
     path("otp/generate/", views.generate_otp),
     path("otp/validate/", views.validate_otp),
+    path("change-user-role/<int:user_id>/", views.change_user_role),
+    path("users/",views.get_users),
     path("add_hr/", views.add_hr),
     path("add_organisation/", views.add_organisation),
     path("get_organisation/", views.get_organisation),
@@ -140,7 +154,14 @@ urlpatterns = [
         views.get_upcoming_sessions_of_user,
     ),
     path(
+        "new/sessions/upcoming/<str:user_type>/<int:user_id>/",
+        views.new_get_upcoming_sessions_of_user,
+    ),
+    path(
         "sessions/past/<str:user_type>/<int:user_id>/", views.get_past_sessions_of_user
+    ),
+     path(
+        "new/sessions/past/<str:user_type>/<int:user_id>/", views.new_get_past_sessions_of_user
     ),
     path("sessions/edit/<int:session_id>/", views.edit_session_availability),
     path("learners/<str:user_type>/<int:user_id>/", views.get_coachee_of_user),
@@ -285,4 +306,33 @@ urlpatterns = [
         StandardizedFieldRequestAcceptReject.as_view(),
     ),
     path("standard-field-delete-value/", StandardFieldDeleteValue.as_view()),
+
+    path("projects/<int:project_id>/coaches/", views.remove_coach_from_project),
+    path("templates/", views.template_list_create_view),
+    path("templates/<int:pk>/", views.template_retrieve_update_destroy_view),
+    path("create-project-contract/", views.create_project_contract),
+    path("get-project-contracts/", ProjectContractAPIView.as_view()),
+    path("coach-contracts/", CoachContractList.as_view()),
+    path("coach-contracts/<int:pk>/", CoachContractDetail.as_view()),
+    path("handle-assign/", AssignCoachContractAndProjectContract.as_view()),
+    path("project-contracts/<int:project_id>/", ProjectContractDetailView.as_view()),
+    path("update-contract/", UpdateCoachContract.as_view()),
+    path("send-contract-reminder/", SendContractReminder.as_view()),
+    path(
+        "get-approved-coach-contract/<int:project_id>/<int:coach_id>/",
+        ApprovedCoachContract.as_view(),
+    ),
+    path(
+        "coaches-with-approved-contracts-in-project/<int:project_id>/",
+        CoachWithApprovedContractsInProject.as_view(),
+    ),
+    path('google/oauth/<str:user_email>/', views.google_oauth, name='google_oauth'),
+    path('google-auth-callback/', views.google_auth_callback, name='google_auth_callback'),
+    path('microsoft/oauth/<str:user_mail_address>/', views.microsoft_auth),
+    path('microsoft-auth-callback/', views.microsoft_callback),
+    path(
+        "user-token-avaliable-check/<str:user_mail>/",
+        UserTokenAvaliableCheck.as_view(),
+    ),
+    path('session-data/', SessionData.as_view(),),
 ]

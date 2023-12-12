@@ -4,7 +4,7 @@ from .models import (
     Lesson,
     QuizLesson,
     Question,
-    LiveSession,
+    LiveSessionLesson,
     TextLesson,
     LaserCoachingSession,
     FeedbackLesson,
@@ -21,7 +21,7 @@ from .models import (
 # Register your models here.
 admin.site.register(Course)
 admin.site.register(Lesson)
-admin.site.register(LiveSession)
+admin.site.register(LiveSessionLesson)
 admin.site.register(TextLesson)
 admin.site.register(QuizLesson)
 admin.site.register(FeedbackLesson)

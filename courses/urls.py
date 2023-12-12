@@ -2,10 +2,13 @@ from django.urls import path, include
 from . import views
 from .views import (
     CourseListView,
+    CourseTemplateListView,
     CourseDetailView,
+    CourseTemplateDetailView,
     TextLessonCreateView,
     TextLessonEditView,
     LessonListView,
+    CourseTemplateLessonListView,
     LessonDetailView,
     CertificateListAPIView,
     GetFilteredCoursesForCertificate,
@@ -15,6 +18,7 @@ from .views import (
     DownlaodLessonCertificate,
     GetCertificateForCourse,
     GetLaserCoachingTime,
+    AssignCourseTemplateToBatch,
 )
 import environ
 
@@ -27,13 +31,32 @@ urlpatterns = [
         name="course-detail",
     ),
     path(
+        "course-templates/<int:pk>/",
+        CourseTemplateDetailView.as_view(),
+        name="course-detail",
+    ),
+    path(
         "courses/",
         CourseListView.as_view(),
         name="course-list-create-update-destroy",
     ),
     path(
+        "course-templates/",
+        CourseTemplateListView.as_view(),
+    ),
+    path(
+        "courses/<int:course_id>/duplicate/",
+        views.DuplicateCourseAPIView.as_view(),
+        name="course-detail",
+    ),
+    path(
         "create-lesson-with-live-session/",
         views.create_lesson_with_live_session,
+    ),
+    path(
+        "lessons/update_lesson_order/",
+        views.UpdateLessonOrder.as_view(),
+        name="update_lesson_order",
     ),
     path("text-lessons/", TextLessonCreateView.as_view(), name="text-lesson-create"),
     path(
@@ -43,9 +66,19 @@ urlpatterns = [
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
     ),
     path(
+        "course-templates/<int:course_template_id>/lessons/",
+        CourseTemplateLessonListView.as_view(),
+        name="course-template-lesson-list",
+    ),
+    path(
         "lessons/<str:lesson_type>/<int:lesson_id>/",
         LessonDetailView.as_view(),
         name="lesson-list",
+    ),
+    path(
+        "lessons/<int:lesson_id>/",
+        views.DeleteLessonAPIView.as_view(),
+        name="delete_lesson",
     ),
     path(
         "course/<int:course_id>/lesson/<int:lesson_id>/live-sessions/",
@@ -79,11 +112,11 @@ urlpatterns = [
         views.create_assessment_and_lesson,
     ),
     path(
-        "courses/<int:course_id>/lessons/<int:lesson_id>/assessment-lesson/",
+        "lessons/<int:lesson_id>/assessment-lesson/",
         views.get_assessment_lesson,
     ),
     path(
-        "courses/<int:course_id>/lessons/<int:lesson_id>/assessment-lesson/<int:session_id>/",
+        "lessons/<int:lesson_id>/assessment-lesson/<int:session_id>/",
         views.update_assessment_lesson,
     ),
     path(
@@ -167,5 +200,9 @@ urlpatterns = [
     path(
         "get-laser-coaching-time/<int:laser_coaching_id>/<str:participant_email>/",
         GetLaserCoachingTime.as_view(),
+    ),
+    path(
+        "assign-course-template-to-batch/<int:course_template_id>/<int:batch_id>/",
+        AssignCourseTemplateToBatch.as_view(),
     ),
 ]
