@@ -53,10 +53,6 @@ def get_line_items_details(invoices):
     return res
 
 
-class EmailSendingError(Exception):
-    pass
-
-
 def generate_access_token_from_refresh_token(refresh_token):
     token_url = env("ZOHO_TOKEN_URL")
     client_id = env("ZOHO_CLIENT_ID")
@@ -102,9 +98,9 @@ def get_access_token(refresh_token):
 
 
 def send_mail_templates(file_name, user_email, email_subject, content):
-    email_message = render_to_string(file_name, content)
-
     try:
+        email_message = render_to_string(file_name, content)
+
         # Attempt to send the email
         send_mail_result = send_mail(
             f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
@@ -121,14 +117,14 @@ def send_mail_templates(file_name, user_email, email_subject, content):
             )
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
 
 def send_mail_templates_with_attachment(
     file_name, user_email, email_subject, content, body_message
 ):
-    image_url = f"{content['invoice']['signature']}"
     try:
+        image_url = f"{content['invoice']['signature']}"
+
         # Attempt to send the email
         image_response = requests.get(image_url)
         image_response.raise_for_status()
