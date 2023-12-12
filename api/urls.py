@@ -23,11 +23,11 @@ from .views import (
     CoachWithApprovedContractsInProject,
     UserTokenAvaliableCheck,
     SessionData,
+    DownloadCoachContract,
 )
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
-    path("coaches/", views.coach_signup),
     path("coaches/all/", views.get_coaches),
     path("coaches/approve/", views.approve_coach),
     path("pmo-login/", views.pmo_login, name="pmo-login"),
@@ -56,6 +56,8 @@ urlpatterns = [
     path("session/", views.session_view, name="api-session"),
     path("otp/generate/", views.generate_otp),
     path("otp/validate/", views.validate_otp),
+    path("change-user-role/<int:user_id>/", views.change_user_role),
+    path("users/",views.get_users),
     path("add_hr/", views.add_hr),
     path("add_organisation/", views.add_organisation),
     path("get_organisation/", views.get_organisation),
@@ -325,6 +327,10 @@ urlpatterns = [
     path(
         "user-token-avaliable-check/<str:user_mail>/",
         UserTokenAvaliableCheck.as_view(),
+    ),
+    path(
+        "download-coach-contract/<int:coach_contract_id>/",
+        DownloadCoachContract.as_view(),
     ),
     path('session-data/', SessionData.as_view(),),
 ]
