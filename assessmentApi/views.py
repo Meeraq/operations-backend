@@ -180,7 +180,7 @@ def create_learner(learner_name, learner_email):
                 )
 
                 user.save()
-                profile = Profile.objects.create(user=user, type="learner")
+                profile = Profile.objects.create(user=user)
             learner_role, created = Role.objects.get_or_create(name="learner")
             profile.roles.add(learner_role)
             profile.save()
