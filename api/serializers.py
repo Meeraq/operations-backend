@@ -328,8 +328,6 @@ class StandardizedFieldRequestDepthOneSerializer(serializers.ModelSerializer):
 
 
 class SessionRequestedActivitySerializer(serializers.ModelSerializer):
-    
-
     class Meta:
         model = SessionRequestedActivity
         fields = "__all__"
@@ -341,7 +339,6 @@ class DeleteCoachProfileActivitySerializer(serializers.ModelSerializer):
         model = DeleteCoachProfileActivity
         fields = "__all__"
         depth = 1
-        
 
 
 class RemoveCoachActivitySerializer(serializers.ModelSerializer):
@@ -351,13 +348,13 @@ class RemoveCoachActivitySerializer(serializers.ModelSerializer):
         depth = 1
 
 
-
 class PastSessionActivitySerializer(serializers.ModelSerializer):
     class Meta:
         model = PastSessionActivity
         fields = "__all__"
         depth = 1
-        
+
+
 class TemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template
@@ -374,17 +371,18 @@ class CoachContractSerializer(serializers.ModelSerializer):
     class Meta:
         model = CoachContract
         fields = "__all__"
-        
+
+
 class UserTokenSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserToken
-        fields = '__all__'
-        
+        fields = "__all__"
+
+
 class CalendarEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = CalendarEvent
-        fields = '__all__'
-
+        fields = "__all__"
 
 
 class ShareCoachProfileActivitySerializer(serializers.ModelSerializer):
@@ -394,18 +392,21 @@ class ShareCoachProfileActivitySerializer(serializers.ModelSerializer):
         depth = 1
 
 
-
 class CreateProjectActivitySerializer(serializers.ModelSerializer):
-
     class Meta:
         model = CreateProjectActivity
-        fields= "__all__"
+        fields = "__all__"
         depth = 1
 
 
 class FinalizeCoachActivitySerializer(serializers.ModelSerializer):
-
     class Meta:
         model = FinalizeCoachActivity
-        fields= "__all__"
+        fields = "__all__"
         depth = 1
+
+
+class SessionDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SessionRequestCaas
+        fields = "__all__"
