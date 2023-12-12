@@ -643,10 +643,6 @@ class CoachContract(models.Model):
     response_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True)
 
-    send_date = models.DateField(auto_now_add=True, blank=True)
-    response_date = models.DateField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True, blank=True)
-
     def __str__(self):
         return f"{self.coach.first_name}'s Contract for {self.project.name}"
 
