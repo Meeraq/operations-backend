@@ -1,6 +1,7 @@
 from datetime import date
 import requests
 from django.http import JsonResponse
+import calendar
 from os import name
 from django.shortcuts import render, get_object_or_404
 from django.template.loader import render_to_string
@@ -61,6 +62,7 @@ from .serializers import (
     ShareCoachProfileActivitySerializer,
     CreateProjectActivitySerializer,
     FinalizeCoachActivitySerializer,
+    SessionDataSerializer,
 )
 
 from rest_framework import generics
@@ -78,6 +80,7 @@ from django.core.mail import EmailMessage, BadHeaderError
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.forms.models import model_to_dict
 from .models import (
     Profile,
     Pmo,
@@ -2945,7 +2948,7 @@ def send_consent(request):
     for coach_id in coach_list:
         if not project.coach_consent_mandatory:
             for coach_status in project.coaches_status.all():
-                if coach_status.coach.id == coach.id:
+                if coach_status.coach.id == coach_id:
                     coach_status.status["consent"]["status"] = "select"
                     if project.steps["project_structure"]["status"] == "complete":
                         coach_status.status["project_structure"]["status"] = "select"
@@ -3657,12 +3660,24 @@ def accept_coach_caas_hr(request):
         # Project
         try:
             contract = ProjectContract.objects.get(project=project.id)
-            contract_data = {
-                "project_contract": contract.id,
-                "project": project.id,
-                "status": "pending",
-                "coach": request.data["coach_id"],
-            }
+            coach_for_contract = Coach.objects.get(id=request.data["coach_id"])
+            contract_data={}
+            if not project.coach_consent_mandatory:
+                contract_data = {
+                    "project_contract": contract.id,
+                    "project": project.id,
+                    "status": "approved",
+                    "coach": request.data["coach_id"],
+                    "name_inputed": coach_for_contract.first_name + " " + coach_for_contract.last_name,
+                    "response_date":timezone.now().date(),
+                }
+            else:
+                contract_data = {
+                    "project_contract": contract.id,
+                    "project": project.id,
+                    "status": "pending",
+                    "coach": request.data["coach_id"],
+                }
 
             contract_serializer = CoachContractSerializer(data=contract_data)
 
@@ -4015,6 +4030,13 @@ def send_project_strure_to_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.steps["project_structure"]["status"] = "complete"
     project.save()
+    if not project.coach_consent_mandatory:
+        for coach_status in project.coaches_status.all():
+            if not coach_status.status["consent"]["status"] == "reject":
+                coach_status.status["consent"]["status"] = "select"
+                if project.steps["project_structure"]["status"] == "complete":
+                    coach_status.status["project_structure"]["status"] = "select"
+            coach_status.save()
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Project structure has been added to the project - {project.name}."
@@ -6694,15 +6716,43 @@ def get_all_engagements(request):
             is_archive=False,
         ).count()
 
+        completed_sessions = SessionRequestCaas.objects.filter(
+            project__id=engagement.project.id,
+            learner=engagement.learner,
+            status="completed",
+            is_archive=False,
+        ).exclude(billable_session_number__isnull=True, session_type="chemistry")
+
+        sessions_data = [
+            {
+                "start_time": datetime.utcfromtimestamp(int(session.confirmed_availability.start_time) / 1000),
+                "end_time": datetime.utcfromtimestamp(int(session.confirmed_availability.end_time) / 1000)
+            }
+            for session in completed_sessions
+        ]
+        print(sessions_data)
+
+        # Sort the availabilities_data based on start time in descending order
+        sorted_availabilities = sorted(
+            sessions_data,
+            key=lambda availability: availability["start_time"],
+            reverse=True
+        )
+
+        # Extract the date of the most recent completed session
+        last_session_date = sorted_availabilities[0]["start_time"].date() if sorted_availabilities else None
+
         # Serialize the engagement along with session counts
         serialized_engagement = EngagementSerializer(engagement).data
         serialized_engagement["completed_sessions_count"] = completed_sessions_count
         serialized_engagement["total_sessions_count"] = total_sessions_count
+        serialized_engagement["last_completed_session_date"] = last_session_date
 
         # Add serialized engagement data to the list
         engagement_data_list.append(serialized_engagement)
 
     # Return the list of serialized engagement data with session counts
+    # print("engagement_data_list--------------------------------",engagement_data_list)
     return Response(engagement_data_list)
 
 
@@ -7436,12 +7486,23 @@ class AssignCoachContractAndProjectContract(APIView):
                 ).exists()
 
                 if not existing_coach_contract:
-                    contract_data = {
-                        "project_contract": contract.id,
-                        "project": project_id,
-                        "status": "pending",
-                        "coach": coach.id,
-                    }
+                    contract_data={}
+                    if not project.coach_consent_mandatory:
+                        contract_data = {
+                            "project_contract": contract.id,
+                            "project": project_id,
+                            "status": "approved",
+                            "coach": coach.id,
+                            "name_inputed": coach.first_name + " " + coach.last_name,
+                            "response_date":timezone.now().date(),
+                        }
+                    else:
+                        contract_data = {
+                            "project_contract": contract.id,
+                            "project": project_id,
+                            "status": "pending",
+                            "coach": coach.id,
+                        }
                     contract_serializer = CoachContractSerializer(data=contract_data)
 
                     if contract_serializer.is_valid():
@@ -7536,6 +7597,123 @@ class SendContractReminder(APIView):
                 {"error": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+def get_weeks_for_current_month():
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    current_date = datetime.now()
+    first_day_of_current_month = current_date.replace(day=1)
+    cal = calendar.monthcalendar(current_year, current_month)
+    weeks = []
+
+    for week in cal:
+        days_in_week = [day for day in week if day != 0]
+        if days_in_week:
+            start_day = min(days_in_week)
+            end_day = max(days_in_week)
+
+            # Check if Saturday is the last day of the week
+            if calendar.weekday(current_year, current_month, end_day) == calendar.SATURDAY:
+                end_day += 1
+
+            start_date = datetime(current_year, current_month, start_day)
+            end_date = datetime(current_year, current_month, end_day)
+
+            weeks.append({
+                "start_day": start_day,
+                "end_day": end_day,
+                "start_date": start_date,
+                "end_date": end_date,
+            })
+
+    return weeks
+
+class SessionData(APIView):
+    def get(self, request, format=None):
+        now = date.today()
+        current_datetime = datetime.now()
+        first_day_of_current_month = datetime(
+            current_datetime.year, current_datetime.month, 1
+        )
+        last_day_of_previous_month = first_day_of_current_month - timedelta(days=1)
+        first_day_of_previous_month = datetime(
+            last_day_of_previous_month.year, last_day_of_previous_month.month, 1
+        )
+        start_timestamp_prev_month = int(first_day_of_previous_month.timestamp() * 1000)
+        end_timestamp_prev_month = int(
+            last_day_of_previous_month.timestamp() * 1000 + 86400000
+        )
+        if now.month == 12:
+            last_day_of_current_month = datetime(now.year + 1, 1, 1) - timedelta(days=1)
+        else:
+            last_day_of_current_month = datetime(now.year, now.month + 1, 1) - timedelta(days=1)
+
+        start_timestamp_current_month = int(first_day_of_current_month.timestamp() * 1000)
+        end_timestamp_current_month = int(last_day_of_current_month.timestamp() * 1000)
+
+
+        start_str_prev_mon = str(start_timestamp_prev_month)
+        end_str_prev_mon = str(end_timestamp_prev_month)
+
+        start_str_current_mon = str(start_timestamp_current_month)
+        end_str_current_mon = str(end_timestamp_current_month )
+
+        projects=Project.objects.all()
+        sessiondata=[]
+        weeks = get_weeks_for_current_month()
+        for project in projects:
+            res_obj = {}
+            is_involved_in_sessions = SessionRequestCaas.objects.filter(
+                project=project, is_booked=True
+            ).exists()
+            if is_involved_in_sessions:
+                res_obj['project_name'] = project.name
+            else: 
+                continue
+            previous_month_sessions = SessionRequestCaas.objects.filter(
+                confirmed_availability__start_time__gte=start_str_prev_mon,
+                confirmed_availability__end_time__lte=end_str_prev_mon,    
+                project__id = project.id
+            )
+            res_obj['last_month'] = previous_month_sessions.count()
+
+            current_month_sessions=SessionRequestCaas.objects.filter(
+                confirmed_availability__start_time__gte=start_str_current_mon,
+                confirmed_availability__end_time__lte=end_str_current_mon,    
+                project__id = project.id
+            )
+            res_obj['current_month']=current_month_sessions.count()
+
+            for i, week in enumerate(weeks, start=1):
+                start_timestamp = int(week["start_date"].timestamp())
+                end_timestamp = int(week["end_date"].timestamp())
+                start_day_of_ith_week_of_curr_month=str(start_timestamp)
+                last_day_of_ith_week_of_curr_month=str(end_timestamp)
+                weekly_sessions = SessionRequestCaas.objects.filter(
+                    confirmed_availability__start_time__gte=start_day_of_ith_week_of_curr_month,
+                    confirmed_availability__end_time__lte=last_day_of_ith_week_of_curr_month,    
+                    project__id = project.id
+                )
+                key = f"current_month_week_{i}"
+                res_obj[key] = weekly_sessions.count()
+            actual_sessions_in_current_month=SessionRequestCaas.objects.filter(
+                confirmed_availability__start_time__gte=start_str_current_mon,
+                confirmed_availability__end_time__lte=end_str_current_mon,    
+                project__id = project.id,
+                status='completed'
+            )
+            res_obj['total_actuals']=actual_sessions_in_current_month.count()
+            balance=current_month_sessions.count()-actual_sessions_in_current_month.count()
+            res_obj['balance']=balance
+            sessiondata.append(res_obj)
+        
+        return Response(
+            {
+                "sessiondata":sessiondata,
+                "weeks":weeks
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 @api_view(["GET"])

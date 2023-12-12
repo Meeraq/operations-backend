@@ -22,6 +22,7 @@ from .views import (
     SendContractReminder,
     CoachWithApprovedContractsInProject,
     UserTokenAvaliableCheck,
+    SessionData,
 )
 
 urlpatterns = [
@@ -325,7 +326,5 @@ urlpatterns = [
         "user-token-avaliable-check/<str:user_mail>/",
         UserTokenAvaliableCheck.as_view(),
     ),
-
-
-   
+    path('session-data/', SessionData.as_view(),),
 ]
