@@ -151,20 +151,20 @@ from zohoapi.models import Vendor
 
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
-
+import pdfkit
 import os
 
 # Create your views here.
 from collections import defaultdict
 import pandas as pd
-
+from django.http import HttpResponse
 import environ
 
 env = environ.Env()
 
+wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
-class EmailSendingError(Exception):
-    pass
+pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
 
 def create_send_email(user_email, file_name):
@@ -181,24 +181,23 @@ def create_send_email(user_email, file_name):
 
 
 def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
-    email_message = render_to_string(file_name, content)
-
-    email = EmailMessage(
-        f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
-        email_message,
-        settings.DEFAULT_FROM_EMAIL,
-        user_email,
-        bcc_emails,
-    )
-    email.content_subtype = "html"
-
     try:
+        email_message = render_to_string(file_name, content)
+
+        email = EmailMessage(
+            f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
+            email_message,
+            settings.DEFAULT_FROM_EMAIL,
+            user_email,
+            bcc_emails,
+        )
+        email.content_subtype = "html"
+
         email.send(fail_silently=False)
         for email in user_email:
             create_send_email(email, file_name)
-    except BadHeaderError as e:
+    except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
 
 def convert_to_24hr_format(time_str):
@@ -2909,7 +2908,7 @@ def send_consent(request):
     for coach_id in coach_list:
         if not project.coach_consent_mandatory:
             for coach_status in project.coaches_status.all():
-                if coach_status.coach.id == coach.id:
+                if coach_status.coach.id == coach_id:
                     coach_status.status["consent"]["status"] = "select"
                     if project.steps["project_structure"]["status"] == "complete":
                         coach_status.status["project_structure"]["status"] = "select"
@@ -3589,7 +3588,7 @@ def accept_coach_caas_hr(request):
             #     print(coach.status)
             # else:
             #     return Response({"error": "Status Already Updated"}, status=400)
-        print(coach.status["hr"]["status"])
+        
         if coach.status["hr"]["status"] == "select":
             coaches_selected_count += 1
 
@@ -3623,12 +3622,24 @@ def accept_coach_caas_hr(request):
         # Project
         try:
             contract = ProjectContract.objects.get(project=project.id)
-            contract_data = {
-                "project_contract": contract.id,
-                "project": project.id,
-                "status": "pending",
-                "coach": request.data["coach_id"],
-            }
+            coach_for_contract = Coach.objects.get(id=request.data["coach_id"])
+            contract_data={}
+            if not project.coach_consent_mandatory:
+                contract_data = {
+                    "project_contract": contract.id,
+                    "project": project.id,
+                    "status": "approved",
+                    "coach": request.data["coach_id"],
+                    "name_inputed": coach_for_contract.first_name + " " + coach_for_contract.last_name,
+                    "response_date":timezone.now().date(),
+                }
+            else:
+                contract_data = {
+                    "project_contract": contract.id,
+                    "project": project.id,
+                    "status": "pending",
+                    "coach": request.data["coach_id"],
+                }
 
             contract_serializer = CoachContractSerializer(data=contract_data)
 
@@ -3981,6 +3992,13 @@ def send_project_strure_to_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.steps["project_structure"]["status"] = "complete"
     project.save()
+    if not project.coach_consent_mandatory:
+        for coach_status in project.coaches_status.all():
+            if not coach_status.status["consent"]["status"] == "reject":
+                coach_status.status["consent"]["status"] = "select"
+                if project.steps["project_structure"]["status"] == "complete":
+                    coach_status.status["project_structure"]["status"] = "select"
+            coach_status.save()
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Project structure has been added to the project - {project.name}."
@@ -7447,12 +7465,23 @@ class AssignCoachContractAndProjectContract(APIView):
                 ).exists()
 
                 if not existing_coach_contract:
-                    contract_data = {
-                        "project_contract": contract.id,
-                        "project": project_id,
-                        "status": "pending",
-                        "coach": coach.id,
-                    }
+                    contract_data={}
+                    if not project.coach_consent_mandatory:
+                        contract_data = {
+                            "project_contract": contract.id,
+                            "project": project_id,
+                            "status": "approved",
+                            "coach": coach.id,
+                            "name_inputed": coach.first_name + " " + coach.last_name,
+                            "response_date":timezone.now().date(),
+                        }
+                    else:
+                        contract_data = {
+                            "project_contract": contract.id,
+                            "project": project_id,
+                            "status": "pending",
+                            "coach": coach.id,
+                        }
                     contract_serializer = CoachContractSerializer(data=contract_data)
 
                     if contract_serializer.is_valid():
@@ -7888,3 +7917,51 @@ class UserTokenAvaliableCheck(APIView):
         except Exception as e:
             pass
         return Response({"user_token_present": user_token_present})
+
+
+class DownloadCoachContract(APIView):
+    def get(self, request, coach_contract_id, format=None):
+        try:
+           
+            coach_contract = CoachContract.objects.get(id=coach_contract_id)
+            coach_contract.project_contract.project.project_structure
+            data = coach_contract.project_contract.project.project_structure
+            for item in data:
+                if "session_type" in item and item["session_type"] in SESSION_TYPE_VALUE:
+                    item["session_type"] = SESSION_TYPE_VALUE[item["session_type"]]
+
+            total_sessions = sum(session['no_of_sessions'] for session in data)
+            total_duration = sum(int(session['session_duration']) for session in data)
+            total_coach_fees = sum(int(session['coach_price']) for session in data)
+
+            html_content = render_to_string(
+                "contract/contract_template.html",
+                {
+                    "name": coach_contract.coach.first_name
+                    + " " +  coach_contract.coach.last_name,
+                    "data": data,
+                    "content":coach_contract.project_contract.content,
+                    "name_inputed":coach_contract.name_inputed.capitalize(),
+                    "signed_date":coach_contract.response_date.strftime('%d-%m-%Y'),
+                    "total_sessions": total_sessions,
+                    "total_duration": total_duration,
+                    "total_coach_fees": total_coach_fees,
+                },
+            )
+            pdf = pdfkit.from_string(
+                html_content,
+                False,
+                configuration=pdfkit_config,
+            )
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response[
+                "Content-Disposition"
+            ] = f'attachment; filename={f"Contract.pdf"}'
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to downlaod Contract."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

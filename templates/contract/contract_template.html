@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>{{name}} Contract</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <style>
+      body {
+        font-family: "Calibri", sans-serif;
+      }
+
+      .tableStyle {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+        margin: 0 auto;
+        font-size: 13pt;
+      }
+
+      th,
+      td {
+        border: 1px solid #dddddd;
+        text-align: center;
+        padding: 8px;
+      }
+
+      th {
+        background-color: #4472c4;
+        text-align: center;
+        color: white;
+      }
+
+      tr:nth-child(even) {
+        background-color: #d9e2f3;
+      }
+    </style>
+  </head>
+  <body>
+    {{ content|safe }}
+
+    <h2>Project Structure:</h2>
+    <table class="tableStyle">
+      <tr>
+        <th>Session Type</th>
+        <th>Number of Sessions</th>
+        <th>Session Duration</th>
+        <th>Coach Fees</th>
+      </tr>
+
+      {% for session in data %}
+      <tr>
+        <td>{{ session.session_type }}</td>
+        <td>{{ session.no_of_sessions }}</td>
+        <td>{{ session.session_duration }}</td>
+        <td>{{ session.coach_price }}</td>
+      </tr>
+      {% endfor %}
+
+      <tr>
+        <td><strong>Total:</strong></td>
+        <td><strong>{{ total_sessions }}</strong></td>
+        <td><strong>{{ total_duration }}</strong></td>
+        <td><strong>{{ total_coach_fees }}</strong></td>
+      </tr>
+    </table>
+
+    <h2>Digital Signatures:</h2>
+
+    <p>
+      I have read, understand and agree to the terms set forth in the Agreement
+      and I hereby accept the terms of this Agreement. I also acknowledge my
+      agreement with the ICF’s Code of Ethics
+    </p>
+
+    <h3>Agreed by the parties:</h3>
+
+    <div>
+      <strong>Signed By (Coach)</strong><br />
+      <p>Name: {{name_inputed}}</p>
+      <p>Date: {{signed_date}}</p>
+    </div>
+
+    <div>
+      <p>Authorized signatory on behalf of InMuto Consulting Pvt Ltd</p>
+      <strong>Signed By</strong><br />
+      <p>Name: Rajat Garg</p>
+      <p>Position: Founder at InMuto Consulting Pvt Ltd</p>
+    </div>
+  </body>
+</html>
