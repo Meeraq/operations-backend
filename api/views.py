@@ -2667,9 +2667,18 @@ def delete_hr(request, hr_id):
     try:
         hr = HR.objects.get(id=hr_id)
         user_profile = hr.user
-        user = user_profile.user
-        user.delete()
-        hr.delete()
+        is_delete_user = True
+        for role in user_profile.roles.all():
+            if not role.name == "hr":
+                is_delete_user = False
+            else:
+                user_profile.roles.remove(role)
+                user_profile.save()
+        if is_delete_user:
+            user = user_profile.user
+            user.delete()
+        else:
+            hr.delete()
         return Response(
             {"message": "HR deleted successfully"}, status=status.HTTP_200_OK
         )
