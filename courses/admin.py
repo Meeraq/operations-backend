@@ -16,6 +16,7 @@ from .models import (
     FeedbackLessonResponse,
     Video,
     VideoLesson,
+    CourseTemplate,
 )
 
 # Register your models here.
@@ -35,3 +36,4 @@ admin.site.register(QuizLessonResponse)
 admin.site.register(FeedbackLessonResponse)
 admin.site.register(Video)
 admin.site.register(VideoLesson)
+admin.site.register(CourseTemplate)

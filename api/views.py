@@ -5219,11 +5219,11 @@ def get_coachee_of_user(request, user_type, user_id):
                 "name": batch.project.name,
                 "type":"SEEQ"
             }
-            learner_dict["organisation"].add(project.organisation.name)
+            learner_dict["organisation"].add(batch.project.organisation.name)
             if project_dict["name"] not in [proj["name"] for proj in learner_dict["projects"]]:
                 learner_dict["projects"].append(project_dict)
         learners_data.append(learner_dict)
-    print(learner_dict)
+    
     # serializer = LearnerSerializer(learners,many=True)
     return Response(learners_data)
 
