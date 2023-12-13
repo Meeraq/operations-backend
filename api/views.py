@@ -4918,7 +4918,9 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
-       
+        learner = Learner.objects.get(id =user_id)
+        schedular_sessions = SchedularSessions.objects.filter(enrolled_participant__email=learner.email)
+        avaliable_sessions = schedular_sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -4952,6 +4954,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     if user_type == "coach":
         coach_id=user_id
     for session in avaliable_sessions:
+        
         session_detail = {
             "id": session.id,
             "batch_name": session.coaching_session.batch.name
@@ -5065,6 +5068,9 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             ~Q(session_type="chemistry"),
             Q(is_archive=False),
         )
+        learner = Learner.objects.get(id =user_id)
+        schedular_sessions = SchedularSessions.objects.filter(enrolled_participant__email=learner.email)
+        avaliable_sessions = schedular_sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
