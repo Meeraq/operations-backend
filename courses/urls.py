@@ -141,6 +141,10 @@ urlpatterns = [
         views.get_course_enrollment_for_pmo_preview,
     ),
     path(
+        "course-template/preview/pmo/<int:course_template_id>/",
+        views.get_course_enrollment_for_pmo_preview_for_course_template,
+    ),
+    path(
         "course-enrollments/<int:learner_id>/",
         views.get_course_enrollments_of_learner,
     ),
