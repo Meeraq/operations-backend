@@ -23,6 +23,7 @@ from .views import (
     CoachWithApprovedContractsInProject,
     UserTokenAvaliableCheck,
     SessionData,
+    DownloadCoachContract,
 )
 
 urlpatterns = [
@@ -333,6 +334,10 @@ urlpatterns = [
     path(
         "user-token-avaliable-check/<str:user_mail>/",
         UserTokenAvaliableCheck.as_view(),
+    ),
+    path(
+        "download-coach-contract/<int:coach_contract_id>/",
+        DownloadCoachContract.as_view(),
     ),
     path('session-data/', SessionData.as_view(),),
 ]

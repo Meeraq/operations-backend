@@ -1,6 +1,6 @@
 from django.db import models
 import os
-
+from django.core.exceptions import ValidationError
 # Create your models here.
 from django.contrib.auth.models import AbstractUser, Group
 from django.db.models.signals import post_save
@@ -25,25 +25,25 @@ import environ
 env = environ.Env()
 
 
-class EmailSendingError(Exception):
-    pass
+
 
 
 def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
-    email_message = render_to_string(file_name, content)
-    email = EmailMessage(
-        f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
-        email_message,
-        settings.DEFAULT_FROM_EMAIL,
-        user_email,
-        bcc_emails,
-    )
-    email.content_subtype = "html"
     try:
+        email_message = render_to_string(file_name, content)
+        email = EmailMessage(
+            f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
+            email_message,
+            settings.DEFAULT_FROM_EMAIL,
+            user_email,
+            bcc_emails,
+        )
+        email.content_subtype = "html"
+    
         email.send(fail_silently=False)
-    except BadHeaderError as e:
+    except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
+        
 
 
 @receiver(reset_password_token_created)
@@ -639,10 +639,6 @@ class CoachContract(models.Model):
         max_length=50, choices=STATUS_CHOICES, default="pending", blank=True
     )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-    send_date = models.DateField(auto_now_add=True, blank=True)
-    response_date = models.DateField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True, blank=True)
-
     send_date = models.DateField(auto_now_add=True, blank=True)
     response_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True)

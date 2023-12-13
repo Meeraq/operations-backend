@@ -586,39 +586,42 @@ def addEmailTemplate(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def send_test_mails(request):
-    emails = request.data.get("emails", [])
-    subject = request.data.get("subject")
-    # email_content = request.data.get('email_content', '')  # Assuming you're sending email content too
-    temp1 = request.data.get("htmlContent", "")
+    try:
+        emails = request.data.get("emails", [])
+        subject = request.data.get("subject")
+        # email_content = request.data.get('email_content', '')  # Assuming you're sending email content too
+        temp1 = request.data.get("htmlContent", "")
 
-    print(emails, "emails")
+        print(emails, "emails")
 
-    # if not subject:
-    #     return Response({'error': "Subject is required."}, status=400)
+        # if not subject:
+        #     return Response({'error': "Subject is required."}, status=400)
 
-    if len(emails) > 0:
-        for email in emails:
-            email_message_learner = render_to_string(
-                "default.html",
-                {
-                    "email_content": mark_safe(temp1),
-                    "email_title": "hello",
-                    "subject": subject,
-                },
-            )
-            email = EmailMessage(
-                subject,
-                email_message_learner,
-                settings.DEFAULT_FROM_EMAIL,  # from email address
-                [email],  # to email address
-            )
-            email.content_subtype = "html"
-            email.send()
-            print("Email sent to:", email)
+        if len(emails) > 0:
+            for email in emails:
+                email_message_learner = render_to_string(
+                    "default.html",
+                    {
+                        "email_content": mark_safe(temp1),
+                        "email_title": "hello",
+                        "subject": subject,
+                    },
+                )
+                email = EmailMessage(
+                    subject,
+                    email_message_learner,
+                    settings.DEFAULT_FROM_EMAIL,  # from email address
+                    [email],  # to email address
+                )
+                email.content_subtype = "html"
+                email.send()
+                print("Email sent to:", email)
 
-        return Response({"message": "Emails sent successfully"}, status=200)
-    else:
-        return Response({"error": "No email addresses found."}, status=400)
+            return Response({"message": "Emails sent successfully"}, status=200)
+        else:
+            return Response({"error": "No email addresses found."}, status=400)
+    except Exception as e:
+        return Response({"error": "Failed to send mail."}, status=400)
 
 
 @api_view(["GET"])
