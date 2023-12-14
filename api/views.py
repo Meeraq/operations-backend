@@ -63,6 +63,7 @@ from .serializers import (
     CreateProjectActivitySerializer,
     FinalizeCoachActivitySerializer,
     SessionDataSerializer,
+    SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer,
 )
 
 from rest_framework import generics
@@ -142,12 +143,13 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from rest_framework import generics
-from django.db.models import Subquery, OuterRef
-from schedularApi.models import SchedularBatch
+from django.db.models import Subquery, OuterRef, Value, BooleanField
+from schedularApi.models import SchedularBatch, SchedularSessions,SchedularProject,SchedularBatch ,SchedularSessions
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
 from zohoapi.models import Vendor
+from courses.models import CourseEnrollment
 
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
@@ -584,7 +586,7 @@ FIELD_NAME_VALUES = {
 def create_pmo(request):
     # Get data from request
     name = request.data.get("name")
-    email = request.data.get("email")
+    email = request.data.get("email", "").strip()
     phone = request.data.get("phone")
     username = email  # username and email are the same
     password = request.data.get("password")
@@ -687,7 +689,7 @@ def update_coach_profile(request, id):
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email")
+    new_email = mutable_data.get("email").strip()
     #  other user exists with the new email
     if (
         new_email
@@ -921,11 +923,11 @@ def create_learners(learners_data):
             learners = []
             for learner_data in learners_data:
                 # Check if username field is provided
+                email = learner_data.get('email','').strip()
                 if "email" not in learner_data:
                     raise ValueError("Username field is required")
-
                 # Check if user already exists
-                user = User.objects.filter(username=learner_data["email"]).first()
+                user = User.objects.filter(username=email).first()
                 if user:
                     # If user exists, check if learner already exists
                     learner = Learner.objects.filter(user__user=user).first()
@@ -947,9 +949,9 @@ def create_learners(learners_data):
                         )
                     )
                     user = User.objects.create_user(
-                        username=learner_data["email"],
+                        username=email,
                         password=temp_password,
-                        email=learner_data.get("email", learner_data["email"]),
+                        email=email,
                     )
                     # user.set_unusable_password()
                     user.save()
@@ -962,11 +964,10 @@ def create_learners(learners_data):
                 learner = Learner.objects.create(
                     user=profile,
                     name=learner_data.get("name"),
-                    email=learner_data["email"],
+                    email=email,
                     phone=learner_data.get("phone"),
                 )
                 learners.append(learner)
-
             # Return response with learners created or already existing
             serializer = LearnerSerializer(learners, many=True)
             return learners
@@ -1111,7 +1112,7 @@ def add_coach(request):
     coach_id = request.data.get("coach_id")
     first_name = request.data.get("first_name")
     last_name = request.data.get("last_name")
-    email = request.data.get("email")
+    email = request.data.get("email", "").strip()
     age = request.data.get("age")
     gender = request.data.get("gender")
     domain = json.loads(request.data["domain"])
@@ -1136,7 +1137,7 @@ def add_coach(request):
     ctt_nctt = json.loads(request.data["ctt_nctt"])
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
-    username = request.data.get("email")  # keeping username and email same
+    username = request.data.get("email", "").strip()  # keeping username and email same
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
@@ -1632,7 +1633,7 @@ def update_organisation(request, org_id):
 @permission_classes([IsAuthenticated])
 def add_hr(request):
     try:
-        email = request.data.get("email")
+        email = request.data.get("email", "").strip()
         with transaction.atomic():
             user = User.objects.filter(email=email).first()
             if not user:
@@ -1691,7 +1692,7 @@ def update_hr(request, hr_id):
         # Update HR instance
         serializer = HrSerializer(hr, data=request.data, partial=True)
         if serializer.is_valid():
-            new_email = request.data.get("email")  # Get the new email from the request
+            new_email = request.data.get("email",'').strip()  # Get the new email from the request
             existing_user = (
                 User.objects.filter(email=new_email).exclude(username=hr.email).first()
             )
@@ -3276,7 +3277,7 @@ def add_mulitple_coaches(request):
                 corporate_yoe = coach_data.get("corporate_yoe", "")
                 coaching_yoe = coach_data.get("coaching_yoe", "")
                 domain = coach_data.get("functional_domain", [])
-                email = coach_data.get("email")
+                email = coach_data.get("email","").strip()
                 phone = coach_data.get("mobile")
                 phone_country_code = coach_data.get("phone_country_code")
                 job_roles = coach_data.get("job_roles", [])
@@ -3912,7 +3913,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
-
+    
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
             Engagement.objects.filter(
@@ -3926,6 +3927,107 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     )
     return Response(serializer.data, status=200)
 
+
+
+@api_view(["GET"])
+def new_get_upcoming_sessions_of_user(request, user_type, user_id):
+    
+    current_time = int(timezone.now().timestamp() * 1000)
+    session_requests = []
+    current_time_seeq = timezone.now()
+    timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+    avaliable_sessions=[]
+    if user_type == "pmo":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__gt=current_time),
+            ~Q(status="completed"),
+        )
+        schedular_sessions = SchedularSessions.objects.all()
+        avaliable_sessions = schedular_sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
+    if user_type == "learner":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__gt=current_time),
+            Q(learner__id=user_id),
+            ~Q(session_type="chemistry"),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        )
+        learner = Learner.objects.get(id =user_id)
+        schedular_sessions = SchedularSessions.objects.filter(enrolled_participant__email=learner.email)
+        avaliable_sessions = schedular_sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
+    if user_type == "coach":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__gt=current_time),
+            Q(coach__id=user_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        )
+        schedular_sessions = SchedularSessions.objects.filter(availibility__coach__id=user_id)
+        avaliable_sessions = schedular_sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
+    if user_type == "hr":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__gt=current_time),
+            Q(project__hr__id=user_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        )
+    
+    session_requests = session_requests.annotate(
+        engagement_status=Subquery(
+            Engagement.objects.filter(
+                project=OuterRef("project"),
+                learner=OuterRef("learner"),
+            ).values("status")[:1]
+        ),
+        is_seeq_project=Value(False, output_field=BooleanField())
+    )
+    session_details = []
+    coach_id = None
+    if user_type == "coach":
+        coach_id=user_id
+    for session in avaliable_sessions:
+        
+        session_detail = {
+            "id": session.id,
+            "batch_name": session.coaching_session.batch.name
+            if coach_id is None
+            else None,
+            "project_name": session.coaching_session.batch.project.name,
+            "organisation_name":session.coaching_session.batch.project.organisation.name,
+            "project_id": session.coaching_session.batch.project.id
+            if coach_id is None
+            else None,
+            "coach_name": session.availibility.coach.first_name
+            + " "
+            + session.availibility.coach.last_name,
+            "coach_email": session.availibility.coach.email,
+            "coach_phone": "+"
+            + session.availibility.coach.phone_country_code
+            + session.availibility.coach.phone,
+            "participant_name": session.enrolled_participant.name,
+            "participant_email": session.enrolled_participant.email,
+            "participant_phone": session.enrolled_participant.phone,
+            "coaching_session_number": session.coaching_session.coaching_session_number
+            if coach_id is None
+            else None,
+            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "start_time": session.availibility.start_time,
+            "room_id": f"{session.availibility.coach.room_id}",
+            "status": session.status,
+            "session_type": session.coaching_session.session_type,
+            "end_time": session.availibility.end_time,
+            "is_seeq_project": True
+        }
+        session_details.append(session_detail)
+
+    serializer = SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer(
+        session_requests, many=True
+    )
+    return Response({"caas_session_details":serializer.data,"seeq_session_details":session_details}, status=200)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -3979,6 +4081,103 @@ def get_past_sessions_of_user(request, user_type, user_id):
     )
     return Response(serializer.data, status=200)
 
+@api_view(["GET"])
+def new_get_past_sessions_of_user(request, user_type, user_id):
+    current_time = int(timezone.now().timestamp() * 1000)
+    session_requests = []
+    current_time_seeq = timezone.now()
+    timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+    avaliable_sessions=[]
+    if user_type == "pmo":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__lt=current_time)
+            | Q(status="completed"),
+        )
+        schedular_sessions = SchedularSessions.objects.all()
+        avaliable_sessions = schedular_sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
+    if user_type == "learner":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__lt=current_time)
+            | Q(status="completed"),
+            Q(learner__id=user_id),
+            ~Q(session_type="chemistry"),
+            Q(is_archive=False),
+        )
+        learner = Learner.objects.get(id =user_id)
+        schedular_sessions = SchedularSessions.objects.filter(enrolled_participant__email=learner.email)
+        avaliable_sessions = schedular_sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
+    if user_type == "coach":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__lt=current_time)
+            | Q(status="completed"),
+            Q(coach__id=user_id),
+            Q(is_archive=False),
+        )
+        schedular_sessions = SchedularSessions.objects.filter(availibility__coach__id=user_id)
+        avaliable_sessions = schedular_sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
+    if user_type == "hr":
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__lt=current_time)
+            | Q(status="completed"),
+            Q(project__hr__id=user_id),
+            Q(is_archive=False),
+        )
+
+    session_requests = session_requests.annotate(
+        engagement_status=Subquery(
+            Engagement.objects.filter(
+                project=OuterRef("project"),
+                learner=OuterRef("learner"),
+            ).values("status")[:1]
+        ),
+        is_seeq_project=Value(False, output_field=BooleanField())
+    )
+    session_details = []
+    coach_id = None
+    if user_type == "coach":
+        coach_id=user_id
+    for session in avaliable_sessions:
+        session_detail = {
+            "id": session.id,
+            "batch_name": session.coaching_session.batch.name
+            if coach_id is None
+            else None,
+            "project_name": session.coaching_session.batch.project.name,
+            "organisation_name":session.coaching_session.batch.project.organisation.name,
+            "project_id": session.coaching_session.batch.project.id
+            if coach_id is None
+            else None,
+            "coach_name": session.availibility.coach.first_name
+            + " "
+            + session.availibility.coach.last_name,
+            "coach_email": session.availibility.coach.email,
+            "coach_phone": "+"
+            + session.availibility.coach.phone_country_code
+            + session.availibility.coach.phone,
+            "participant_name": session.enrolled_participant.name,
+            "participant_email": session.enrolled_participant.email,
+            "participant_phone": session.enrolled_participant.phone,
+            "coaching_session_number": session.coaching_session.coaching_session_number
+            if coach_id is None
+            else None,
+            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "start_time": session.availibility.start_time,
+            "room_id": f"{session.availibility.coach.room_id}",
+            "status": session.status,
+            "session_type": session.coaching_session.session_type,
+            "end_time": session.availibility.end_time,
+            "is_seeq_project": True
+        }
+        session_details.append(session_detail)
+
+    serializer = SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer(
+        session_requests, many=True
+    )
+    return Response({"caas_session_details":serializer.data,"seeq_session_details":session_details}, status=200)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -4050,6 +4249,12 @@ def get_coachee_of_user(request, user_type, user_id):
         }
         if user_type == "pmo":
             projects = Project.objects.filter(engagement__learner=learner)
+            schedular_batches=SchedularBatch.objects.filter(participants__email=learner.email)
+            course_enrollments = CourseEnrollment.objects.filter(learner__id=learner.id)
+            courses_names = []
+            for course_enrollment in course_enrollments:
+                courses_names.append(course_enrollment.course.name)
+            learner_dict["coursesEnrolled"] = courses_names
         elif user_type == "coach":
             projects = Project.objects.filter(
                 Q(engagement__learner=learner) & Q(engagement__coach__id=user_id)
@@ -4058,16 +4263,23 @@ def get_coachee_of_user(request, user_type, user_id):
             projects = Project.objects.filter(
                 Q(engagement__learner=learner) & Q(hr__id=user_id)
             )
-        # project_data = []
-        # organisation = set()
+
         for project in projects:
             project_dict = {
                 "name": project.name,
+                "type":"CAAS"
             }
             learner_dict["organisation"].add(project.organisation.name)
             learner_dict["projects"].append(project_dict)
+        for batch in schedular_batches:
+            project_dict = {
+                "name": batch.project.name,
+                "type":"SEEQ"
+            }
+            learner_dict["organisation"].add(batch.project.organisation.name)
+            if project_dict["name"] not in [proj["name"] for proj in learner_dict["projects"]]:
+                learner_dict["projects"].append(project_dict)
         learners_data.append(learner_dict)
-    # serializer = LearnerSerializer(learners,many=True)
     return Response(learners_data)
 
 
@@ -4551,6 +4763,16 @@ def get_current_session(request, user_type, room_id, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
+
+        if sessions.count() == 0:
+            learner = Learner.objects.get(id=user_id)
+            sessions = SchedularSessions.objects.filter(
+                availibility__start_time__lt=five_minutes_plus_current_time,
+                availibility__end_time__gt=current_time,
+                enrolled_participant__email=learner.email,
+                availibility__coach__room_id=room_id,
+            )
+
     elif user_type == "hr":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
