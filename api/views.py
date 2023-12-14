@@ -853,8 +853,14 @@ def update_coach_profile(request, id):
         user=coach.user.user,
         timestamp=timezone.now(),
     )
-    serializer = CoachSerializer(coach, data=mutable_data, partial=True)
+    if mutable_data.get("education_pic", "")=="null":
+        mutable_data["education_pic"] = None
+    if mutable_data.get("profile_pic","")=="null":
+        mutable_data["profile_pic"] = None
+    if mutable_data.get("education_upload_file","")=="null":
+        mutable_data["education_upload_file"] = None
 
+    serializer = CoachSerializer(coach, data=mutable_data, partial=True)
     coach_id = request.data.get("coach_id")
 
     # Check if coach_id exists in request.data

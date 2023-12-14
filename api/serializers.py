@@ -74,6 +74,10 @@ class LearnerDepthOneSerializer(serializers.ModelSerializer):
 
 
 class CoachSerializer(serializers.ModelSerializer):
+    education_pic = serializers.ImageField(required=False, allow_null=True)
+    profile_pic = serializers.ImageField(required=False, allow_null=True)
+
+
     class Meta:
         model = Coach
         fields = "__all__"
