@@ -47,7 +47,7 @@ from .serializers import (
     PdfLessonSerializer,
 )
 from rest_framework.views import APIView
-from api.models import User, Learner, Profile
+from api.models import User, Learner, Profile, Role
 from schedularApi.models import (
     SchedularParticipants,
     SchedularBatch,
@@ -89,9 +89,12 @@ def create_learner(learner_name, learner_email, learner_phone):
                 email=learner_email,
             )
             user.save()
-            learner_profile = Profile.objects.create(user=user, type="learner")
+            learner_role, created = Role.objects.get_or_create(name="learner")
+            profile = Profile.objects.create(user=user)
+            profile.roles.add(learner_role)
+            profile.save()
             learner = Learner.objects.create(
-                user=learner_profile,
+                user=profile,
                 name=learner_name,
                 email=learner_email,
                 phone=learner_phone,
@@ -649,28 +652,19 @@ def update_live_session(request, course_id, lesson_id):
 
     if request.method == "PUT":
         lesson_data = request.data.get("lesson")
-        live_session_data = request.data.get("live_session")
-
+        # live_session_data = request.data.get("live_session")
         # Update Lesson instance fields
         lesson.name = lesson_data.get("name")
         lesson.status = lesson_data.get("status")
         lesson.lesson_type = lesson_data.get("lesson_type")
         lesson.save()
-
         # Update LiveSession instance fields
-        live_session.description = live_session_data.get("description")
-        live_session.meeting_link = live_session_data.get("meeting_link")
-        live_session.date = live_session_data.get("date")
-        live_session.start_time = live_session_data.get("start_time")
-        live_session.end_time = live_session_data.get("end_time")
-        live_session.save()
-
-        # Update Lesson status based on incoming data
-        lesson_status = lesson_data.get("status")
-        if lesson_status:
-            lesson.status = lesson_status
-            lesson.save()
-
+        # live_session.description = live_session_data.get("description")
+        # live_session.meeting_link = live_session_data.get("meeting_link")
+        # live_session.date = live_session_data.get("date")
+        # live_session.start_time = live_session_data.get("start_time")
+        # live_session.end_time = live_session_data.get("end_time")
+        # live_session.save()
         # Serialize the updated LiveSession instance
         serializer = LiveSessionSerializer(live_session)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -731,29 +725,28 @@ def update_laser_coaching_session(request, course_id, lesson_id, session_id):
             "Lesson or Laser Coaching Session not found",
             status=status.HTTP_404_NOT_FOUND,
         )
-
     lesson_data = request.data.get("lesson")
-    session_data = request.data.get("laser_coaching_session")
-
+    # session_data = request.data.get("laser_coaching_session")
     lesson_serializer = LessonSerializer(lesson, data=lesson_data, partial=True)
-    session_serializer = LaserCoachingSessionSerializer(
-        coaching_session, data=session_data, partial=True
-    )
+    # session_serializer = LaserCoachingSessionSerializer(
+    #     coaching_session, data=session_data, partial=True
+    # )
 
-    if lesson_serializer.is_valid() and session_serializer.is_valid():
+    if lesson_serializer.is_valid():
+    # and session_serializer.is_valid():
         lesson_serializer.save()
-        session_serializer.save()
+        # session_serializer.save()
         return Response(
             {
                 "lesson": lesson_serializer.data,
-                "laser_coaching_session": session_serializer.data,
+                # "laser_coaching_session": session_serializer.data,
             }
         )
 
     return Response(
         {
             "lesson_errors": lesson_serializer.errors,
-            "session_errors": session_serializer.errors,
+            # "session_errors": session_serializer.errors,
         },
         status=status.HTTP_400_BAD_REQUEST,
     )
@@ -928,6 +921,27 @@ def get_course_enrollment_for_pmo_preview(request, course_id):
         )
     except Course.DoesNotExist:
         return Response(status=404)
+    
+@api_view(["GET"])
+def get_course_enrollment_for_pmo_preview_for_course_template(request, course_template_id):
+    try:
+        course_template = CourseTemplate.objects.get(id=course_template_id)
+        course_serializer = CourseTemplateSerializer(course_template)
+        lessons = Lesson.objects.filter(course_template=course_template, status="public")
+        lessons_serializer = LessonSerializer(lessons, many=True)
+        completed_lessons = []
+        return Response(
+            {
+                "course_enrollment": {
+                    "completed_lessons": completed_lessons,
+                    "course": course_serializer.data,
+                },
+                "lessons": lessons_serializer.data,
+            }
+        )
+    except Course.DoesNotExist:
+        return Response(status=404)
+
 
 
 @api_view(["GET"])
@@ -1481,18 +1495,13 @@ class GetLaserCoachingTime(APIView):
     def get(self, request, laser_coaching_id, participant_email):
         try:
             laser_coaching = LaserCoachingSession.objects.get(id=laser_coaching_id)
-            coaching_session = CoachingSession.objects.get(
-                booking_link=laser_coaching.booking_link
-            )
-
+            coaching_session = laser_coaching.coaching_session
             participant = get_object_or_404(
                 SchedularParticipants, email=participant_email
             )
-
             existing_session = SchedularSessions.objects.filter(
                 enrolled_participant=participant, coaching_session=coaching_session
             ).first()
-
             return Response(
                 {
                     "start_time": existing_session.availibility.start_time,
@@ -1774,11 +1783,24 @@ class AssignCourseTemplateToBatch(APIView):
                     # check if same email user exists or not
                     user = User.objects.filter(username=participant.email).first()
                     if user:
-                        if user.profile.type == "learner":
+                        if user.profile.roles.all().filter(name="learner").exists():
                             learner = Learner.objects.get(user=user.profile)
                             learners.append(learner)
                         else:
-                            not_enrolled_learner_emails.append(participant.email)
+                            learner_role = (
+                                learner_role,
+                                created,
+                            ) = Role.objects.get_or_create(name="learner")
+                            learner_profile = user.profile
+                            learner_profile.roles.add(learner_role)
+                            learner_role.save()
+                            learner = Learner.objects.create(
+                                user=learner_profile,
+                                name=participant.name,
+                                email=participant.email,
+                                phone=participant.phone,
+                            )
+                            learners.append(learner)
                     else:
                         learner = create_learner(
                             participant.name, participant.email, participant.phone

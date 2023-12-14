@@ -4,7 +4,7 @@
 <head>
 	<style>
 		body {
-			font-family: Ubuntu, 'WebFont-Ubuntu';
+			 font-family:"Calibri", sans-serif;
 			font-size: 9pt;
 			color: #333333;
 			background: #ffffff;
@@ -32,6 +32,20 @@
 			border: none;
 			padding: 0;
 		}
+ 		.tableStyle {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+        margin: 0 auto;
+        font-size: 11pt;
+       
+     	 }
+
+		.tableDataCenter {
+        text-align: center;
+        padding: 8px;
+      }
+
 
 		#header,
 		#footer {
@@ -100,12 +114,12 @@
 <body>
 	<div style="padding: 5pt;">
 		<div style="border: 2pt solid #000; margin: 5pt;">
-			<div style="min-height: 700px; display: flex; flex-direction: column; justify-content: space-between;"
+			<div style="min-height: 700px; display: flex; flex-direction: column; justify-content: space-between; margin-top: 20pt;"
 				id="template-body" id='template-body'>
-				<table style="width: 100%; table-layout: fixed;  border: 0px;">
+				<table style="width: 100%; table-layout: fixed;  border: 0px;" >
 					<tbody>
 						<tr>
-							<td style="vertical-align: top; width: 50%;">
+							<td style="vertical-align: top; width: 50%;font-size: 13pt">
 								<div class="mt-4">
 									<div style="font-size: 18px; color: #333333;"><b>{{ invoice.vendor_name }}</b></div>
 									<div style="font-size: 15px; color: #333333;">
@@ -120,7 +134,7 @@
 									</div>
 								</div>
 							</td>
-							<td style="width: 50%; text-align: right; vertical-align: top;">
+							<td style="width: 50%; text-align: right; vertical-align: top; font-size: 13pt">
 								<div style="font-size: 18pt; margin: 0pt; padding:0pt;">TAX INVOICE</div><br />
 								<div style="font-size: 12pt;margin: 0pt; padding:0pt;">Invoice No.: <b>{{ invoice.invoice_number }}</b>
 								</div>
@@ -145,10 +159,10 @@
 								</div>
 							</td>
 							<td valign="right" style="vertical-align: bottom; width: 40%;">
-								<table style="float: right; width: 100%; table-layout: fixed; word-wrap: break-word;">
+								<table style="float: right; width: 100%; table-layout: fixed; word-wrap: break-word; ">
 									<tbody>
 										<tr>
-											<td style="text-align: left;">
+											<td style="text-align: right; font-size: 13pt;">
 												<span>Invoice Date:</span>
 												<span id="entity-date" style="font-size: 16px;">
 													{{ invoice.invoice_date }}
@@ -157,7 +171,7 @@
 										</tr>
 
 										<tr>
-											<td style="text-align: left;">
+											<td style="text-align: right; font-size: 13pt">
 												<span>Due Date:</span>
 												<span style="white-space: nowrap; font-size: 16px;" id="due-date">
 													{{ invoice.due_date}}
@@ -165,7 +179,7 @@
 											</td>
 										</tr>
 										<tr>
-											<td>
+											<td style="text-align: right; font-size: 13pt">
 												<span>P.O.#:</span>
 												<span style="word-wrap:break-word;font-size: 16px; white-space:wrap;">
 													{{invoice.purchase_order_no}}
@@ -179,47 +193,47 @@
 					</tbody>
 				</table>
 
-				<table style="width: 100%; margin-top: 20px; border: 1px solid gray;" border="1" cellspacing="0"
-					cellpadding="0">
+				<table style="width: 100%; margin-top: 40pt; border: 1px solid gray;" border="1" cellspacing="0"
+					cellpadding="0" class="tableStyle">
 					<thead>
 						<tr style="height: 32px;">
-							<td>
-								<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word">
+							<td class="tableDataCenter" >
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word">
 									S. No.
 								</div>
 							</td>
-							<td>
-								<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
 									Item & Description
 								</div>
 							</td>
-							<td>
-								<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
 									Qty
 								</div>
 							</td>
-							<td>
-								<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
 									Rate
 								</div>
 							</td>
-							<td>
-								<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
 									Amount
 								</div>
 							</td>
-							<td>
-								<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
 									Tax
 								</div>
 							</td>
-							<td>
-								<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
 									HSN/SAC
 								</div>
 							</td>
-							<td>
-								<div style="font-size: 16pt !important; white-space: break-spaces; word-wrap: break-word ">
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
 									Amount (Including tax)
 								</div>
 							</td>
@@ -229,24 +243,24 @@
 					<tbody>
 						{% for item in invoice.line_items %}
 						<tr>
-							<td>{{ forloop.counter }}</td>
-							<td>
+							<td class="tableDataCenter">{{ forloop.counter }}</td>
+							<td class="tableDataCenter">
 								<span style="word-wrap: break-word;">{{ item.name|default:item.description|default:"Item" }}</span>
 							</td>
-							<td>{{ item.quantity_input }}</td>
-							<td>{{ item.rate }}</td>
-							<td>{{ item.quantity_mul_rate }}</td>
-							<td>{{ item.tax_percentage }} %</td>
-							<td>{{ item.hsn_sac|default:"-" }}</td>
-							<td>{{ item.quantity_mul_rate_include_tax }}</td>
+							<td class="tableDataCenter">{{ item.quantity_input }}</td>
+							<td class="tableDataCenter">{{ item.rate }}</td>
+							<td class="tableDataCenter">{{ item.quantity_mul_rate }}</td>
+							<td class="tableDataCenter">{{ item.tax_percentage }} %</td>
+							<td class="tableDataCenter">{{ item.hsn_sac|default:"-" }}</td>
+							<td class="tableDataCenter">{{ item.quantity_mul_rate_include_tax }}</td>
 						</tr>
 						{% endfor %}
 					</tbody>
 				</table>
-				<table style="margin-top: 4px; border: 0px;" cellspacing="0" border="0" width="100%">
+				<table style="margin-top: 10pt; border: 0px;" cellspacing="0" border="0" width="100%">
 					<tbody>
 						<tr>
-							<td id="total" style="text-align: right;"><span style="font-weight: bold;">Total: </span>{{ invoice.total }}</td>
+							<td id="total" style="text-align: right;font-size: 16pt; "><span style="font-weight: bold;">Total: </span>{{ invoice.total }}</td>
 						</tr>
 					</tbody>
 				</table>
@@ -259,7 +273,7 @@
 				<table style="border: 0px; width: 100%; margin-bottom: 8px;">
 					<thead style="border: 0px;">
 						<tr>
-							<td style="text-align: right; width: 100%;">
+							<td style="text-align: right; width: 100%; font-size: 13pt;">
 								Signature:
 								<img style="width: 100px; height: auto; display: inline-block;" alt="signature"
 									src="data:image/png;base64, {{image_base64}}" />
@@ -271,21 +285,21 @@
 		</div>
 	</div>
 	<div style="padding: 16px 0px">
-		<div style="font-weight: 600; font-size: large;margin-bottom: 2pt;">Bank Account Details:</div>
-		<div style="margin: 0pt; padding: 0pt;">Beneficiary Name: {{ invoice.beneficiary_name }}</div>
-		<div style="margin: 0pt; padding: 0pt;">Bank Name: {{ invoice.bank_name }}</div>
-		<div style="margin: 0pt; padding: 0pt;">Account Number: {{ invoice.account_number }}</div>
+		<div style="font-weight: 600; font-size: 13pt;margin-bottom: 2pt;">Bank Account Details:</div>
+		<div style="margin: 0pt; padding: 0pt; font-size: 13pt;">Beneficiary Name: {{ invoice.beneficiary_name }}</div>
+		<div style="margin: 0pt; padding: 0pt; font-size: 13pt;">Bank Name: {{ invoice.bank_name }}</div>
+		<div style="margin: 0pt; padding: 0pt; font-size: 13pt;">Account Number: {{ invoice.account_number }}</div>
 		{% if invoice.is_oversea_account %}
-		<div style="margin: 0pt; padding: 0pt;">TIN Number: {{ invoice.tin_number }}</div>
-		<div style="margin: 0pt; padding: 0pt;">
+		<div style="margin: 0pt; padding: 0pt; font-size: 13pt;">TIN Number: {{ invoice.tin_number }}</div>
+		<div style="margin: 0pt; padding: 0pt; font-size: 13pt;">
 			{% if invoice.type_of_code == "iban" %}
 			IBAN: {{ invoice.iban }}
 			{% elif invoice.type_of_code == "swift_code" %}
 			Swift Code {{ invoice.swift_code }}
 			{% endif %}
-		</div style="margin: 0pt; padding: 0pt;">
+		</div style="margin: 0pt; padding: 0pt; font-size: 13pt;">
 		{% else %}
-		<div style="margin: 0pt; padding: 0pt;">IFSC Code: {{ invoice.ifsc_code }}</div>
+		<div style="margin: 0pt; padding: 0pt; font-size: 13pt;">IFSC Code: {{ invoice.ifsc_code }}</div>
 		{% endif %}
 	</div>
 	</div>

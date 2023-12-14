@@ -153,20 +153,20 @@ from courses.models import CourseEnrollment
 
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
-
+import pdfkit
 import os
 
 # Create your views here.
 from collections import defaultdict
 import pandas as pd
-
+from django.http import HttpResponse
 import environ
 
 env = environ.Env()
 
+wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
-class EmailSendingError(Exception):
-    pass
+pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
 
 def create_send_email(user_email, file_name):
@@ -183,24 +183,23 @@ def create_send_email(user_email, file_name):
 
 
 def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
-    email_message = render_to_string(file_name, content)
-
-    email = EmailMessage(
-        f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
-        email_message,
-        settings.DEFAULT_FROM_EMAIL,
-        user_email,
-        bcc_emails,
-    )
-    email.content_subtype = "html"
-
     try:
+        email_message = render_to_string(file_name, content)
+
+        email = EmailMessage(
+            f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
+            email_message,
+            settings.DEFAULT_FROM_EMAIL,
+            user_email,
+            bcc_emails,
+        )
+        email.content_subtype = "html"
+
         email.send(fail_silently=False)
         for email in user_email:
             create_send_email(email, file_name)
-    except BadHeaderError as e:
+    except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
 
 def convert_to_24hr_format(time_str):
@@ -587,7 +586,7 @@ FIELD_NAME_VALUES = {
 def create_pmo(request):
     # Get data from request
     name = request.data.get("name")
-    email = request.data.get("email")
+    email = request.data.get("email", "").strip()
     phone = request.data.get("phone")
     username = email  # username and email are the same
     password = request.data.get("password")
@@ -741,7 +740,7 @@ def update_coach_profile(request, id):
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email")
+    new_email = mutable_data.get("email").strip()
     #  other user exists with the new email
     if (
         new_email
@@ -811,14 +810,16 @@ def update_coach_profile(request, id):
         roles = []
         for role in roles:
             roles.append(role.name)
-        return Response({
-            **depth_serializer.data,
-            "is_caas_allowed": is_caas_allowed,
-            "is_seeq_allowed": is_seeq_allowed,
-            "roles": roles,
-            "last_login": coach.user.user.last_login,
-            "user": {**depth_serializer.data["user"], "type": "coach"}
-            })
+        return Response(
+            {
+                **depth_serializer.data,
+                "is_caas_allowed": is_caas_allowed,
+                "is_seeq_allowed": is_seeq_allowed,
+                "roles": roles,
+                "last_login": coach.user.user.last_login,
+                "user": {**depth_serializer.data["user"], "type": "coach"},
+            }
+        )
     return Response(serializer.errors, status=400)
 
 
@@ -1170,11 +1171,11 @@ def create_learners(learners_data):
             learners = []
             for learner_data in learners_data:
                 # Check if username field is provided
+                email = learner_data.get('email','').strip()
                 if "email" not in learner_data:
                     raise ValueError("Username field is required")
-
                 # Check if user already exists
-                user = User.objects.filter(username=learner_data["email"]).first()
+                user = User.objects.filter(username=email).first()
                 if user:
                     # If user exists, check if learner already exists
                     learner = Learner.objects.filter(user__user=user).first()
@@ -1196,9 +1197,9 @@ def create_learners(learners_data):
                         )
                     )
                     user = User.objects.create_user(
-                        username=learner_data["email"],
+                        username=email,
                         password=temp_password,
-                        email=learner_data.get("email", learner_data["email"]),
+                        email=email,
                     )
                     # user.set_unusable_password()
                     user.save()
@@ -1211,11 +1212,10 @@ def create_learners(learners_data):
                 learner = Learner.objects.create(
                     user=profile,
                     name=learner_data.get("name"),
-                    email=learner_data["email"],
+                    email=email,
                     phone=learner_data.get("phone"),
                 )
                 learners.append(learner)
-
             # Return response with learners created or already existing
             serializer = LearnerSerializer(learners, many=True)
             return learners
@@ -1980,7 +1980,7 @@ def add_coach(request):
     coach_id = request.data.get("coach_id")
     first_name = request.data.get("first_name")
     last_name = request.data.get("last_name")
-    email = request.data.get("email")
+    email = request.data.get("email", "").strip()
     age = request.data.get("age")
     gender = request.data.get("gender")
     domain = json.loads(request.data["domain"])
@@ -2005,7 +2005,7 @@ def add_coach(request):
     ctt_nctt = json.loads(request.data["ctt_nctt"])
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
-    username = request.data.get("email")  # keeping username and email same
+    username = request.data.get("email", "").strip()  # keeping username and email same
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
@@ -2163,7 +2163,7 @@ def delete_coach(request):
         try:
             coach = Coach.objects.get(id=coach_id)
             coach_name = coach.first_name + " " + coach.last_name
-            coach_user_profile=coach.user
+            coach_user_profile = coach.user
             is_delete_user = True
             for role in coach_user_profile.roles.all():
                 if not role.name == "coach":
@@ -2563,7 +2563,7 @@ def update_organisation(request, org_id):
 @api_view(["POST"])
 def add_hr(request):
     try:
-        email = request.data.get("email")
+        email = request.data.get("email", "").strip()
         with transaction.atomic():
             user = User.objects.filter(email=email).first()
             if not user:
@@ -2621,7 +2621,7 @@ def update_hr(request, hr_id):
         # Update HR instance
         serializer = HrSerializer(hr, data=request.data, partial=True)
         if serializer.is_valid():
-            new_email = request.data.get("email")  # Get the new email from the request
+            new_email = request.data.get("email",'').strip()  # Get the new email from the request
             existing_user = (
                 User.objects.filter(email=new_email).exclude(username=hr.email).first()
             )
@@ -2670,9 +2670,18 @@ def delete_hr(request, hr_id):
     try:
         hr = HR.objects.get(id=hr_id)
         user_profile = hr.user
-        user = user_profile.user
-        user.delete()
-        hr.delete()
+        is_delete_user = True
+        for role in user_profile.roles.all():
+            if not role.name == "hr":
+                is_delete_user = False
+            else:
+                user_profile.roles.remove(role)
+                user_profile.save()
+        if is_delete_user:
+            user = user_profile.user
+            user.delete()
+        else:
+            hr.delete()
         return Response(
             {"message": "HR deleted successfully"}, status=status.HTTP_200_OK
         )
@@ -2911,7 +2920,7 @@ def send_consent(request):
     for coach_id in coach_list:
         if not project.coach_consent_mandatory:
             for coach_status in project.coaches_status.all():
-                if coach_status.coach.id == coach.id:
+                if coach_status.coach.id == coach_id:
                     coach_status.status["consent"]["status"] = "select"
                     if project.steps["project_structure"]["status"] == "complete":
                         coach_status.status["project_structure"]["status"] = "select"
@@ -3591,7 +3600,7 @@ def accept_coach_caas_hr(request):
             #     print(coach.status)
             # else:
             #     return Response({"error": "Status Already Updated"}, status=400)
-        print(coach.status["hr"]["status"])
+
         if coach.status["hr"]["status"] == "select":
             coaches_selected_count += 1
 
@@ -3625,12 +3634,26 @@ def accept_coach_caas_hr(request):
         # Project
         try:
             contract = ProjectContract.objects.get(project=project.id)
-            contract_data = {
-                "project_contract": contract.id,
-                "project": project.id,
-                "status": "pending",
-                "coach": request.data["coach_id"],
-            }
+            coach_for_contract = Coach.objects.get(id=request.data["coach_id"])
+            contract_data = {}
+            if not project.coach_consent_mandatory:
+                contract_data = {
+                    "project_contract": contract.id,
+                    "project": project.id,
+                    "status": "approved",
+                    "coach": request.data["coach_id"],
+                    "name_inputed": coach_for_contract.first_name
+                    + " "
+                    + coach_for_contract.last_name,
+                    "response_date": timezone.now().date(),
+                }
+            else:
+                contract_data = {
+                    "project_contract": contract.id,
+                    "project": project.id,
+                    "status": "pending",
+                    "coach": request.data["coach_id"],
+                }
 
             contract_serializer = CoachContractSerializer(data=contract_data)
 
@@ -3983,6 +4006,13 @@ def send_project_strure_to_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.steps["project_structure"]["status"] = "complete"
     project.save()
+    if not project.coach_consent_mandatory:
+        for coach_status in project.coaches_status.all():
+            if not coach_status.status["consent"]["status"] == "reject":
+                coach_status.status["consent"]["status"] = "select"
+                if project.steps["project_structure"]["status"] == "complete":
+                    coach_status.status["project_structure"]["status"] = "select"
+            coach_status.save()
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"Project structure has been added to the project - {project.name}."
@@ -4242,7 +4272,7 @@ def add_mulitple_coaches(request):
                 corporate_yoe = coach_data.get("corporate_yoe", "")
                 coaching_yoe = coach_data.get("coaching_yoe", "")
                 domain = coach_data.get("functional_domain", [])
-                email = coach_data.get("email")
+                email = coach_data.get("email","").strip()
                 phone = coach_data.get("mobile")
                 phone_country_code = coach_data.get("phone_country_code")
                 job_roles = coach_data.get("job_roles", [])
@@ -4900,7 +4930,9 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
-       
+        learner = Learner.objects.get(id =user_id)
+        schedular_sessions = SchedularSessions.objects.filter(enrolled_participant__email=learner.email)
+        avaliable_sessions = schedular_sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -4934,6 +4966,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     if user_type == "coach":
         coach_id=user_id
     for session in avaliable_sessions:
+        
         session_detail = {
             "id": session.id,
             "batch_name": session.coaching_session.batch.name
@@ -5047,6 +5080,9 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             ~Q(session_type="chemistry"),
             Q(is_archive=False),
         )
+        learner = Learner.objects.get(id =user_id)
+        schedular_sessions = SchedularSessions.objects.filter(enrolled_participant__email=learner.email)
+        avaliable_sessions = schedular_sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -5185,13 +5221,7 @@ def get_coachee_of_user(request, user_type, user_id):
         }
         if user_type == "pmo":
             projects = Project.objects.filter(engagement__learner=learner)
-            # print("dd",learner)
-            # schedular_projects=SchedularProject.objects.filter(schedularbatch__participants__email=learner.email)
             schedular_batches=SchedularBatch.objects.filter(participants__email=learner.email)
-            print(schedular_batches)
-            # print(schedular_projects.schedularbatch)
-            # return Response([])
-
             course_enrollments = CourseEnrollment.objects.filter(learner__id=learner.id)
             courses_names = []
             for course_enrollment in course_enrollments:
@@ -5205,8 +5235,7 @@ def get_coachee_of_user(request, user_type, user_id):
             projects = Project.objects.filter(
                 Q(engagement__learner=learner) & Q(hr__id=user_id)
             )
-        # project_data = []
-        # organisation = set()
+
         for project in projects:
             project_dict = {
                 "name": project.name,
@@ -5223,7 +5252,7 @@ def get_coachee_of_user(request, user_type, user_id):
             if project_dict["name"] not in [proj["name"] for proj in learner_dict["projects"]]:
                 learner_dict["projects"].append(project_dict)
         learners_data.append(learner_dict)
-    
+
     # serializer = LearnerSerializer(learners,many=True)
     return Response(learners_data)
 
@@ -6912,8 +6941,12 @@ def get_all_engagements(request):
 
         sessions_data = [
             {
-                "start_time": datetime.utcfromtimestamp(int(session.confirmed_availability.start_time) / 1000),
-                "end_time": datetime.utcfromtimestamp(int(session.confirmed_availability.end_time) / 1000)
+                "start_time": datetime.utcfromtimestamp(
+                    int(session.confirmed_availability.start_time) / 1000
+                ),
+                "end_time": datetime.utcfromtimestamp(
+                    int(session.confirmed_availability.end_time) / 1000
+                ),
             }
             for session in completed_sessions
         ]
@@ -6923,11 +6956,15 @@ def get_all_engagements(request):
         sorted_availabilities = sorted(
             sessions_data,
             key=lambda availability: availability["start_time"],
-            reverse=True
+            reverse=True,
         )
 
         # Extract the date of the most recent completed session
-        last_session_date = sorted_availabilities[0]["start_time"].date() if sorted_availabilities else None
+        last_session_date = (
+            sorted_availabilities[0]["start_time"].date()
+            if sorted_availabilities
+            else None
+        )
 
         # Serialize the engagement along with session counts
         serialized_engagement = EngagementSerializer(engagement).data
@@ -7673,12 +7710,23 @@ class AssignCoachContractAndProjectContract(APIView):
                 ).exists()
 
                 if not existing_coach_contract:
-                    contract_data = {
-                        "project_contract": contract.id,
-                        "project": project_id,
-                        "status": "pending",
-                        "coach": coach.id,
-                    }
+                    contract_data = {}
+                    if not project.coach_consent_mandatory:
+                        contract_data = {
+                            "project_contract": contract.id,
+                            "project": project_id,
+                            "status": "approved",
+                            "coach": coach.id,
+                            "name_inputed": coach.first_name + " " + coach.last_name,
+                            "response_date": timezone.now().date(),
+                        }
+                    else:
+                        contract_data = {
+                            "project_contract": contract.id,
+                            "project": project_id,
+                            "status": "pending",
+                            "coach": coach.id,
+                        }
                     contract_serializer = CoachContractSerializer(data=contract_data)
 
                     if contract_serializer.is_valid():
@@ -7841,6 +7889,7 @@ def get_users(request):
         res.append({"id": profile.id, "email": email, "roles": existing_roles})
     return Response(res)
 
+
 def get_weeks_for_current_month():
     current_year = datetime.now().year
     current_month = datetime.now().month
@@ -7856,20 +7905,26 @@ def get_weeks_for_current_month():
             end_day = max(days_in_week)
 
             # Check if Saturday is the last day of the week
-            if calendar.weekday(current_year, current_month, end_day) == calendar.SATURDAY:
+            if (
+                calendar.weekday(current_year, current_month, end_day)
+                == calendar.SATURDAY
+            ):
                 end_day += 1
 
             start_date = datetime(current_year, current_month, start_day)
             end_date = datetime(current_year, current_month, end_day)
 
-            weeks.append({
-                "start_day": start_day,
-                "end_day": end_day,
-                "start_date": start_date,
-                "end_date": end_date,
-            })
+            weeks.append(
+                {
+                    "start_day": start_day,
+                    "end_day": end_day,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                }
+            )
 
     return weeks
+
 
 class SessionData(APIView):
     def get(self, request, format=None):
@@ -7889,20 +7944,23 @@ class SessionData(APIView):
         if now.month == 12:
             last_day_of_current_month = datetime(now.year + 1, 1, 1) - timedelta(days=1)
         else:
-            last_day_of_current_month = datetime(now.year, now.month + 1, 1) - timedelta(days=1)
+            last_day_of_current_month = datetime(
+                now.year, now.month + 1, 1
+            ) - timedelta(days=1)
 
-        start_timestamp_current_month = int(first_day_of_current_month.timestamp() * 1000)
+        start_timestamp_current_month = int(
+            first_day_of_current_month.timestamp() * 1000
+        )
         end_timestamp_current_month = int(last_day_of_current_month.timestamp() * 1000)
-
 
         start_str_prev_mon = str(start_timestamp_prev_month)
         end_str_prev_mon = str(end_timestamp_prev_month)
 
         start_str_current_mon = str(start_timestamp_current_month)
-        end_str_current_mon = str(end_timestamp_current_month )
+        end_str_current_mon = str(end_timestamp_current_month)
 
-        projects=Project.objects.all()
-        sessiondata=[]
+        projects = Project.objects.all()
+        sessiondata = []
         weeks = get_weeks_for_current_month()
         for project in projects:
             res_obj = {}
@@ -7910,51 +7968,51 @@ class SessionData(APIView):
                 project=project, is_booked=True
             ).exists()
             if is_involved_in_sessions:
-                res_obj['project_name'] = project.name
-            else: 
+                res_obj["project_name"] = project.name
+            else:
                 continue
             previous_month_sessions = SessionRequestCaas.objects.filter(
                 confirmed_availability__start_time__gte=start_str_prev_mon,
-                confirmed_availability__end_time__lte=end_str_prev_mon,    
-                project__id = project.id
+                confirmed_availability__end_time__lte=end_str_prev_mon,
+                project__id=project.id,
             )
-            res_obj['last_month'] = previous_month_sessions.count()
+            res_obj["last_month"] = previous_month_sessions.count()
 
-            current_month_sessions=SessionRequestCaas.objects.filter(
+            current_month_sessions = SessionRequestCaas.objects.filter(
                 confirmed_availability__start_time__gte=start_str_current_mon,
-                confirmed_availability__end_time__lte=end_str_current_mon,    
-                project__id = project.id
+                confirmed_availability__end_time__lte=end_str_current_mon,
+                project__id=project.id,
             )
-            res_obj['current_month']=current_month_sessions.count()
+            res_obj["current_month"] = current_month_sessions.count()
 
             for i, week in enumerate(weeks, start=1):
                 start_timestamp = int(week["start_date"].timestamp())
                 end_timestamp = int(week["end_date"].timestamp())
-                start_day_of_ith_week_of_curr_month=str(start_timestamp)
-                last_day_of_ith_week_of_curr_month=str(end_timestamp)
+                start_day_of_ith_week_of_curr_month = str(start_timestamp)
+                last_day_of_ith_week_of_curr_month = str(end_timestamp)
                 weekly_sessions = SessionRequestCaas.objects.filter(
                     confirmed_availability__start_time__gte=start_day_of_ith_week_of_curr_month,
-                    confirmed_availability__end_time__lte=last_day_of_ith_week_of_curr_month,    
-                    project__id = project.id
+                    confirmed_availability__end_time__lte=last_day_of_ith_week_of_curr_month,
+                    project__id=project.id,
                 )
                 key = f"current_month_week_{i}"
                 res_obj[key] = weekly_sessions.count()
-            actual_sessions_in_current_month=SessionRequestCaas.objects.filter(
+            actual_sessions_in_current_month = SessionRequestCaas.objects.filter(
                 confirmed_availability__start_time__gte=start_str_current_mon,
-                confirmed_availability__end_time__lte=end_str_current_mon,    
-                project__id = project.id,
-                status='completed'
+                confirmed_availability__end_time__lte=end_str_current_mon,
+                project__id=project.id,
+                status="completed",
             )
-            res_obj['total_actuals']=actual_sessions_in_current_month.count()
-            balance=current_month_sessions.count()-actual_sessions_in_current_month.count()
-            res_obj['balance']=balance
+            res_obj["total_actuals"] = actual_sessions_in_current_month.count()
+            balance = (
+                current_month_sessions.count()
+                - actual_sessions_in_current_month.count()
+            )
+            res_obj["balance"] = balance
             sessiondata.append(res_obj)
-        
+
         return Response(
-            {
-                "sessiondata":sessiondata,
-                "weeks":weeks
-            },
+            {"sessiondata": sessiondata, "weeks": weeks},
             status=status.HTTP_200_OK,
         )
 
@@ -8114,3 +8172,52 @@ class UserTokenAvaliableCheck(APIView):
         except Exception as e:
             pass
         return Response({"user_token_present": user_token_present})
+
+
+class DownloadCoachContract(APIView):
+    def get(self, request, coach_contract_id, format=None):
+        try:
+            coach_contract = CoachContract.objects.get(id=coach_contract_id)
+            coach_contract.project_contract.project.project_structure
+            data = coach_contract.project_contract.project.project_structure
+            for item in data:
+                if (
+                    "session_type" in item
+                    and item["session_type"] in SESSION_TYPE_VALUE
+                ):
+                    item["session_type"] = SESSION_TYPE_VALUE[item["session_type"]]
+
+            total_sessions = sum(session["no_of_sessions"] for session in data)
+            total_duration = sum(int(session["session_duration"]) for session in data)
+            total_coach_fees = sum(int(session["coach_price"]) for session in data)
+
+            html_content = render_to_string(
+                "contract/contract_template.html",
+                {
+                    "name": coach_contract.coach.first_name
+                    + " "
+                    + coach_contract.coach.last_name,
+                    "data": data,
+                    "content": coach_contract.project_contract.content,
+                    "name_inputed": coach_contract.name_inputed.capitalize(),
+                    "signed_date": coach_contract.response_date.strftime("%d-%m-%Y"),
+                    "total_sessions": total_sessions,
+                    "total_duration": total_duration,
+                    "total_coach_fees": total_coach_fees,
+                },
+            )
+            pdf = pdfkit.from_string(
+                html_content,
+                False,
+                configuration=pdfkit_config,
+            )
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response["Content-Disposition"] = f'attachment; filename={f"Contract.pdf"}'
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to downlaod Contract."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
