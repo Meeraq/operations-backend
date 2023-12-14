@@ -66,11 +66,12 @@ import matplotlib
 import os
 from django.http import HttpResponse
 import io
-
+from win32com.client import Dispatch
+import pythoncom
 
 matplotlib.use("Agg")
 env = environ.Env()
-from pdf2docx import parse
+from pdf2docx import parse, Converter
 from io import BytesIO
 
 wkhtmltopdf_path = os.environ.get(
@@ -78,8 +79,6 @@ wkhtmltopdf_path = os.environ.get(
 )
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
-
-
 
 
 def send_reset_password_link(users):
@@ -137,13 +136,11 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
         )
         email.content_subtype = "html"
 
-   
         email.send(fail_silently=False)
         for email in user_email:
             create_send_email(email, file_name)
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-        
 
 
 # def create_notification(user, path, message):
@@ -2071,6 +2068,8 @@ class DownloadParticipantResultReport(APIView):
                 assessment_id,
             )
             # Group questions by competency
+            competency_array=[]
+            assessment_rating_type=None
             for competency in assessment.questionnaire.questions.values(
                 "competency"
             ).distinct():
@@ -2078,11 +2077,13 @@ class DownloadParticipantResultReport(APIView):
                 competency_questions = assessment.questionnaire.questions.filter(
                     competency__id=competency_id
                 )
-
+                competency_name_for_object=Competency.objects.get(id=competency_id).name
                 competency_object = {
-                    "competency_name": Competency.objects.get(id=competency_id).name,
+                    "competency_name": competency_name_for_object,
                     "questions": [],
                 }
+                if(len(competency_array)<14):
+                    competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
                     question_object = None
@@ -2093,7 +2094,7 @@ class DownloadParticipantResultReport(APIView):
                             str(question.id)
                         ),
                     }
-
+                    assessment_rating_type=question.rating_type
                     count = 1
                     observer_types_total = get_total_observer_types(
                         participant_observer, participant_id
@@ -2159,6 +2160,9 @@ class DownloadParticipantResultReport(APIView):
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
                     "image_base64_array": graph_images,
+                    "competency_array":competency_array,
+                    "assessment_rating_type":assessment_rating_type,
+                    
                 },
                 f"This new report generated for {participant.name}",
             )
@@ -2196,6 +2200,8 @@ class DownloadParticipantResultReport(APIView):
                 assessment_id,
             )
             # Group questions by competency
+            assessment_rating_type=None
+            competency_array=[]
             for competency in assessment.questionnaire.questions.values(
                 "competency"
             ).distinct():
@@ -2203,11 +2209,14 @@ class DownloadParticipantResultReport(APIView):
                 competency_questions = assessment.questionnaire.questions.filter(
                     competency__id=competency_id
                 )
-
+                competency_name_for_object=Competency.objects.get(id=competency_id).name
                 competency_object = {
-                    "competency_name": Competency.objects.get(id=competency_id).name,
+                    "competency_name": competency_name_for_object,
                     "questions": [],
                 }
+               
+                if(len(competency_array)<14):
+                    competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
                     question_object = None
@@ -2218,7 +2227,7 @@ class DownloadParticipantResultReport(APIView):
                             str(question.id)
                         ),
                     }
-
+                    assessment_rating_type=question.rating_type
                     count = 1
                     observer_types_total = get_total_observer_types(
                         participant_observer, participant_id
@@ -2282,6 +2291,8 @@ class DownloadParticipantResultReport(APIView):
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
                     "image_base64_array": graph_images,
+                    "competency_array":competency_array,
+                    "assessment_rating_type":assessment_rating_type,
                 },
             )
             pdf_path = "graphsAndReports/Report.pdf"
@@ -2341,14 +2352,12 @@ class MarkNotificationAsRead(APIView):
         return Response("Notifications marked as read.")
 
 
-
 class GetUnreadNotificationCount(APIView):
     def get(self, request, user_id):
         count = AssessmentNotification.objects.filter(
             user__id=user_id, read_status=False
         ).count()
         return Response({"count": count})
-
 
 
 class DownloadWordReport(APIView):
@@ -2373,6 +2382,8 @@ class DownloadWordReport(APIView):
                 assessment_id,
             )
             # Group questions by competency
+            competency_array=[]
+            assessment_rating_type=None
             for competency in assessment.questionnaire.questions.values(
                 "competency"
             ).distinct():
@@ -2380,11 +2391,13 @@ class DownloadWordReport(APIView):
                 competency_questions = assessment.questionnaire.questions.filter(
                     competency__id=competency_id
                 )
-
+                competency_name_for_object=Competency.objects.get(id=competency_id).name
                 competency_object = {
-                    "competency_name": Competency.objects.get(id=competency_id).name,
+                    "competency_name": competency_name_for_object,
                     "questions": [],
                 }
+                if(len(competency_array)<14):
+                    competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
                     question_object = None
@@ -2395,7 +2408,7 @@ class DownloadWordReport(APIView):
                             str(question.id)
                         ),
                     }
-
+                    assessment_rating_type=question.rating_type
                     count = 1
                     observer_types_total = get_total_observer_types(
                         participant_observer, participant_id
@@ -2459,17 +2472,36 @@ class DownloadWordReport(APIView):
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
                     "image_base64_array": graph_images,
+                    "competency_array":competency_array,
+                    "assessment_rating_type":assessment_rating_type,
                 },
             )
             pdf_path = "graphsAndReports/Report.pdf"
-            parse(pdf_path, "graphsAndReports/WordReport.docx", start=0, end=None)
+            # # parse(pdf_path, "graphsAndReports/WordReport.docx", start=0, end=None)
+            # # obj = Converter(pdf_path)
+            # # obj.convert("graphsAndReports/WordReport.docx")
+            # # obj.close()
+            # pythoncom.CoInitialize()
+            # word = Dispatch('Word.Application')
+            # doc = word.Documents.Open(pdf_path)
+            # doc.SaveAs("graphsAndReports/WordReport.docx", FileFormat=12)
+            # doc.Close()
+            # word.Quit()
+            pythoncom.CoInitialize()
+            word = Dispatch("word.Application")
+            word.visible = 0
 
-            # Open the Word file for reading
+            doc = word.Documents.Open(os.path.abspath(pdf_path))
+            word_report_path = os.path.join(
+                os.getcwd(), "graphsAndReports", "WordReport.docx"
+            )
+            doc.SaveAs2(word_report_path, FileFormat=16)
+            doc.Close()
+            word.Quit()
+
             with open("graphsAndReports/WordReport.docx", "rb") as word_file:
-                # Create an in-memory output stream for the Word document
                 output_stream = BytesIO(word_file.read())
 
-            # Set the response headers for a Word document
             response = HttpResponse(
                 content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
@@ -2477,7 +2509,6 @@ class DownloadWordReport(APIView):
                 "Content-Disposition"
             ] = f'attachment; filename="{participant.name} Report.docx"'
 
-            # Write the Word document to the response
             response.write(output_stream.getvalue())
 
             return response
