@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "zohoapi",
     "schedularApi",
     "assessmentApi",
+    "courses",
     "rest_framework.authtoken",
     "django_rest_passwordreset",
     "corsheaders",
