@@ -20,7 +20,8 @@ from .views import (
     GetParticipantResponseFormAssessment,
     GetParticipantResponseForParticipant,
     CreateParticipantResponseView,
-    AssessmentStatusOrEndDataChange,
+    AssessmentStatusChange,
+    AssessmentEndDataChange,
     ObserverView,
     ObserverAssessment,
     AssessmentsOfParticipant,
@@ -68,7 +69,10 @@ urlpatterns = [
     path("delete-assessment/", AssessmentView.as_view()),
     path("edit-assessment/", AssessmentView.as_view()),
     path(
-        "assessment-status-end-data-change/", AssessmentStatusOrEndDataChange.as_view()
+        "assessment-status-change/", AssessmentStatusChange.as_view()
+    ),
+    path(
+        "assessment-end-data-change/", AssessmentEndDataChange.as_view()
     ),
     path(
         "add-participant-observer-to-assessment/",

@@ -559,13 +559,62 @@ class AssessmentView(APIView):
         )
 
 
-class AssessmentStatusOrEndDataChange(APIView):
+class AssessmentStatusChange(APIView):
+    @transaction.atomic()
     def put(self, request):
         assessment_id = request.data.get("id")
 
         try:
             assessment = Assessment.objects.get(id=assessment_id)
+            prev_status=assessment.status
             assessment.status = request.data.get("status")
+            # assessment.assessment_end_date = request.data.get("assessment_end_date")
+            assessment.save()
+            if prev_status == "draft" and assessment.status == "ongoing":
+                for hr in assessment.hr.all():
+                    user = User.objects.get(email=hr.email)
+                    
+                    token = get_token_generator().generate_token()
+                    
+                    ResetPasswordToken.objects.create(user=user, key=token)
+                    
+                    create_password_link = f"https://assessment.meeraq.com/create-password/{token}"
+
+                    send_mail_templates(
+                    "assessment/create_password_to_hr.html",
+                    [hr.email],
+                    "Meeraq - Welcome to Assessment Platform !",
+                    {
+                        "hr_name": hr.first_name,
+                        "link": create_password_link,
+                        "assessment_name":assessment.participant_view_name,
+                    },
+                    [],
+                )
+
+
+            serializer = AssessmentSerializerDepthFour(assessment)
+            return Response(
+                {"message": "Update successfully.", "assessment_data": serializer.data},
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {
+                    "error": "Failed to Update Status.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+class AssessmentEndDataChange(APIView):
+    def put(self, request):
+        assessment_id = request.data.get("id")
+
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+            # assessment.status = request.data.get("status")
             assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
             serializer = AssessmentSerializerDepthFour(assessment)
@@ -582,7 +631,6 @@ class AssessmentStatusOrEndDataChange(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
 
 class AddParticipantObserverToAssessment(APIView):
     @transaction.atomic
