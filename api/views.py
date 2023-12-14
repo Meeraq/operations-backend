@@ -740,7 +740,7 @@ def update_coach_profile(request, id):
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email").strip()
+    new_email = mutable_data.get("email","").strip()
     #  other user exists with the new email
     if (
         new_email
