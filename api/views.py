@@ -864,6 +864,10 @@ def update_coach_profile(request, id):
     coach_id = request.data.get("coach_id")
 
     # Check if coach_id exists in request.data
+    if len(coach_id) == 0:
+        coach_id = None
+
+    # print("coachID", len(coach_id))
     if coach_id is not None:
         # Check if any other coach already has this coach_id
         existing_coach = Coach.objects.exclude(id=id).filter(coach_id=coach_id).first()
