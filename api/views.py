@@ -2403,7 +2403,7 @@ def generate_otp(request):
                 return Response(
                     {"error": "User with the given email does not exist."}, status=400
                 )
-        elif hr_roles.exists():
+        if hr_roles.exists():
             projects = Project.objects.filter(
                 hr=user.profile.hr, enable_emails_to_hr_and_coachee=False
             )
