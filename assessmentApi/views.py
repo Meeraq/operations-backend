@@ -66,6 +66,9 @@ import matplotlib
 import os
 from django.http import HttpResponse
 import io
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.decorators import permission_classes
+
 
 matplotlib.use("Agg")
 env = environ.Env()
@@ -75,8 +78,6 @@ wkhtmltopdf_path = os.environ.get(
 )
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
-
-
 
 
 def send_reset_password_link(users):
@@ -134,13 +135,11 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
         )
         email.content_subtype = "html"
 
-   
         email.send(fail_silently=False)
         for email in user_email:
             create_send_email(email, file_name)
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-        
 
 
 # def create_notification(user, path, message):
@@ -197,6 +196,7 @@ def create_learner(learner_name, learner_email):
 
 
 class CompetencyView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         competencies = Competency.objects.all()
         serializer = CompetencySerializerDepthOne(competencies, many=True)
@@ -291,6 +291,7 @@ class CompetencyView(APIView):
 
 
 class OneCompetencyDetail(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         competency_id = request.data.get("id")
         try:
@@ -305,6 +306,8 @@ class OneCompetencyDetail(APIView):
 
 
 class QuestionView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         questions = Question.objects.all()
         serializer = QuestionSerializerDepthTwo(questions, many=True)
@@ -372,6 +375,8 @@ class QuestionView(APIView):
 
 
 class OneQuestionDetail(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         question_id = request.data.get("id")
         try:
@@ -386,6 +391,7 @@ class OneQuestionDetail(APIView):
 
 
 class QuestionnaireView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         questionnaires = Questionnaire.objects.all()
         serializer = QuestionnaireSerializerDepthThree(questionnaires, many=True)
@@ -450,6 +456,8 @@ class QuestionnaireView(APIView):
 
 
 class OneQuestionnaireDetail(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         questionnaire_id = request.data.get("id")
         try:
@@ -464,6 +472,7 @@ class OneQuestionnaireDetail(APIView):
 
 
 class AssessmentView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         assessments = Assessment.objects.all()
         serializer = AssessmentSerializerDepthFour(assessments, many=True)
@@ -560,6 +569,8 @@ class AssessmentView(APIView):
 
 
 class AssessmentStatusOrEndDataChange(APIView):
+    permission_classes = [IsAuthenticated]
+
     def put(self, request):
         assessment_id = request.data.get("id")
 
@@ -585,6 +596,7 @@ class AssessmentStatusOrEndDataChange(APIView):
 
 
 class AddParticipantObserverToAssessment(APIView):
+    permission_classes = [IsAuthenticated]
     @transaction.atomic
     def put(self, request):
         assessment_id = request.data.get("assessment_id")
@@ -678,6 +690,7 @@ class AddParticipantObserverToAssessment(APIView):
 
 
 class AssessmentsOfParticipant(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, participant_email):
         try:
             participant = Learner.objects.get(email=participant_email)
@@ -711,6 +724,7 @@ class AssessmentsOfParticipant(APIView):
 
 
 class QuestionsForAssessment(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -746,6 +760,7 @@ class QuestionsForAssessment(APIView):
 
 
 class QuestionsForObserverAssessment(APIView):
+    permission_classes = [AllowAny]
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -781,6 +796,7 @@ class QuestionsForObserverAssessment(APIView):
 
 
 class ObserverView(APIView):
+    permission_classes = [AllowAny]
     def post(self, request):
         try:
             request_email = request.data.get("email")
@@ -806,6 +822,7 @@ class ObserverView(APIView):
 
 
 class ObserverAssessment(APIView):
+    permission_classes = [AllowAny]
     def get(self, request, email):
         try:
             assessments = Assessment.objects.filter(
@@ -822,6 +839,7 @@ class ObserverAssessment(APIView):
 
 
 class CreateParticipantResponseView(APIView):
+    permission_classes = [IsAuthenticated]
     @transaction.atomic
     def post(self, request):
         try:
@@ -861,6 +879,7 @@ class CreateParticipantResponseView(APIView):
 
 
 class CreateObserverResponseView(APIView):
+    permission_classes = [AllowAny]
     @transaction.atomic
     def post(self, request):
         try:
@@ -906,6 +925,7 @@ class CreateObserverResponseView(APIView):
 
 
 class GetParticipantResponseForParticipant(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, participant_email):
         try:
             participant = Learner.objects.get(email=participant_email)
@@ -926,6 +946,7 @@ class GetParticipantResponseForParticipant(APIView):
 
 
 class GetParticipantResponseFormAssessment(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -946,6 +967,7 @@ class GetParticipantResponseFormAssessment(APIView):
 
 
 class GetObserverResponseForObserver(APIView):
+    permission_classes = [AllowAny]
     def get(self, request, observer_email):
         try:
             observer = Observer.objects.get(email=observer_email)
@@ -966,6 +988,7 @@ class GetObserverResponseForObserver(APIView):
 
 
 class GetObserverResponseFormAssessment(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -986,6 +1009,7 @@ class GetObserverResponseFormAssessment(APIView):
 
 
 class ParticipantObserverTypeList(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         participant_observer_types = ParticipantObserverType.objects.all()
         serializer = ParticipantObserverTypeSerializerDepthTwo(
@@ -995,6 +1019,7 @@ class ParticipantObserverTypeList(APIView):
 
 
 class DeleteParticipantFromAssessment(APIView):
+    permission_classes = [IsAuthenticated]
     @transaction.atomic
     def delete(self, request):
         try:
@@ -1029,6 +1054,7 @@ class DeleteParticipantFromAssessment(APIView):
 
 
 class DeleteObserverFromAssessment(APIView):
+    permission_classes = [IsAuthenticated]
     @transaction.atomic
     def delete(self, request):
         try:
@@ -1062,6 +1088,7 @@ class DeleteObserverFromAssessment(APIView):
 
 
 class AddObserverToParticipant(APIView):
+    permission_classes = [IsAuthenticated]
     @transaction.atomic
     def put(self, request):
         try:
@@ -1148,6 +1175,7 @@ class AddObserverToParticipant(APIView):
 
 
 class CompetencyIdsInOngoingAndCompletedAssessments(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         try:
             assessments = Assessment.objects.filter(status__in=["completed", "ongoing"])
@@ -1169,6 +1197,7 @@ class CompetencyIdsInOngoingAndCompletedAssessments(APIView):
 
 
 class QuestionIdsInOngoingAndCompletedAssessments(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         try:
             assessments = Assessment.objects.filter(status__in=["completed", "ongoing"])
@@ -1190,6 +1219,7 @@ class QuestionIdsInOngoingAndCompletedAssessments(APIView):
 
 
 class QuestionnaireIdsInOngoingAndCompletedAssessments(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         try:
             assessments = Assessment.objects.filter(status__in=["completed", "ongoing"])
@@ -1209,6 +1239,7 @@ class QuestionnaireIdsInOngoingAndCompletedAssessments(APIView):
 
 
 class ParticipantAddsObserverToAssessment(APIView):
+    permission_classes = [IsAuthenticated]
     @transaction.atomic
     def post(self, request):
         try:
@@ -1298,6 +1329,7 @@ class ParticipantAddsObserverToAssessment(APIView):
 
 
 class StartAssessmentDataForObserver(APIView):
+    permission_classes = [AllowAny]
     def get(self, request, unique_id):
         try:
             observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
@@ -1321,6 +1353,7 @@ class StartAssessmentDataForObserver(APIView):
 
 
 class GetObserversUniqueIds(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, assessment_id):
         try:
             observers_unique_id = ObserverUniqueId.objects.filter(
@@ -1342,6 +1375,7 @@ class GetObserversUniqueIds(APIView):
 
 
 class GetParticipantObserversUniqueIds(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, participant_email):
         try:
             observers_unique_id = ObserverUniqueId.objects.filter(
@@ -1363,6 +1397,7 @@ class GetParticipantObserversUniqueIds(APIView):
 
 
 class StartAssessmentDisabled(APIView):
+    permission_classes = [AllowAny]
     def get(self, request, unique_id):
         try:
             observers_unique_id = ObserverUniqueId.objects.filter(
@@ -1387,6 +1422,7 @@ class StartAssessmentDisabled(APIView):
 
 
 class ReleaseResults(APIView):
+    permission_classes = [IsAuthenticated]
     def put(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -1411,6 +1447,7 @@ class ReleaseResults(APIView):
 
 
 class AssessmentsOfHr(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, hr_email):
         try:
             hr = HR.objects.get(email=hr_email)
@@ -1430,6 +1467,7 @@ class AssessmentsOfHr(APIView):
 
 
 class GetParticipantResponseForAllAssessment(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, hr_email):
         try:
             participant_responses = ParticipantResponse.objects.filter(
@@ -1448,6 +1486,7 @@ class GetParticipantResponseForAllAssessment(APIView):
 
 
 class GetObserverResponseForAllAssessment(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, hr_email):
         try:
             observer_responses = ObserverResponse.objects.filter(
@@ -1466,6 +1505,7 @@ class GetObserverResponseForAllAssessment(APIView):
 
 
 class ReminderMailForObserverByPmoAndParticipant(APIView):
+    permission_classes = [IsAuthenticated]
     def put(self, request):
         try:
             assessment_id = request.data.get("assessment_id")
@@ -1516,6 +1556,7 @@ class ReminderMailForObserverByPmoAndParticipant(APIView):
 
 
 class GetParticipantResponseForAllAssessments(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         try:
             participant_responses = ParticipantResponse.objects.all()
@@ -1532,6 +1573,7 @@ class GetParticipantResponseForAllAssessments(APIView):
 
 
 class GetObserverResponseForAllAssessments(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         try:
             observer_responses = ObserverResponse.objects.all()
@@ -1547,6 +1589,7 @@ class GetObserverResponseForAllAssessments(APIView):
 
 
 class AddMultipleQuestions(APIView):
+    permission_classes = [IsAuthenticated]
     @transaction.atomic
     def post(self, request):
         try:
@@ -1616,6 +1659,7 @@ class AddMultipleQuestions(APIView):
 
 
 class AddMultipleParticipants(APIView):
+    permission_classes = [IsAuthenticated]
     @transaction.atomic
     def post(self, request):
         try:
@@ -1684,6 +1728,7 @@ class AddMultipleParticipants(APIView):
 
 
 class CreateObserverType(APIView):
+    permission_classes = [IsAuthenticated]
     @transaction.atomic
     def post(
         self,
@@ -1709,6 +1754,7 @@ class CreateObserverType(APIView):
 
 
 class GetObserverTypes(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         try:
             observer_types = ObserverTypes.objects.all()
@@ -2045,6 +2091,7 @@ def get_frequency_analysis_data(
 
 
 class DownloadParticipantResultReport(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         try:
             assessment_id = request.data.get("assessment_id")
@@ -2302,6 +2349,7 @@ class DownloadParticipantResultReport(APIView):
 
 
 class GetAssessmentNotification(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, user_id):
         notifications = AssessmentNotification.objects.filter(
             user__id=user_id
@@ -2312,6 +2360,7 @@ class GetAssessmentNotification(APIView):
 
 
 class MarkAllNotificationAsRead(APIView):
+    permission_classes = [IsAuthenticated]
     def put(self, request):
         notifications = AssessmentNotification.objects.filter(
             read_status=False, user__id=request.data["user_id"]
@@ -2321,6 +2370,7 @@ class MarkAllNotificationAsRead(APIView):
 
 
 class MarkNotificationAsRead(APIView):
+    permission_classes = [IsAuthenticated]
     def put(self, request):
         user_id = request.data.get("user_id")
         notification_ids = request.data.get("notification_ids")
@@ -2339,6 +2389,7 @@ class MarkNotificationAsRead(APIView):
 
 
 class GetUnreadNotificationCount(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request, user_id):
         count = AssessmentNotification.objects.filter(
             user__id=user_id, read_status=False

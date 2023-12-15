@@ -3930,6 +3930,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     
     current_time = int(timezone.now().timestamp() * 1000)
@@ -4082,6 +4083,7 @@ def get_past_sessions_of_user(request, user_type, user_id):
     return Response(serializer.data, status=200)
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def new_get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
