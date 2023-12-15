@@ -2,6 +2,7 @@ from django.db import models
 from api.models import Learner
 from schedularApi.models import SchedularBatch, LiveSession, CoachingSession
 import os
+from django.core.exceptions import ValidationError
 
 
 # Create your models here.
