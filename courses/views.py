@@ -18,6 +18,8 @@ from .models import (
     QuizLessonResponse,
     FeedbackLessonResponse,
     CourseTemplate,
+    Resources,
+    PdfLesson,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -41,6 +43,8 @@ from .serializers import (
     AnswerSerializer,
     CertificateSerializerDepthOne,
     VideoLessonSerializerDepthOne,
+    ResourcesSerializer,
+    PdfLessonSerializer,
 )
 from rest_framework.views import APIView
 from api.models import User, Learner, Profile, Role
@@ -335,6 +339,9 @@ class LessonDetailView(generics.RetrieveAPIView):
         elif lesson_type == "video":
             video = VideoLesson.objects.get(lesson=lesson)
             serializer = VideoLessonSerializerDepthOne(video)
+        elif lesson_type == "ppt":
+            ppt = PdfLesson.objects.get(lesson=lesson)
+            serializer = PdfLessonSerializer(ppt)
         else:
             return Response({"error": f"Failed to get the lessons"}, status=400)
 
@@ -1743,6 +1750,11 @@ class AssignCourseTemplateToBatch(APIView):
                                 lesson=new_lesson,
                                 video=original_lesson.videolesson.video,
                             )
+                        elif original_lesson.lesson_type == "ppt":
+                            PdfLesson.objects.create(
+                                lesson=new_lesson,
+                                pdf=original_lesson.pdflesson.pdf,
+                            )
                         elif original_lesson.lesson_type == "assessment":
                             Assessment.objects.create(lesson=new_lesson)
                         elif original_lesson.lesson_type == "quiz":
@@ -1861,3 +1873,133 @@ class AssignCourseTemplateToBatch(APIView):
                 {"error": "Failed to assign course template."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["GET"])
+def get_resources(request):
+    resources = Resources.objects.all()
+    serializer = ResourcesSerializer(resources, many=True)
+    return Response(serializer.data)
+
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Resources
+from .serializers import ResourcesSerializer  # Import your Resources model serializer
+
+
+@api_view(["POST"])
+def create_resource(request):
+    pdf_name = request.data.get("pdfName")  # Extracting pdfName from request data
+    pdf_file = request.data.get("pdfFile")  # Extracting pdfFile from request data
+
+    # Create a dictionary containing the data for the Resources model instance
+    resource_data = {
+        "name": pdf_name,
+        "pdf_file": pdf_file,
+    }
+
+    # Assuming you have a serializer for the Resources model
+    serializer = ResourcesSerializer(data=resource_data)
+
+    if serializer.is_valid():
+        # Save the validated data to create a new Resources instance
+        serializer.save()
+        return Response(serializer.data, status=201)  # Return the serialized data
+    else:
+        return Response(
+            serializer.errors, status=400
+        )  # Return errors if validation fails
+
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import PdfLesson, Lesson, Resources, CourseTemplate
+
+
+@api_view(["POST"])
+def create_pdf_lesson(request):
+    # Extracting data from request
+    lesson_data = request.data.get("lesson")
+    pdf_id = request.data.get("pdf_id")
+    course_template_id = lesson_data.get("course_template")
+
+    try:
+        # Get CourseTemplate instance
+        course_template_instance = CourseTemplate.objects.get(id=course_template_id)
+
+        # Creating or retrieving Lesson instance
+        lesson_instance = Lesson.objects.create(
+            course=lesson_data["course"],
+            course_template=course_template_instance,
+            name=lesson_data["name"],
+            status=lesson_data["status"],
+            lesson_type=lesson_data["lesson_type"],
+            order=lesson_data["order"],
+        )
+
+        # Getting or creating PdfLesson instance
+        pdf_lesson_instance, created = PdfLesson.objects.get_or_create(
+            lesson=lesson_instance, defaults={"pdf_id": pdf_id}
+        )
+
+        if created or not created:
+            return Response({"message": "PPT lesson created successfully."})
+        else:
+            return Response({"message": "Failed to create PPT lesson."})
+
+    except CourseTemplate.DoesNotExist:
+        return Response({"message": "Course template does not exist."})
+    except Exception as e:
+        return Response({"message": f"Error: {str(e)}"})
+
+
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from .models import PdfLesson, Lesson, Resources
+from .serializers import PdfLessonSerializer, LessonSerializer
+
+
+@api_view(["PUT"])
+def update_pdf_lesson(request, pk):
+    try:
+        pdf_lesson = PdfLesson.objects.get(id=pk)
+    except PdfLesson.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    # Extract data from request
+    lesson_data = request.data.get("lesson", {})
+    print(lesson_data)
+    pdf_id = request.data.get("pdf_id")
+
+    try:
+        lesson = Lesson.objects.get(id=lesson_data.get("id"))
+    except Lesson.DoesNotExist:
+        return Response({"error": "Lesson not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Update Lesson instance
+    lesson_serializer = LessonSerializer(lesson, data=lesson_data)
+    if lesson_serializer.is_valid():
+        lesson_serializer.save()
+
+        # Update PdfLesson instance
+        pdf_serializer = PdfLessonSerializer(pdf_lesson, data=lesson_data)
+        if pdf_serializer.is_valid():
+            pdf_serializer.save()
+
+            # Update pdf reference
+            try:
+                pdf_resource = Resources.objects.get(pk=pdf_id)
+                pdf_lesson.pdf = pdf_resource
+                pdf_lesson.save()
+            except Resources.DoesNotExist:
+                return Response(
+                    {"error": "PDF resource not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            return Response(pdf_serializer.data)
+        return Response(pdf_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)

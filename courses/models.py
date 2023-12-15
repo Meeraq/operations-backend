@@ -1,6 +1,9 @@
 from django.db import models
 from api.models import Learner
 from schedularApi.models import SchedularBatch, LiveSession, CoachingSession
+import os
+from django.core.exceptions import ValidationError
+
 
 # Create your models here.
 
@@ -42,6 +45,7 @@ class Lesson(models.Model):
         ("feedback", "Feedback"),
         ("assessment", "Assessment"),
         ("video", "Video"),
+        ("ppt", "PPT"),
     )
     STATUS_CHOICES = (
         ("draft", "Draft"),
@@ -162,3 +166,22 @@ class FeedbackLessonResponse(models.Model):
     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(auto_now=True)
+
+
+def validate_pdf_extension(value):
+    ext = os.path.splitext(value.name)[1].lower()
+    if not ext == ".pdf":
+        raise ValidationError("Only PDF files are allowed.")
+
+
+class Resources(models.Model):
+    # lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    name = models.TextField()
+    pdf_file = models.FileField(
+        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+    )
+
+
+class PdfLesson(models.Model):
+    lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    pdf = models.ForeignKey(Resources, on_delete=models.CASCADE)
