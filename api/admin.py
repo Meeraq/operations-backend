@@ -36,6 +36,7 @@ from .models import (
     FinalizeCoachActivity,
     ShareCoachProfileActivity,
     CreateProjectActivity,
+    Role,
 )
 
 # Register your models here.
@@ -79,3 +80,4 @@ admin.site.register(CalendarEvent)
 admin.site.register(ShareCoachProfileActivity)
 admin.site.register(CreateProjectActivity)
 admin.site.register(FinalizeCoachActivity)
+admin.site.register(Role)

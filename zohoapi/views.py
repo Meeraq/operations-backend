@@ -11,16 +11,11 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.permissions import AllowAny
-from api.models import (
-    Coach,
-    OTP,
-    UserLoginActivity,
-)
-from api.serializers import (
-    CoachDepthOneSerializer,
-)
+from api.models import Coach, OTP, UserLoginActivity
+from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 
+from rest_framework.views import APIView
 
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
@@ -28,8 +23,12 @@ from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import status
 from django.http import HttpResponse
-from .serializers import InvoiceDataEditSerializer, InvoiceDataSerializer
-from .models import InvoiceData, AccessToken
+from .serializers import (
+    InvoiceDataEditSerializer,
+    InvoiceDataSerializer,
+    VendorDepthOneSerializer,
+)
+from .models import InvoiceData, AccessToken, Vendor
 import base64
 from django.core.mail import EmailMessage
 from io import BytesIO
@@ -37,8 +36,19 @@ from xhtml2pdf import pisa
 
 import environ
 import os
+import os
+from django.http import HttpResponse
+import io
+import pdfkit
 
 env = environ.Env()
+
+wkhtmltopdf_path = os.environ.get(
+    "WKHTMLTOPDF_PATH", r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+)
+
+pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
 
 base_url = os.environ.get("ZOHO_API_BASE_URL")
 organization_id = os.environ.get("ZOHO_ORGANIZATION_ID")
@@ -53,10 +63,6 @@ def get_line_items_details(invoices):
             else:
                 res[line_item["line_item_id"]] = line_item["quantity_input"]
     return res
-
-
-class EmailSendingError(Exception):
-    pass
 
 
 def generate_access_token_from_refresh_token(refresh_token):
@@ -104,9 +110,9 @@ def get_access_token(refresh_token):
 
 
 def send_mail_templates(file_name, user_email, email_subject, content):
-    email_message = render_to_string(file_name, content)
-
     try:
+        email_message = render_to_string(file_name, content)
+
         # Attempt to send the email
         send_mail_result = send_mail(
             f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
@@ -123,14 +129,14 @@ def send_mail_templates(file_name, user_email, email_subject, content):
             )
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
 
 def send_mail_templates_with_attachment(
     file_name, user_email, email_subject, content, body_message
 ):
-    image_url = f"{content['invoice']['signature']}"
     try:
+        image_url = f"{content['invoice']['signature']}"
+
         # Attempt to send the email
         image_response = requests.get(image_url)
         image_response.raise_for_status()
@@ -139,8 +145,8 @@ def send_mail_templates_with_attachment(
         image_base64 = base64.b64encode(image_response.content).decode("utf-8")
         content["image_base64"] = image_base64
         email_message = render_to_string(file_name, content)
-        result = BytesIO()
-        pdf = pisa.pisaDocument(BytesIO(email_message.encode("ISO-8859-1")), result)
+        pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+        result = BytesIO(pdf)
         email = EmailMessage(
             subject=f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
             body=body_message,
@@ -203,17 +209,17 @@ def add_45_days(date_str):
 def get_user_data(user):
     if not user.profile:
         return None
-    elif user.profile.type == "coach" and user.profile.coach.vendor_id:
-        serializer = CoachDepthOneSerializer(user.profile.coach)
-    # elif user.profile.type == "pmo":
-    #     serializer = PmoDepthOneSerializer(user.profile.pmo)
-    # elif user.profile.type == "learner":
-    #     serializer = LearnerDepthOneSerializer(user.profile.learner)
-    # elif user.profile.type == "hr":
-    #     serializer = HrDepthOneSerializer(user.profile.hr)
+    elif user.profile.roles.count() == 0:
+        return None
+    user_profile_role = user.profile.roles.filter(name="vendor")
+    if user_profile_role.exists() and user.profile.vendor:
+        serializer = VendorDepthOneSerializer(user.profile.vendor)
     else:
         return None
-    return serializer.data
+    return {
+        **serializer.data,
+        "user": {**serializer.data["user"], "type": "vendor"},
+    }
 
 
 @api_view(["POST"])
@@ -222,7 +228,6 @@ def generate_otp(request):
     try:
         user = User.objects.get(username=request.data["email"])
         try:
-            # Check if OTP already exists for the user
             otp_obj = OTP.objects.get(user=user)
             otp_obj.delete()
         except OTP.DoesNotExist:
@@ -309,9 +314,7 @@ def validate_otp(request):
         .first()
     )
     data = request.data
-    platform = data.get("platform","unknown")
-    
-
+    platform = data.get("platform", "unknown")
 
     if otp_obj is None:
         raise AuthenticationFailed("Invalid OTP")
@@ -327,7 +330,9 @@ def validate_otp(request):
         organization = get_organization_data()
         zoho_vendor = get_vendor(user_data["vendor_id"])
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=platform)
+        UserLoginActivity.objects.create(
+            user=user, timestamp=login_timestamp, platform=platform
+        )
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -370,14 +375,12 @@ def login_view(request):
     data = request.data
     username = data.get("username")
     password = data.get("password")
-    platform = data.get("platform","unknown")
+    platform = data.get("platform", "unknown")
     if username is None or password is None:
         raise ValidationError({"detail": "Please provide username and password."})
     user = authenticate(request, username=username, password=password)
     if user is None:
         raise AuthenticationFailed({"detail": "Invalid credentials."})
-    
-    
 
     last_login = user.last_login
     login(request, user)
@@ -386,7 +389,9 @@ def login_view(request):
         organization = get_organization_data()
         zoho_vendor = get_vendor(user_data["vendor_id"])
         login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(user=user, timestamp=login_timestamp,platform=platform)
+        UserLoginActivity.objects.create(
+            user=user, timestamp=login_timestamp, platform=platform
+        )
         return Response(
             {
                 "detail": "Successfully logged in.",
@@ -520,6 +525,18 @@ def get_purchase_order_data_pdf(request, purchaseorder_id):
         )
 
 
+def get_line_items_for_template(line_items):
+    res = [*line_items]
+    for line_item in res:
+        line_item["quantity_mul_rate"] = line_item["quantity_input"] * line_item["rate"]
+        line_item["quantity_mul_rate_include_tax"] = (
+            line_item["quantity_input"]
+            * line_item["rate"]
+            * (1 + line_item["tax_percentage"] / 100)
+        )
+    return res
+
+
 @api_view(["POST"])
 def add_invoice_data(request):
     invoices = InvoiceData.objects.filter(
@@ -534,15 +551,16 @@ def add_invoice_data(request):
     if serializer.is_valid():
         serializer.save()
         line_items = serializer.data["line_items"]
-        for line_item in line_items:
-            line_item["quantity_mul_rate"] = (
-                line_item["quantity_input"] * line_item["rate"]
-            )
-            line_item["quantity_mul_rate_include_tax"] = (
-                line_item["quantity_input"]
-                * line_item["rate"]
-                * (1 + line_item["tax_percentage"] / 100)
-            )
+        # for line_item in line_items:
+        #     line_item["quantity_mul_rate"] = (
+        #         line_item["quantity_input"] * line_item["rate"]
+        #     )
+        #     line_item["quantity_mul_rate_include_tax"] = (
+        #         line_item["quantity_input"]
+        #         * line_item["rate"]
+        #         * (1 + line_item["tax_percentage"] / 100)
+        #     )
+        line_items = get_line_items_for_template(serializer.data["line_items"])
         invoice_date = datetime.strptime(
             serializer.data["invoice_date"], "%Y-%m-%d"
         ).strftime("%d-%m-%Y")
@@ -556,6 +574,7 @@ def add_invoice_data(request):
             "due_date": due_date,
             "line_items": line_items,
         }
+        
         send_mail_templates_with_attachment(
             "invoice_pdf.html",
             [env("FINANCE_EMAIL")],
@@ -580,7 +599,7 @@ def edit_invoice(request, invoice_id):
     ):
         return Response({"error": "Invoice already exists with the invoice number"})
     serializer = InvoiceDataEditSerializer(data=request.data, instance=invoice)
-
+   
     if serializer.is_valid():
         serializer.save()
         line_items = serializer.data["line_items"]
@@ -679,53 +698,53 @@ def get_bank_account_data(
         return Response({}, status=400)
 
 
+# @api_view(["GET"])
+# def update_vendor_id(request):
+#     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+#     if access_token:
+#         headers = {"Authorization": f"Bearer {access_token}"}
+#         url = f"{base_url}/contacts?organization_id={env('ZOHO_ORGANIZATION_ID')}&contact_type=vendor"
+#         vendor_response = requests.get(url, headers=headers)
+#         if vendor_response.json()["message"] == "success":
+#             for vendor in vendor_response.json()["contacts"]:
+#                 if vendor["email"]:
+#                     try:
+#                         coach = Coach.objects.get(email=vendor["email"])
+#                         coach.vendor_id = vendor["contact_id"]
+#                         coach.save()
+#                     except Coach.DoesNotExist:
+#                         print(vendor["email"], "coach doesnt exist")
+#                         pass
+#             return Response(vendor_response.json())
+#         else:
+#             return Response({"error": "Failed to get vendors."}, status=400)
+#     else:
+#         return Response({"error": "Unauthorized	."}, status=400)
+
+
 @api_view(["GET"])
-def update_vendor_id(request):
+def get_vendor_exists_and_not_existing_emails(request):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
         headers = {"Authorization": f"Bearer {access_token}"}
         url = f"{base_url}/contacts?organization_id={env('ZOHO_ORGANIZATION_ID')}&contact_type=vendor"
         vendor_response = requests.get(url, headers=headers)
         if vendor_response.json()["message"] == "success":
+            existing_vendors = []
+            not_existing_vendors = []
             for vendor in vendor_response.json()["contacts"]:
                 if vendor["email"]:
                     try:
-                        coach = Coach.objects.get(email=vendor["email"])
-                        coach.vendor_id = vendor["contact_id"]
-                        coach.save()
-                    except Coach.DoesNotExist:
-                        print(vendor["email"], "coach doesnt exist")
-                        pass
-            return Response(vendor_response.json())
-        else:
-            return Response({"error": "Failed to get vendors."}, status=400)
-    else:
-        return Response({"error": "Unauthorized	."}, status=400)
-
-
-@api_view(["GET"])
-def get_coach_exists_and_not_existing_emails(request):
-    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-    if access_token:
-        headers = {"Authorization": f"Bearer {access_token}"}
-        url = f"{base_url}/contacts?organization_id={env('ZOHO_ORGANIZATION_ID')}&contact_type=vendor"
-        vendor_response = requests.get(url, headers=headers)
-        if vendor_response.json()["message"] == "success":
-            existing_coaches = []
-            not_existing_coaches = []
-            for vendor in vendor_response.json()["contacts"]:
-                if vendor["email"]:
-                    try:
-                        coach = Coach.objects.get(email=vendor["email"])
-                        existing_coaches.append(vendor["email"])
-                    except Coach.DoesNotExist:
-                        not_existing_coaches.append(vendor["email"])
+                        existing_vendor = Vendor.objects.get(email=vendor["email"])
+                        existing_vendors.append(vendor["email"])
+                    except Vendor.DoesNotExist:
+                        not_existing_vendors.append(vendor["email"])
                         pass
             return Response(
                 {
                     "vendors": vendor_response.json()["contacts"],
-                    "existing_coaches": existing_coaches,
-                    "not_existing_coaches": not_existing_coaches,
+                    "existing_vendors": existing_vendors,
+                    "not_existing_vendors": not_existing_vendors,
                 },
                 status=200,
             )
@@ -740,11 +759,11 @@ def import_invoices_from_zoho(request):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
         headers = {"Authorization": f"Bearer {access_token}"}
-        coaches = Coach.objects.exclude(vendor_id__isnull=True).exclude(vendor_id="")
+        vendors = Vendor.objects.all()
         res = []
         bill_details_res = []
-        for coach in coaches:
-            purchase_orders_url = f"{base_url}/purchaseorders/?organization_id={organization_id}&vendor_id={coach.vendor_id}"
+        for vendor in vendors:
+            purchase_orders_url = f"{base_url}/purchaseorders/?organization_id={organization_id}&vendor_id={vendor.vendor_id}"
             response = requests.get(purchase_orders_url, headers=headers)
             if response.status_code == 200:
                 purchase_orders = response.json().get("purchaseorders", [])
@@ -777,7 +796,7 @@ def import_invoices_from_zoho(request):
                                             }
                                         )
                                 if InvoiceData.objects.filter(
-                                    vendor_id=coach.vendor_id,
+                                    vendor_id=vendor.vendor_id,
                                     invoice_number=bill[env("INVOICE_FIELD_NAME")],
                                 ).exists():
                                     print(
@@ -787,15 +806,16 @@ def import_invoices_from_zoho(request):
                                 else:
                                     invoice = InvoiceData.objects.create(
                                         invoice_number=bill[env("INVOICE_FIELD_NAME")],
-                                        vendor_id=coach.vendor_id,
-                                        vendor_name=coach.first_name,
-                                        vendor_email=coach.email,
+                                        vendor_id=vendor.vendor_id,
+                                        vendor_name=vendor.name,
+                                        vendor_email=vendor.email,
                                         vendor_billing_address="",
                                         vendor_gst="",
-                                        vendor_phone=coach.phone,
+                                        vendor_phone=vendor.phone,
                                         customer_name="",
                                         customer_gst="",
                                         customer_notes="",
+                                        customer_address="",
                                         is_oversea_account=False,
                                         tin_number="",
                                         invoice_date=bill["date"],
@@ -812,10 +832,10 @@ def import_invoices_from_zoho(request):
                                 print("bill details couldn't get")
                     else:
                         print("bills didn't fetched")
-                print(coach.email, purchase_orders)
+                print(vendor.email, purchase_orders)
             else:
                 print(
-                    {"error": "Failed to fetch purchase orders", "email": coach.email}
+                    {"error": "Failed to fetch purchase orders", "email": vendor.email}
                 )
         return Response({"res": res, "bill_details_res": bill_details_res}, status=200)
     else:
@@ -899,3 +919,51 @@ def export_invoice_data(request):
     wb.save(response)
 
     return response
+
+
+class DownloadInvoice(APIView):
+    def get(self, request, record_id):
+        try:
+            invoice = get_object_or_404(InvoiceData, id=record_id)
+            serializer = InvoiceDataSerializer(invoice)
+            line_items = get_line_items_for_template(serializer.data["line_items"])
+            invoice_date = datetime.strptime(
+                serializer.data["invoice_date"], "%Y-%m-%d"
+            ).strftime("%d-%m-%Y")
+            due_date = datetime.strptime(
+                add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
+            ).strftime("%d-%m-%Y")
+            invoice_data = {
+                **serializer.data,
+                "invoice_date": invoice_date,
+                "due_date": due_date,
+                "line_items": line_items,
+            }
+            image_base64=None
+            try:
+                image_url = f"{invoice_data['signature']}"
+            
+                # Attempt to send the email
+                image_response = requests.get(image_url)
+            
+                image_response.raise_for_status()
+                
+                # Convert the downloaded image to base64
+                image_base64 = base64.b64encode(image_response.content).decode("utf-8")
+            except Exception as e:
+                pass
+            
+            email_message = render_to_string("invoice_pdf.html", {"invoice":invoice_data,"image_base64":image_base64})
+            pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response[
+                "Content-Disposition"
+            ] = f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download invoice."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
