@@ -16,6 +16,8 @@ from .models import (
     Video,
     VideoLesson,
     CourseTemplate,
+    Resources,
+    PdfLesson,
 )
 
 
@@ -182,5 +184,18 @@ class AnswerSerializer(serializers.ModelSerializer):
 class CertificateSerializerDepthOne(serializers.ModelSerializer):
     class Meta:
         model = Certificate
+        fields = "__all__"
+        depth = 1
+
+
+class ResourcesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Resources
+        fields = "__all__"
+
+
+class PdfLessonSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PdfLesson
         fields = "__all__"
         depth = 1

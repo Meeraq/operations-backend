@@ -5252,6 +5252,8 @@ def get_coachee_of_user(request, user_type, user_id):
             if project_dict["name"] not in [proj["name"] for proj in learner_dict["projects"]]:
                 learner_dict["projects"].append(project_dict)
         learners_data.append(learner_dict)
+
+    # serializer = LearnerSerializer(learners,many=True)
     return Response(learners_data)
 
 
