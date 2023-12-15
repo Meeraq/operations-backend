@@ -1750,6 +1750,11 @@ class AssignCourseTemplateToBatch(APIView):
                                 lesson=new_lesson,
                                 video=original_lesson.videolesson.video,
                             )
+                        elif original_lesson.lesson_type == "ppt":
+                            PdfLesson.objects.create(
+                                lesson=new_lesson,
+                                pdf=original_lesson.pdflesson.pdf,
+                            )
                         elif original_lesson.lesson_type == "assessment":
                             Assessment.objects.create(lesson=new_lesson)
                         elif original_lesson.lesson_type == "quiz":
@@ -1939,12 +1944,12 @@ def create_pdf_lesson(request):
         )
 
         if created or not created:
-            return Response({"message": "PdfLesson created successfully."})
+            return Response({"message": "PPT lesson created successfully."})
         else:
-            return Response({"message": "Failed to create PdfLesson."})
+            return Response({"message": "Failed to create PPT lesson."})
 
     except CourseTemplate.DoesNotExist:
-        return Response({"message": "CourseTemplate does not exist."})
+        return Response({"message": "Course template does not exist."})
     except Exception as e:
         return Response({"message": f"Error: {str(e)}"})
 
