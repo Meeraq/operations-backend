@@ -1477,7 +1477,7 @@ def update_video(request, pk):
     except Video.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    serializer = VideoSerializer(video, data=request.data)
+    serializer = VideoSerializer(video, data=request.data,partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data)
