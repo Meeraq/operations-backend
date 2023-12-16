@@ -209,4 +209,11 @@ urlpatterns = [
         "assign-course-template-to-batch/<int:course_template_id>/<int:batch_id>/",
         AssignCourseTemplateToBatch.as_view(),
     ),
+    path(
+        "update_course_template_status/",
+        views.update_course_template_status,
+        name="update_course_template",
+    ),
+    path("update-course_status/", views.update_course_status),
+    path("update-lesson-status/", views.lesson_update_status),
 ]

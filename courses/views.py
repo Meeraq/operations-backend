@@ -1861,3 +1861,80 @@ class AssignCourseTemplateToBatch(APIView):
                 {"error": "Failed to assign course template."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+from rest_framework import status
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import CourseTemplate
+from .serializers import CourseTemplateSerializer
+
+@api_view(["PUT"])
+def update_course_template_status(request):
+    course_template_id = request.data.get('course_template_id')
+    selected_status = request.data.get('status')
+
+    try:
+        course_template = CourseTemplate.objects.get(id=course_template_id)
+    except CourseTemplate.DoesNotExist:
+        return Response({"error": "Course Template not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Update the fields if data exists in the request
+    if selected_status:
+        course_template.status = selected_status
+
+    course_template.save()
+
+    serializer = CourseTemplateSerializer(course_template)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+from rest_framework import status
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Course
+
+@api_view(['PUT'])
+def update_course_status(request):
+    try:
+        course_id = request.data.get('course_id')
+        status = request.data.get('status')
+
+        # Fetch the course object to update
+        course = Course.objects.get(pk=course_id)
+        
+        # Update the status
+        course.status = status
+        course.save()
+
+        return Response({'message': 'Course status updated successfully'}, status=200)
+    except Course.DoesNotExist:
+        return Response({'message': 'Course not found'}, status=404)
+    except Exception as e:
+        return Response({'message': str(e)}, status=500)
+
+
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Lesson
+from .serializers import LessonUpdateSerializer
+
+@api_view(['PUT'])
+def lesson_update_status(request):
+    if request.method == 'PUT':
+        serializer = LessonUpdateSerializer(data=request.data)
+        if serializer.is_valid():
+            lesson_id = serializer.validated_data['lesson_id']
+            status_value = serializer.validated_data['status']
+
+            try:
+                lesson = Lesson.objects.get(id=lesson_id)
+                lesson.status = status_value
+                lesson.save()
+                return Response({'message': f'Lesson status updated.'}, status=status.HTTP_200_OK)
+            except Lesson.DoesNotExist:
+                return Response({'message': f'Lesson does not exist'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        return Response({'message': 'Invalid method'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)

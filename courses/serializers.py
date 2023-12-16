@@ -184,3 +184,8 @@ class CertificateSerializerDepthOne(serializers.ModelSerializer):
         model = Certificate
         fields = "__all__"
         depth = 1
+
+
+class LessonUpdateSerializer(serializers.Serializer):
+    lesson_id = serializers.IntegerField()
+    status = serializers.CharField(max_length=20)
