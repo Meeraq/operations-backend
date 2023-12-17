@@ -45,6 +45,7 @@ from .serializers import (
     VideoLessonSerializerDepthOne,
     ResourcesSerializer,
     PdfLessonSerializer,
+    LessonUpdateSerializer,
 )
 from rest_framework.views import APIView
 from api.models import User, Learner, Profile, Role
@@ -1886,12 +1887,6 @@ def get_resources(request):
     return Response(serializer.data)
 
 
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .models import Resources
-from .serializers import ResourcesSerializer  # Import your Resources model serializer
-
-
 @api_view(["POST"])
 def create_resource(request):
     pdf_name = request.data.get("pdfName")  # Extracting pdfName from request data
@@ -1914,11 +1909,6 @@ def create_resource(request):
         return Response(
             serializer.errors, status=400
         )  # Return errors if validation fails
-
-
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .models import PdfLesson, Lesson, Resources, CourseTemplate
 
 
 @api_view(["POST"])
@@ -1956,13 +1946,6 @@ def create_pdf_lesson(request):
         return Response({"message": "Course template does not exist."})
     except Exception as e:
         return Response({"message": f"Error: {str(e)}"})
-
-
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.decorators import api_view
-from .models import PdfLesson, Lesson, Resources
-from .serializers import PdfLessonSerializer, LessonSerializer
 
 
 @api_view(["PUT"])
@@ -2009,13 +1992,6 @@ def update_pdf_lesson(request, pk):
     return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-from rest_framework import status
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .models import CourseTemplate
-from .serializers import CourseTemplateSerializer
-
-
 @api_view(["PUT"])
 def update_course_template_status(request):
     course_template_id = request.data.get("course_template_id")
@@ -2038,12 +2014,6 @@ def update_course_template_status(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-from rest_framework import status
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .models import Course
-
-
 @api_view(["PUT"])
 def update_course_status(request):
     try:
@@ -2062,13 +2032,6 @@ def update_course_status(request):
         return Response({"message": "Course not found"}, status=404)
     except Exception as e:
         return Response({"message": str(e)}, status=500)
-
-
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
-from .models import Lesson
-from .serializers import LessonUpdateSerializer
 
 
 @api_view(["PUT"])
