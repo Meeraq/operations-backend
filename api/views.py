@@ -740,7 +740,7 @@ def update_coach_profile(request, id):
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email").strip()
+    new_email = mutable_data.get("email","").strip()
     #  other user exists with the new email
     if (
         new_email
@@ -2403,7 +2403,7 @@ def generate_otp(request):
                 return Response(
                     {"error": "User with the given email does not exist."}, status=400
                 )
-        elif hr_roles.exists():
+        if hr_roles.exists():
             projects = Project.objects.filter(
                 hr=user.profile.hr, enable_emails_to_hr_and_coachee=False
             )
@@ -5252,6 +5252,8 @@ def get_coachee_of_user(request, user_type, user_id):
             if project_dict["name"] not in [proj["name"] for proj in learner_dict["projects"]]:
                 learner_dict["projects"].append(project_dict)
         learners_data.append(learner_dict)
+
+    # serializer = LearnerSerializer(learners,many=True)
     return Response(learners_data)
 
 

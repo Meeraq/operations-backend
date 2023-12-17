@@ -1104,7 +1104,7 @@ def schedule_session(request):
                 if session_type == "laser_coaching_session"
                 else "Meeraq - Mentoring Session Booked",
                 {
-                    "name": coach_name,
+                    "name": participant.name,
                     "date": date_for_mail,
                     "time": session_time,
                     "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
@@ -1303,7 +1303,7 @@ def schedule_session_fixed(request):
                     if session_type == "laser_coaching_session"
                     else "Meeraq - Mentoring Session Booked",
                     {
-                        "name": coach_name,
+                        "name": participant.name,
                         "date": date_for_mail,
                         "time": session_time,
                         "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
