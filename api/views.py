@@ -4907,7 +4907,6 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
 
 @api_view(["GET"])
 def new_get_upcoming_sessions_of_user(request, user_type, user_id):
-    
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     current_time_seeq = timezone.now()
@@ -4931,7 +4930,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             ~Q(status="completed"),
         )
         learner = Learner.objects.get(id =user_id)
-        schedular_sessions = SchedularSessions.objects.filter(enrolled_participant__email=learner.email)
+        schedular_sessions = SchedularSessions.objects.filter(learner=learner)
         avaliable_sessions = schedular_sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
@@ -4984,9 +4983,9 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "coach_phone": "+"
             + session.availibility.coach.phone_country_code
             + session.availibility.coach.phone,
-            "participant_name": session.enrolled_participant.name,
-            "participant_email": session.enrolled_participant.email,
-            "participant_phone": session.enrolled_participant.phone,
+            "participant_name": session.learner.name,
+            "participant_email": session.learner.email,
+            "participant_phone": session.learner.phone,
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
@@ -5081,7 +5080,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
         )
         learner = Learner.objects.get(id =user_id)
-        schedular_sessions = SchedularSessions.objects.filter(enrolled_participant__email=learner.email)
+        schedular_sessions = SchedularSessions.objects.filter(learner=learner)
         avaliable_sessions = schedular_sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
@@ -5133,9 +5132,9 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "coach_phone": "+"
             + session.availibility.coach.phone_country_code
             + session.availibility.coach.phone,
-            "participant_name": session.enrolled_participant.name,
-            "participant_email": session.enrolled_participant.email,
-            "participant_phone": session.enrolled_participant.phone,
+            "participant_name": session.learner.name,
+            "participant_email": session.learner.email,
+            "participant_phone": session.learner.phone,
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
@@ -5221,7 +5220,7 @@ def get_coachee_of_user(request, user_type, user_id):
         }
         if user_type == "pmo":
             projects = Project.objects.filter(engagement__learner=learner)
-            schedular_batches=SchedularBatch.objects.filter(participants__email=learner.email)
+            schedular_batches=SchedularBatch.objects.filter(learners__email=learner.email)
             course_enrollments = CourseEnrollment.objects.filter(learner__id=learner.id)
             courses_names = []
             for course_enrollment in course_enrollments:
@@ -5719,7 +5718,7 @@ def get_current_session(request, user_type, room_id, user_id):
             sessions = SchedularSessions.objects.filter(
                 availibility__start_time__lt=five_minutes_plus_current_time,
                 availibility__end_time__gt=current_time,
-                enrolled_participant__email=learner.email,
+                learner__email=learner.email,
                 availibility__coach__room_id=room_id,
             )
 
