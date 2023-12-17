@@ -45,6 +45,7 @@ from .serializers import (
     VideoLessonSerializerDepthOne,
     ResourcesSerializer,
     PdfLessonSerializer,
+    LessonUpdateSerializer,
 )
 from rest_framework.views import APIView
 from api.models import User, Learner, Profile, Role
@@ -733,7 +734,7 @@ def update_laser_coaching_session(request, course_id, lesson_id, session_id):
     # )
 
     if lesson_serializer.is_valid():
-    # and session_serializer.is_valid():
+        # and session_serializer.is_valid():
         lesson_serializer.save()
         # session_serializer.save()
         return Response(
@@ -921,13 +922,18 @@ def get_course_enrollment_for_pmo_preview(request, course_id):
         )
     except Course.DoesNotExist:
         return Response(status=404)
-    
+
+
 @api_view(["GET"])
-def get_course_enrollment_for_pmo_preview_for_course_template(request, course_template_id):
+def get_course_enrollment_for_pmo_preview_for_course_template(
+    request, course_template_id
+):
     try:
         course_template = CourseTemplate.objects.get(id=course_template_id)
         course_serializer = CourseTemplateSerializer(course_template)
-        lessons = Lesson.objects.filter(course_template=course_template, status="public")
+        lessons = Lesson.objects.filter(
+            course_template=course_template, status="public"
+        )
         lessons_serializer = LessonSerializer(lessons, many=True)
         completed_lessons = []
         return Response(
@@ -941,7 +947,6 @@ def get_course_enrollment_for_pmo_preview_for_course_template(request, course_te
         )
     except Course.DoesNotExist:
         return Response(status=404)
-
 
 
 @api_view(["GET"])
@@ -1484,7 +1489,7 @@ def update_video(request, pk):
     except Video.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    serializer = VideoSerializer(video, data=request.data,partial=True)
+    serializer = VideoSerializer(video, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data)
@@ -1882,12 +1887,6 @@ def get_resources(request):
     return Response(serializer.data)
 
 
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .models import Resources
-from .serializers import ResourcesSerializer  # Import your Resources model serializer
-
-
 @api_view(["POST"])
 def create_resource(request):
     pdf_name = request.data.get("pdfName")  # Extracting pdfName from request data
@@ -1910,11 +1909,6 @@ def create_resource(request):
         return Response(
             serializer.errors, status=400
         )  # Return errors if validation fails
-
-
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .models import PdfLesson, Lesson, Resources, CourseTemplate
 
 
 @api_view(["POST"])
@@ -1952,13 +1946,6 @@ def create_pdf_lesson(request):
         return Response({"message": "Course template does not exist."})
     except Exception as e:
         return Response({"message": f"Error: {str(e)}"})
-
-
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.decorators import api_view
-from .models import PdfLesson, Lesson, Resources
-from .serializers import PdfLessonSerializer, LessonSerializer
 
 
 @api_view(["PUT"])
@@ -2003,3 +1990,72 @@ def update_pdf_lesson(request, pk):
         return Response(pdf_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+def update_course_template_status(request):
+    course_template_id = request.data.get("course_template_id")
+    selected_status = request.data.get("status")
+
+    try:
+        course_template = CourseTemplate.objects.get(id=course_template_id)
+    except CourseTemplate.DoesNotExist:
+        return Response(
+            {"error": "Course Template not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Update the fields if data exists in the request
+    if selected_status:
+        course_template.status = selected_status
+
+    course_template.save()
+
+    serializer = CourseTemplateSerializer(course_template)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["PUT"])
+def update_course_status(request):
+    try:
+        course_id = request.data.get("course_id")
+        status = request.data.get("status")
+
+        # Fetch the course object to update
+        course = Course.objects.get(pk=course_id)
+
+        # Update the status
+        course.status = status
+        course.save()
+
+        return Response({"message": "Course status updated successfully"}, status=200)
+    except Course.DoesNotExist:
+        return Response({"message": "Course not found"}, status=404)
+    except Exception as e:
+        return Response({"message": str(e)}, status=500)
+
+
+@api_view(["PUT"])
+def lesson_update_status(request):
+    if request.method == "PUT":
+        serializer = LessonUpdateSerializer(data=request.data)
+        if serializer.is_valid():
+            lesson_id = serializer.validated_data["lesson_id"]
+            status_value = serializer.validated_data["status"]
+
+            try:
+                lesson = Lesson.objects.get(id=lesson_id)
+                lesson.status = status_value
+                lesson.save()
+                return Response(
+                    {"message": f"Lesson status updated."}, status=status.HTTP_200_OK
+                )
+            except Lesson.DoesNotExist:
+                return Response(
+                    {"message": f"Lesson does not exist"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        return Response(
+            {"message": "Invalid method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
+        )
