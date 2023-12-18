@@ -1913,37 +1913,62 @@ def create_resource(request):
 
 @api_view(["POST"])
 def create_pdf_lesson(request):
-    # Extracting data from request
-    lesson_data = request.data.get("lesson")
-    pdf_id = request.data.get("pdf_id")
-    course_template_id = lesson_data.get("course_template")
-
     try:
-        # Get CourseTemplate instance
-        course_template_instance = CourseTemplate.objects.get(id=course_template_id)
+        lesson_data = request.data.get("lesson")
+        pdf_id = request.data.get("pdf_id")
+        course_template_id = lesson_data.get("course_template", "")
+        course_id = lesson_data.get("course", "")
 
-        # Creating or retrieving Lesson instance
-        lesson_instance = Lesson.objects.create(
-            course=lesson_data["course"],
-            course_template=course_template_instance,
-            name=lesson_data["name"],
-            status=lesson_data["status"],
-            lesson_type=lesson_data["lesson_type"],
-            order=lesson_data["order"],
-        )
+        if course_id:
+            course_instance = Course.objects.get(id=course_id)
+            course_template_instance = course_instance.course_template
 
-        # Getting or creating PdfLesson instance
-        pdf_lesson_instance, created = PdfLesson.objects.get_or_create(
-            lesson=lesson_instance, defaults={"pdf_id": pdf_id}
-        )
+            lesson_instance = Lesson.objects.create(
+                course=course_instance,
+                name=lesson_data["name"],
+                status=lesson_data["status"],
+                lesson_type=lesson_data["lesson_type"],
+                order=lesson_data["order"],
+            )
 
-        if created or not created:
-            return Response({"message": "PPT lesson created successfully."})
+            pdf_lesson_instance, created = PdfLesson.objects.get_or_create(
+                lesson=lesson_instance, defaults={"pdf_id": pdf_id}
+            )
+
+            if created or not created:
+                return Response({"message": "PDF lesson created successfully."})
+            else:
+                return Response({"message": "Failed to create PDF lesson."})
+
+        elif course_template_id:
+            course_template_instance = CourseTemplate.objects.get(id=course_template_id)
+
+            lesson_instance = Lesson.objects.create(
+                course_template=course_template_instance,
+                name=lesson_data["name"],
+                status=lesson_data["status"],
+                lesson_type=lesson_data["lesson_type"],
+                order=lesson_data["order"],
+            )
+
+            pdf_lesson_instance, created = PdfLesson.objects.get_or_create(
+                lesson=lesson_instance, defaults={"pdf_id": pdf_id}
+            )
+
+            if created or not created:
+                return Response({"message": "PDF lesson created successfully."})
+            else:
+                return Response({"message": "Failed to create PDF lesson."})
+
         else:
-            return Response({"message": "Failed to create PPT lesson."})
+            return Response(
+                {"message": "Neither Course ID nor Course Template ID provided."}
+            )
 
+    except Course.DoesNotExist:
+        return Response({"message": "Course does not exist."})
     except CourseTemplate.DoesNotExist:
-        return Response({"message": "Course template does not exist."})
+        return Response({"message": "Course Template does not exist."})
     except Exception as e:
         return Response({"message": f"Error: {str(e)}"})
 
