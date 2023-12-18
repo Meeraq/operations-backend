@@ -8012,6 +8012,22 @@ class SessionData(APIView):
         sessiondata = []
         weeks = get_weeks_for_current_month()
         for project in projects:
+            engagements = Engagement.objects.filter(project=project)
+            planned_learner_count=0
+            for engagement in engagements:
+                completed_sessions_count = SessionRequestCaas.objects.filter(
+                    status="completed",
+                    project__id=engagement.project.id,
+                    learner__id=engagement.learner.id,
+                ).count()
+
+                total_sessions_count = SessionRequestCaas.objects.filter(
+                    project__id=engagement.project.id,
+                    learner__id=engagement.learner.id,
+                    is_archive=False,
+                ).count()
+                if engagement.status=="active" and completed_sessions_count != total_sessions_count:
+                    planned_learner_count+=1
             res_obj = {}
             is_involved_in_sessions = SessionRequestCaas.objects.filter(
                 project=project, is_booked=True
@@ -8032,7 +8048,7 @@ class SessionData(APIView):
                 confirmed_availability__end_time__lte=end_str_current_mon,
                 project__id=project.id,
             )
-            res_obj["current_month"] = current_month_sessions.count()
+            res_obj["current_month"] = planned_learner_count
 
             for i, week in enumerate(weeks, start=1):
                 start_timestamp = int(week["start_date"].timestamp())
