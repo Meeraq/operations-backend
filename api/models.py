@@ -722,3 +722,16 @@ class FinalizeCoachActivity(models.Model):
 
     def __str__(self):
         return f"{self.user_who_finalized.username} finalized the coach."
+
+
+
+class CoachActivity(models.Model):
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    profile_shared_count = models.PositiveIntegerField(default=0)
+    projects_finalized_count = models.PositiveIntegerField(default=0)
+    projects_done_chem_count = models.PositiveIntegerField(default=0)
+    coachee_projects_finalized_count = models.PositiveIntegerField(default=0)
+    project_id_array = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return f"Activity for {self.coach.user.username}"

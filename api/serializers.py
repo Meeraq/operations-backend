@@ -35,6 +35,7 @@ from .models import (
     ShareCoachProfileActivity,
     CreateProjectActivity,
     FinalizeCoachActivity,
+    CoachActivity,
 )
 from django.contrib.auth.models import User
 
@@ -409,4 +410,10 @@ class FinalizeCoachActivitySerializer(serializers.ModelSerializer):
 class SessionDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = SessionRequestCaas
+        fields = "__all__"
+
+
+class CoachActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachActivity
         fields = "__all__"

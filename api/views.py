@@ -63,6 +63,7 @@ from .serializers import (
     CreateProjectActivitySerializer,
     FinalizeCoachActivitySerializer,
     SessionDataSerializer,
+    CoachActivitySerializer,
 )
 
 from rest_framework import generics
@@ -120,6 +121,7 @@ from .models import (
     ShareCoachProfileActivity,
     CreateProjectActivity,
     FinalizeCoachActivity,
+    CoachActivity,
 )
 
 from rest_framework.authtoken.models import Token
@@ -3566,6 +3568,7 @@ def get_session_requests_of_coach(request, coach_id):
 def accept_coach_caas_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
+        print("project", project.project_structure)
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     coaches_selected_count = 0
@@ -3610,6 +3613,27 @@ def accept_coach_caas_hr(request):
         )
 
         finalizeCoach.save()
+    except Exception as e:
+        pass
+
+    try:
+        coach_id = request.data.get("coach_id")
+        print("coach_id", coach_id)
+        project_structure = project.project_structure
+        chemistry = False
+        if any(session.get('session_type') == 'chemistry' for session in project_structure):
+            chemistry = True
+        coach = Coach.objects.get(pk=coach_id)
+        coach_activity, created = CoachActivity.objects.get_or_create(coach=coach)
+        if not created:
+            coach_activity.projects_finalized_count += 1
+            if chemistry:
+                coach_activity.projects_done_chem_count += 1
+        else:
+            coach_activity.projects_finalized_count = 1
+            if chemistry:
+                coach_activity.projects_done_chem_count = 1
+        coach_activity.save()
     except Exception as e:
         pass
     # for i in range(0,len(project.coaches_status)):
@@ -4097,6 +4121,8 @@ def send_list_to_hr(request):
         coaches.append(Coach.objects.get(id=coach_id))
         coach_status.save()
 
+    
+
     project.save()
     try:
         user_who_shared = User.objects.get(id=request.data.get("user_id", ""))
@@ -4111,6 +4137,21 @@ def send_list_to_hr(request):
         shareCoachProfile.save()
     except Exception as e:
         pass
+
+    
+    try:
+        for coach_id in request.data["coach_list"]:
+            print("coach_id", coach_id)
+            coach = Coach.objects.get(pk=coach_id)
+            coach_activity, created = CoachActivity.objects.get_or_create(coach=coach)
+            if not created:
+                coach_activity.profile_shared_count += 1
+            else:
+                coach_activity.profile_shared_count = 1
+            coach_activity.save()
+    except Exception as e:
+        pass
+
     if project.enable_emails_to_hr_and_coachee:
         try:
             path = f"/projects/caas/progress/{project.id}"
@@ -5963,6 +6004,7 @@ def get_learners_without_sessions(request, hr_id):
 
 @api_view(["POST"])
 def select_coach_for_coachee(request):
+    print("request", request.data)
     try:
         coach_status = CoachStatus.objects.get(id=request.data["coach_status_id"])
     except CoachStatus.DoesNotExist:
@@ -5971,6 +6013,34 @@ def select_coach_for_coachee(request):
         engagement = Engagement.objects.get(id=request.data["engagement_id"])
     except Engagement.DoesNotExist:
         return Response({"error": "Unable to find learner"}, status=404)
+    
+    try:
+        projectId = request.data["project_id"]
+        coachId = request.data["coach_id"]
+
+        coach = Coach.objects.get(pk=coachId)
+        coach_activity, created = CoachActivity.objects.get_or_create(coach=coach)
+        
+        project_id_array = coach_activity.project_id_array
+        print("project_id_array", project_id_array)
+        print("created", created)
+        if not created:
+            if projectId in project_id_array: 
+                pass
+            else:
+                coach_activity.coachee_projects_finalized_count += 1
+                project_id_array.append(projectId)
+                coach_activity.project_id_array = project_id_array
+                print("inside first else")
+        else:
+            coach_activity.coachee_projects_finalized_count = 1
+            project_id_array.append(projectId)
+            coach_activity.project_id_array = project_id_array
+            print("inside second else")
+        coach_activity.save()
+    except Exception as e:
+        pass
+
     coach_status.learner_id.append(engagement.learner.id)
     coach_status.save()
     engagement.coach = coach_status.coach
@@ -7888,3 +7958,19 @@ class UserTokenAvaliableCheck(APIView):
         except Exception as e:
             pass
         return Response({"user_token_present": user_token_present})
+
+
+
+@api_view(["GET"])
+def get_coach_data(request, coach_id):
+    coach = get_object_or_404(Coach, pk=coach_id)
+    coach_serializer = CoachSerializer(coach)
+    
+    # Assuming CoachActivity has a ForeignKey to Coach, and you want to include related activities
+    activities = CoachActivity.objects.filter(coach=coach)
+    activity_serializer = CoachActivitySerializer(activities, many=True)
+
+    return Response({
+        'coach': coach_serializer.data,
+        'activities': activity_serializer.data,
+    })
