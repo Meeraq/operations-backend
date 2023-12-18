@@ -1918,6 +1918,36 @@ def generate_report_for_participant(file_name, content):
     except Exception as e:
         print(str(e))
 
+def word_generate_report_for_participant(file_name, content):
+    try:
+        organisation = Organisation.objects.get(id=content["organisation_id"])
+        org_serializer = OrganisationSerializer(organisation)
+
+        image_url = org_serializer.data.get("image_url")
+
+        if image_url is not None:
+            image_response = requests.get(image_url)
+            image_response.raise_for_status()
+
+            image_organisation_base64 = base64.b64encode(image_response.content).decode(
+                "utf-8"
+            )
+            content["image_organisation_base64"] = image_organisation_base64
+        else:
+            content["image_organisation_base64"] = None
+
+        email_message = render_to_string(file_name, content)
+
+        pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+        
+        pdf_path = "graphsAndReports/Report.pdf"
+        with open(pdf_path, "wb") as pdf_file:
+            pdf_file.write(pdf)
+
+    except Exception as e:
+        print(str(e))
+
+
 
 def html_for_pdf_preview(file_name, user_email, email_subject, content, body_message):
     try:
@@ -2509,7 +2539,7 @@ class DownloadWordReport(APIView):
             )
             data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
 
-            generate_report_for_participant(
+            word_generate_report_for_participant(
                 "assessment/report/assessment_report.html",
                 {
                     "name": participant.name,
