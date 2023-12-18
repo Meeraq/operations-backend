@@ -190,6 +190,15 @@ class SessionRequestWithEngagementCaasDepthOneSerializer(serializers.ModelSerial
         fields = "__all__"
         depth = 2
 
+class SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer(serializers.ModelSerializer):
+    engagement_status = serializers.CharField()
+    is_seeq_project=serializers.BooleanField()
+
+    class Meta:
+        model = SessionRequestCaas
+        fields = "__all__"
+        depth = 2
+
 
 class SessionRequestCaasDepthTwoSerializer(serializers.ModelSerializer):
     class Meta:

@@ -63,6 +63,8 @@ from .models import (
     SchedularSessions,
     Facilitator,
 )
+from courses.models import Course
+from courses.serializers import CourseSerializer
 
 
 from api.views import create_notification, send_mail_templates
@@ -460,11 +462,17 @@ def get_batch_calendar(request, batch_id):
         coaches_serializer = CoachBasicDetailsSerializer(coaches, many=True)
         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
+        try:
+            course = Course.objects.get(batch__id=batch_id)
+            course_serailizer = CourseSerializer(course)
+        except Exception as e:
+            course = None
         return Response(
             {
                 "sessions": sorted_sessions,
                 "participants": participants_serializer.data,
                 "coaches": coaches_serializer.data,
+                "course" : course_serailizer.data if course else None
             }
         )
     except SchedularProject.DoesNotExist:
@@ -764,7 +772,7 @@ def create_coach_schedular_availibilty(request):
                     },
                     [],
                 )
-
+                create_notification(coach.user.user,"/slot-request","Admin has asked your availability!")
                 from_email = settings.DEFAULT_FROM_EMAIL
                 recipient_list = [coach.email]
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -1096,7 +1104,7 @@ def schedule_session(request):
                 if session_type == "laser_coaching_session"
                 else "Meeraq - Mentoring Session Booked",
                 {
-                    "name": coach_name,
+                    "name": participant.name,
                     "date": date_for_mail,
                     "time": session_time,
                     "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
@@ -1295,7 +1303,7 @@ def schedule_session_fixed(request):
                     if session_type == "laser_coaching_session"
                     else "Meeraq - Mentoring Session Booked",
                     {
-                        "name": coach_name,
+                        "name": participant.name,
                         "date": date_for_mail,
                         "time": session_time,
                         "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
