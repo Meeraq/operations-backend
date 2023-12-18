@@ -62,6 +62,7 @@ class TextLessonCreateSerializer(serializers.ModelSerializer):
         lesson_instance.lesson_type = lesson_data.get(
             "lesson_type", lesson_instance.lesson_type
         )
+        lesson_instance.drip_date=lesson_data.get("drip_date",lesson_instance.drip_date)
         lesson_instance.save()
 
         instance.content = validated_data.get("content", instance.content)
@@ -87,6 +88,7 @@ class LessonSerializer(serializers.ModelSerializer):
             "lesson_type",
             "order",
             "course_template",
+            "drip_date"
         ]
 
 

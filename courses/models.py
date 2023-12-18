@@ -59,6 +59,7 @@ class Lesson(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     lesson_type = models.CharField(max_length=20, choices=LESSON_TYPES)
     order = models.PositiveIntegerField(default=0)
+    drip_date = models.DateField(blank=True, null=True)
 
 
 class TextLesson(models.Model):

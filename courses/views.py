@@ -611,6 +611,7 @@ def create_lesson_with_live_session(request):
     # Update live_session_data to include lesson_id
     live_session_data["lesson"] = lesson_instance.id
 
+
     live_session_serializer = LiveSessionSerializer(data=live_session_data)
     live_session_serializer.is_valid(raise_exception=True)
     live_session_instance = (
@@ -657,6 +658,7 @@ def update_live_session(request, course_id, lesson_id):
         lesson.name = lesson_data.get("name")
         lesson.status = lesson_data.get("status")
         lesson.lesson_type = lesson_data.get("lesson_type")
+        lesson.drip_date =lesson_data.get("drip_date")
         lesson.save()
         # Update LiveSession instance fields
         # live_session.description = live_session_data.get("description")
@@ -686,6 +688,7 @@ def create_laser_booking_lesson(request):
         status=lesson_data["status"],
         lesson_type=lesson_data["lesson_type"],
         order=lesson_data["order"],
+        drip_date=lesson_data["drip_date"],
     )
 
     # Create a LaserCoachingSession instance associated with the created Lesson
@@ -1936,6 +1939,7 @@ def create_pdf_lesson(request):
             status=lesson_data["status"],
             lesson_type=lesson_data["lesson_type"],
             order=lesson_data["order"],
+            drip_date=lesson_data["drip_date"],
         )
 
         # Getting or creating PdfLesson instance
