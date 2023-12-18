@@ -757,7 +757,7 @@ def create_coach_schedular_availibilty(request):
                     },
                     [],
                 )
-
+                create_notification(coach.user.user,"/slot-request","Admin has asked your availability!")
                 from_email = settings.DEFAULT_FROM_EMAIL
                 recipient_list = [coach.email]
             return Response(serializer.data, status=status.HTTP_201_CREATED)

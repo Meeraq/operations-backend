@@ -5702,6 +5702,14 @@ def get_current_session(request, user_type, room_id, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
+        if sessions.count() == 0:
+            coach = Coach.objects.get(id=user_id)
+            sessions = SchedularSessions.objects.filter(
+                availibility__start_time__lt=five_minutes_plus_current_time,
+                availibility__end_time__gt=current_time,
+                availibility__coach__email=coach.email,
+                availibility__coach__room_id=room_id,
+            )
     elif user_type == "learner":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
