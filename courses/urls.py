@@ -128,11 +128,6 @@ urlpatterns = [
         name="feedback-lesson-edit",
     ),
     path(
-        "courses/<int:course_id>/enroll-participants/<int:schedular_batch_id>/",
-        views.enroll_participants_to_course,
-        name="enroll-participants-to-course",
-    ),
-    path(
         "course-enrollment/<int:course_id>/<int:learner_id>/",
         views.get_course_enrollment,
     ),

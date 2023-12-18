@@ -15,11 +15,6 @@ urlpatterns = [
     ),
     path("create-project-schedular/", views.create_project_schedular),
     path(
-        "create-schedular-participant/",
-        views.create_schedular_participant,
-        name="create-schedular-participant",
-    ),
-    path(
         "schedular-batches/",
         views.get_schedular_batches,
         name="schedular-batch-list",
@@ -101,7 +96,6 @@ urlpatterns = [
         views.get_upcoming_slots_of_coach,
     ),
     path("slots/delete/", views.delete_slots),
-    path("participants/", views.get_participants),
     path(
         "existing_slots_of_coach/<int:request_id>/<int:coach_id>/",
         views.get_existing_slots_of_coach_on_request_dates,
