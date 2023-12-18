@@ -4,7 +4,6 @@ from .models import (
     LiveSession,
     CoachingSession,
     SchedularBatch,
-    SchedularParticipants,
     EmailTemplate,
     SentEmail,
     CoachSchedularAvailibilty,
@@ -26,18 +25,6 @@ class SessionItemSerializer(serializers.Serializer):
     session_type = serializers.CharField()
     duration = serializers.IntegerField()
     order = serializers.IntegerField(required=False, allow_null=True)
-
-
-class SchedularParticipantsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SchedularParticipants
-        fields = ["name", "email", "phone"]
-
-
-class GetSchedularParticipantsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SchedularParticipants
-        fields = "__all__"
 
 
 class SchedularBatchSerializer(serializers.ModelSerializer):
@@ -144,12 +131,6 @@ class RequestAvailibiltySerializerDepthOne(serializers.ModelSerializer):
 class RequestAvailibiltySerializer(serializers.ModelSerializer):
     class Meta:
         model = RequestAvailibilty
-        fields = "__all__"
-
-
-class SchedularParticipantsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SchedularParticipants
         fields = "__all__"
 
 
