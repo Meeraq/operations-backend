@@ -8226,6 +8226,6 @@ class DownloadCoachContract(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Failed to downlaod Contract."},
+                {"error": "Failed to download Contract."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

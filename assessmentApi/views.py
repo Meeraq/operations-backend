@@ -1910,9 +1910,10 @@ def generate_report_for_participant(file_name, content):
         email_message = render_to_string(file_name, content)
 
         pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
-        pdf_path = "graphsAndReports/Report.pdf"
-        with open(pdf_path, "wb") as pdf_file:
-            pdf_file.write(pdf)
+        return pdf
+        # pdf_path = "graphsAndReports/Report.pdf"
+        # with open(pdf_path, "wb") as pdf_file:
+        #     pdf_file.write(pdf)
 
     except Exception as e:
         print(str(e))
@@ -2327,7 +2328,7 @@ class DownloadParticipantResultReport(APIView):
             )
             data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
 
-            generate_report_for_participant(
+            pdf = generate_report_for_participant(
                 "assessment/report/assessment_report.html",
                 {
                     "name": participant.name,
@@ -2343,15 +2344,15 @@ class DownloadParticipantResultReport(APIView):
                     "assessment_rating_type":assessment_rating_type,
                 },
             )
-            pdf_path = "graphsAndReports/Report.pdf"
+            # pdf_path = "graphsAndReports/Report.pdf"
 
-            with open(pdf_path, "rb") as pdf_file:
-                response = HttpResponse(pdf_file.read(), content_type="application/pdf")
-                response[
+            # with open(pdf_path, "rb") as pdf_file:
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response[
                     "Content-Disposition"
                 ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
             # Close the file after reading
-            pdf_file.close()
+            # pdf_file.close()
 
             return response
 
