@@ -235,16 +235,15 @@ def send_participant_morning_reminder_email():
         availibility__end_time__gte=start_timestamp,
     )
     for session in today_sessions:
-        name = session.enrolled_participant.name
+        name = session.learner.name
         meeting_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
         time = datetime.fromtimestamp(
             (int(session.availibility.start_time) / 1000) + 19800
         ).strftime("%I:%M %p")
-        print(time)
         content = {"time": time, "meeting_link": meeting_link, "name": name}
         send_mail_templates(
             "coachee_emails/session_reminder.html",
-            [session.enrolled_participant.email],
+            [session.learner.email],
             "Meeraq - Coaching Session Reminder",
             content,
             [],  # bcc
@@ -277,14 +276,14 @@ def send_upcoming_session_pmo_at_10am():
             "coach": session.availibility.coach.first_name
             + " "
             + session.availibility.coach.last_name,
-            "participant": session.enrolled_participant.name,
+            "participant": session.learner.name,
             "batch_name": session.coaching_session.batch.name,
             "status": session.status,
             # "session_date": start_time.strftime("%d %B %Y"),
             "session_time": start_time + " - " + end_time,
         }
         sessions_list.append(session_details)
-        pmo_user = User.objects.filter(profile__type="pmo").first()
+        pmo_user = User.objects.filter(profile__roles__name="pmo").first()
         send_mail_templates(
             "pmo_emails/daily_session.html",
             [pmo_user.email],
@@ -305,7 +304,7 @@ def send_participant_morning_reminder_one_day_before_email():
         availibility__end_time__gte=start_timestamp_one_day_ahead,
     )
     for session in tomorrow_sessions:
-        name = session.enrolled_participant.name
+        name = session.learner.name
         meeting_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
         time = datetime.fromtimestamp(
             (int(session.availibility.start_time) / 1000) + 19800
@@ -313,7 +312,7 @@ def send_participant_morning_reminder_one_day_before_email():
         content = {"time": time, "meeting_link": meeting_link, "name": name}
         send_mail_templates(
             "coachee_emails/one_day_before_remailder.html",
-            [session.enrolled_participant.email],
+            [session.learner.email],
             "Meeraq - Coaching Session Reminder",
             content,
             [],  # bcc

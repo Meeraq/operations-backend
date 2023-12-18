@@ -1,6 +1,6 @@
 from django.db import models
 from django_celery_beat.models import PeriodicTask
-from api.models import Organisation, HR, Coach
+from api.models import Organisation, HR, Coach, Learner
 
 
 # Create your models here.
@@ -20,19 +20,11 @@ class SchedularProject(models.Model):
         return self.name
 
 
-class SchedularParticipants(models.Model):
-    name = models.CharField(max_length=100)
-    email = models.EmailField(unique=True)
-    phone = models.CharField(max_length=25)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True, blank=True)
-
-
 class SchedularBatch(models.Model):
     name = models.CharField(max_length=100, blank=True)
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
     coaches = models.ManyToManyField(Coach, blank=True)
-    participants = models.ManyToManyField(SchedularParticipants, blank=True)
+    learners = models.ManyToManyField(Learner, blank=True)
     facilitator = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
@@ -45,7 +37,7 @@ class RequestAvailibilty(models.Model):
         default=list
     )  # used to store coach ids who already provided the slots
     expiry_date = models.DateField(blank=True, null=True)
-    slot_duration= models.PositiveIntegerField(null=True, blank=True)
+    slot_duration = models.PositiveIntegerField(null=True, blank=True)
     availability = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, null=True, default=None)
@@ -81,13 +73,13 @@ class CoachingSession(models.Model):
     duration = models.CharField(max_length=50, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    session_type = models.CharField(max_length=50, choices=SESSION_CHOICES, default="laser_coaching_session")
+    session_type = models.CharField(
+        max_length=50, choices=SESSION_CHOICES, default="laser_coaching_session"
+    )
 
 
 class SchedularSessions(models.Model):
-    enrolled_participant = models.ForeignKey(
-        SchedularParticipants, on_delete=models.CASCADE
-    )
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE, null=True)
     availibility = models.ForeignKey(
         CoachSchedularAvailibilty, on_delete=models.CASCADE
     )
