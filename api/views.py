@@ -144,7 +144,13 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from rest_framework import generics
 from django.db.models import Subquery, OuterRef, Value, BooleanField
-from schedularApi.models import SchedularBatch, SchedularSessions,SchedularProject,SchedularBatch ,SchedularSessions
+from schedularApi.models import (
+    SchedularBatch,
+    SchedularSessions,
+    SchedularProject,
+    SchedularBatch,
+    SchedularSessions,
+)
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
@@ -581,6 +587,38 @@ FIELD_NAME_VALUES = {
 }
 
 
+def add_contact_in_wati(user_type,name,phone):
+    try:
+        wati_api_url = (
+                f"https://live-mt-server.wati.io/300780/api/v1/addContact/{phone}"
+            )
+        headers = {
+            "content-type": "text/json",
+            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzZWQ4MzI5OC01NGNkLTRmNjUtODUyNS1hMjJhNDQ4MTNmY2EiLCJ1bmlxdWVfbmFtZSI6InNyZWVyYWdAbWVlcmFxLmNvbSIsIm5hbWVpZCI6InNyZWVyYWdAbWVlcmFxLmNvbSIsImVtYWlsIjoic3JlZXJhZ0BtZWVyYXEuY29tIiwiYXV0aF90aW1lIjoiMTEvMjIvMjAyMyAxMzoxMDo0NSIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMDA3ODAiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.xhKHK0tj0-NRb5vu6SY1sau0aOyBka8_HwqvAcK9E_E",
+        }
+        payload = {
+            "customParams": [
+                {
+                    "name": "user_type",
+                    "value": user_type,
+                },
+            ],
+            "name": name
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()  # Raise an HTTPError for bad responses
+
+        print(response.json())
+        # Return the response from the WATI API
+        return JsonResponse(response.json()), response.status_code
+
+    except requests.exceptions.HTTPError as errh:
+        return JsonResponse({"error": f"HTTP Error: {errh}"}), 500
+    except requests.exceptions.RequestException as err:
+        return JsonResponse({"error": f"Request Error: {err}"}), 500
+    except Exception as e:
+        return JsonResponse({"error": str(e)}), 500
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def create_pmo(request):
@@ -621,6 +659,9 @@ def create_pmo(request):
             pmo_user = Pmo.objects.create(
                 user=profile, name=name, email=email, phone=phone, room_id=room_id
             )
+
+            name = pmo_user.name
+            add_contact_in_wati("pmo", name, pmo_user.phone )
 
             # Return success response without room_id
             return Response({"message": "PMO added successfully."}, status=201)
@@ -740,7 +781,7 @@ def update_coach_profile(request, id):
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email","").strip()
+    new_email = mutable_data.get("email", "").strip()
     #  other user exists with the new email
     if (
         new_email
@@ -797,6 +838,9 @@ def update_coach_profile(request, id):
 
         if existing_coach:
             return Response({"error": "Coach ID must be unique"}, status=400)
+        
+    name = coach.first_name + " "  + coach.last_name
+    add_contact_in_wati("coach", name, coach.phone )
 
     if serializer.is_valid():
         serializer.save()
@@ -1171,7 +1215,7 @@ def create_learners(learners_data):
             learners = []
             for learner_data in learners_data:
                 # Check if username field is provided
-                email = learner_data.get('email','').strip()
+                email = learner_data.get("email", "").strip()
                 if "email" not in learner_data:
                     raise ValueError("Username field is required")
                 # Check if user already exists
@@ -1217,6 +1261,8 @@ def create_learners(learners_data):
                 )
                 learners.append(learner)
             # Return response with learners created or already existing
+                name = learner.name
+                add_contact_in_wati("learner", name, learner.phone )
             serializer = LearnerSerializer(learners, many=True)
             return learners
 
@@ -2112,8 +2158,11 @@ def add_coach(request):
             # Approve coach
             coach_user.is_approved = True
             coach_user.save()
-
             # Send email notification to the coach
+
+            name = coach_user.first_name + " "  + coach_user.last_name
+            add_contact_in_wati("coach", name, coach_user.phone )
+
             full_name = coach_user.first_name + " " + coach_user.last_name
             microsoft_auth_url = (
                 f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach_user.email}/'
@@ -2597,6 +2646,8 @@ def add_hr(request):
                 phone=request.data.get("phone"),
                 organisation=organisation,
             )
+            name = hr.first_name + " "  + hr.last_name
+            add_contact_in_wati("hr", name, hr.phone )
 
             hrs = HR.objects.all()
             serializer = HrSerializer(hrs, many=True)
@@ -2621,7 +2672,9 @@ def update_hr(request, hr_id):
         # Update HR instance
         serializer = HrSerializer(hr, data=request.data, partial=True)
         if serializer.is_valid():
-            new_email = request.data.get("email",'').strip()  # Get the new email from the request
+            new_email = request.data.get(
+                "email", ""
+            ).strip()  # Get the new email from the request
             existing_user = (
                 User.objects.filter(email=new_email).exclude(username=hr.email).first()
             )
@@ -2634,6 +2687,10 @@ def update_hr(request, hr_id):
             # saving hr
             updated_hr = serializer.save()
             user = updated_hr.user.user
+
+            
+            name = hr.first_name + " "  + hr.last_name
+            add_contact_in_wati("hr", name, hr.phone )
 
             # if email if getting updated -> updating email in all other user present
             if not updated_hr.email == user.email:
@@ -4099,6 +4156,8 @@ def edit_learner(request):
     learner.name = request.data["name"]
     learner.phone = request.data["phone"]
     learner.save()
+    name = learner.name
+    add_contact_in_wati("learner", name, learner.phone )
     return Response({"message": "Learner details updated.", "details": ""}, status=200)
 
 
@@ -4272,7 +4331,7 @@ def add_mulitple_coaches(request):
                 corporate_yoe = coach_data.get("corporate_yoe", "")
                 coaching_yoe = coach_data.get("coaching_yoe", "")
                 domain = coach_data.get("functional_domain", [])
-                email = coach_data.get("email","").strip()
+                email = coach_data.get("email", "").strip()
                 phone = coach_data.get("mobile")
                 phone_country_code = coach_data.get("phone_country_code")
                 job_roles = coach_data.get("job_roles", [])
@@ -4405,6 +4464,8 @@ def add_mulitple_coaches(request):
                 coach = Coach.objects.get(id=coach_user.id)
                 coach.is_approved = True
                 coach.save()
+                name = coach_user.first_name + " "  + coach_user.last_name
+                add_contact_in_wati("coach", name, coach_user.phone )
 
         return Response({"message": "Coaches added successfully."}, status=201)
     except IntegrityError as e:
@@ -4889,7 +4950,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
-    
+
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
             Engagement.objects.filter(
@@ -4904,15 +4965,13 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     return Response(serializer.data, status=200)
 
 
-
 @api_view(["GET"])
 def new_get_upcoming_sessions_of_user(request, user_type, user_id):
-    
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     current_time_seeq = timezone.now()
     timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
-    avaliable_sessions=[]
+    avaliable_sessions = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -4920,7 +4979,9 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             ~Q(status="completed"),
         )
         schedular_sessions = SchedularSessions.objects.all()
-        avaliable_sessions = schedular_sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__gt=timestamp_milliseconds
+        )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -4930,9 +4991,13 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
-        learner = Learner.objects.get(id =user_id)
-        schedular_sessions = SchedularSessions.objects.filter(enrolled_participant__email=learner.email)
-        avaliable_sessions = schedular_sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
+        learner = Learner.objects.get(id=user_id)
+        schedular_sessions = SchedularSessions.objects.filter(
+            enrolled_participant__email=learner.email
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__gt=timestamp_milliseconds
+        )
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -4941,8 +5006,12 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
-        schedular_sessions = SchedularSessions.objects.filter(availibility__coach__id=user_id)
-        avaliable_sessions = schedular_sessions.filter(availibility__end_time__gt=timestamp_milliseconds)
+        schedular_sessions = SchedularSessions.objects.filter(
+            availibility__coach__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__gt=timestamp_milliseconds
+        )
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -4959,21 +5028,20 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
                 learner=OuterRef("learner"),
             ).values("status")[:1]
         ),
-        is_seeq_project=Value(False, output_field=BooleanField())
+        is_seeq_project=Value(False, output_field=BooleanField()),
     )
     session_details = []
     coach_id = None
     if user_type == "coach":
-        coach_id=user_id
+        coach_id = user_id
     for session in avaliable_sessions:
-        
         session_detail = {
             "id": session.id,
             "batch_name": session.coaching_session.batch.name
             if coach_id is None
             else None,
             "project_name": session.coaching_session.batch.project.name,
-            "organisation_name":session.coaching_session.batch.project.organisation.name,
+            "organisation_name": session.coaching_session.batch.project.organisation.name,
             "project_id": session.coaching_session.batch.project.id
             if coach_id is None
             else None,
@@ -4996,14 +5064,21 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "status": session.status,
             "session_type": session.coaching_session.session_type,
             "end_time": session.availibility.end_time,
-            "is_seeq_project": True
+            "is_seeq_project": True,
         }
         session_details.append(session_detail)
 
     serializer = SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer(
         session_requests, many=True
     )
-    return Response({"caas_session_details":serializer.data,"seeq_session_details":session_details}, status=200)
+    return Response(
+        {
+            "caas_session_details": serializer.data,
+            "seeq_session_details": session_details,
+        },
+        status=200,
+    )
+
 
 @api_view(["GET"])
 def get_past_sessions_of_user(request, user_type, user_id):
@@ -5056,13 +5131,14 @@ def get_past_sessions_of_user(request, user_type, user_id):
     )
     return Response(serializer.data, status=200)
 
+
 @api_view(["GET"])
 def new_get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     current_time_seeq = timezone.now()
     timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
-    avaliable_sessions=[]
+    avaliable_sessions = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -5070,7 +5146,9 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             | Q(status="completed"),
         )
         schedular_sessions = SchedularSessions.objects.all()
-        avaliable_sessions = schedular_sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__lt=timestamp_milliseconds
+        )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -5080,9 +5158,13 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             ~Q(session_type="chemistry"),
             Q(is_archive=False),
         )
-        learner = Learner.objects.get(id =user_id)
-        schedular_sessions = SchedularSessions.objects.filter(enrolled_participant__email=learner.email)
-        avaliable_sessions = schedular_sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
+        learner = Learner.objects.get(id=user_id)
+        schedular_sessions = SchedularSessions.objects.filter(
+            enrolled_participant__email=learner.email
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__lt=timestamp_milliseconds
+        )
     if user_type == "coach":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -5091,8 +5173,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             Q(coach__id=user_id),
             Q(is_archive=False),
         )
-        schedular_sessions = SchedularSessions.objects.filter(availibility__coach__id=user_id)
-        avaliable_sessions = schedular_sessions.filter(availibility__end_time__lt=timestamp_milliseconds)
+        schedular_sessions = SchedularSessions.objects.filter(
+            availibility__coach__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__lt=timestamp_milliseconds
+        )
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -5109,12 +5195,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
                 learner=OuterRef("learner"),
             ).values("status")[:1]
         ),
-        is_seeq_project=Value(False, output_field=BooleanField())
+        is_seeq_project=Value(False, output_field=BooleanField()),
     )
     session_details = []
     coach_id = None
     if user_type == "coach":
-        coach_id=user_id
+        coach_id = user_id
     for session in avaliable_sessions:
         session_detail = {
             "id": session.id,
@@ -5122,7 +5208,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             if coach_id is None
             else None,
             "project_name": session.coaching_session.batch.project.name,
-            "organisation_name":session.coaching_session.batch.project.organisation.name,
+            "organisation_name": session.coaching_session.batch.project.organisation.name,
             "project_id": session.coaching_session.batch.project.id
             if coach_id is None
             else None,
@@ -5145,14 +5231,21 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "status": session.status,
             "session_type": session.coaching_session.session_type,
             "end_time": session.availibility.end_time,
-            "is_seeq_project": True
+            "is_seeq_project": True,
         }
         session_details.append(session_detail)
 
     serializer = SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer(
         session_requests, many=True
     )
-    return Response({"caas_session_details":serializer.data,"seeq_session_details":session_details}, status=200)
+    return Response(
+        {
+            "caas_session_details": serializer.data,
+            "seeq_session_details": session_details,
+        },
+        status=200,
+    )
+
 
 @api_view(["POST"])
 def edit_session_status(request, session_id):
@@ -5221,7 +5314,9 @@ def get_coachee_of_user(request, user_type, user_id):
         }
         if user_type == "pmo":
             projects = Project.objects.filter(engagement__learner=learner)
-            schedular_batches=SchedularBatch.objects.filter(participants__email=learner.email)
+            schedular_batches = SchedularBatch.objects.filter(
+                participants__email=learner.email
+            )
             course_enrollments = CourseEnrollment.objects.filter(learner__id=learner.id)
             courses_names = []
             for course_enrollment in course_enrollments:
@@ -5237,19 +5332,15 @@ def get_coachee_of_user(request, user_type, user_id):
             )
 
         for project in projects:
-            project_dict = {
-                "name": project.name,
-                "type":"CAAS"
-            }
+            project_dict = {"name": project.name, "type": "CAAS"}
             learner_dict["organisation"].add(project.organisation.name)
             learner_dict["projects"].append(project_dict)
         for batch in schedular_batches:
-            project_dict = {
-                "name": batch.project.name,
-                "type":"SEEQ"
-            }
+            project_dict = {"name": batch.project.name, "type": "SEEQ"}
             learner_dict["organisation"].add(batch.project.organisation.name)
-            if project_dict["name"] not in [proj["name"] for proj in learner_dict["projects"]]:
+            if project_dict["name"] not in [
+                proj["name"] for proj in learner_dict["projects"]
+            ]:
                 learner_dict["projects"].append(project_dict)
         learners_data.append(learner_dict)
 
@@ -6750,6 +6841,8 @@ class AddRegisteredCoach(APIView):
                 # Change the is_approved field to True
                 coach.is_approved = False
                 coach.save()
+                name = coach_user.first_name + " "  + coach_user.last_name
+                add_contact_in_wati("coach", name, coach_user.phone )
                 coach_serializer = CoachSerializer(coach)
 
                 path = f"/profile"

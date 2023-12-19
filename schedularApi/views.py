@@ -23,7 +23,7 @@ from django.http import HttpResponse
 import pandas as pd
 from django.db.models import Q
 import json
-from api.views import get_date, get_time
+from api.views import get_date, get_time,add_contact_in_wati
 from django.shortcuts import render
 from api.models import Organisation, HR, Coach, User
 from .serializers import (
@@ -856,6 +856,9 @@ def add_batch(request, project_id):
         participant, participant_created = SchedularParticipants.objects.get_or_create(
             email=email, defaults={"name": name, "phone": phone}
         )
+
+        name = participant.name
+        add_contact_in_wati("learner", name, participant.phone )
 
         # Add participant to the batch if not already added
         if participant not in batch.participants.all():
@@ -1751,6 +1754,8 @@ def add_participant_to_batch(request, batch_id):
     # Add the participant to the batch
     batch.participants.add(participant)
     batch.save()
+    name = participant.name
+    add_contact_in_wati("learner", name, participant.phone )
 
     return Response(
         {"message": "Participant added to the batch successfully"},
