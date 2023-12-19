@@ -25,4 +25,5 @@ urlpatterns = [
     path("schedular/", include("schedularApi.urls")),
     path("assessmentApi/", include("assessmentApi.urls")),
     path("courses-apis/", include("courses.urls")),
+    path("affiliateApi/", include("affiliateApi.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

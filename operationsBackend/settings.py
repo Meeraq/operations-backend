@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "schedularApi",
     "assessmentApi",
     "courses",
+    "affiliateApi",
     "rest_framework.authtoken",
     "django_rest_passwordreset",
     "corsheaders",
