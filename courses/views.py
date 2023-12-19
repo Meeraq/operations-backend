@@ -937,7 +937,7 @@ def get_course_enrollment_for_pmo_preview(request, course_id):
         )
     except Course.DoesNotExist:
         return Response(status=404)
-    
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1897,6 +1897,7 @@ class AssignCourseTemplateToBatch(APIView):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_resources(request):
     resources = Resources.objects.all()
     serializer = ResourcesSerializer(resources, many=True)
@@ -1904,6 +1905,7 @@ def get_resources(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_resource(request):
     pdf_name = request.data.get("pdfName")  # Extracting pdfName from request data
     pdf_file = request.data.get("pdfFile")  # Extracting pdfFile from request data
@@ -1928,6 +1930,7 @@ def create_resource(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_pdf_lesson(request):
     try:
         lesson_data = request.data.get("lesson")
@@ -1990,6 +1993,7 @@ def create_pdf_lesson(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_pdf_lesson(request, pk):
     try:
         pdf_lesson = PdfLesson.objects.get(id=pk)
@@ -2034,6 +2038,7 @@ def update_pdf_lesson(request, pk):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_course_template_status(request):
     course_template_id = request.data.get("course_template_id")
     selected_status = request.data.get("status")
@@ -2056,6 +2061,7 @@ def update_course_template_status(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_course_status(request):
     try:
         course_id = request.data.get("course_id")
@@ -2076,6 +2082,7 @@ def update_course_status(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def lesson_update_status(request):
     if request.method == "PUT":
         serializer = LessonUpdateSerializer(data=request.data)
