@@ -67,13 +67,11 @@ import os
 from django.http import HttpResponse
 import io
 from win32com.client import Dispatch
-import pythoncom
-
 matplotlib.use("Agg")
 env = environ.Env()
 from pdf2docx import parse, Converter
 from io import BytesIO
-
+from apryse_sdk import PDFNet,Convert,StructuredOutputModule
 wkhtmltopdf_path = os.environ.get(
     "WKHTMLTOPDF_PATH", r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
 )
@@ -2556,27 +2554,19 @@ class DownloadWordReport(APIView):
                 },
             )
             pdf_path = "graphsAndReports/Report.pdf"
-            # # parse(pdf_path, "graphsAndReports/WordReport.docx", start=0, end=None)
-            # # obj = Converter(pdf_path)
-            # # obj.convert("graphsAndReports/WordReport.docx")
-            # # obj.close()
-            # pythoncom.CoInitialize()
-            # word = Dispatch('Word.Application')
-            # doc = word.Documents.Open(pdf_path)
-            # doc.SaveAs("graphsAndReports/WordReport.docx", FileFormat=12)
-            # doc.Close()
-            # word.Quit()
-            pythoncom.CoInitialize()
-            word = Dispatch("word.Application")
-            word.visible = 0
+            
+            PDFNet.Initialize("demo:1702970002104:7c8f102f0300000000f9a19766ccfb8d39844f0d25c1beea57ea6833ba")
+    
+            PDFNet.AddResourceSearchPath("Lib/Windows")
 
-            doc = word.Documents.Open(os.path.abspath(pdf_path))
-            word_report_path = os.path.join(
-                os.getcwd(), "graphsAndReports", "WordReport.docx"
-            )
-            doc.SaveAs2(word_report_path, FileFormat=16)
-            doc.Close()
-            word.Quit()
+            if not StructuredOutputModule.IsModuleAvailable():
+                print("Unable to run the sample: PDFTron SDK Structured Output module not available.")
+                return Response(
+                    {"error": "Failed to download report."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            
+            Convert.ToWord(pdf_path, "graphsAndReports/WordReport.docx")
 
             with open("graphsAndReports/WordReport.docx", "rb") as word_file:
                 output_stream = BytesIO(word_file.read())
