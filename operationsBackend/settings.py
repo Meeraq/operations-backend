@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "zohoapi",
     "schedularApi",
     "assessmentApi",
+    "courses",
     "rest_framework.authtoken",
     "django_rest_passwordreset",
     "corsheaders",
@@ -66,7 +67,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = env("EMAIL_HOST")
 EMAIL_PORT = env("EMAIL_PORT")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")

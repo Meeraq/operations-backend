@@ -1,5 +1,6 @@
 from django.db import models
 import os
+from django.core.exceptions import ValidationError
 
 # Create your models here.
 from django.contrib.auth.models import AbstractUser, Group
@@ -25,25 +26,21 @@ import environ
 env = environ.Env()
 
 
-class EmailSendingError(Exception):
-    pass
-
-
 def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
-    email_message = render_to_string(file_name, content)
-    email = EmailMessage(
-        f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
-        email_message,
-        settings.DEFAULT_FROM_EMAIL,
-        user_email,
-        bcc_emails,
-    )
-    email.content_subtype = "html"
     try:
+        email_message = render_to_string(file_name, content)
+        email = EmailMessage(
+            f"{env('EMAIL_SUBJECT_INITIAL',default='')} {email_subject}",
+            email_message,
+            settings.DEFAULT_FROM_EMAIL,
+            user_email,
+            bcc_emails,
+        )
+        email.content_subtype = "html"
+
         email.send(fail_silently=False)
-    except BadHeaderError as e:
+    except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-        raise EmailSendingError(f"Error occurred while sending emails: {str(e)}")
 
 
 @receiver(reset_password_token_created)
@@ -69,6 +66,7 @@ def password_reset_token_created(
             {"name": name, "createPassword": link},
             [],  # no bcc
         )
+        return None
     else:
         learner_roles = user.profile.roles.all().filter(name="learner")
         hr_roles = user.profile.roles.all().filter(name="hr")
@@ -79,22 +77,21 @@ def password_reset_token_created(
             )
             if engagements.exists():
                 return None
-        elif hr_roles.exists():
+        if hr_roles.exists():
             projects = Project.objects.filter(
                 hr=user.profile.hr, enable_emails_to_hr_and_coachee=False
             )
             if projects.exists():
                 return None
-        else:
-            name = "User"
-            link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
-            send_mail_templates(
-                "hr_emails/forgot_password.html",
-                [reset_password_token.user.email],
-                "Meeraq Platform | Password Reset",
-                {"name": name, "resetPassword": link},
-                [],  # no bcc
-            )
+        name = "User"
+        link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
+        send_mail_templates(
+            "hr_emails/forgot_password.html",
+            [reset_password_token.user.email],
+            "Meeraq Platform | Password Reset",
+            {"name": name, "resetPassword": link},
+            [],  # no bcc
+        )
 
 
 class Role(models.Model):
@@ -639,10 +636,6 @@ class CoachContract(models.Model):
         max_length=50, choices=STATUS_CHOICES, default="pending", blank=True
     )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-    send_date = models.DateField(auto_now_add=True, blank=True)
-    response_date = models.DateField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True, blank=True)
-
     send_date = models.DateField(auto_now_add=True, blank=True)
     response_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True)
