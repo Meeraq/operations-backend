@@ -128,11 +128,6 @@ urlpatterns = [
         name="feedback-lesson-edit",
     ),
     path(
-        "courses/<int:course_id>/enroll-participants/<int:schedular_batch_id>/",
-        views.enroll_participants_to_course,
-        name="enroll-participants-to-course",
-    ),
-    path(
         "course-enrollment/<int:course_id>/<int:learner_id>/",
         views.get_course_enrollment,
     ),
@@ -223,4 +218,11 @@ urlpatterns = [
         views.update_pdf_lesson,
         name="update_pdf_lesson",
     ),
+    path(
+        "update_course_template_status/",
+        views.update_course_template_status,
+        name="update_course_template",
+    ),
+    path("update-course_status/", views.update_course_status),
+    path("update-lesson-status/", views.lesson_update_status),
 ]

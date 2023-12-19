@@ -29,6 +29,7 @@ def trim_emails(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ("api", "0034_role_remove_profile_type_profile_roles"),
+        ("zohoapi", "0005_vendor"),
     ]
 
     operations = [

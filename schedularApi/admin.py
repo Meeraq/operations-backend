@@ -2,7 +2,6 @@ from django.contrib import admin
 
 from .models import (
     SchedularProject,
-    SchedularParticipants,
     SchedularBatch,
     CoachSchedularAvailibilty,
     CoachingSession,
@@ -18,7 +17,6 @@ from .models import (
 
 
 admin.site.register(SchedularProject)
-admin.site.register(SchedularParticipants)
 admin.site.register(SchedularBatch)
 admin.site.register(CoachSchedularAvailibilty)
 admin.site.register(CoachingSession)
