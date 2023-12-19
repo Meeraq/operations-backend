@@ -795,7 +795,7 @@ def update_coach_profile(request, id):
     #     # mutable_data["education_upload_file"] = None
     #     coach.education_upload_file = None
     #     coach.save()
-    if request.data["education_upload_file"]=="null":
+    if 'education_upload_file' in request.data and request.data['education_upload_file'] == "null":
         coach.education_upload_file = None
         coach.save()
         del mutable_data["education_upload_file"]
