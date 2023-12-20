@@ -7931,14 +7931,18 @@ def change_user_role(request, user_id):
         ).exists()
         is_seeq_allowed = SchedularBatch.objects.filter(
             learners=user.profile.learner
-        ).exists()  
-        return {
-            **serializer.data,
-            "is_caas_allowed": is_caas_allowed,
-            "is_seeq_allowed": is_seeq_allowed,
-            "roles": roles,
-            "user": {**serializer.data["user"], "type": user_profile_role},
-        }
+        ).exists()
+        return Response(
+            {
+                **serializer.data,
+                "is_caas_allowed": is_caas_allowed,
+                "is_seeq_allowed": is_seeq_allowed,
+                "roles": roles,
+                "user": {**serializer.data["user"], "type": user_profile_role},
+                "last_login": user.last_login,
+                "message": "Role changed to Learner",
+            }
+        )
     elif user_profile_role == "hr":
         serializer = HrDepthOneSerializer(user.profile.hr)
     else:
@@ -8039,7 +8043,7 @@ class SessionData(APIView):
         weeks = get_weeks_for_current_month()
         for project in projects:
             engagements = Engagement.objects.filter(project=project)
-            planned_learner_count=0
+            planned_learner_count = 0
             for engagement in engagements:
                 completed_sessions_count = SessionRequestCaas.objects.filter(
                     status="completed",
@@ -8052,8 +8056,11 @@ class SessionData(APIView):
                     learner__id=engagement.learner.id,
                     is_archive=False,
                 ).count()
-                if engagement.status=="active" and completed_sessions_count != total_sessions_count:
-                    planned_learner_count+=1
+                if (
+                    engagement.status == "active"
+                    and completed_sessions_count != total_sessions_count
+                ):
+                    planned_learner_count += 1
             res_obj = {}
             is_involved_in_sessions = SessionRequestCaas.objects.filter(
                 project=project, is_booked=True
