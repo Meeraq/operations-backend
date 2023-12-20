@@ -2381,6 +2381,19 @@ def get_user_data(user):
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
+        is_caas_allowed = Engagement.objects.filter(
+            learner=user.profile.learner
+        ).exists()
+        is_seeq_allowed = SchedularBatch.objects.filter(
+            learners=user.profile.learner
+        ).exists()
+        return {
+            **serializer.data,
+            "is_caas_allowed": is_caas_allowed,
+            "is_seeq_allowed": is_seeq_allowed,
+            "roles": roles,
+            "user": {**serializer.data["user"], "type": user_profile_role},
+        }
     elif user_profile_role == "hr":
         serializer = HrDepthOneSerializer(user.profile.hr)
     else:
@@ -5003,7 +5016,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
@@ -5168,7 +5181,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
@@ -7913,6 +7926,19 @@ def change_user_role(request, user_id):
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
+        is_caas_allowed = Engagement.objects.filter(
+            learner=user.profile.learner
+        ).exists()
+        is_seeq_allowed = SchedularBatch.objects.filter(
+            learners=user.profile.learner
+        ).exists()  
+        return {
+            **serializer.data,
+            "is_caas_allowed": is_caas_allowed,
+            "is_seeq_allowed": is_seeq_allowed,
+            "roles": roles,
+            "user": {**serializer.data["user"], "type": user_profile_role},
+        }
     elif user_profile_role == "hr":
         serializer = HrDepthOneSerializer(user.profile.hr)
     else:
