@@ -82,7 +82,6 @@ def get_user_data(user):
     else:
         return None
 
-    
     return {
         **serializer.data,
         "roles": roles,
@@ -97,7 +96,7 @@ class AddAffiliate(APIView):
         last_name = request.data.get("last_name")
         email = request.data.get("email")
         phone = request.data.get("phone")
-
+        gender = request.data.get("gender")
         if not all([first_name, last_name, email, phone]):
             return Response(
                 {"error": "All required fields must be provided."},
@@ -143,7 +142,8 @@ class AddAffiliate(APIView):
                     last_name=last_name,
                     email=email,
                     phone=phone,
-                    is_approved=False,
+                    gender=gender,
+                    status="pending",
                 )
 
                 affiliate_serializer = AffiliateSerializer(affiliate_user)
@@ -264,3 +264,46 @@ def validate_otp(request):
     else:
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
+
+
+class GetAffiliates(APIView):
+    def get(self, request, format=None):
+        approved_affiliates = Affiliate.objects.filter(status="accepted")
+
+        non_approved_affiliates = Affiliate.objects.filter(status="pending")
+
+        serializer_approved = AffiliateSerializer(approved_affiliates, many=True)
+        serializer_non_approved = AffiliateSerializer(
+            non_approved_affiliates, many=True
+        )
+
+        return Response(
+            {
+                "approved_affiliates": serializer_approved.data,
+                "non_approved_affiliates": serializer_non_approved.data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ApproveRejectAffiliate(APIView):
+    def put(self, request):
+        try:
+            affiliate_id = request.data.get("affiliate_id")
+            a_status = request.data.get("status")
+
+            affiliate =Affiliate.objects.get(id = affiliate_id)
+            if a_status == "accepted":
+                affiliate.status = "accepted"
+            elif a_status == "rejected":
+                affiliate.status = "rejected"
+            affiliate.save()
+
+            return Response(
+                {"message": f"Affiliate {a_status} successfully."},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            return Response(
+                data={"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
