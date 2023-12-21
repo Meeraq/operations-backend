@@ -1,68 +1,57 @@
-{% extends "parent_template.html" %} {% block title %}Meeraq
-Coaching{%endblock%} table_parent_template.html {% block content %}
+{% extends "parent_template.html" %}
+{% block title %}Meeraq Coaching{%endblock%}
+{% block content %}
 <tr style="border: 0">
-  <td style="padding: 20px; background: #f8f7f8; border: 0">
-  
-    <div align="center">
-      <table
-        border="0"
-        cellpadding="0"
-        cellspacing="0"
-        style="
+	<td style="padding: 20px; background: #f8f7f8; border: 0">
+		<div align="center">
+			<table border="0" cellpadding="0" cellspacing="0" style="
           width: 100%;
           mso-cellspacing: 0cm;
           background: #f8f7f8;
           mso-yfti-tbllook: 1184;
           mso-padding-alt: 0cm 0cm 0cm 0cm;
-        "
-        width="100%"
-      >
-        <tbody>
-          <tr
-            style="
+        " width="100%">
+				<tbody>
+					<tr style="
               mso-yfti-irow: 0;
               mso-yfti-firstrow: yes;
               mso-yfti-lastrow: yes;
-            "
-          >
-            <td style="padding: 15pt 15pt 15pt 15pt">
-              <p>
-      <strong><span style="font-size: 14px">Dear&nbsp;</span></strong
-      ><b>{{name}}</b><strong>,</strong>
-    </p>
-              <p
-                class="child-para"
-                style="color: #333; font-size: 18px; font-weight: bold"
-              >
-                Greetings from Meeraq!!
-              </p>
-              <p class="child-para">Your Slot Booking Confirmation</p>
-              <p class="child-para">Coachee has booked your below slot.</p>
-              <p>Date: {{date}}</p>
-              <p>Time: {{time}}</p>
-              <p class="child-para">
-                Please make sure you join in 5 mins before the start time. If
-                you have any queries, feel free to reach out to
-                <a href="mailto:pmocoaching@meeraq.com"
-                  >pmocoaching@meeraq.com</a
-                >
-              </p>
-              <p class="child-para">
-                You can join the session on our CAAS platform.
-              </p>
-              <p class="child-para">
-                Please block your calendars for the same.
-              </p>
-
-              <p><br /></p>
-              <p>Best regards,</p>
-              <p>Team Meeraq.</p>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </td>
+            ">
+						<td style="padding: 15pt 15pt 15pt 15pt">
+							<p>
+								<strong><span style="font-size: 14px">Dear&nbsp;</span></strong><b>{{name}}</b><strong>,</strong>
+							</p>
+							<p class="child-para" style="color: #333; font-size: 18px; font-weight: bold">
+								Greetings from Meeraq!!
+							</p>
+							<p class="child-para">Your Slot Booking Confirmation</p>
+							<p class="child-para">Coachee has booked your below slot.</p>
+							<p>Date: {{date}}</p>
+							<p>Time: {{time}}</p>
+							<p class="child-para">
+								Please make sure you join in 5 mins before the start time. If
+								you have any queries, feel free to reach out to
+								<a href="mailto:pmocoaching@meeraq.com">pmocoaching@meeraq.com</a>
+							</p>
+							<p class="child-para">
+								You can join the session on our Meeraq platform.
+							</p>
+							<p class="child-para">
+								Please block your calendars for the same.
+							</p>
+							<p class="child-para">
+								Click
+								<a href="https://caas.meeraq.com/" style="color: #007bff; text-decoration: underline">here</a>
+								to login to the Meeraq Platform.
+							</p>
+							<p><br /></p>
+							<p>Best regards,</p>
+							<p>Team Meeraq.</p>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</td>
 </tr>
-
 {% endblock %}
