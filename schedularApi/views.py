@@ -806,7 +806,7 @@ def add_batch(request, project_id):
                         ).count()
                         + 1
                     )
-                    booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                    booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                     coaching_session = CoachingSession.objects.create(
                         batch=batch,
                         coaching_session_number=coaching_session_number,
@@ -827,7 +827,7 @@ def add_batch(request, project_id):
                             batch=batch, session_type=session_type
                         )
                     )
-                    booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                    booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                     coaching_session = CoachingSession.objects.create(
                         batch=batch,
                         coaching_session_number=coaching_session_number,
@@ -889,7 +889,7 @@ def get_coach_availabilities_booking_link(request):
     booking_link_id = request.GET.get("booking_link_id")
 
     if booking_link_id:
-        booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+        booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{booking_link_id}"
         try:
             coaching_session = CoachingSession.objects.get(booking_link=booking_link)
             current_date = datetime.now().date()
@@ -938,7 +938,7 @@ def get_coach_availabilities_booking_link(request):
 def schedule_session(request):
     try:
         booking_link_id = request.data.get("booking_link_id", "")
-        booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+        booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{booking_link_id}"
         participant_email = request.data.get("participant_email", "")
         # coach_availability_id = request.data.get("availability_id", "")
         timestamp = request.data.get("timestamp", "")
@@ -1104,7 +1104,7 @@ def schedule_session(request):
                     "name": learner.name,
                     "date": date_for_mail,
                     "time": session_time,
-                    "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                    "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
                     "session_type": "Mentoring"
                     if session_type == "mentoring_session"
                     else "Laser Coaching",
@@ -1135,7 +1135,7 @@ def schedule_session_fixed(request):
     try:
         with transaction.atomic():
             booking_link_id = request.data.get("booking_link_id", "")
-            booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{booking_link_id}"
             participant_email = request.data.get("participant_email", "")
             timestamp = request.data.get("timestamp", "")
             end_time = request.data.get("end_time", "")
@@ -1301,7 +1301,7 @@ def schedule_session_fixed(request):
                         "name": learner.name,
                         "date": date_for_mail,
                         "time": session_time,
-                        "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                        "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
                         "session_type": "Mentoring"
                         if session_type == "mentoring_session"
                         else "Laser Coaching",
@@ -1412,7 +1412,7 @@ def get_sessions(request):
             "participant_name": session.learner.name,
             "coaching_session_number": session.coaching_session.coaching_session_number,
             "participant_email": session.learner.email,
-            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
             "room_id": f"{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
         }
@@ -1463,7 +1463,7 @@ def get_sessions_by_type(request, sessions_type):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
