@@ -1,6 +1,8 @@
 from django.shortcuts import render
 
 # Create your views here.
+import boto3
+import requests
 from rest_framework import generics, serializers, status
 from .models import (
     Course,
@@ -20,6 +22,8 @@ from .models import (
     CourseTemplate,
     Resources,
     PdfLesson,
+    File,
+    DownloadableLesson,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -46,6 +50,8 @@ from .serializers import (
     ResourcesSerializer,
     PdfLessonSerializer,
     LessonUpdateSerializer,
+    FileSerializer,
+    DownloadableLessonSerializer,
 )
 from rest_framework.views import APIView
 from api.models import User, Learner, Profile, Role
@@ -64,6 +70,9 @@ from django.template.loader import render_to_string
 import base64
 from openpyxl import Workbook
 from django.db.models import Max
+import environ
+
+env = environ.Env()
 
 
 from schedularApi.models import CoachingSession, SchedularSessions
@@ -374,6 +383,9 @@ class LessonDetailView(generics.RetrieveAPIView):
         elif lesson_type == "ppt":
             ppt = PdfLesson.objects.get(lesson=lesson)
             serializer = PdfLessonSerializer(ppt)
+        elif lesson_type == "downloadable_file":
+            downloadable_file_lesson = DownloadableLesson.objects.get(lesson=lesson)
+            serializer = DownloadableLessonSerializer(downloadable_file_lesson)
         else:
             return Response({"error": f"Failed to get the lessons"}, status=400)
 
@@ -1742,6 +1754,12 @@ class AssignCourseTemplateToBatch(APIView):
                                 lesson=new_lesson,
                                 pdf=original_lesson.pdflesson.pdf,
                             )
+                        elif original_lesson.lesson_type == "downloadable_file":
+                            DownloadableLesson.objects.create(
+                                lesson=new_lesson,
+                                file=original_lesson.downloadablelesson.file,
+                                description = original_lesson.downloadablelesson.description
+                            )
                         elif original_lesson.lesson_type == "assessment":
                             Assessment.objects.create(lesson=new_lesson)
                         elif original_lesson.lesson_type == "quiz":
@@ -2034,3 +2052,91 @@ def lesson_update_status(request):
         return Response(
             {"message": "Invalid method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
         )
+
+
+class FileListAPIView(generics.ListAPIView):
+    queryset = File.objects.all()
+    serializer_class = FileSerializer
+
+
+class FileUploadView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = FileSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+def update_file(request, file_id):
+    try:
+        file = File.objects.get(id=file_id)
+    except File.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    serializer = FileSerializer(file, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+def get_file_name_from_url(url):
+    # Split the URL by '/' to get an array of parts
+    url_parts = url.split("/")
+
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+
+    # Extract the file name without the query parameters
+    file_name = full_file_name.split("?")[0]
+
+    return file_name
+
+
+def get_file_extension(url):
+    # Split the URL by '.' to get an array of parts
+    url_parts = url.split(".")
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+    # Extract the file extension
+    file_extension = full_file_name.split("?")[0]
+    return file_extension
+
+
+class FileDownloadView(APIView):
+    def get(self, request, file_id):
+        file_obj = get_object_or_404(File, id=file_id)
+
+        try:
+            serializer = FileSerializer(file_obj)
+            response = requests.get(serializer.data["file"])
+            if response.status_code == 200:
+                file_content = response.content
+                extension = get_file_extension(serializer.data["file"])
+                content_type = response.headers.get(
+                    "Content-Type", f"application/{extension}"
+                )
+                file_name = get_file_name_from_url(serializer.data["file"])
+                file_response = HttpResponse(file_content, content_type=content_type)
+                file_response[
+                    "Content-Disposition"
+                ] = 'attachment; filename="{}"'.format(file_name)
+                return file_response
+            else:
+                return HttpResponse(
+                    "Failed to download the file", status=response.status_code
+                )
+        except Exception as e:
+            return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
+
+
+class DownloadableLessonCreateView(generics.CreateAPIView):
+    queryset = DownloadableLesson.objects.all()
+    serializer_class = DownloadableLessonSerializer
+
+
+class DownloadableLessonUpdateView(generics.UpdateAPIView):
+    queryset = DownloadableLesson.objects.all()
+    serializer_class = DownloadableLessonSerializer
