@@ -46,6 +46,7 @@ class Lesson(models.Model):
         ("assessment", "Assessment"),
         ("video", "Video"),
         ("ppt", "PPT"),
+        ("downloadable_file", "Downloadable File"),
     )
     STATUS_CHOICES = (
         ("draft", "Draft"),
@@ -118,6 +119,23 @@ class Video(models.Model):
 class VideoLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     video = models.ForeignKey(Video, on_delete=models.CASCADE)
+
+
+class File(models.Model):
+    name = models.CharField(max_length=255)
+    file = models.FileField(upload_to="file-uploads/")
+
+    def __str__(self):
+        return self.name
+
+
+class DownloadableLesson(models.Model):
+    lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    description = models.TextField(default="", blank=True)
+    file = models.ForeignKey(File, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return f"File lesson {self.lesson.name}"
 
 
 class CourseEnrollment(models.Model):

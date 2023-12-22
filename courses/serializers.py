@@ -18,6 +18,8 @@ from .models import (
     CourseTemplate,
     Resources,
     PdfLesson,
+    File,
+    DownloadableLesson,
 )
 
 
@@ -206,3 +208,43 @@ class PdfLessonSerializer(serializers.ModelSerializer):
 class LessonUpdateSerializer(serializers.Serializer):
     lesson_id = serializers.IntegerField()
     status = serializers.CharField(max_length=20)
+
+
+class FileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = File
+        fields = "__all__"
+
+
+class DownloadableLessonSerializer(serializers.ModelSerializer):
+    lesson = LessonSerializer()
+
+    class Meta:
+        model = DownloadableLesson
+        fields = ["id", "lesson", "description", "file"]
+
+    def create(self, validated_data):
+        lesson_data = validated_data.pop("lesson")
+        lesson_instance = Lesson.objects.create(**lesson_data)
+        downloadable_lesson_instance = DownloadableLesson.objects.create(
+            lesson=lesson_instance, **validated_data
+        )
+        return downloadable_lesson_instance
+
+    def update(self, instance, validated_data):
+        lesson_data = validated_data.pop("lesson", None)
+
+        if lesson_data:
+            lesson_instance = instance.lesson
+            course_template = lesson_data.pop("course_template", None)
+            course = lesson_data.pop("course", None)
+            lesson_serializer = LessonSerializer(
+                lesson_instance, data=lesson_data, partial=True
+            )
+            lesson_serializer.is_valid(raise_exception=True)
+            lesson_serializer.save()
+
+        instance.description = validated_data.get("description", instance.description)
+        instance.file = validated_data.get("file", instance.file)
+        instance.save()
+        return instance

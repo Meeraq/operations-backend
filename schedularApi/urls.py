@@ -136,4 +136,8 @@ urlpatterns = [
     path("facilitator/profile/<int:id>/", views.update_facilitator_profile),
     path("facilitator/delete/", views.delete_facilitator),
     path("facilitator-field-values/", views.get_facilitator_field_values),
+    path(
+        "delete-learner_from_course/",
+        views.delete_learner_from_course,
+    ),
 ]
