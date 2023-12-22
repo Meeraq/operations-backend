@@ -2099,12 +2099,10 @@ def get_facilitator_field_values(request):
     )
 
 
-
-
 @api_view(["DELETE"])
 def delete_learner_from_course(request):
-    learner_id = request.data.get('learnerId')
-    batch_id = request.data.get('batchId')
+    learner_id = request.data.get("learnerId")
+    batch_id = request.data.get("batchId")
 
     try:
         learner = Learner.objects.get(id=learner_id)
@@ -2112,34 +2110,32 @@ def delete_learner_from_course(request):
 
         if learner in batch.learners.all():
             batch.learners.remove(learner)
-
             # Remove the learner from FeedbackLessonResponse if present
             feedback_responses = FeedbackLessonResponse.objects.filter(
-                learner=learner
+                learner=learner, feedback_lesson__lesson__course__batch=batch
             )
             feedback_responses.delete()
-
             # Remove the learner from QuizLessonResponse if present
             quiz_responses = QuizLessonResponse.objects.filter(
-                learner=learner
+                learner=learner, quiz_lesson__lesson__course__batch=batch
             )
             quiz_responses.delete()
 
             # Remove the learner from CourseEnrollment if enrolled
             enrollments = CourseEnrollment.objects.filter(
-                learner=learner
+                learner=learner, course__batch=batch
             )
             enrollments.delete()
 
             # Remove the learner from SchedularSessions if present
             schedular_sessions = SchedularSessions.objects.filter(
-                learner=learner
+                learner=learner, coaching_session__batch=batch
             )
             schedular_sessions.delete()
 
-            return Response({'message': f'Coachee removed from batch successfully.'})
+            return Response({"message": f"Coachee removed from batch successfully."})
         else:
-            return Response({'message': f'Coachee is not part of batch.'}, status=400)
+            return Response({"message": f"Coachee is not part of batch."}, status=400)
 
     except ObjectDoesNotExist:
-        return Response({'message': 'Object not found.'}, status=404)
+        return Response({"message": "Object not found."}, status=404)
