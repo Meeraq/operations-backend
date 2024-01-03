@@ -33,6 +33,13 @@ class SchedularBatchSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class SchedularBatchDepthSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularBatch
+        fields = "__all__"
+        depth = 1
+
+
 class LiveSessionSerializerDepthOne(serializers.ModelSerializer):
     class Meta:
         model = LiveSession
@@ -138,3 +145,23 @@ class FacilitatorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilitator
         fields = "__all__"
+
+
+class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Facilitator
+        fields = "__all__"
+        depth = 1
+
+
+class FacilitatorBasicDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Coach
+        fields = ["first_name", "last_name", "email", "phone"]
+
+
+class SchedularBatchDepthTwoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularBatch
+        fields = "__all__"
+        depth = 2

@@ -123,7 +123,7 @@ urlpatterns = [
     ),
     path(
         "add-facilitator/",
-        views.addFacilitator,
+        views.add_facilitator,
     ),
     path(
         "facilitators/",
@@ -136,4 +136,13 @@ urlpatterns = [
     path("facilitator/profile/<int:id>/", views.update_facilitator_profile),
     path("facilitator/delete/", views.delete_facilitator),
     path("facilitator-field-values/", views.get_facilitator_field_values),
+    path(
+        "facilitators/<int:facilitator_id>/batches_and_projects/",
+        views.facilitator_projects,
+        name="facilitator_batches_projects",
+    ),
+    path(
+        "facilitators/<int:facilitator_id>/sessions/",
+        views.get_facilitator_sessions,
+    ),
 ]
