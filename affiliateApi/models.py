@@ -26,7 +26,7 @@ class Lead(models.Model):
     lead_phone = models.CharField(max_length=255, blank=True, null=True)
     lead_gender = models.CharField(max_length=255, blank=True, null=True)
     lead_status = models.CharField(max_length=255, blank=True, null=True)
-    conversation_summary = models.CharField(max_length=255, blank=True, null=True)
+    conversation_summary = models.TextField(blank=True, null=True)
     affiliate = models.ForeignKey(Affiliate, on_delete=models.SET_NULL, blank=True, null=True)
 
 
