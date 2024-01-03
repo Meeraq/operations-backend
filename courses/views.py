@@ -2191,25 +2191,30 @@ class CreateAssignmentLesson(APIView):
 class UpdateAssignmentLesson(APIView):
     def put(self, request, assignment_id):
         try:
+  
             course_template = CourseTemplate.objects.get(
                 id=int(request.data["course_template"])
             )
-            lesson = Lesson.objects.get(
-                course_template=course_template,
-                name=request.data["name"],
-                status=request.data["status"],
-                lesson_type="assignment",
-                order=int(request.data["order"]),
-            )
+         
+            # lesson = Lesson.objects.get(
+            #     course_template=course_template,
+            #     name=request.data["name"],
+            #     status=request.data["status"],
+            #     lesson_type="assignment",
+            #     # order=int(request.data["order"]),
+            # )
 
             assignment_lesson = AssignmentLesson.objects.get(
                 id=assignment_id,
             )
-            assignment_lesson.lesson = (lesson,)
-            assignment_lesson.name = (request.data["name"],)
-            assignment_lesson.description = (request.data["description"],)
+            # assignment_lesson.lesson = lesson
+            assignment_lesson.name = request.data["name"]
+            assignment_lesson.description = request.data["description"]
 
             assignment_lesson.save()
+            lesson = Lesson.objects.get(id =assignment_lesson.lesson.id )
+            lesson.name = request.data["name"]
+            lesson.save()
             return Response(
                 {"message": f"Assignment Lesson Updated."}, status=status.HTTP_200_OK
             )
