@@ -2,7 +2,7 @@ from django.shortcuts import render
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Affiliate
+from .models import Affiliate, Lead
 from django.db import transaction, IntegrityError
 from django.contrib.auth.models import User
 from api.models import (
@@ -17,7 +17,7 @@ from api.serializers import PmoDepthOneSerializer
 import json
 import string
 import random
-from .serializer import AffiliateSerializer, AffiliateDepthOneSerializer
+from .serializer import AffiliateSerializer, AffiliateDepthOneSerializer, LeadSerializer
 from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.shortcuts import render, get_object_or_404
@@ -264,3 +264,42 @@ def validate_otp(request):
     else:
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
+
+
+
+@api_view(['POST'])
+def lead_create_view(request):
+    if request.method == 'POST':
+        serializer = LeadSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+
+
+@api_view(['GET'])
+def leads_by_affiliate(request, affiliate_id):
+    try:
+        affiliate = Affiliate.objects.get(pk=affiliate_id)
+    except Affiliate.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    leads = Lead.objects.filter(affiliate=affiliate)
+    serializer = LeadSerializer(leads, many=True)
+    return Response(serializer.data)
+
+
+
+@api_view(['PUT'])
+def lead_update(request, pk):
+    try:
+        lead = Lead.objects.get(pk=pk)
+    except Lead.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    serializer = LeadSerializer(lead, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

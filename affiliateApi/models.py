@@ -13,3 +13,22 @@ class Affiliate(models.Model):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
+
+
+
+class Lead(models.Model):
+    lead_name = models.CharField(max_length=255, blank=True, null=True)
+    lead_program = models.CharField(max_length=255, blank=True, null=True)
+    lead_email = models.CharField(max_length=255,blank=True, null=True)
+    lead_country = models.CharField(max_length=255, blank=True, null=True)
+    lead_city = models.CharField(max_length=255, blank=True, null=True)
+    lead_phone_country_code = models.CharField(max_length=255, blank=True, null=True)
+    lead_phone = models.CharField(max_length=255, blank=True, null=True)
+    lead_gender = models.CharField(max_length=255, blank=True, null=True)
+    lead_status = models.CharField(max_length=255, blank=True, null=True)
+    conversation_summary = models.CharField(max_length=255, blank=True, null=True)
+    affiliate = models.ForeignKey(Affiliate, on_delete=models.SET_NULL, blank=True, null=True)
+
+
+    def __str__(self):
+        return f"{self.lead_name} with {self.lead_program}"
