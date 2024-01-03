@@ -2326,9 +2326,9 @@ def get_facilitator_field_values(request):
 def facilitator_projects(request, facilitator_id):
     print(facilitator_id)
     try:
-        batches = SchedularBatch.objects.filter(id=facilitator_id)
+        batches = SchedularBatch.objects.filter(facilitator__id=facilitator_id)
         print(batches)
-
+        
         serializer = SchedularBatchDepthSerializer(batches, many=True)
 
         data = serializer.data
