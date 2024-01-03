@@ -25,6 +25,12 @@ from .views import (
     update_file,
     DownloadableLessonUpdateView,
     DownloadableLessonCreateView,
+    CreateAssignmentLesson,
+    UpdateAssignmentLesson,
+    GetAllAssignmentsResponses,
+    CreateAssignmentLessonResponse,
+    GetAssignmentsResponses,
+    DownlaodAssignmentLessonFile,
 )
 import environ
 
@@ -258,4 +264,15 @@ urlpatterns = [
         DownloadableLessonUpdateView.as_view(),
         name="update-downloadable-lesson",
     ),
+    path("create_assignment_lesson/", CreateAssignmentLesson.as_view()),
+    path(
+        "update_assignment_lessons/<int:assignment_id>/",
+        UpdateAssignmentLesson.as_view(),
+    ),
+    path("get_all_assignments_responses/", GetAllAssignmentsResponses.as_view()),
+    path(
+        "create_assignment_lesson_response/", CreateAssignmentLessonResponse.as_view()
+    ),
+    path("get_assignments_responses/<int:assignment_id>/<int:learner_id>/", GetAssignmentsResponses.as_view()),
+    path("downlaod_assignment_lesson_file/<int:assignment_response_id>/", DownlaodAssignmentLessonFile.as_view()),
 ]

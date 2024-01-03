@@ -19,6 +19,8 @@ from .models import (
     CourseTemplate,
     Resources,
     PdfLesson,
+    AssignmentLesson,
+    AssignmentLessonResponse,
 )
 
 # Register your models here.
@@ -41,3 +43,5 @@ admin.site.register(VideoLesson)
 admin.site.register(CourseTemplate)
 admin.site.register(Resources)
 admin.site.register(PdfLesson)
+admin.site.register(AssignmentLesson)
+admin.site.register(AssignmentLessonResponse)
