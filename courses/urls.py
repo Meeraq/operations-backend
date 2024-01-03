@@ -19,6 +19,12 @@ from .views import (
     GetCertificateForCourse,
     GetLaserCoachingTime,
     AssignCourseTemplateToBatch,
+    FileListAPIView,
+    FileUploadView,
+    FileDownloadView,
+    update_file,
+    DownloadableLessonUpdateView,
+    DownloadableLessonCreateView,
 )
 import environ
 
@@ -62,6 +68,11 @@ urlpatterns = [
     path(
         "text-lessons/<int:pk>/", TextLessonEditView.as_view(), name="text-lesson-edit"
     ),
+    # path(
+    #     "downloadable-file-lessons/",
+    #     DownloadableFileLessonCreateView.as_view(),
+    #     name="downloadable-file-lesson-create",
+    # ),
     path(
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
     ),
@@ -225,4 +236,26 @@ urlpatterns = [
     ),
     path("update-course_status/", views.update_course_status),
     path("update-lesson-status/", views.lesson_update_status),
+    path("files/", FileListAPIView.as_view(), name="file-list"),
+    path("files/upload/", FileUploadView.as_view(), name="file-upload"),
+    path(
+        "files/<int:file_id>/download/",
+        FileDownloadView.as_view(),
+        name="file-download",
+    ),
+    path(
+        "files/<int:file_id>/",
+        update_file,
+        name="update-file",
+    ),
+    path(
+        "downloadable-lessons/create/",
+        DownloadableLessonCreateView.as_view(),
+        name="create-downloadable-lesson",
+    ),
+    path(
+        "downloadable-lessons/update/<int:pk>/",
+        DownloadableLessonUpdateView.as_view(),
+        name="update-downloadable-lesson",
+    ),
 ]

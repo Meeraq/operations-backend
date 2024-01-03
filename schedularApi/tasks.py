@@ -236,7 +236,7 @@ def send_participant_morning_reminder_email():
     )
     for session in today_sessions:
         name = session.learner.name
-        meeting_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
+        meeting_link = f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
         time = datetime.fromtimestamp(
             (int(session.availibility.start_time) / 1000) + 19800
         ).strftime("%I:%M %p")
@@ -305,7 +305,7 @@ def send_participant_morning_reminder_one_day_before_email():
     )
     for session in tomorrow_sessions:
         name = session.learner.name
-        meeting_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
+        meeting_link = f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
         time = datetime.fromtimestamp(
             (int(session.availibility.start_time) / 1000) + 19800
         ).strftime("%I:%M %p")
