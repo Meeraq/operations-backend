@@ -1,6 +1,8 @@
 from django.shortcuts import render
 
 # Create your views here.
+import boto3
+import requests
 from rest_framework import generics, serializers, status
 from .models import (
     Course,
@@ -20,6 +22,8 @@ from .models import (
     CourseTemplate,
     Resources,
     PdfLesson,
+    File,
+    DownloadableLesson,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -46,11 +50,12 @@ from .serializers import (
     ResourcesSerializer,
     PdfLessonSerializer,
     LessonUpdateSerializer,
+    FileSerializer,
+    DownloadableLessonSerializer,
 )
 from rest_framework.views import APIView
 from api.models import User, Learner, Profile, Role
 from schedularApi.models import (
-    SchedularParticipants,
     SchedularBatch,
     LiveSession as LiveSessionSchedular,
 )
@@ -65,6 +70,9 @@ from django.template.loader import render_to_string
 import base64
 from openpyxl import Workbook
 from django.db.models import Max
+import environ
+
+env = environ.Env()
 
 
 from schedularApi.models import CoachingSession, SchedularSessions
@@ -104,6 +112,38 @@ def create_learner(learner_name, learner_email, learner_phone):
 
     except Exception as e:
         return None
+
+
+def create_or_get_learner(learner_data):
+    try:
+        # check if the same email user exists or not
+        user = User.objects.filter(username=learner_data["email"]).first()
+        if user:
+            if user.profile.roles.all().filter(name="learner").exists():
+                learner = Learner.objects.get(user=user.profile)
+                return learner
+            else:
+                learner_role, created = Role.objects.get_or_create(name="learner")
+                learner_profile = user.profile
+                learner_profile.roles.add(learner_role)
+                learner_role.save()
+                learner, created = Learner.objects.get_or_create(
+                    user=learner_profile,
+                    defaults={
+                        "name": learner_data["name"],
+                        "email": learner_data["email"],
+                        "phone": learner_data["phone"],
+                    },
+                )
+                return learner
+        else:
+            learner = create_learner(
+                learner_data["name"], learner_data["email"], learner_data["phone"]
+            )
+            return learner
+    except Exception as e:
+        # Handle specific exceptions or log the error
+        print(f"Error processing participant: {str(e)}")
 
 
 class CourseListView(generics.ListCreateAPIView):
@@ -343,6 +383,9 @@ class LessonDetailView(generics.RetrieveAPIView):
         elif lesson_type == "ppt":
             ppt = PdfLesson.objects.get(lesson=lesson)
             serializer = PdfLessonSerializer(ppt)
+        elif lesson_type == "downloadable_file":
+            downloadable_file_lesson = DownloadableLesson.objects.get(lesson=lesson)
+            serializer = DownloadableLessonSerializer(downloadable_file_lesson)
         else:
             return Response({"error": f"Failed to get the lessons"}, status=400)
 
@@ -830,53 +873,6 @@ def update_assessment_lesson(request, lesson_id, session_id):
         },
         status=status.HTTP_400_BAD_REQUEST,
     )
-
-
-@api_view(["POST"])
-def enroll_participants_to_course(request, course_id, schedular_batch_id):
-    try:
-        course = Course.objects.get(id=course_id)
-        batch = SchedularBatch.objects.get(id=schedular_batch_id)
-        batch_participants = batch.participants.all()
-        learners = []
-        not_enrolled_learner_emails = []
-        for participant in batch_participants:
-            # check if same email user exists or not
-            user = User.objects.filter(username=participant.email).first()
-            if user:
-                if user.profile.type == "learner":
-                    learner = Learner.objects.get(user=user.profile)
-                    learners.append(learner)
-                else:
-                    not_enrolled_learner_emails.append(participant.email)
-            else:
-                learner = create_learner(
-                    participant.name, participant.email, participant.phone
-                )
-                if learner:
-                    learners.append(learner)
-                else:
-                    not_enrolled_learner_emails.append(participant.email)
-
-        for learner in learners:
-            course_enrollments = CourseEnrollment.objects.filter(
-                learner=learner, course=course
-            )
-            if not course_enrollments.exists():
-                datetime = timezone.now()
-                CourseEnrollment.objects.create(
-                    learner=learner, course=course, enrollment_date=datetime
-                )
-        course_serializer = CourseSerializer(course)
-        return Response(
-            {
-                "message": "Participant enrolled successfully",
-                "not_enrolled_learner_emails": not_enrolled_learner_emails,
-                "course": course_serializer.data,
-            }
-        )
-    except LaserCoachingSession.DoesNotExist:
-        return Response(status=404)
 
 
 @api_view(["GET"])
@@ -1501,11 +1497,9 @@ class GetLaserCoachingTime(APIView):
         try:
             laser_coaching = LaserCoachingSession.objects.get(id=laser_coaching_id)
             coaching_session = laser_coaching.coaching_session
-            participant = get_object_or_404(
-                SchedularParticipants, email=participant_email
-            )
+            learner = get_object_or_404(Learner, email=participant_email)
             existing_session = SchedularSessions.objects.filter(
-                enrolled_participant=participant, coaching_session=coaching_session
+                learner=learner, coaching_session=coaching_session
             ).first()
             return Response(
                 {
@@ -1540,7 +1534,7 @@ def get_all_courses_progress(request):
                 / (lessons.count() * course_enrollments.count())
             )
             * 100
-            if course_enrollments.count() > 0
+            if course_enrollments.count() > 0 and lessons.count() > 0
             else 0
         )
 
@@ -1760,6 +1754,12 @@ class AssignCourseTemplateToBatch(APIView):
                                 lesson=new_lesson,
                                 pdf=original_lesson.pdflesson.pdf,
                             )
+                        elif original_lesson.lesson_type == "downloadable_file":
+                            DownloadableLesson.objects.create(
+                                lesson=new_lesson,
+                                file=original_lesson.downloadablelesson.file,
+                                description = original_lesson.downloadablelesson.description
+                            )
                         elif original_lesson.lesson_type == "assessment":
                             Assessment.objects.create(lesson=new_lesson)
                         elif original_lesson.lesson_type == "quiz":
@@ -1786,39 +1786,7 @@ class AssignCourseTemplateToBatch(APIView):
                                     type=question.type,
                                 )
                                 new_feedback_lesson.questions.add(new_question)
-                batch_participants = batch.participants.all()
-                learners = []
-                not_enrolled_learner_emails = []
-                for participant in batch_participants:
-                    # check if same email user exists or not
-                    user = User.objects.filter(username=participant.email).first()
-                    if user:
-                        if user.profile.roles.all().filter(name="learner").exists():
-                            learner = Learner.objects.get(user=user.profile)
-                            learners.append(learner)
-                        else:
-                            learner_role = (
-                                learner_role,
-                                created,
-                            ) = Role.objects.get_or_create(name="learner")
-                            learner_profile = user.profile
-                            learner_profile.roles.add(learner_role)
-                            learner_role.save()
-                            learner = Learner.objects.create(
-                                user=learner_profile,
-                                name=participant.name,
-                                email=participant.email,
-                                phone=participant.phone,
-                            )
-                            learners.append(learner)
-                    else:
-                        learner = create_learner(
-                            participant.name, participant.email, participant.phone
-                        )
-                        if learner:
-                            learners.append(learner)
-                        else:
-                            not_enrolled_learner_emails.append(participant.email)
+                learners = batch.learners.all()
                 for learner in learners:
                     course_enrollments = CourseEnrollment.objects.filter(
                         learner=learner, course=new_course
@@ -1913,37 +1881,62 @@ def create_resource(request):
 
 @api_view(["POST"])
 def create_pdf_lesson(request):
-    # Extracting data from request
-    lesson_data = request.data.get("lesson")
-    pdf_id = request.data.get("pdf_id")
-    course_template_id = lesson_data.get("course_template")
-
     try:
-        # Get CourseTemplate instance
-        course_template_instance = CourseTemplate.objects.get(id=course_template_id)
+        lesson_data = request.data.get("lesson")
+        pdf_id = request.data.get("pdf_id")
+        course_template_id = lesson_data.get("course_template", "")
+        course_id = lesson_data.get("course", "")
 
-        # Creating or retrieving Lesson instance
-        lesson_instance = Lesson.objects.create(
-            course=lesson_data["course"],
-            course_template=course_template_instance,
-            name=lesson_data["name"],
-            status=lesson_data["status"],
-            lesson_type=lesson_data["lesson_type"],
-            order=lesson_data["order"],
-        )
+        if course_id:
+            course_instance = Course.objects.get(id=course_id)
+            course_template_instance = course_instance.course_template
 
-        # Getting or creating PdfLesson instance
-        pdf_lesson_instance, created = PdfLesson.objects.get_or_create(
-            lesson=lesson_instance, defaults={"pdf_id": pdf_id}
-        )
+            lesson_instance = Lesson.objects.create(
+                course=course_instance,
+                name=lesson_data["name"],
+                status=lesson_data["status"],
+                lesson_type=lesson_data["lesson_type"],
+                order=lesson_data["order"],
+            )
 
-        if created or not created:
-            return Response({"message": "PPT lesson created successfully."})
+            pdf_lesson_instance, created = PdfLesson.objects.get_or_create(
+                lesson=lesson_instance, defaults={"pdf_id": pdf_id}
+            )
+
+            if created or not created:
+                return Response({"message": "PDF lesson created successfully."})
+            else:
+                return Response({"message": "Failed to create PDF lesson."})
+
+        elif course_template_id:
+            course_template_instance = CourseTemplate.objects.get(id=course_template_id)
+
+            lesson_instance = Lesson.objects.create(
+                course_template=course_template_instance,
+                name=lesson_data["name"],
+                status=lesson_data["status"],
+                lesson_type=lesson_data["lesson_type"],
+                order=lesson_data["order"],
+            )
+
+            pdf_lesson_instance, created = PdfLesson.objects.get_or_create(
+                lesson=lesson_instance, defaults={"pdf_id": pdf_id}
+            )
+
+            if created or not created:
+                return Response({"message": "PDF lesson created successfully."})
+            else:
+                return Response({"message": "Failed to create PDF lesson."})
+
         else:
-            return Response({"message": "Failed to create PPT lesson."})
+            return Response(
+                {"message": "Neither Course ID nor Course Template ID provided."}
+            )
 
+    except Course.DoesNotExist:
+        return Response({"message": "Course does not exist."})
     except CourseTemplate.DoesNotExist:
-        return Response({"message": "Course template does not exist."})
+        return Response({"message": "Course Template does not exist."})
     except Exception as e:
         return Response({"message": f"Error: {str(e)}"})
 
@@ -2059,3 +2052,91 @@ def lesson_update_status(request):
         return Response(
             {"message": "Invalid method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
         )
+
+
+class FileListAPIView(generics.ListAPIView):
+    queryset = File.objects.all()
+    serializer_class = FileSerializer
+
+
+class FileUploadView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = FileSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+def update_file(request, file_id):
+    try:
+        file = File.objects.get(id=file_id)
+    except File.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    serializer = FileSerializer(file, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+def get_file_name_from_url(url):
+    # Split the URL by '/' to get an array of parts
+    url_parts = url.split("/")
+
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+
+    # Extract the file name without the query parameters
+    file_name = full_file_name.split("?")[0]
+
+    return file_name
+
+
+def get_file_extension(url):
+    # Split the URL by '.' to get an array of parts
+    url_parts = url.split(".")
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+    # Extract the file extension
+    file_extension = full_file_name.split("?")[0]
+    return file_extension
+
+
+class FileDownloadView(APIView):
+    def get(self, request, file_id):
+        file_obj = get_object_or_404(File, id=file_id)
+
+        try:
+            serializer = FileSerializer(file_obj)
+            response = requests.get(serializer.data["file"])
+            if response.status_code == 200:
+                file_content = response.content
+                extension = get_file_extension(serializer.data["file"])
+                content_type = response.headers.get(
+                    "Content-Type", f"application/{extension}"
+                )
+                file_name = get_file_name_from_url(serializer.data["file"])
+                file_response = HttpResponse(file_content, content_type=content_type)
+                file_response[
+                    "Content-Disposition"
+                ] = 'attachment; filename="{}"'.format(file_name)
+                return file_response
+            else:
+                return HttpResponse(
+                    "Failed to download the file", status=response.status_code
+                )
+        except Exception as e:
+            return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
+
+
+class DownloadableLessonCreateView(generics.CreateAPIView):
+    queryset = DownloadableLesson.objects.all()
+    serializer_class = DownloadableLessonSerializer
+
+
+class DownloadableLessonUpdateView(generics.UpdateAPIView):
+    queryset = DownloadableLesson.objects.all()
+    serializer_class = DownloadableLessonSerializer

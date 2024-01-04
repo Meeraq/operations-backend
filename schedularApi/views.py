@@ -23,13 +23,13 @@ from django.http import HttpResponse
 import pandas as pd
 from django.db.models import Q
 import json
+from django.core.exceptions import ObjectDoesNotExist
 from api.views import get_date, get_time
 from django.shortcuts import render
-from api.models import Organisation, HR, Coach, User
+from api.models import Organisation, HR, Coach, User, Learner
 from .serializers import (
     SchedularProjectSerializer,
     SchedularBatchSerializer,
-    SchedularParticipantsSerializer,
     SessionItemSerializer,
     LearnerDataUploadSerializer,
     LiveSessionSerializerDepthOne,
@@ -38,7 +38,6 @@ from .serializers import (
     BatchSerializer,
     LiveSessionSerializer,
     CoachingSessionSerializer,
-    GetSchedularParticipantsSerializer,
     CoachSchedularAvailibiltySerializer,
     CoachSchedularAvailibiltySerializer2,
     CoachBasicDetailsSerializer,
@@ -55,18 +54,26 @@ from .models import (
     LiveSession,
     CoachingSession,
     SchedularProject,
-    SchedularParticipants,
     SentEmail,
     EmailTemplate,
     CoachSchedularAvailibilty,
     RequestAvailibilty,
     SchedularSessions,
     Facilitator,
+    SchedularBatch,
 )
-from courses.models import Course
+
+from courses.models import (
+    FeedbackLessonResponse,
+    QuizLessonResponse,
+    FeedbackLesson,
+    QuizLesson,
+)
+from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
+from courses.views import create_or_get_learner
 
-
+from api.serializers import LearnerSerializer
 from api.views import create_notification, send_mail_templates
 import io
 
@@ -176,16 +183,6 @@ def get_all_Schedular_Projects(request):
     projects = SchedularProject.objects.all()
     serializer = SchedularProjectSerializer(projects, many=True)
     return Response(serializer.data, status=200)
-
-
-@api_view(["POST"])
-def create_schedular_participant(request):
-    if request.method == "POST":
-        serializer = SchedularParticipantsSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # @api_view(["POST"])
@@ -436,9 +433,9 @@ def get_batch_calendar(request, batch_id):
                     result += generate_slots(startT, endT, small_session_duration)
 
             # Retrieve participants who have not booked this session
-            participants = SchedularParticipants.objects.filter(
-                schedularbatch__id=batch_id
-            ).exclude(schedularsessions__coaching_session__id=coaching_session["id"])
+            participants = Learner.objects.filter(schedularbatch__id=batch_id).exclude(
+                schedularsessions__coaching_session__id=coaching_session["id"]
+            )
             coaching_sessions_result.append(
                 {
                     **coaching_session,
@@ -448,16 +445,14 @@ def get_batch_calendar(request, batch_id):
                     # if session_duration > '30'
                     # else (len(availabilities) if availabilities is not None else 0),
                     "booked_session_count": booked_session_count,
-                    "participants_not_booked": GetSchedularParticipantsSerializer(
+                    "participants_not_booked": LearnerSerializer(
                         participants, many=True
                     ).data,
                 }
             )
 
-        participants = SchedularParticipants.objects.filter(schedularbatch__id=batch_id)
-        participants_serializer = GetSchedularParticipantsSerializer(
-            participants, many=True
-        )
+        participants = Learner.objects.filter(schedularbatch__id=batch_id)
+        participants_serializer = LearnerSerializer(participants, many=True)
         coaches = Coach.objects.filter(schedularbatch__id=batch_id)
         coaches_serializer = CoachBasicDetailsSerializer(coaches, many=True)
         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
@@ -472,7 +467,8 @@ def get_batch_calendar(request, batch_id):
                 "sessions": sorted_sessions,
                 "participants": participants_serializer.data,
                 "coaches": coaches_serializer.data,
-                "course" : course_serailizer.data if course else None
+                "course": course_serailizer.data if course else None,
+                "batch": batch_id,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -630,9 +626,8 @@ def participants_list(request, batch_id):
         batch = SchedularBatch.objects.get(id=batch_id)
     except SchedularBatch.DoesNotExist:
         return Response({"detail": "Batch not found"}, status=404)
-
-    participants = batch.participants.all()
-    serializer = SchedularParticipantsSerializer(participants, many=True)
+    learners = batch.learners.all()
+    serializer = LearnerSerializer(learners, many=True)
     return Response(serializer.data)
 
 
@@ -772,7 +767,11 @@ def create_coach_schedular_availibilty(request):
                     },
                     [],
                 )
-                create_notification(coach.user.user,"/slot-request","Admin has asked your availability!")
+                create_notification(
+                    coach.user.user,
+                    "/slot-request",
+                    "Admin has asked your availability!",
+                )
                 from_email = settings.DEFAULT_FROM_EMAIL
                 recipient_list = [coach.email]
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -821,7 +820,7 @@ def add_batch(request, project_id):
                         ).count()
                         + 1
                     )
-                    booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                    booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                     coaching_session = CoachingSession.objects.create(
                         batch=batch,
                         coaching_session_number=coaching_session_number,
@@ -842,7 +841,7 @@ def add_batch(request, project_id):
                             batch=batch, session_type=session_type
                         )
                     )
-                    booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                    booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                     coaching_session = CoachingSession.objects.create(
                         batch=batch,
                         coaching_session_number=coaching_session_number,
@@ -853,13 +852,25 @@ def add_batch(request, project_id):
                     )
 
         # Check if participant with the same email exists
-        participant, participant_created = SchedularParticipants.objects.get_or_create(
-            email=email, defaults={"name": name, "phone": phone}
-        )
+        learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
 
         # Add participant to the batch if not already added
-        if participant not in batch.participants.all():
-            batch.participants.add(participant)
+        if learner and learner not in batch.learners.all():
+            batch.learners.add(learner)
+            try:
+                course = Course.objects.get(batch=batch)
+                course_enrollments = CourseEnrollment.objects.filter(
+                    learner=learner, course=course
+                )
+                if not course_enrollments.exists():
+                    datetime = timezone.now()
+                    CourseEnrollment.objects.create(
+                        learner=learner,
+                        course=course,
+                        enrollment_date=datetime,
+                    )
+            except Exception:
+                pass
 
     return Response(
         {"message": "Batch created successfully."}, status=status.HTTP_201_CREATED
@@ -892,7 +903,7 @@ def get_coach_availabilities_booking_link(request):
     booking_link_id = request.GET.get("booking_link_id")
 
     if booking_link_id:
-        booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+        booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{booking_link_id}"
         try:
             coaching_session = CoachingSession.objects.get(booking_link=booking_link)
             current_date = datetime.now().date()
@@ -941,7 +952,7 @@ def get_coach_availabilities_booking_link(request):
 def schedule_session(request):
     try:
         booking_link_id = request.data.get("booking_link_id", "")
-        booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+        booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{booking_link_id}"
         participant_email = request.data.get("participant_email", "")
         # coach_availability_id = request.data.get("availability_id", "")
         timestamp = request.data.get("timestamp", "")
@@ -992,8 +1003,8 @@ def schedule_session(request):
         session_type = coaching_session.session_type
 
         # Check if the participant is in the batch
-        participant = get_object_or_404(SchedularParticipants, email=participant_email)
-        if participant not in batch.participants.all():
+        learner = get_object_or_404(Learner, email=participant_email)
+        if learner not in batch.learners.all():
             return Response(
                 {"error": "Email not found. Please use the registered Email"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1001,7 +1012,7 @@ def schedule_session(request):
 
         # Check if the participant has already booked the session for the same coaching session
         existing_session = SchedularSessions.objects.filter(
-            enrolled_participant=participant, coaching_session=coaching_session
+            learner=learner, coaching_session=coaching_session
         ).first()
 
         if existing_session:
@@ -1034,7 +1045,7 @@ def schedule_session(request):
 
         # Create session
         session_data = {
-            "enrolled_participant": participant.id,
+            "learner": learner.id,
             "availibility": coach_availability.id,
             "coaching_session": coaching_session.id,
             "status": "pending",
@@ -1104,10 +1115,10 @@ def schedule_session(request):
                 if session_type == "laser_coaching_session"
                 else "Meeraq - Mentoring Session Booked",
                 {
-                    "name": participant.name,
+                    "name": learner.name,
                     "date": date_for_mail,
                     "time": session_time,
-                    "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                    "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
                     "session_type": "Mentoring"
                     if session_type == "mentoring_session"
                     else "Laser Coaching",
@@ -1138,7 +1149,7 @@ def schedule_session_fixed(request):
     try:
         with transaction.atomic():
             booking_link_id = request.data.get("booking_link_id", "")
-            booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{booking_link_id}"
             participant_email = request.data.get("participant_email", "")
             timestamp = request.data.get("timestamp", "")
             end_time = request.data.get("end_time", "")
@@ -1186,17 +1197,15 @@ def schedule_session_fixed(request):
             batch = coaching_session.batch
             session_type = coaching_session.session_type
 
-            participant = get_object_or_404(
-                SchedularParticipants, email=participant_email
-            )
-            if participant not in batch.participants.all():
+            learner = get_object_or_404(Learner, email=participant_email)
+            if learner not in batch.learners.all():
                 return Response(
                     {"error": "Email not found. Please use the registered Email"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
             existing_session = SchedularSessions.objects.filter(
-                enrolled_participant=participant, coaching_session=coaching_session
+                learner=learner, coaching_session=coaching_session
             ).first()
 
             if existing_session:
@@ -1227,7 +1236,7 @@ def schedule_session_fixed(request):
                 )
 
             session_data = {
-                "enrolled_participant": participant.id,
+                "learner": learner.id,
                 "availibility": coach_availability.id,
                 "coaching_session": coaching_session.id,
                 "status": "pending",
@@ -1303,10 +1312,10 @@ def schedule_session_fixed(request):
                     if session_type == "laser_coaching_session"
                     else "Meeraq - Mentoring Session Booked",
                     {
-                        "name": participant.name,
+                        "name": learner.name,
                         "date": date_for_mail,
                         "time": session_time,
-                        "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                        "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
                         "session_type": "Mentoring"
                         if session_type == "mentoring_session"
                         else "Laser Coaching",
@@ -1414,10 +1423,10 @@ def get_sessions(request):
             "coach_name": session.availibility.coach.first_name
             + " "
             + session.availibility.coach.last_name,
-            "participant_name": session.enrolled_participant.name,
+            "participant_name": session.learner.name,
             "coaching_session_number": session.coaching_session.coaching_session_number,
-            "participant_email": session.enrolled_participant.email,
-            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "participant_email": session.learner.email,
+            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
             "room_id": f"{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
         }
@@ -1462,13 +1471,13 @@ def get_sessions_by_type(request, sessions_type):
             "coach_phone": "+"
             + session.availibility.coach.phone_country_code
             + session.availibility.coach.phone,
-            "participant_name": session.enrolled_participant.name,
-            "participant_email": session.enrolled_participant.email,
-            "participant_phone": session.enrolled_participant.phone,
+            "participant_name": session.learner.name,
+            "participant_email": session.learner.email,
+            "participant_phone": session.learner.phone,
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
@@ -1505,19 +1514,19 @@ def get_current_session_of_learner(request, room_id):
         sessions = SchedularSessions.objects.filter(
             availibility__start_time__lt=five_minutes_plus_current_time,
             availibility__end_time__gt=current_time,
-            enrolled_participant__email=participant_email,
+            learner__email=participant_email,
             availibility__coach__room_id=room_id,
         )
         if len(sessions) == 0:
             return Response(
                 {"error": "You don't have any sessions right now."}, status=404
             )
-        participant = SchedularParticipants.objects.get(email=participant_email)
+        learner = Learner.objects.get(email=participant_email)
         return Response(
             {
                 "message": "success",
-                "name": participant.name,
-                "email": participant.email,
+                "name": learner.name,
+                "email": learner.email,
             },
             status=200,
         )
@@ -1594,16 +1603,8 @@ def delete_slots(request):
     return Response({"detail": "Slots deleted successfully."})
 
 
-@api_view(["GET"])
-def get_participants(request):
-    participants = SchedularParticipants.objects.all()
-    participants_serializer = SchedularParticipantsSerializer(participants, many=True)
-    return Response(participants_serializer.data)
-
-
 @api_view(["POST"])
 def send_unbooked_coaching_session_mail(request):
-    print(request.data)
     batch_name = request.data.get("batchName", "")
     participants = request.data.get("participants", [])
     booking_link = request.data.get("bookingLink", "")
@@ -1614,7 +1615,7 @@ def send_unbooked_coaching_session_mail(request):
 
     for participant in participants:
         try:
-            participant_name = SchedularParticipants.objects.get(email=participant).name
+            learner_name = Learner.objects.get(email=participant).name
         except:
             continue
             # Handle the case when "name" is not in participant
@@ -1626,7 +1627,7 @@ def send_unbooked_coaching_session_mail(request):
             if session_type == "laser_coaching_session"
             else "Meeraq - Book Mentoring Session",
             {
-                "name": participant_name,
+                "name": learner_name,
                 "event_link": booking_link,
                 "expiry_date": formatted_date,
                 "session_type": "mentoring"
@@ -1735,26 +1736,43 @@ def add_participant_to_batch(request, batch_id):
         return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
 
     try:
-        participant = SchedularParticipants.objects.get(email=email)
+        learner = Learner.objects.get(email=email)
         # Check if participant is already in the batch
-        if participant in batch.participants.all():
+        if learner in batch.learners.all():
             return Response(
                 {"error": "Participant already exists in the batch"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    except SchedularParticipants.DoesNotExist:
+    except Learner.DoesNotExist:
         # Participant doesn't exist, create a new one
-        participant = SchedularParticipants(name=name, email=email, phone=phone)
-        participant.save()
-
+        learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
     # Add the participant to the batch
-    batch.participants.add(participant)
-    batch.save()
-
+    if learner:
+        batch.learners.add(learner)
+        batch.save()
+        try:
+            course = Course.objects.get(batch=batch)
+            course_enrollments = CourseEnrollment.objects.filter(
+                learner=learner, course=course
+            )
+            if not course_enrollments.exists():
+                datetime = timezone.now()
+                CourseEnrollment.objects.create(
+                    learner=learner,
+                    course=course,
+                    enrollment_date=datetime,
+                )
+        except Exception:
+            # course doesnt exists
+            pass
+        return Response(
+            {"message": "Participant added to the batch successfully"},
+            status=status.HTTP_201_CREATED,
+        )
     return Response(
-        {"message": "Participant added to the batch successfully"},
-        status=status.HTTP_201_CREATED,
+        {"error": "Failed to add participants."},
+        status=status.HTTP_400_BAD_REQUEST,
     )
 
 
@@ -1852,7 +1870,7 @@ def project_report_download(request, project_id):
                 session_name = "Unknown Session"
                 attendance = ""
                 date = ""
-            total_participants = batch.participants.count()
+            total_participants = batch.learners.count()
             percentage = str(int((attendance / total_participants) * 100)) + " %"
             data["Session name"].append(session_name)
             data["Attendance"].append(attendance)
@@ -2080,3 +2098,44 @@ def get_facilitator_field_values(request):
         status=200,
     )
 
+
+@api_view(["DELETE"])
+def delete_learner_from_course(request):
+    learner_id = request.data.get("learnerId")
+    batch_id = request.data.get("batchId")
+
+    try:
+        learner = Learner.objects.get(id=learner_id)
+        batch = SchedularBatch.objects.get(id=batch_id)
+
+        if learner in batch.learners.all():
+            batch.learners.remove(learner)
+            # Remove the learner from FeedbackLessonResponse if present
+            feedback_responses = FeedbackLessonResponse.objects.filter(
+                learner=learner, feedback_lesson__lesson__course__batch=batch
+            )
+            feedback_responses.delete()
+            # Remove the learner from QuizLessonResponse if present
+            quiz_responses = QuizLessonResponse.objects.filter(
+                learner=learner, quiz_lesson__lesson__course__batch=batch
+            )
+            quiz_responses.delete()
+
+            # Remove the learner from CourseEnrollment if enrolled
+            enrollments = CourseEnrollment.objects.filter(
+                learner=learner, course__batch=batch
+            )
+            enrollments.delete()
+
+            # Remove the learner from SchedularSessions if present
+            schedular_sessions = SchedularSessions.objects.filter(
+                learner=learner, coaching_session__batch=batch
+            )
+            schedular_sessions.delete()
+
+            return Response({"message": f"Coachee removed from batch successfully."})
+        else:
+            return Response({"message": f"Coachee is not part of batch."}, status=400)
+
+    except ObjectDoesNotExist:
+        return Response({"message": "Object not found."}, status=404)
