@@ -50,7 +50,9 @@ from .views import (
     DownloadWordReport,
     GetLearnersUniqueId,
     StartAssessmentDataForParticipant,
-    StartAssessmentParticipantDisabled
+    StartAssessmentParticipantDisabled,
+    PreReportDownloadForParticipant,
+    PreReportDownloadForAllParticipant
 )
 
 
@@ -221,5 +223,13 @@ urlpatterns = [
     path(
         "get-start-assessment-data-for-participant/<str:unique_id>/",
         StartAssessmentDataForParticipant.as_view(),
+    ),
+     path(
+        "pre-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
+        PreReportDownloadForParticipant.as_view(),
+    ),
+    path(
+        "pre-report-download-for-all-participant/<int:assessment_id>/",
+        PreReportDownloadForAllParticipant.as_view(),
     ),
 ]
