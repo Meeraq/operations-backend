@@ -1,13 +1,16 @@
 from django.db import models
 from api.models import Learner, Profile, Organisation, HR
 from django.contrib.auth.models import User
+
 # Create your models here.
+
 
 class Behavior(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
 
 class Competency(models.Model):
     name = models.CharField(max_length=255)
@@ -32,8 +35,8 @@ class Question(models.Model):
     type = models.CharField(max_length=10, choices=QUESTION_TYPES, blank=True)
     self_question = models.TextField()
     observer_question = models.TextField(blank=True, null=True)
-    reverse_question= models.BooleanField(blank=True, default=False)
-    behavior= models.ForeignKey(Behavior, on_delete=models.CASCADE,blank=True)
+    reverse_question = models.BooleanField(blank=True, default=False)
+    behavior = models.ForeignKey(Behavior, on_delete=models.CASCADE, blank=True)
     rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -69,7 +72,6 @@ class Observer(models.Model):
         return self.name
 
 
-
 class ParticipantObserverMapping(models.Model):
     participant = models.ForeignKey(Learner, on_delete=models.CASCADE, blank=True)
     observers = models.ManyToManyField(Observer, blank=True)
@@ -79,10 +81,12 @@ class ParticipantObserverMapping(models.Model):
     def __str__(self):
         return f"Mapping for {self.participant}"
 
+
 class ObserverTypes(models.Model):
-    type = models.CharField(max_length=225,blank=True)
+    type = models.CharField(max_length=225, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
 
 class ParticipantObserverType(models.Model):
     participant = models.ForeignKey(Learner, on_delete=models.CASCADE, blank=True)
@@ -120,7 +124,7 @@ class Assessment(models.Model):
     ]
 
     name = models.CharField(max_length=255, blank=True)
-    participant_view_name=models.CharField(max_length=255, blank=True)
+    participant_view_name = models.CharField(max_length=255, blank=True)
     assessment_type = models.CharField(
         max_length=10, choices=ASSESSMENT_TYPES, blank=True
     )
@@ -136,7 +140,7 @@ class Assessment(models.Model):
     participants_observers = models.ManyToManyField(
         ParticipantObserverMapping, blank=True
     )
-    observer_types= models.ManyToManyField(ObserverTypes, blank=True)
+    observer_types = models.ManyToManyField(ObserverTypes, blank=True)
     # rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
     automated_reminder= models.BooleanField(blank=True, default=False)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
@@ -198,3 +202,14 @@ class AssessmentNotification(models.Model):
 
     def __str__(self):
         return self.user.username
+
+
+class ParticipantUniqueId(models.Model):
+    participant = models.ForeignKey(Learner, on_delete=models.CASCADE, blank=True)
+    assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
+    unique_id = models.CharField(max_length=225, unique=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Unique Id for Observer {self.participant.name} in Assessment {self.assessment.name}."
