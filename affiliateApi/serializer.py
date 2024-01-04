@@ -17,6 +17,7 @@ class LeadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lead
         fields = '__all__'
+        depth = 1
 
 
 class LeadDepthOneSerializer(serializers.ModelSerializer):

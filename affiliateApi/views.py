@@ -303,3 +303,11 @@ def lead_update(request, pk):
         serializer.save()
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+def all_leads(request):
+    
+    leads = Lead.objects.all()
+    serializer = LeadSerializer(leads, many=True)
+    return Response(serializer.data)
