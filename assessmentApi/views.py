@@ -18,6 +18,7 @@ from .models import (
     Behavior,
     ObserverTypes,
     AssessmentNotification,
+    ParticipantUniqueId,
 )
 from .serializers import (
     CompetencySerializerDepthOne,
@@ -684,6 +685,15 @@ class AddParticipantObserverToAssessment(APIView):
             participant = create_learner(
                 participants[0]["participantName"], participants[0]["participantEmail"]
             )
+            unique_id = uuid.uuid4()  # Generate a UUID4
+
+            # Creating a ParticipantUniqueId instance with a UUID as unique_id
+            unique_id_instance = ParticipantUniqueId.objects.create(
+                participant=participant,
+                assessment=assessment,
+                unique_id=unique_id,
+            )
+
             mapping = ParticipantObserverMapping.objects.create(participant=participant)
 
             # if assessment.assessment_type == "360":
@@ -767,6 +777,7 @@ class AssessmentsOfParticipant(APIView):
 
 class QuestionsForAssessment(APIView):
     def get(self, request, assessment_id):
+        print(assessment_id)
         try:
             assessment = Assessment.objects.get(id=assessment_id)
             questionnaire = assessment.questionnaire
@@ -879,18 +890,24 @@ class ObserverAssessment(APIView):
 class CreateParticipantResponseView(APIView):
     @transaction.atomic
     def post(self, request):
+        print(request.data)
         try:
             assessment_id = request.data.get("assessment_id")
             participant_email = request.data.get("participant_email")
             response = request.data.get("response")
 
             assessment = Assessment.objects.get(id=assessment_id)
+            print(assessment, "ass")
 
             participant = Learner.objects.get(email=participant_email)
+            print(participant, "par")
+
 
             existing_response = ParticipantResponse.objects.filter(
                 participant=participant, assessment=assessment
             ).first()
+
+            print(existing_response, "exit")
 
             if existing_response:
                 return Response(
@@ -1419,6 +1436,7 @@ class GetParticipantObserversUniqueIds(APIView):
 
 class StartAssessmentDisabled(APIView):
     def get(self, request, unique_id):
+        print(unique_id, "6767")
         try:
             observers_unique_id = ObserverUniqueId.objects.filter(
                 unique_id=unique_id
@@ -1437,6 +1455,30 @@ class StartAssessmentDisabled(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to retrieve Observer Response Data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class StartAssessmentParticipantDisabled(APIView):
+    def get(self, request, unique_id):
+        print(unique_id, "6767")
+        try:
+            participant_unique_id = ParticipantUniqueId.objects.filter(
+                unique_id=unique_id
+            ).first()
+
+            participant_response_data = ParticipantResponse.objects.filter(
+                participant=participant_unique_id.participant,
+                assessment=participant_unique_id.assessment,
+            )
+            if participant_response_data:
+                return Response({"participant_response": True})
+            else:
+                return Response({"participant_response": False})
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to retrieve participant response data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -2604,5 +2646,55 @@ class DownloadWordReport(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to download report."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetLearnersUniqueId(APIView):
+    def get(self, request, assessment_id):
+        try:
+            # Assuming assessment_id is a valid Assessment ID
+            participants_unique_ids = ParticipantUniqueId.objects.filter(
+                assessment_id=assessment_id
+            ).select_related("participant")
+
+            participants_data = []
+            for entry in participants_unique_ids:
+                participant_data = {
+                    "participant_id": entry.participant.id,
+                    "participant_name": entry.participant.name,
+                    "participant_email": entry.participant.email,
+                    "unique_id": entry.unique_id,
+                }
+                participants_data.append(participant_data)
+
+            return Response(participants_data)
+
+        except ParticipantUniqueId.DoesNotExist:
+            return Response(
+                {"error": "No participants found for this assessment ID"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class StartAssessmentDataForParticipant(APIView):
+    def get(self, request, unique_id):
+        try:
+            participant_unique_id = ParticipantUniqueId.objects.get(unique_id=unique_id)
+
+            serializer = AssessmentSerializerDepthFour(participant_unique_id.assessment)
+
+            return Response(
+                {
+                    "assessment_data": serializer.data,
+                    "participant_email": participant_unique_id.participant.email,
+                    "participant_id": participant_unique_id.participant.id,
+                },
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to retrieve Start Assessment Data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
