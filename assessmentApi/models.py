@@ -113,6 +113,12 @@ class Assessment(models.Model):
         ("completed", "Completed"),
     ]
 
+    ASSESSMENT_TIMING_CHOICES = [
+        ("pre", "Pre-Assessment"),
+        ("post", "Post-Assessment"),
+        ("none", "None"),
+    ]
+
     name = models.CharField(max_length=255, blank=True)
     participant_view_name=models.CharField(max_length=255, blank=True)
     assessment_type = models.CharField(
@@ -121,6 +127,7 @@ class Assessment(models.Model):
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     hr = models.ManyToManyField(HR, blank=True)
     number_of_observers = models.PositiveIntegerField(null=True, blank=True)
+    assessment_start_date = models.CharField(max_length=255, blank=True)
     assessment_end_date = models.CharField(max_length=255, blank=True)
     questionnaire = models.ForeignKey(
         Questionnaire, on_delete=models.CASCADE, blank=True
@@ -131,8 +138,13 @@ class Assessment(models.Model):
     )
     observer_types= models.ManyToManyField(ObserverTypes, blank=True)
     # rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
+    automated_reminder= models.BooleanField(blank=True, default=False)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
     result_released=models.BooleanField(blank=True, default=False)
+    assessment_timing=models.CharField(max_length=255, choices=ASSESSMENT_TIMING_CHOICES, default="none")
+    pre_assessment = models.ForeignKey(
+    'self', on_delete=models.CASCADE, blank=True, null=True
+)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
