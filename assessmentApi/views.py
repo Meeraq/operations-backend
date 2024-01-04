@@ -66,10 +66,10 @@ import matplotlib
 import os
 from django.http import HttpResponse
 import io
-from win32com.client import Dispatch
+
 matplotlib.use("Agg")
 env = environ.Env()
-from pdf2docx import parse, Converter
+
 from io import BytesIO
 from apryse_sdk import PDFNet,Convert,StructuredOutputModule
 wkhtmltopdf_path = os.environ.get(
