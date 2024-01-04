@@ -1658,6 +1658,7 @@ class AddMultipleQuestions(APIView):
             for question in questions:
                 behavior, created = Behavior.objects.get_or_create(
                     name=question["behaviour"],
+                    description="This is a demo description"
                 )
                 behavior.save()
                 competency, created = Competency.objects.get_or_create(
