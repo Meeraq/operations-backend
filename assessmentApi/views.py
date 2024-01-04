@@ -18,6 +18,7 @@ from .models import (
     Behavior,
     ObserverTypes,
     AssessmentNotification,
+    ParticipantUniqueId,
 )
 from .serializers import (
     CompetencySerializerDepthOne,
@@ -71,7 +72,8 @@ matplotlib.use("Agg")
 env = environ.Env()
 
 from io import BytesIO
-from apryse_sdk import PDFNet,Convert,StructuredOutputModule
+from apryse_sdk import PDFNet, Convert, StructuredOutputModule
+
 wkhtmltopdf_path = os.environ.get(
     "WKHTMLTOPDF_PATH", r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
 )
@@ -564,32 +566,33 @@ class AssessmentStatusChange(APIView):
 
         try:
             assessment = Assessment.objects.get(id=assessment_id)
-            prev_status=assessment.status
+            prev_status = assessment.status
             assessment.status = request.data.get("status")
             # assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
             if prev_status == "draft" and assessment.status == "ongoing":
                 for hr in assessment.hr.all():
                     user = User.objects.get(email=hr.email)
-                    
+
                     token = get_token_generator().generate_token()
-                    
+
                     ResetPasswordToken.objects.create(user=user, key=token)
-                    
-                    create_password_link = f"https://assessment.meeraq.com/create-password/{token}"
+
+                    create_password_link = (
+                        f"https://assessment.meeraq.com/create-password/{token}"
+                    )
 
                     send_mail_templates(
-                    "assessment/create_password_to_hr.html",
-                    [hr.email],
-                    "Meeraq - Welcome to Assessment Platform !",
-                    {
-                        "hr_name": hr.first_name,
-                        "link": create_password_link,
-                        "assessment_name":assessment.participant_view_name,
-                    },
-                    [],
-                )
-
+                        "assessment/create_password_to_hr.html",
+                        [hr.email],
+                        "Meeraq - Welcome to Assessment Platform !",
+                        {
+                            "hr_name": hr.first_name,
+                            "link": create_password_link,
+                            "assessment_name": assessment.participant_view_name,
+                        },
+                        [],
+                    )
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
@@ -605,6 +608,7 @@ class AssessmentStatusChange(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
 
 class AssessmentEndDataChange(APIView):
     def put(self, request):
@@ -629,6 +633,7 @@ class AssessmentEndDataChange(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
 
 class AddParticipantObserverToAssessment(APIView):
     @transaction.atomic
@@ -675,6 +680,15 @@ class AddParticipantObserverToAssessment(APIView):
             participant = create_learner(
                 participants[0]["participantName"], participants[0]["participantEmail"]
             )
+            unique_id = uuid.uuid4()  # Generate a UUID4
+
+            # Creating a ParticipantUniqueId instance with a UUID as unique_id
+            unique_id_instance = ParticipantUniqueId.objects.create(
+                participant=participant,
+                assessment=assessment,
+                unique_id=unique_id,
+            )
+
             mapping = ParticipantObserverMapping.objects.create(participant=participant)
 
             # if assessment.assessment_type == "360":
@@ -758,6 +772,7 @@ class AssessmentsOfParticipant(APIView):
 
 class QuestionsForAssessment(APIView):
     def get(self, request, assessment_id):
+        print(assessment_id)
         try:
             assessment = Assessment.objects.get(id=assessment_id)
             questionnaire = assessment.questionnaire
@@ -870,18 +885,24 @@ class ObserverAssessment(APIView):
 class CreateParticipantResponseView(APIView):
     @transaction.atomic
     def post(self, request):
+        print(request.data)
         try:
             assessment_id = request.data.get("assessment_id")
             participant_email = request.data.get("participant_email")
             response = request.data.get("response")
 
             assessment = Assessment.objects.get(id=assessment_id)
+            print(assessment, "ass")
 
             participant = Learner.objects.get(email=participant_email)
+            print(participant, "par")
+
 
             existing_response = ParticipantResponse.objects.filter(
                 participant=participant, assessment=assessment
             ).first()
+
+            print(existing_response, "exit")
 
             if existing_response:
                 return Response(
@@ -1410,6 +1431,7 @@ class GetParticipantObserversUniqueIds(APIView):
 
 class StartAssessmentDisabled(APIView):
     def get(self, request, unique_id):
+        print(unique_id, "6767")
         try:
             observers_unique_id = ObserverUniqueId.objects.filter(
                 unique_id=unique_id
@@ -1428,6 +1450,30 @@ class StartAssessmentDisabled(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to retrieve Observer Response Data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class StartAssessmentParticipantDisabled(APIView):
+    def get(self, request, unique_id):
+        print(unique_id, "6767")
+        try:
+            participant_unique_id = ParticipantUniqueId.objects.filter(
+                unique_id=unique_id
+            ).first()
+
+            participant_response_data = ParticipantResponse.objects.filter(
+                participant=participant_unique_id.participant,
+                assessment=participant_unique_id.assessment,
+            )
+            if participant_response_data:
+                return Response({"participant_response": True})
+            else:
+                return Response({"participant_response": False})
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to retrieve participant response data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -1916,6 +1962,7 @@ def generate_report_for_participant(file_name, content):
     except Exception as e:
         print(str(e))
 
+
 def word_generate_report_for_participant(file_name, content):
     try:
         organisation = Organisation.objects.get(id=content["organisation_id"])
@@ -1937,14 +1984,13 @@ def word_generate_report_for_participant(file_name, content):
         email_message = render_to_string(file_name, content)
 
         pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
-        
+
         pdf_path = "graphsAndReports/Report.pdf"
         with open(pdf_path, "wb") as pdf_file:
             pdf_file.write(pdf)
 
     except Exception as e:
         print(str(e))
-
 
 
 def html_for_pdf_preview(file_name, user_email, email_subject, content, body_message):
@@ -2145,8 +2191,8 @@ class DownloadParticipantResultReport(APIView):
                 assessment_id,
             )
             # Group questions by competency
-            competency_array=[]
-            assessment_rating_type=None
+            competency_array = []
+            assessment_rating_type = None
             for competency in assessment.questionnaire.questions.values(
                 "competency"
             ).distinct():
@@ -2154,12 +2200,14 @@ class DownloadParticipantResultReport(APIView):
                 competency_questions = assessment.questionnaire.questions.filter(
                     competency__id=competency_id
                 )
-                competency_name_for_object=Competency.objects.get(id=competency_id).name
+                competency_name_for_object = Competency.objects.get(
+                    id=competency_id
+                ).name
                 competency_object = {
                     "competency_name": competency_name_for_object,
                     "questions": [],
                 }
-                if(len(competency_array)<14):
+                if len(competency_array) < 14:
                     competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
@@ -2171,7 +2219,7 @@ class DownloadParticipantResultReport(APIView):
                             str(question.id)
                         ),
                     }
-                    assessment_rating_type=question.rating_type
+                    assessment_rating_type = question.rating_type
                     count = 1
                     observer_types_total = get_total_observer_types(
                         participant_observer, participant_id
@@ -2237,9 +2285,8 @@ class DownloadParticipantResultReport(APIView):
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
                     "image_base64_array": graph_images,
-                    "competency_array":competency_array,
-                    "assessment_rating_type":assessment_rating_type,
-                    
+                    "competency_array": competency_array,
+                    "assessment_rating_type": assessment_rating_type,
                 },
                 f"This new report generated for {participant.name}",
             )
@@ -2277,8 +2324,8 @@ class DownloadParticipantResultReport(APIView):
                 assessment_id,
             )
             # Group questions by competency
-            assessment_rating_type=None
-            competency_array=[]
+            assessment_rating_type = None
+            competency_array = []
             for competency in assessment.questionnaire.questions.values(
                 "competency"
             ).distinct():
@@ -2286,13 +2333,15 @@ class DownloadParticipantResultReport(APIView):
                 competency_questions = assessment.questionnaire.questions.filter(
                     competency__id=competency_id
                 )
-                competency_name_for_object=Competency.objects.get(id=competency_id).name
+                competency_name_for_object = Competency.objects.get(
+                    id=competency_id
+                ).name
                 competency_object = {
                     "competency_name": competency_name_for_object,
                     "questions": [],
                 }
-               
-                if(len(competency_array)<14):
+
+                if len(competency_array) < 14:
                     competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
@@ -2304,7 +2353,7 @@ class DownloadParticipantResultReport(APIView):
                             str(question.id)
                         ),
                     }
-                    assessment_rating_type=question.rating_type
+                    assessment_rating_type = question.rating_type
                     count = 1
                     observer_types_total = get_total_observer_types(
                         participant_observer, participant_id
@@ -2368,8 +2417,8 @@ class DownloadParticipantResultReport(APIView):
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
                     "image_base64_array": graph_images,
-                    "competency_array":competency_array,
-                    "assessment_rating_type":assessment_rating_type,
+                    "competency_array": competency_array,
+                    "assessment_rating_type": assessment_rating_type,
                 },
             )
             # pdf_path = "graphsAndReports/Report.pdf"
@@ -2377,8 +2426,8 @@ class DownloadParticipantResultReport(APIView):
             # with open(pdf_path, "rb") as pdf_file:
             response = HttpResponse(pdf, content_type="application/pdf")
             response[
-                    "Content-Disposition"
-                ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
+                "Content-Disposition"
+            ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
             # Close the file after reading
             # pdf_file.close()
 
@@ -2459,8 +2508,8 @@ class DownloadWordReport(APIView):
                 assessment_id,
             )
             # Group questions by competency
-            competency_array=[]
-            assessment_rating_type=None
+            competency_array = []
+            assessment_rating_type = None
             for competency in assessment.questionnaire.questions.values(
                 "competency"
             ).distinct():
@@ -2468,12 +2517,14 @@ class DownloadWordReport(APIView):
                 competency_questions = assessment.questionnaire.questions.filter(
                     competency__id=competency_id
                 )
-                competency_name_for_object=Competency.objects.get(id=competency_id).name
+                competency_name_for_object = Competency.objects.get(
+                    id=competency_id
+                ).name
                 competency_object = {
                     "competency_name": competency_name_for_object,
                     "questions": [],
                 }
-                if(len(competency_array)<14):
+                if len(competency_array) < 14:
                     competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
@@ -2485,7 +2536,7 @@ class DownloadWordReport(APIView):
                             str(question.id)
                         ),
                     }
-                    assessment_rating_type=question.rating_type
+                    assessment_rating_type = question.rating_type
                     count = 1
                     observer_types_total = get_total_observer_types(
                         participant_observer, participant_id
@@ -2549,23 +2600,27 @@ class DownloadWordReport(APIView):
                     "data_for_assessment_overview_table": data_for_assessment_overview_table,
                     "frequency_analysis_data": frequency_analysis_data,
                     "image_base64_array": graph_images,
-                    "competency_array":competency_array,
-                    "assessment_rating_type":assessment_rating_type,
+                    "competency_array": competency_array,
+                    "assessment_rating_type": assessment_rating_type,
                 },
             )
             pdf_path = "graphsAndReports/Report.pdf"
-            
-            PDFNet.Initialize("demo:1702970002104:7c8f102f0300000000f9a19766ccfb8d39844f0d25c1beea57ea6833ba")
-    
+
+            PDFNet.Initialize(
+                "demo:1702970002104:7c8f102f0300000000f9a19766ccfb8d39844f0d25c1beea57ea6833ba"
+            )
+
             PDFNet.AddResourceSearchPath("Lib/Windows")
 
             if not StructuredOutputModule.IsModuleAvailable():
-                print("Unable to run the sample: PDFTron SDK Structured Output module not available.")
+                print(
+                    "Unable to run the sample: PDFTron SDK Structured Output module not available."
+                )
                 return Response(
                     {"error": "Failed to download report."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
-            
+
             Convert.ToWord(pdf_path, "graphsAndReports/WordReport.docx")
 
             with open("graphsAndReports/WordReport.docx", "rb") as word_file:
@@ -2586,5 +2641,55 @@ class DownloadWordReport(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to download report."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetLearnersUniqueId(APIView):
+    def get(self, request, assessment_id):
+        try:
+            # Assuming assessment_id is a valid Assessment ID
+            participants_unique_ids = ParticipantUniqueId.objects.filter(
+                assessment_id=assessment_id
+            ).select_related("participant")
+
+            participants_data = []
+            for entry in participants_unique_ids:
+                participant_data = {
+                    "participant_id": entry.participant.id,
+                    "participant_name": entry.participant.name,
+                    "participant_email": entry.participant.email,
+                    "unique_id": entry.unique_id,
+                }
+                participants_data.append(participant_data)
+
+            return Response(participants_data)
+
+        except ParticipantUniqueId.DoesNotExist:
+            return Response(
+                {"error": "No participants found for this assessment ID"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class StartAssessmentDataForParticipant(APIView):
+    def get(self, request, unique_id):
+        try:
+            participant_unique_id = ParticipantUniqueId.objects.get(unique_id=unique_id)
+
+            serializer = AssessmentSerializerDepthFour(participant_unique_id.assessment)
+
+            return Response(
+                {
+                    "assessment_data": serializer.data,
+                    "participant_email": participant_unique_id.participant.email,
+                    "participant_id": participant_unique_id.participant.id,
+                },
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to retrieve Start Assessment Data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
