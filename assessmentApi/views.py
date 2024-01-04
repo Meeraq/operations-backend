@@ -499,6 +499,7 @@ class AssessmentView(APIView):
             questionnaire = Questionnaire.objects.get(
                 id=request.data.get("questionnaire")
             )
+            pre_assessment=Assessment.objects.get(id=request.data.get("pre_assessment"))
 
             organisation = Organisation.objects.get(id=request.data.get("organisation"))
             hr = []
@@ -524,6 +525,10 @@ class AssessmentView(APIView):
             assessment.organisation = organisation
             assessment.hr.set(hr)
             assessment.observer_types.set(observer_types)
+            assessment.assessment_start_date = request.data.get("assessment_start_date")
+            assessment.automated_reminder = request.data.get("automated_reminder")
+            assessment.assessment_timing = request.data.get("assessment_timing")
+            assessment.pre_assessment = pre_assessment
             assessment.save()
 
             serializer = AssessmentSerializerDepthFour(assessment)
