@@ -29,15 +29,14 @@
     </div>
      <h1>Assessment Name - {{ assessment_name }}</h1>
  <h2>Partiicipant Name - {{ name }}</h2>
-    <p>
-        Thank you for taking the {{assessment_name}} - {% if assessment_timing == 'pre' %}
-            pre
-          {% else %}
-            post
-          {% endif %} assessment. Your scores, in each
+    {% if assessment_timing == 'pre' %}
+            <p>
+        Thank you for taking the  {{assessment_name}} - pre assessment. Your scores, in each
         category, are as follows:
-    </p>
-
+          {% else %}
+           Thank you for taking the  {{assessment_name}} - post assessment. Here is how you fared:
+        </p>
+ {% endif %}
     <img src="data:image/png;base64, {{ image_base64 }}" alt="graph"
         style="width: 100%; height: auto; margin-top: 60pt;" />
 

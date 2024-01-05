@@ -143,12 +143,13 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
 
-def send_whatsapp_message(user_type, participant, assessment,unique_id):
+
+def send_whatsapp_message(user_type, participant, assessment, unique_id):
     try:
-        assessment_name = assessment.name
+        assessment_name = assessment.participant_view_name
         participant_phone = participant.phone
         participant_name = participant.name
-        wati_api_url=f"https://live-mt-server.wati.io/300780/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
+        wati_api_url = f"https://live-mt-server.wati.io/300780/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
         headers = {
             "content-type": "text/json",
             "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNThhMDY4Yy05NzNjLTQwYmMtOWI2YS1jNjE0MWZiMzlmY2MiLCJ1bmlxdWVfbmFtZSI6InNyZWVyYWdAbWVlcmFxLmNvbSIsIm5hbWVpZCI6InNyZWVyYWdAbWVlcmFxLmNvbSIsImVtYWlsIjoic3JlZXJhZ0BtZWVyYXEuY29tIiwiYXV0aF90aW1lIjoiMDEvMDQvMjAyNCAxMDozNzo0NyIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMDA3ODAiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.ArLdahSk4kk9wKiGVVg2l_fYvhsUv4zx3hd4Gc--d0s",
@@ -163,14 +164,14 @@ def send_whatsapp_message(user_type, participant, assessment,unique_id):
                 },
                 {
                     "name": "assessment_name",
-                    "value": assessment_name,   
+                    "value": assessment_name,
                 },
                 {
                     "name": "participant_id",
                     "value": participant_id,
-                }
+                },
             ],
-            "template_name": "assessment_reminders_message"
+            "template_name": "assessment_reminders_message",
         }
 
         response = requests.post(wati_api_url, headers=headers, json=payload)
@@ -205,11 +206,16 @@ def send_whatsapp_message(user_type, participant, assessment,unique_id):
 
 from django.core.exceptions import ObjectDoesNotExist
 
+
 def whatsapp_message_for_participant(whatsapp):
-    ongoing_assessments = Assessment.objects.filter(status="ongoing", automated_reminder=True)
+    ongoing_assessments = Assessment.objects.filter(
+        status="ongoing", automated_reminder=True
+    )
 
     for assessment in ongoing_assessments:
-        start_date = datetime.strptime(assessment.assessment_start_date, "%Y-%m-%d").date()
+        start_date = datetime.strptime(
+            assessment.assessment_start_date, "%Y-%m-%d"
+        ).date()
         end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
 
         # Check if today's date is within the assessment date range
@@ -220,13 +226,20 @@ def whatsapp_message_for_participant(whatsapp):
             for participant_observer_mapping in participants_observers:
                 participant = participant_observer_mapping.participant
                 try:
-                    participant_response = ParticipantResponse.objects.filter(participant=participant, assessment=assessment)
+                    participant_response = ParticipantResponse.objects.filter(
+                        participant=participant, assessment=assessment
+                    )
                     if not participant_response:
-                        participant_unique_id = ParticipantUniqueId.objects.get(participant=participant)
-                        unique_id=participant_unique_id.unique_id
-                        send_whatsapp_message("learner", participant, assessment,unique_id)
+                        participant_unique_id = ParticipantUniqueId.objects.get(
+                            participant=participant
+                        )
+                        unique_id = participant_unique_id.unique_id
+                        send_whatsapp_message(
+                            "learner", participant, assessment, unique_id
+                        )
                 except ObjectDoesNotExist:
                     print(f"No unique ID found for participant {participant.name}")
+
 
 def create_learner(learner_name, learner_email):
     try:
@@ -673,17 +686,17 @@ class AssessmentStatusChange(APIView):
                         f"https://assessment.meeraq.com/create-password/{token}"
                     )
 
-                    send_mail_templates(
-                        "assessment/create_password_to_hr.html",
-                        [hr.email],
-                        "Meeraq - Welcome to Assessment Platform !",
-                        {
-                            "hr_name": hr.first_name,
-                            "link": create_password_link,
-                            "assessment_name": assessment.participant_view_name,
-                        },
-                        [],
-                    )
+                    # send_mail_templates(
+                    #     "assessment/create_password_to_hr.html",
+                    #     [hr.email],
+                    #     "Meeraq - Welcome to Assessment Platform !",
+                    #     {
+                    #         "hr_name": hr.first_name,
+                    #         "link": create_password_link,
+                    #         "assessment_name": assessment.participant_view_name,
+                    #     },
+                    #     [],
+                    # )
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
@@ -811,7 +824,7 @@ class AddParticipantObserverToAssessment(APIView):
             assessment.save()
 
             particpant_data = [{"name": participant.name, "email": participant.email}]
-            send_reset_password_link(particpant_data)
+            # send_reset_password_link(particpant_data)
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -848,7 +861,7 @@ class AssessmentsOfParticipant(APIView):
                     )
                 )
             )
-          
+
             serializer = AssessmentAnsweredSerializerDepthFour(assessments, many=True)
 
             return Response(serializer.data)
@@ -866,7 +879,6 @@ class AssessmentsOfParticipant(APIView):
 
 class QuestionsForAssessment(APIView):
     def get(self, request, assessment_id):
-     
         try:
             assessment = Assessment.objects.get(id=assessment_id)
             questionnaire = assessment.questionnaire
@@ -979,22 +991,18 @@ class ObserverAssessment(APIView):
 class CreateParticipantResponseView(APIView):
     @transaction.atomic
     def post(self, request):
-        
         try:
             assessment_id = request.data.get("assessment_id")
             participant_email = request.data.get("participant_email")
             response = request.data.get("response")
 
             assessment = Assessment.objects.get(id=assessment_id)
-           
+
             participant = Learner.objects.get(email=participant_email)
-           
 
             existing_response = ParticipantResponse.objects.filter(
                 participant=participant, assessment=assessment
             ).first()
-
-            
 
             if existing_response:
                 return Response(
@@ -1282,7 +1290,7 @@ class AddObserverToParticipant(APIView):
                 [observer.email],
                 "Meeraq - Welcome to Assessment Platform !",
                 {
-                    "assessment_name": assessment.name,
+                    "assessment_name": assessment.participant_view_name,
                     "participant_name": participants_observer.participant.name,
                     "observer_name": observer.name,
                     "link": observer_link,
@@ -1434,7 +1442,7 @@ class ParticipantAddsObserverToAssessment(APIView):
                     [observer.email],
                     "Meeraq - Welcome to Assessment Platform !",
                     {
-                        "assessment_name": assessment.name,
+                        "assessment_name": assessment.participant_view_name,
                         "participant_name": participants_observer.participant.name,
                         "observer_name": observer.name,
                         "link": observer_link,
@@ -1523,7 +1531,6 @@ class GetParticipantObserversUniqueIds(APIView):
 
 class StartAssessmentDisabled(APIView):
     def get(self, request, unique_id):
-     
         try:
             observers_unique_id = ObserverUniqueId.objects.filter(
                 unique_id=unique_id
@@ -1548,7 +1555,6 @@ class StartAssessmentDisabled(APIView):
 
 class StartAssessmentParticipantDisabled(APIView):
     def get(self, request, unique_id):
-      
         try:
             participant_unique_id = ParticipantUniqueId.objects.filter(
                 unique_id=unique_id
@@ -1653,7 +1659,7 @@ class ReminderMailForObserverByPmoAndParticipant(APIView):
                         [observer.email],
                         "Meeraq - Welcome to Assessment Platform !",
                         {
-                            "assessment_name": assessment.name,
+                            "assessment_name": assessment.participant_view_name,
                             "participant_name": participants_observer.participant.name,
                             "observer_name": observer.name,
                             "link": observer_link,
@@ -1808,10 +1814,8 @@ class AddMultipleParticipants(APIView):
                 #             status=status.HTTP_400_BAD_REQUEST,
                 #         )
                 # name="first_name"+" "+"last_name"
-                name=participant["first_name"]+" "+participant["last_name"]
-                new_participant = create_learner(
-                    name, participant["email"]
-                )
+                name = participant["first_name"].capitalize() + " " + participant["last_name"].capitalize()
+                new_participant = create_learner(name, participant["email"])
                 new_participant.phone = participant["phone"]
                 new_participant.save()
                 mapping = ParticipantObserverMapping.objects.create(
@@ -1831,11 +1835,9 @@ class AddMultipleParticipants(APIView):
                 assessment.participants_observers.add(mapping)
                 assessment.save()
 
-                particpant_data = [
-                    {"name": name, "email": participant["email"]}
-                ]
+                particpant_data = [{"name": name, "email": participant["email"]}]
 
-                send_reset_password_link(particpant_data)
+                # send_reset_password_link(particpant_data)
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
@@ -2356,7 +2358,7 @@ class DownloadParticipantResultReport(APIView):
                 f"Report for {participant.name}",
                 {
                     "name": participant.name,
-                    "assessment_name": assessment.name,
+                    "assessment_name": assessment.participant_view_name,
                     "organisation_name": assessment.organisation.name,
                     "assessment_type": assessment.assessment_type,
                     "organisation_id": assessment.organisation.id,
@@ -2488,7 +2490,7 @@ class DownloadParticipantResultReport(APIView):
                 "assessment/report/assessment_report.html",
                 {
                     "name": participant.name,
-                    "assessment_name": assessment.name,
+                    "assessment_name": assessment.participant_view_name,
                     "organisation_name": assessment.organisation.name,
                     "assessment_type": assessment.assessment_type,
                     "organisation_id": assessment.organisation.id,
@@ -2671,7 +2673,7 @@ class DownloadWordReport(APIView):
                 "assessment/report/assessment_report.html",
                 {
                     "name": participant.name,
-                    "assessment_name": assessment.name,
+                    "assessment_name": assessment.participant_view_name,
                     "organisation_name": assessment.organisation.name,
                     "assessment_type": assessment.assessment_type,
                     "organisation_id": assessment.organisation.id,
@@ -2857,7 +2859,7 @@ def generate_graph_for_participant(participant, assessment_id, assessment):
             color = colors3
         else:
             color = colors4
-     
+
         ax.barh(comp_labels[i], percentage_values[i], color=color, left=bottom[i])
 
     for index, value in enumerate(percentage_values):
@@ -2890,6 +2892,7 @@ def generate_graph_for_participant(participant, assessment_id, assessment):
 def generate_graph_for_participant_for_post_assessent(
     participant, assessment_id, assessment
 ):
+    
     try:
         participant_response = ParticipantResponse.objects.get(
             participant__id=participant.id, assessment__id=assessment_id
@@ -2897,17 +2900,18 @@ def generate_graph_for_participant_for_post_assessent(
     except ParticipantResponse.DoesNotExist as e:
         print(str(e))
         return Response(
-            {"error": "ParticipantResponse not found."},
+            {"error": "Participant Response not found."},
             status=status.HTTP_404_NOT_FOUND,
         )
     try:
         pre_assessment_participant_response = ParticipantResponse.objects.get(
             participant__id=participant.id, assessment__id=assessment.pre_assessment.id
         )
+     
     except ParticipantResponse.DoesNotExist as e:
         print(str(e))
         return Response(
-            {"error": "ParticipantResponse not found."},
+            {"error": "Participant Response for pre assessment not found."},
             status=status.HTTP_404_NOT_FOUND,
         )
 
@@ -2954,7 +2958,7 @@ def generate_graph_for_participant_for_post_assessent(
             )
         )
         correct_answer = answers.get(str(question.id))
-      
+
         if pre_assessment_participant_response_value == correct_answer:
             pre_competency_object[question.competency.name] = (
                 pre_competency_object[question.competency.name] + 1
@@ -3010,7 +3014,7 @@ def generate_graph_for_participant_for_post_assessent(
         [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
         fontweight="bold",
     )
-    plt.title(f"{assessment.participant_view_name} - Assessment Score Comparison")
+    plt.title(f"Your Awareness Levels")
     plt.xlabel("Percentage")
     plt.xlim(0, 100)
     plt.tight_layout()
@@ -3083,8 +3087,8 @@ class PreReportDownloadForParticipant(APIView):
                     "name": participant.name,
                     "image_base64": encoded_image,
                     "compentency_with_description": compentency_with_description,
-                    "assessment_timing":assessment.assessment_timing,
-                     "assessment_name":assessment.participant_view_name
+                    "assessment_timing": assessment.assessment_timing,
+                    "assessment_name": assessment.participant_view_name,
                 },
             )
 
@@ -3142,16 +3146,16 @@ class PreReportDownloadForAllParticipant(APIView):
                         "name": participant.name,
                         "image_base64": encoded_image,
                         "compentency_with_description": compentency_with_description,
-                        "assessment_timing":assessment.assessment_timing,
-                        "assessment_name":assessment.participant_view_name
+                        "assessment_timing": assessment.assessment_timing,
+                      
                     }
                 )
 
             email_message = render_to_string(
                 "assessment/air_india_assessment_report_batch_wise.html",
-                {"participant_context": participant_context},
+                {"participant_context": participant_context , "assessment_name": assessment.participant_view_name,},
             )
-          
+
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
 
             response = HttpResponse(pdf, content_type="application/pdf")
@@ -3195,9 +3199,11 @@ class ReleaseResults(APIView):
                         ) = generate_graph_for_participant_for_post_assessent(
                             participant, assessment_id, assessment
                         )
+                   
                     participant_response = ParticipantResponse.objects.filter(
                         participant__id=participant.id, assessment__id=assessment_id
                     ).first()
+                  
                     if participant_response:
                         send_mail_templates(
                             "assessment/air_india_report_mail.html",
@@ -3207,8 +3213,8 @@ class ReleaseResults(APIView):
                                 "name": participant.name,
                                 "image_base64": encoded_image,
                                 "compentency_with_description": compentency_with_description,
-                                "assessment_timing":assessment.assessment_timing,
-                                 "assessment_name":assessment.participant_view_name
+                                "assessment_timing": assessment.assessment_timing,
+                                "assessment_name": assessment.participant_view_name,
                             },
                             [],
                         )
@@ -3220,6 +3226,86 @@ class ReleaseResults(APIView):
                 }
             )
 
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to Release Results"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class MoveParticipant(APIView):
+    def post(self, request):
+        try:
+            print(request.data)
+            from_assessment = Assessment.objects.get(
+                id=request.data.get("from_assessment_id")
+            )
+            participant = Learner.objects.get(id=request.data.get("participant_id"))
+            to_assessment = Assessment.objects.get(
+                id=request.data.get("to_assessment_id")
+            )
+
+            if to_assessment.questionnaire.id != from_assessment.questionnaire.id:
+                return Response(
+                    {
+                        "error": "Both assessments must have the same questionnaire to move participant."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if to_assessment.participants_observers.filter(
+                participant__email=participant.email
+            ).exists():
+                return Response(
+                    {"error": "Participant already exists in the assessment."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            unique_id = uuid.uuid4()  # Generate a UUID4
+
+            # Creating a ParticipantUniqueId instance with a UUID as unique_id
+            unique_id_instance = ParticipantUniqueId.objects.create(
+                participant=participant,
+                assessment=to_assessment,
+                unique_id=unique_id,
+            )
+
+            mapping = ParticipantObserverMapping.objects.create(participant=participant)
+
+            mapping.save()
+            to_assessment.participants_observers.add(mapping)
+            to_assessment.save()
+
+            particpant_data = [{"name": participant.name, "email": participant.email}]
+            # send_reset_password_link(particpant_data)
+
+            participant_resposne = ParticipantResponse.objects.filter(
+                participant=participant, assessment=from_assessment
+            ).first()
+
+            if participant_resposne:
+                participant_resposne.assessment = to_assessment
+                participant_resposne.save()
+
+            from_assessment.participants_observers.filter(
+                participant__id=participant.id
+            ).delete()
+
+            participant_unique_id_instance = ParticipantUniqueId.objects.filter(
+                participant=participant,
+                assessment=from_assessment,
+            )
+            if participant_unique_id_instance:
+                participant_unique_id_instance.delete()
+
+            serializer = AssessmentSerializerDepthFour(to_assessment)
+            return Response(
+                {
+                    "message": f"Moved {participant.name} participant to {to_assessment.name} assessment.",
+                    "assessment_data": serializer.data,
+                }
+            )
         except Exception as e:
             print(str(e))
             return Response(

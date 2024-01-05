@@ -23,13 +23,14 @@
 
 <body>
 <div>
-
+ 
     {% for participant in participant_context %}
     <div>
         <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png"
             style="width: 150px" alt="Meeraq Logo" class="fr-fic fr-dii" width="187" height="34" />
     </div>
-    <h1>Partiicipant Name - {{ participant.name }}</h1>
+  <h1>Assessment Name - {{ assessment_name }}</h1>
+    <h2>Partiicipant Name - {{ participant.name }}</h2>
     <p>
         Thank you for taking the {{participant.assessment_name}} - {% if participant.assessment_timing == 'pre' %}
             pre

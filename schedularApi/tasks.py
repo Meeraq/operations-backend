@@ -326,19 +326,17 @@ def send_participant_morning_reminder_one_day_before_email():
 @shared_task
 def send_reminder_email_to_participants_for_assessment():
     ongoing_assessments = Assessment.objects.filter(status="ongoing", automated_reminder=True)
-    print(ongoing_assessments,"ongoing")
+   
 
     for assessment in ongoing_assessments:
-        print(assessment, "ass")
+  
         # Convert assessment_start_date and assessment_end_date to datetime objects
         start_date = datetime.strptime(assessment.assessment_start_date, "%Y-%m-%d").date()
         end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
 
         # Check if today's date is within the assessment date range
         today = datetime.now().date()
-        print("start",start_date)
-        print("end",end_date)
-        print("today",today)
+       
         if start_date <= today <= end_date:
             participants_observers = assessment.participants_observers.all()
 
@@ -351,7 +349,7 @@ def send_reminder_email_to_participants_for_assessment():
                     if not participant_response:
                         participant_unique_id = ParticipantUniqueId.objects.get(participant=participant)
                         unique_id = participant_unique_id.unique_id
-                        print("Participant Unique ID:", unique_id)
+                        
 
                         assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
 
@@ -361,7 +359,7 @@ def send_reminder_email_to_participants_for_assessment():
                             [participant.email],
                             "Meeraq - Welcome to Assessment Platform !",
                             {
-                                "assessment_name": assessment.name,
+                                "assessment_name": assessment.participant_view_name,
                                 "participant_name": participant.name,
                                 "link": assessment_link,
                             },
