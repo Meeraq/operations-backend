@@ -1261,7 +1261,7 @@ class LessonMarkAsCompleteAndNotComplete(APIView):
             )
 
 
-class DownlaodLessonCertificate(APIView):
+class DownloadLessonCertificate(APIView):
     def get(self, request, lesson_id, learner_id):
         try:
             lesson = Lesson.objects.get(id=lesson_id)
@@ -1297,7 +1297,7 @@ class DownlaodLessonCertificate(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Failed to downlaod certificate."},
+                {"error": "Failed to download certificate."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
