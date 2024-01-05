@@ -590,13 +590,15 @@ FIELD_NAME_VALUES = {
 
 def add_contact_in_wati(user_type,name,phone):
     try:
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
         wati_api_url = (
-                f"https://live-mt-server.wati.io/300780/api/v1/addContact/{phone}"
+                f"{wati_api_endpoint}/api/v1/addContact/{phone}"
             )
         headers = {
             "content-type": "text/json",
-            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzZWQ4MzI5OC01NGNkLTRmNjUtODUyNS1hMjJhNDQ4MTNmY2EiLCJ1bmlxdWVfbmFtZSI6InNyZWVyYWdAbWVlcmFxLmNvbSIsIm5hbWVpZCI6InNyZWVyYWdAbWVlcmFxLmNvbSIsImVtYWlsIjoic3JlZXJhZ0BtZWVyYXEuY29tIiwiYXV0aF90aW1lIjoiMTEvMjIvMjAyMyAxMzoxMDo0NSIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMDA3ODAiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.xhKHK0tj0-NRb5vu6SY1sau0aOyBka8_HwqvAcK9E_E",
-        }
+            "Authorization":  wati_authorization,
+                }
         payload = {
             "customParams": [
                 {
@@ -608,17 +610,9 @@ def add_contact_in_wati(user_type,name,phone):
         }
         response = requests.post(wati_api_url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an HTTPError for bad responses
-
-        print(response.json())
-        # Return the response from the WATI API
-        return JsonResponse(response.json()), response.status_code
-
-    except requests.exceptions.HTTPError as errh:
-        return JsonResponse({"error": f"HTTP Error: {errh}"}), 500
-    except requests.exceptions.RequestException as err:
-        return JsonResponse({"error": f"Request Error: {err}"}), 500
+        return response.json()
     except Exception as e:
-        return JsonResponse({"error": str(e)}), 500
+        pass
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
