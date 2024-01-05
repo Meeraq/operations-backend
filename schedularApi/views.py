@@ -2169,53 +2169,145 @@ def get_facilitators(request):
     return Response(serializer.data)
 
 
+# @api_view(["POST"])
+# def add_multiple_facilitator(request):
+#     data = request.data.get("coaches", [])
+#     facilitators = []
+#     for coach_data in data:
+#         email = coach_data["email"]
+
+#         if Facilitator.objects.filter(email=email).exists():
+#             return Response(
+#                 {"message": f"Facilitator with email {email} already exists"},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+#         facilitator = Facilitator(
+#             first_name=coach_data["first_name"],
+#             last_name=coach_data["last_name"],
+#             email=email,
+#             age=coach_data["age"],
+#             gender=coach_data["gender"],
+#             domain=coach_data.get("functional_domain", []),
+#             phone=coach_data["mobile"],
+#             level=coach_data.get("level", []),
+#             rating=coach_data.get("rating", ""),
+#             area_of_expertise=coach_data.get("industries", []),
+#             education=coach_data.get("education", []),
+#             years_of_corporate_experience=coach_data.get("corporate_yoe", ""),
+#             city=coach_data.get("city", []),
+#             language=coach_data.get("language", []),
+#             job_roles=coach_data.get("job_roles", []),
+#             country=coach_data.get("country", []),
+#             linkedin_profile_link=coach_data.get("linkedin_profile", ""),
+#             companies_worked_in=coach_data.get("companies_worked_in", []),
+#             educational_qualification=coach_data.get("educational_qualification", []),
+#             client_companies=coach_data.get("client_companies", []),
+#             fees_per_hour=coach_data.get("fees_per_hour", ""),
+#             fees_per_day=coach_data.get("fees_per_day", ""),
+#             topic=coach_data.get("topic", []),
+#             other_certification=coach_data.get("other_certification", []),
+#         )
+#         facilitators.append(facilitator)
+
+#     Facilitator.objects.bulk_create(
+#         facilitators
+#     )  # Bulk create facilitators in the database
+
+#     return Response(
+#         {"message": "Facilitators added successfully"}, status=status.HTTP_201_CREATED
+#     )
+
+
+
 @api_view(["POST"])
 def add_multiple_facilitator(request):
     data = request.data.get("coaches", [])
+    print(data)
     facilitators = []
-    for coach_data in data:
-        email = coach_data["email"]
+    try:
+        for facilitator_data in data:
+            email = facilitator_data["email"]
 
-        if Facilitator.objects.filter(email=email).exists():
-            return Response(
-                {"message": f"Facilitator with email {email} already exists"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        facilitator = Facilitator(
-            first_name=coach_data["first_name"],
-            last_name=coach_data["last_name"],
-            email=email,
-            age=coach_data["age"],
-            gender=coach_data["gender"],
-            domain=coach_data.get("functional_domain", []),
-            phone=coach_data["mobile"],
-            level=coach_data.get("level", []),
-            rating=coach_data.get("rating", ""),
-            area_of_expertise=coach_data.get("industries", []),
-            education=coach_data.get("education", []),
-            years_of_corporate_experience=coach_data.get("corporate_yoe", ""),
-            city=coach_data.get("city", []),
-            language=coach_data.get("language", []),
-            job_roles=coach_data.get("job_roles", []),
-            country=coach_data.get("country", []),
-            linkedin_profile_link=coach_data.get("linkedin_profile", ""),
-            companies_worked_in=coach_data.get("companies_worked_in", []),
-            educational_qualification=coach_data.get("educational_qualification", []),
-            client_companies=coach_data.get("client_companies", []),
-            fees_per_hour=coach_data.get("fees_per_hour", ""),
-            fees_per_day=coach_data.get("fees_per_day", ""),
-            topic=coach_data.get("topic", []),
-            other_certification=coach_data.get("other_certification", []),
+            if Facilitator.objects.filter(email=email).exists():
+                return Response(
+                    {"message": f"Facilitator with email {email} already exists"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            with transaction.atomic():
+                # Create Django User
+                user, created = User.objects.get_or_create(
+                    username=email, email=email
+                )
+                if created:
+                    temp_password = "".join(
+                        random.choices(
+                            string.ascii_uppercase
+                            + string.ascii_lowercase
+                            + string.digits,
+                            k=8,
+                        )
+                    )
+                    user.set_password(temp_password)
+                    user.save()
+
+                    profile = Profile.objects.create(user=user)
+                else:
+                    profile = Profile.objects.get(user=user)
+                
+                facilitator_role, created = Role.objects.get_or_create(name="facilitator")
+                profile.roles.add(facilitator_role)
+                profile.save()
+
+                facilitator = Facilitator(
+                    user=profile,
+                    first_name=facilitator_data["first_name"],
+                    last_name=facilitator_data["last_name"],
+                    email=email,
+                    age=facilitator_data.get("age", ""),
+                    gender=facilitator_data.get("gender", ""),
+                    domain=facilitator_data.get("functional_domain", []),
+                    phone=facilitator_data.get("mobile", ""),
+                    level=facilitator_data.get("level", []),
+                    rating=facilitator_data.get("rating", ""),
+                    area_of_expertise=facilitator_data.get("industries", []),
+                    education=facilitator_data.get("education", []),
+                    years_of_corporate_experience=facilitator_data.get("corporate_yoe", ""),
+                    city=facilitator_data.get("city", []),
+                    language=facilitator_data.get("language", []),
+                    job_roles=facilitator_data.get("job_roles", []),
+                    country=facilitator_data.get("country", []),
+                    linkedin_profile_link=facilitator_data.get("linkedin_profile", ""),
+                    companies_worked_in=facilitator_data.get("companies_worked_in", []),
+                    educational_qualification=facilitator_data.get("educational_qualification", []),
+                    client_companies=facilitator_data.get("client_companies", []),
+                    fees_per_hour=facilitator_data.get("fees_per_hour", ""),
+                    fees_per_day=facilitator_data.get("fees_per_day", ""),
+                    topic=facilitator_data.get("topic", []),
+                    other_certification=facilitator_data.get("other_certification", []),
+                )
+                facilitators.append(facilitator)
+
+        Facilitator.objects.bulk_create(
+            facilitators
+        )  # Bulk create facilitators in the database
+
+        return Response(
+            {"message": "Facilitators added successfully"},
+            status=status.HTTP_201_CREATED
         )
-        facilitators.append(facilitator)
 
-    Facilitator.objects.bulk_create(
-        facilitators
-    )  # Bulk create facilitators in the database
-
-    return Response(
-        {"message": "Facilitators added successfully"}, status=status.HTTP_201_CREATED
-    )
+    except KeyError as e:
+        return Response(
+            {"error": f"Missing key in facilitator data: {str(e)}"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        print(e)
+        return Response(
+            {"error": "An error occurred while creating the facilitators."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @api_view(["PUT"])
@@ -2328,7 +2420,7 @@ def facilitator_projects(request, facilitator_id):
     try:
         batches = SchedularBatch.objects.filter(facilitator__id=facilitator_id)
         print(batches)
-        
+
         serializer = SchedularBatchDepthSerializer(batches, many=True)
 
         data = serializer.data
@@ -2353,7 +2445,6 @@ def facilitator_projects(request, facilitator_id):
         return Response({"message": "Facilitator does not exist"}, status=404)
 
 
-
 @api_view(["GET"])
 def get_facilitator_sessions(request, facilitator_id):
     try:
@@ -2366,18 +2457,22 @@ def get_facilitator_sessions(request, facilitator_id):
             batch_data = {
                 "batch_name": batch.name,
                 "project_name": batch.project.name if batch.project else None,
-                "organisation_name": batch.project.organisation.name if (batch.project and batch.project.organisation) else None,
-                "live_sessions": []
+                "organisation_name": batch.project.organisation.name
+                if (batch.project and batch.project.organisation)
+                else None,
+                "live_sessions": [],
             }
 
             # Fetch all live sessions related to the batch and serialize
             live_sessions = LiveSession.objects.filter(batch=batch)
-            serialized_live_sessions = LiveSessionSerializer(live_sessions, many=True).data
+            serialized_live_sessions = LiveSessionSerializer(
+                live_sessions, many=True
+            ).data
 
             for session in serialized_live_sessions:
                 live_session_data = {
                     "date_time": session.get("date_time"),
-                    "meeting_link": session.get("meeting_link")
+                    "meeting_link": session.get("meeting_link"),
                 }
                 batch_data["live_sessions"].append(live_session_data)
 
