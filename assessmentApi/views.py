@@ -68,6 +68,7 @@ import os
 from django.http import HttpResponse
 from datetime import datetime
 import io
+from api.views import add_contact_in_wati
 
 matplotlib.use("Agg")
 env = environ.Env()
@@ -753,31 +754,13 @@ class AddParticipantObserverToAssessment(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # user = User.objects.filter(
-            #     username=participants[0]["participantEmail"]
-            # ).first()
-            # if user:
-            #     user_profile = Profile.objects.filter(user=user).first()
-
-            #     if (
-            #         user_profile.type == "hr"
-            #         or user_profile.type == "pmo"
-            #         or user_profile.type == "coach"
-            #     ):
-            #         return Response(
-            #             {
-            #                 "error": "Email Already exist as another user. Please try using another email.",
-            #             },
-            #             status=status.HTTP_400_BAD_REQUEST,
-            #         )
-
             participant = create_learner(
                 participants[0]["participantName"], participants[0]["participantEmail"]
             )
             participant.phone = phone
             participant.save()
             unique_id = uuid.uuid4()  # Generate a UUID4
-
+            add_contact_in_wati("learner", participant.name, participant.phone)
             # Creating a ParticipantUniqueId instance with a UUID as unique_id
             unique_id_instance = ParticipantUniqueId.objects.create(
                 participant=participant,
@@ -1794,22 +1777,6 @@ class AddMultipleParticipants(APIView):
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-
-                # user = User.objects.filter(username=participant["email"]).first()
-                # if user:
-                #     user_profile = Profile.objects.filter(user=user).first()
-                #     if (
-                #         user_profile.type == "hr"
-                #         or user_profile.type == "pmo"
-                #         or user_profile.type == "coach"
-                #     ):
-                #         return Response(
-                #             {
-                #                 "error": f"Email {participant['email']} already exist as another user. Please try using another email.",
-                #             },
-                #             status=status.HTTP_400_BAD_REQUEST,
-                #         )
-                # name="first_name"+" "+"last_name"
                 name=participant["first_name"]+" "+participant["last_name"]
                 new_participant = create_learner(
                     name, participant["email"]
@@ -1819,9 +1786,8 @@ class AddMultipleParticipants(APIView):
                 mapping = ParticipantObserverMapping.objects.create(
                     participant=new_participant
                 )
-
+                add_contact_in_wati("learner", new_participant.name, new_participant.phone)
                 unique_id = uuid.uuid4()  # Generate a UUID4
-
                 # Creating a ParticipantUniqueId instance with a UUID as unique_id
                 unique_id_instance = ParticipantUniqueId.objects.create(
                     participant=new_participant,
@@ -2036,10 +2002,7 @@ def generate_report_for_participant(file_name, content):
 
         pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
         return pdf
-        # pdf_path = "graphsAndReports/Report.pdf"
-        # with open(pdf_path, "wb") as pdf_file:
-        #     pdf_file.write(pdf)
-
+    
     except Exception as e:
         print(str(e))
 
