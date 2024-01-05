@@ -285,7 +285,9 @@ def leads_by_affiliate(request, affiliate_id):
     except Affiliate.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
+    print("affiliate_id", affiliate_id)
     leads = Lead.objects.filter(affiliate=affiliate)
+    print("leads", leads)
     serializer = LeadSerializer(leads, many=True)
     return Response(serializer.data)
 
