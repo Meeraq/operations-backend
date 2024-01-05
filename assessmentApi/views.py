@@ -66,6 +66,7 @@ import numpy as np
 import matplotlib
 import os
 from django.http import HttpResponse
+from datetime import datetime
 import io
 
 matplotlib.use("Agg")
@@ -142,11 +143,90 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
 
+def send_whatsapp_message(user_type, participant, assessment,unique_id):
+    try:
+        assessment_name = assessment.name
+        participant_phone = participant.phone
+        participant_name = participant.name
+        wati_api_url=f"https://live-mt-server.wati.io/300780/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
+        headers = {
+            "content-type": "text/json",
+            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNThhMDY4Yy05NzNjLTQwYmMtOWI2YS1jNjE0MWZiMzlmY2MiLCJ1bmlxdWVfbmFtZSI6InNyZWVyYWdAbWVlcmFxLmNvbSIsIm5hbWVpZCI6InNyZWVyYWdAbWVlcmFxLmNvbSIsImVtYWlsIjoic3JlZXJhZ0BtZWVyYXEuY29tIiwiYXV0aF90aW1lIjoiMDEvMDQvMjAyNCAxMDozNzo0NyIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMDA3ODAiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.ArLdahSk4kk9wKiGVVg2l_fYvhsUv4zx3hd4Gc--d0s",
+        }
+        participant_id = unique_id
+        payload = {
+            "broadcast_name": "Testing 19th postman",
+            "parameters": [
+                {
+                    "name": "participant_name",
+                    "value": participant_name,
+                },
+                {
+                    "name": "assessment_name",
+                    "value": assessment_name,   
+                },
+                {
+                    "name": "participant_id",
+                    "value": participant_id,
+                }
+            ],
+            "template_name": "assessment_reminders"
+        }
 
-# def create_notification(user, path, message):
-#     notification = Notification.objects.create(user=user, path=path, message=message)
-#     return notification
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()
 
+        return response.json(), response.status_code
+
+    except requests.exceptions.HTTPError as errh:
+        return {"error": f"HTTP Error: {errh}"}, 500
+    except requests.exceptions.RequestException as err:
+        return {"error": f"Request Error: {err}"}, 500
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+
+# def whatsapp_message_for_participant():
+#     ongoing_assessments = Assessment.objects.filter(status="ongoing")
+
+#     for assessment in ongoing_assessments:
+#         participants_observers = assessment.participants_observers.all()
+
+#         for participant_observer_mapping in participants_observers:
+#             participant = participant_observer_mapping.participant
+#             participant_unique_id = ParticipantUniqueId.objects.filter(participant=participant)
+#             print("hello")
+#             print(participant_unique_id)
+
+#             # if participant_unique_id:
+#             #     # Send WhatsApp messages to the participant and observers
+#             #     send_whatsapp_message("learner", participant, assessment)
+
+
+from django.core.exceptions import ObjectDoesNotExist
+
+def whatsapp_message_for_participant(whatsapp):
+    ongoing_assessments = Assessment.objects.filter(status="ongoing", automated_reminder=True)
+
+    for assessment in ongoing_assessments:
+        start_date = datetime.strptime(assessment.assessment_start_date, "%Y-%m-%d").date()
+        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
+
+        # Check if today's date is within the assessment date range
+        today = datetime.now().date()
+        if start_date <= today <= end_date:
+            participants_observers = assessment.participants_observers.all()
+
+            for participant_observer_mapping in participants_observers:
+                participant = participant_observer_mapping.participant
+                try:
+                    participant_response = ParticipantResponse.objects.filter(participant=participant, assessment=assessment)
+                    if not participant_response:
+                        participant_unique_id = ParticipantUniqueId.objects.get(participant=participant)
+                        unique_id=participant_unique_id.unique_id
+                        send_whatsapp_message("learner", participant, assessment,unique_id)
+                except ObjectDoesNotExist:
+                    print(f"No unique ID found for participant {participant.name}")
 
 def create_learner(learner_name, learner_email):
     try:
@@ -650,6 +730,7 @@ class AddParticipantObserverToAssessment(APIView):
     @transaction.atomic
     def put(self, request):
         assessment_id = request.data.get("assessment_id")
+        phone = request.data.get("phone")
 
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -691,6 +772,8 @@ class AddParticipantObserverToAssessment(APIView):
             participant = create_learner(
                 participants[0]["participantName"], participants[0]["participantEmail"]
             )
+            participant.phone = phone
+            participant.save()
             unique_id = uuid.uuid4()  # Generate a UUID4
 
             # Creating a ParticipantUniqueId instance with a UUID as unique_id
@@ -1750,13 +1833,24 @@ class AddMultipleParticipants(APIView):
                 #             },
                 #             status=status.HTTP_400_BAD_REQUEST,
                 #         )
-
+                # name="first_name"+" "+"last_name"
+                name=participant["first_name"]+" "+participant["last_name"]
                 new_participant = create_learner(
-                    participant["name"], participant["email"]
+                    name, participant["email"]
                 )
-
+                new_participant.phone = participant["phone"]
+                new_participant.save()
                 mapping = ParticipantObserverMapping.objects.create(
                     participant=new_participant
+                )
+
+                unique_id = uuid.uuid4()  # Generate a UUID4
+
+                # Creating a ParticipantUniqueId instance with a UUID as unique_id
+                unique_id_instance = ParticipantUniqueId.objects.create(
+                    participant=new_participant,
+                    assessment=assessment,
+                    unique_id=unique_id,
                 )
 
                 mapping.save()
@@ -1764,7 +1858,7 @@ class AddMultipleParticipants(APIView):
                 assessment.save()
 
                 particpant_data = [
-                    {"name": participant["name"], "email": participant["email"]}
+                    {"name": name, "email": participant["email"]}
                 ]
 
                 send_reset_password_link(particpant_data)

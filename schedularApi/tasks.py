@@ -9,6 +9,9 @@ from api.models import Coach, User
 from django.utils import timezone
 from datetime import datetime
 from api.views import send_mail_templates
+from assessmentApi.views import send_whatsapp_message
+from django.core.exceptions import ObjectDoesNotExist
+from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
 
 
 # from api.views import refresh_microsoft_access_token
@@ -318,3 +321,105 @@ def send_participant_morning_reminder_one_day_before_email():
             [],  # bcc
         )
         sleep(5)
+
+
+@shared_task
+def send_reminder_email_to_participants_for_assessment():
+    ongoing_assessments = Assessment.objects.filter(status="ongoing", automated_reminder=True)
+    print(ongoing_assessments,"ongoing")
+
+    for assessment in ongoing_assessments:
+        print(assessment, "ass")
+        # Convert assessment_start_date and assessment_end_date to datetime objects
+        start_date = datetime.strptime(assessment.assessment_start_date, "%Y-%m-%d").date()
+        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
+
+        # Check if today's date is within the assessment date range
+        today = datetime.now().date()
+        print("start",start_date)
+        print("end",end_date)
+        print("today",today)
+        if start_date <= today <= end_date:
+            participants_observers = assessment.participants_observers.all()
+
+            for participant_observer_mapping in participants_observers:
+                participant = participant_observer_mapping.participant
+
+                try:
+                    participant_response = ParticipantResponse.objects.filter(participant=participant, assessment=assessment)
+
+                    if not participant_response:
+                        participant_unique_id = ParticipantUniqueId.objects.get(participant=participant)
+                        unique_id = participant_unique_id.unique_id
+                        print("Participant Unique ID:", unique_id)
+
+                        assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
+
+                        # Send email only if today's date is within the assessment date range
+                        send_mail_templates(
+                            "assessment/assessment_reminder_mail_to_participant.html",
+                            [participant.email],
+                            "Meeraq - Welcome to Assessment Platform !",
+                            {
+                                "assessment_name": assessment.name,
+                                "participant_name": participant.name,
+                                "link": assessment_link,
+                            },
+                            [],
+                        )
+
+                except ObjectDoesNotExist:
+                    print(f"No unique ID found for participant {participant.name}")
+
+@shared_task
+def send_whatsapp_message_to_participants_for_assessment_at_9AM():
+    ongoing_assessments = Assessment.objects.filter(status="ongoing", automated_reminder=True)
+    for assessment in ongoing_assessments:
+        start_date = datetime.strptime(assessment.assessment_start_date, "%Y-%m-%d").date()
+        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
+
+        # Check if today's date is within the assessment date range
+        today = datetime.now().date()
+        print("start",start_date)
+        print("end",end_date)
+        print("today",today)
+        if start_date <= today <= end_date:
+            participants_observers = assessment.participants_observers.all()
+
+            for participant_observer_mapping in participants_observers:
+                participant = participant_observer_mapping.participant
+                try:
+                    participant_response = ParticipantResponse.objects.filter(participant=participant, assessment=assessment)
+                    if not participant_response:
+                        participant_unique_id = ParticipantUniqueId.objects.get(participant=participant)
+                        unique_id=participant_unique_id.unique_id
+                        print("Participant Unique ID:", unique_id)
+                        send_whatsapp_message("learner", participant, assessment,unique_id)
+                except ObjectDoesNotExist:
+                    print(f"No unique ID found for participant {participant.name}")
+
+@shared_task
+def send_whatsapp_message_to_participants_for_assessment_at_7PM():
+    ongoing_assessments = Assessment.objects.filter(status="ongoing", automated_reminder=True)
+    for assessment in ongoing_assessments:
+        start_date = datetime.strptime(assessment.assessment_start_date, "%Y-%m-%d").date()
+        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
+
+        # Check if today's date is within the assessment date range
+        today = datetime.now().date()
+        print("start",start_date)
+        print("end",end_date)
+        print("today",today)
+        if start_date <= today <= end_date:
+            participants_observers = assessment.participants_observers.all()
+            for participant_observer_mapping in participants_observers:
+                participant = participant_observer_mapping.participant
+                try:
+                    participant_response = ParticipantResponse.objects.filter(participant=participant, assessment=assessment)
+                    if not participant_response:
+                        participant_unique_id = ParticipantUniqueId.objects.get(participant=participant)
+                        unique_id=participant_unique_id.unique_id
+                        print("Participant Unique ID:", unique_id)
+                        send_whatsapp_message("learner", participant, assessment,unique_id)
+                except ObjectDoesNotExist:
+                    print(f"No unique ID found for participant {participant.name}")
