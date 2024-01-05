@@ -68,6 +68,7 @@ import os
 from django.http import HttpResponse
 from datetime import datetime
 import io
+from api.views import add_contact_in_wati
 
 matplotlib.use("Agg")
 env = environ.Env()
@@ -149,10 +150,12 @@ def send_whatsapp_message(user_type, participant, assessment, unique_id):
         assessment_name = assessment.participant_view_name
         participant_phone = participant.phone
         participant_name = participant.name
-        wati_api_url = f"https://live-mt-server.wati.io/300780/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url=f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
         headers = {
             "content-type": "text/json",
-            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNThhMDY4Yy05NzNjLTQwYmMtOWI2YS1jNjE0MWZiMzlmY2MiLCJ1bmlxdWVfbmFtZSI6InNyZWVyYWdAbWVlcmFxLmNvbSIsIm5hbWVpZCI6InNyZWVyYWdAbWVlcmFxLmNvbSIsImVtYWlsIjoic3JlZXJhZ0BtZWVyYXEuY29tIiwiYXV0aF90aW1lIjoiMDEvMDQvMjAyNCAxMDozNzo0NyIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMDA3ODAiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.ArLdahSk4kk9wKiGVVg2l_fYvhsUv4zx3hd4Gc--d0s",
+            "Authorization": wati_authorization,
         }
         participant_id = unique_id
         payload = {
@@ -764,31 +767,13 @@ class AddParticipantObserverToAssessment(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # user = User.objects.filter(
-            #     username=participants[0]["participantEmail"]
-            # ).first()
-            # if user:
-            #     user_profile = Profile.objects.filter(user=user).first()
-
-            #     if (
-            #         user_profile.type == "hr"
-            #         or user_profile.type == "pmo"
-            #         or user_profile.type == "coach"
-            #     ):
-            #         return Response(
-            #             {
-            #                 "error": "Email Already exist as another user. Please try using another email.",
-            #             },
-            #             status=status.HTTP_400_BAD_REQUEST,
-            #         )
-
             participant = create_learner(
                 participants[0]["participantName"], participants[0]["participantEmail"]
             )
             participant.phone = phone
             participant.save()
             unique_id = uuid.uuid4()  # Generate a UUID4
-
+            add_contact_in_wati("learner", participant.name, participant.phone)
             # Creating a ParticipantUniqueId instance with a UUID as unique_id
             unique_id_instance = ParticipantUniqueId.objects.create(
                 participant=participant,
@@ -1821,9 +1806,8 @@ class AddMultipleParticipants(APIView):
                 mapping = ParticipantObserverMapping.objects.create(
                     participant=new_participant
                 )
-
+                add_contact_in_wati("learner", new_participant.name, new_participant.phone)
                 unique_id = uuid.uuid4()  # Generate a UUID4
-
                 # Creating a ParticipantUniqueId instance with a UUID as unique_id
                 unique_id_instance = ParticipantUniqueId.objects.create(
                     participant=new_participant,
@@ -2036,10 +2020,7 @@ def generate_report_for_participant(file_name, content):
 
         pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
         return pdf
-        # pdf_path = "graphsAndReports/Report.pdf"
-        # with open(pdf_path, "wb") as pdf_file:
-        #     pdf_file.write(pdf)
-
+    
     except Exception as e:
         print(str(e))
 

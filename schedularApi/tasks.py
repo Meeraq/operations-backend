@@ -324,7 +324,7 @@ def send_participant_morning_reminder_one_day_before_email():
 
 
 @shared_task
-def send_reminder_email_to_participants_for_assessment():
+def send_reminder_email_to_participants_for_assessment_at_2PM():
     ongoing_assessments = Assessment.objects.filter(status="ongoing", automated_reminder=True)
    
 
