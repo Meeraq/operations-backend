@@ -15,7 +15,7 @@ from .views import (
     AssignCoursesToCertificate,
     DeleteCourseFromCertificate,
     LessonMarkAsCompleteAndNotComplete,
-    DownlaodLessonCertificate,
+    DownloadLessonCertificate,
     GetCertificateForCourse,
     GetLaserCoachingTime,
     AssignCourseTemplateToBatch,
@@ -176,7 +176,7 @@ urlpatterns = [
     path("lesson-mark-as-complete/", LessonMarkAsCompleteAndNotComplete.as_view()),
     path(
         "download-lesson-certificate/<int:lesson_id>/<int:learner_id>/",
-        DownlaodLessonCertificate.as_view(),
+        DownloadLessonCertificate.as_view(),
     ),
     path(
         "get-certificate-for-course/<int:course_id>/", GetCertificateForCourse.as_view()

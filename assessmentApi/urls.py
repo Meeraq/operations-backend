@@ -20,7 +20,8 @@ from .views import (
     GetParticipantResponseFormAssessment,
     GetParticipantResponseForParticipant,
     CreateParticipantResponseView,
-    AssessmentStatusOrEndDataChange,
+    AssessmentStatusChange,
+    AssessmentEndDataChange,
     ObserverView,
     ObserverAssessment,
     AssessmentsOfParticipant,
@@ -46,6 +47,12 @@ from .views import (
     MarkAllNotificationAsRead,
     MarkNotificationAsRead,
     GetUnreadNotificationCount,
+    DownloadWordReport,
+    GetLearnersUniqueId,
+    StartAssessmentDataForParticipant,
+    StartAssessmentParticipantDisabled,
+    PreReportDownloadForParticipant,
+    PreReportDownloadForAllParticipant
 )
 
 
@@ -66,9 +73,8 @@ urlpatterns = [
     path("get-assessments/", AssessmentView.as_view()),
     path("delete-assessment/", AssessmentView.as_view()),
     path("edit-assessment/", AssessmentView.as_view()),
-    path(
-        "assessment-status-end-data-change/", AssessmentStatusOrEndDataChange.as_view()
-    ),
+    path("assessment-status-change/", AssessmentStatusChange.as_view()),
+    path("assessment-end-data-change/", AssessmentEndDataChange.as_view()),
     path(
         "add-participant-observer-to-assessment/",
         AddParticipantObserverToAssessment.as_view(),
@@ -144,6 +150,10 @@ urlpatterns = [
         StartAssessmentDisabled.as_view(),
     ),
     path(
+        "start-participant-assessment-disabled/<str:unique_id>/",
+        StartAssessmentParticipantDisabled.as_view(),
+    ),
+    path(
         "release-assessment-result/<int:assessment_id>/",
         ReleaseResults.as_view(),
     ),
@@ -191,13 +201,35 @@ urlpatterns = [
         "download-participant-result-report/",
         DownloadParticipantResultReport.as_view(),
     ),
-     path(
+    path(
         "download-participant-result-report/<int:assessment_id>/<int:participant_id>/",
         DownloadParticipantResultReport.as_view(),
     ),
-    
-    path("notifications/all/<int:user_id>/",  GetAssessmentNotification.as_view()),
+    path("notifications/all/<int:user_id>/", GetAssessmentNotification.as_view()),
     path("notifications/mark-as-read/", MarkNotificationAsRead.as_view()),
     path("notifications/mark-all-as-read/", MarkAllNotificationAsRead.as_view()),
-    path("notifications/unread-count/<int:user_id>/", GetUnreadNotificationCount.as_view()),
+    path(
+        "notifications/unread-count/<int:user_id>/",
+        GetUnreadNotificationCount.as_view(),
+    ),
+    path(
+        "download-word-report/<int:assessment_id>/<int:participant_id>/",
+        DownloadWordReport.as_view(),
+    ),
+    path(
+        "get/uniqueId/participant/<int:assessment_id>",
+        GetLearnersUniqueId.as_view(),
+    ),
+    path(
+        "get-start-assessment-data-for-participant/<str:unique_id>/",
+        StartAssessmentDataForParticipant.as_view(),
+    ),
+     path(
+        "pre-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
+        PreReportDownloadForParticipant.as_view(),
+    ),
+    path(
+        "pre-report-download-for-all-participant/<int:assessment_id>/",
+        PreReportDownloadForAllParticipant.as_view(),
+    ),
 ]

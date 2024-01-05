@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <style>
+        body {
+            font-family: "Calibri", sans-serif;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+<div>
+
+    {% for participant in participant_context %}
+    <div>
+        <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png"
+            style="width: 150px" alt="Meeraq Logo" class="fr-fic fr-dii" width="187" height="34" />
+    </div>
+    <h1>Partiicipant Name - {{ participant.name }}</h1>
+    <p>
+        Thank you for taking the {{participant.assessment_name}} - {% if participant.assessment_timing == 'pre' %}
+            pre
+          {% else %}
+            post
+          {% endif %} assessment. Your scores, in each
+        category, are as follows:
+    </p>
+
+    <img src="data:image/png;base64, {{ participant.image_base64 }}" alt="graph"
+        style="width: 100%; height: auto; margin-top: 60pt;" />
+
+    <p>
+        Here is what these parameters mean:
+    </p>
+
+    <ul>
+        {% for competency in participant.compentency_with_description %}
+            <li >
+                {{ competency.competency_name }}: {{ competency.competency_description }}.
+            </li>
+        {% endfor %}
+    </ul>
+
+    <p>
+        The course was designed to help you move in a positive direction. We hope that the course was useful to you!
+        Happy learning!
+    </p>
+    <div style="page-break-before: always"></div>
+    {% endfor %}
+    <div>
+</body>
+
+</html>
