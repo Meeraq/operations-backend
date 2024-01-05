@@ -212,4 +212,4 @@ class ParticipantUniqueId(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Unique Id for Observer {self.participant.name} in Assessment {self.assessment.name}."
+        return f"Unique Id for Participant {self.participant.name} in Assessment {self.assessment.name}."
