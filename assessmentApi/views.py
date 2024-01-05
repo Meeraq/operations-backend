@@ -148,10 +148,12 @@ def send_whatsapp_message(user_type, participant, assessment,unique_id):
         assessment_name = assessment.name
         participant_phone = participant.phone
         participant_name = participant.name
-        wati_api_url=f"https://live-mt-server.wati.io/300780/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url=f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
         headers = {
             "content-type": "text/json",
-            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNThhMDY4Yy05NzNjLTQwYmMtOWI2YS1jNjE0MWZiMzlmY2MiLCJ1bmlxdWVfbmFtZSI6InNyZWVyYWdAbWVlcmFxLmNvbSIsIm5hbWVpZCI6InNyZWVyYWdAbWVlcmFxLmNvbSIsImVtYWlsIjoic3JlZXJhZ0BtZWVyYXEuY29tIiwiYXV0aF90aW1lIjoiMDEvMDQvMjAyNCAxMDozNzo0NyIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMDA3ODAiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.ArLdahSk4kk9wKiGVVg2l_fYvhsUv4zx3hd4Gc--d0s",
+            "Authorization": wati_authorization,
         }
         participant_id = unique_id
         payload = {
