@@ -17,7 +17,7 @@ from api.serializers import PmoDepthOneSerializer
 import json
 import string
 import random
-from .serializer import AffiliateSerializer, AffiliateDepthOneSerializer, LeadSerializer
+from .serializer import AffiliateSerializer, AffiliateDepthOneSerializer, LeadSerializer, LeadDepthOneSerializer
 from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.shortcuts import render, get_object_or_404
@@ -311,5 +311,5 @@ def lead_update(request, pk):
 def all_leads(request):
     
     leads = Lead.objects.all()
-    serializer = LeadSerializer(leads, many=True)
+    serializer = LeadDepthOneSerializer(leads, many=True)
     return Response(serializer.data)
