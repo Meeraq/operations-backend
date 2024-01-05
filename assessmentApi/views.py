@@ -170,7 +170,7 @@ def send_whatsapp_message(user_type, participant, assessment,unique_id):
                     "value": participant_id,
                 }
             ],
-            "template_name": "assessment_reminders"
+            "template_name": "assessment_reminders_message"
         }
 
         response = requests.post(wati_api_url, headers=headers, json=payload)
