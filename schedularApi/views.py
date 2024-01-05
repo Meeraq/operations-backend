@@ -24,7 +24,7 @@ import pandas as pd
 from django.db.models import Q
 import json
 from django.core.exceptions import ObjectDoesNotExist
-from api.views import get_date, get_time
+from api.views import get_date, get_time,add_contact_in_wati
 from django.shortcuts import render
 from api.models import Organisation, HR, Coach, User, Learner
 from .serializers import (
@@ -853,6 +853,9 @@ def add_batch(request, project_id):
 
         # Check if participant with the same email exists
         learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
+
+        name = learner.name
+        add_contact_in_wati("learner", name, learner.phone )
 
         # Add participant to the batch if not already added
         if learner and learner not in batch.learners.all():
@@ -1751,6 +1754,8 @@ def add_participant_to_batch(request, batch_id):
     if learner:
         batch.learners.add(learner)
         batch.save()
+        name = learner.name
+        add_contact_in_wati("learner", name, learner.phone )
         try:
             course = Course.objects.get(batch=batch)
             course_enrollments = CourseEnrollment.objects.filter(
@@ -1765,7 +1770,8 @@ def add_participant_to_batch(request, batch_id):
                 )
         except Exception:
             # course doesnt exists
-            pass
+            pass    
+
         return Response(
             {"message": "Participant added to the batch successfully"},
             status=status.HTTP_201_CREATED,
