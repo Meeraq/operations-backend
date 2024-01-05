@@ -27,9 +27,10 @@
         <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png"
             style="width: 150px" alt="Meeraq Logo" class="fr-fic fr-dii" width="187" height="34" />
     </div>
-
+     <h1>Assessment Name - {{ assessment_name }}</h1>
+ <h2>Partiicipant Name - {{ name }}</h2>
     <p>
-        Thank you for taking the influencing without authority - {% if assessment_timing == 'pre' %}
+        Thank you for taking the {{assessment_name}} - {% if assessment_timing == 'pre' %}
             pre
           {% else %}
             post

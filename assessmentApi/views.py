@@ -2989,7 +2989,8 @@ class PreReportDownloadForParticipant(APIView):
                     "name": participant.name,
                     "image_base64": encoded_image,
                     "compentency_with_description": compentency_with_description,
-                    "assessment_timing":assessment.assessment_timing
+                    "assessment_timing":assessment.assessment_timing,
+                     "assessment_name":assessment.participant_view_name
                 },
             )
 
@@ -3047,7 +3048,8 @@ class PreReportDownloadForAllParticipant(APIView):
                         "name": participant.name,
                         "image_base64": encoded_image,
                         "compentency_with_description": compentency_with_description,
-                        "assessment_timing":assessment.assessment_timing
+                        "assessment_timing":assessment.assessment_timing,
+                        "assessment_name":assessment.participant_view_name
                     }
                 )
 
@@ -3111,7 +3113,8 @@ class ReleaseResults(APIView):
                                 "name": participant.name,
                                 "image_base64": encoded_image,
                                 "compentency_with_description": compentency_with_description,
-                                "assessment_timing":assessment.assessment_timing
+                                "assessment_timing":assessment.assessment_timing,
+                                 "assessment_name":assessment.participant_view_name
                             },
                             [],
                         )
