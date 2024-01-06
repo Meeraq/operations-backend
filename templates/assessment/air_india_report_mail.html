@@ -35,11 +35,15 @@
     </p>
     <br>
     {% if assessment_timing == 'pre' %}
+    <p>
     <p style="font-size: 20px;">
         Thank you for taking the {{assessment_name}} - pre assessment. Your scores, in each
         category, are as follows:
-        {% else %}
+    </p>
+    {% else %}
+    <p style="font-size: 20px;">
         Thank you for taking the {{assessment_name}} - post assessment. Here is how you fared:
+    </p>
     </p>
     {% endif %}
     </p>
