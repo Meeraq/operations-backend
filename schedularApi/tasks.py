@@ -357,7 +357,7 @@ def send_reminder_email_to_participants_for_assessment_at_2PM():
 
                     if not participant_response:
                         participant_unique_id = ParticipantUniqueId.objects.get(
-                            participant=participant
+                            participant=participant , assessment=assessment
                         )
                         unique_id = participant_unique_id.unique_id
 
@@ -407,7 +407,7 @@ def send_whatsapp_message_to_participants_for_assessment_at_9AM():
                     )
                     if not participant_response:
                         participant_unique_id = ParticipantUniqueId.objects.get(
-                            participant=participant
+                            participant=participant, assessment=assessment
                         )
                         unique_id = participant_unique_id.unique_id
                         print("Participant Unique ID:", unique_id)
@@ -444,7 +444,7 @@ def send_whatsapp_message_to_participants_for_assessment_at_7PM():
                     )
                     if not participant_response:
                         participant_unique_id = ParticipantUniqueId.objects.get(
-                            participant=participant
+                            participant=participant, assessment=assessment
                         )
                         unique_id = participant_unique_id.unique_id
                         print("Participant Unique ID:", unique_id)
