@@ -3268,7 +3268,7 @@ class ReleaseResults(APIView):
                             [participant.email],
                             "Meeraq Assessment Report",
                             {
-                                "name": participant.name,
+                                "name": participant.name.capitalize(),
                                 "image_base64": encoded_image,
                                 "compentency_with_description": compentency_with_description,
                                 "assessment_timing": assessment.assessment_timing,
