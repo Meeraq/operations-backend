@@ -152,7 +152,7 @@ def send_whatsapp_message(user_type, participant, assessment, unique_id):
         participant_name = participant.name
         wati_api_endpoint = env("WATI_API_ENDPOINT")
         wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url=f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
+        wati_api_url = f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
         headers = {
             "content-type": "text/json",
             "Authorization": wati_authorization,
@@ -810,6 +810,27 @@ class AddParticipantObserverToAssessment(APIView):
 
             particpant_data = [{"name": participant.name, "email": participant.email}]
             # send_reset_password_link(particpant_data)
+
+            if assessment.assessment_timing == "pre":
+                post_assessment = Assessment.objects.filter(
+                    pre_assessment=assessment
+                ).first()
+
+                mapping = ParticipantObserverMapping.objects.create(
+                    participant=participant
+                )
+                mapping.save()
+                post_assessment.participants_observers.add(mapping)
+                post_assessment.save()
+            elif assessment.assessment_timing == "post":
+                pre_assessment = Assessment.objects.get(id=assessment.pre_assessment.id)
+                mapping = ParticipantObserverMapping.objects.create(
+                    participant=participant
+                )
+                mapping.save()
+                pre_assessment.participants_observers.add(mapping)
+                pre_assessment.save()
+
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -1799,14 +1820,20 @@ class AddMultipleParticipants(APIView):
                 #             status=status.HTTP_400_BAD_REQUEST,
                 #         )
                 # name="first_name"+" "+"last_name"
-                name = participant["first_name"].capitalize() + " " + participant["last_name"].capitalize()
+                name = (
+                    participant["first_name"].capitalize()
+                    + " "
+                    + participant["last_name"].capitalize()
+                )
                 new_participant = create_learner(name, participant["email"])
                 new_participant.phone = participant["phone"]
                 new_participant.save()
                 mapping = ParticipantObserverMapping.objects.create(
                     participant=new_participant
                 )
-                add_contact_in_wati("learner", new_participant.name, new_participant.phone)
+                add_contact_in_wati(
+                    "learner", new_participant.name, new_participant.phone
+                )
                 unique_id = uuid.uuid4()  # Generate a UUID4
                 # Creating a ParticipantUniqueId instance with a UUID as unique_id
                 unique_id_instance = ParticipantUniqueId.objects.create(
@@ -1822,6 +1849,27 @@ class AddMultipleParticipants(APIView):
                 particpant_data = [{"name": name, "email": participant["email"]}]
 
                 # send_reset_password_link(particpant_data)
+                if assessment.assessment_timing == "pre":
+                    post_assessment = Assessment.objects.filter(
+                        pre_assessment=assessment
+                    ).first()
+
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    post_assessment.participants_observers.add(mapping)
+                    post_assessment.save()
+                elif assessment.assessment_timing == "post":
+                    pre_assessment = Assessment.objects.get(
+                        id=assessment.pre_assessment.id
+                    )
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    pre_assessment.participants_observers.add(mapping)
+                    pre_assessment.save()
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
@@ -2020,7 +2068,7 @@ def generate_report_for_participant(file_name, content):
 
         pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
         return pdf
-    
+
     except Exception as e:
         print(str(e))
 
@@ -2873,7 +2921,6 @@ def generate_graph_for_participant(participant, assessment_id, assessment):
 def generate_graph_for_participant_for_post_assessent(
     participant, assessment_id, assessment
 ):
-    
     try:
         participant_response = ParticipantResponse.objects.get(
             participant__id=participant.id, assessment__id=assessment_id
@@ -2888,7 +2935,7 @@ def generate_graph_for_participant_for_post_assessent(
         pre_assessment_participant_response = ParticipantResponse.objects.get(
             participant__id=participant.id, assessment__id=assessment.pre_assessment.id
         )
-     
+
     except ParticipantResponse.DoesNotExist as e:
         print(str(e))
         return Response(
@@ -3128,13 +3175,15 @@ class PreReportDownloadForAllParticipant(APIView):
                         "image_base64": encoded_image,
                         "compentency_with_description": compentency_with_description,
                         "assessment_timing": assessment.assessment_timing,
-                      
                     }
                 )
 
             email_message = render_to_string(
                 "assessment/air_india_assessment_report_batch_wise.html",
-                {"participant_context": participant_context , "assessment_name": assessment.participant_view_name,},
+                {
+                    "participant_context": participant_context,
+                    "assessment_name": assessment.participant_view_name,
+                },
             )
 
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
@@ -3180,11 +3229,11 @@ class ReleaseResults(APIView):
                         ) = generate_graph_for_participant_for_post_assessent(
                             participant, assessment_id, assessment
                         )
-                   
+
                     participant_response = ParticipantResponse.objects.filter(
                         participant__id=participant.id, assessment__id=assessment_id
                     ).first()
-                  
+
                     if participant_response:
                         send_mail_templates(
                             "assessment/air_india_report_mail.html",
