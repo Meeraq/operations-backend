@@ -54,6 +54,7 @@ from .views import (
     PreReportDownloadForParticipant,
     PreReportDownloadForAllParticipant,
     MoveParticipant,
+    GetAllLearnersUniqueId,
 )
 
 
@@ -218,7 +219,11 @@ urlpatterns = [
         DownloadWordReport.as_view(),
     ),
     path(
-        "get/uniqueId/participant/<int:assessment_id>",
+        "get/uniqueId/participant/",
+        GetAllLearnersUniqueId.as_view(),
+    ),
+    path(
+        "get/all/uniqueId/participant/<int:assessment_id>",
         GetLearnersUniqueId.as_view(),
     ),
     path(

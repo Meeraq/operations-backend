@@ -3473,3 +3473,31 @@ class MoveParticipant(APIView):
                 {"error": "Failed to Release Results"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+
+
+class GetAllLearnersUniqueId(APIView):
+    def get(self, request):
+        try:
+            # Assuming assessment_id is a valid Assessment ID
+            participants_unique_ids = ParticipantUniqueId.objects.all().select_related("participant")
+
+            participants_data = []
+            for entry in participants_unique_ids:
+                participant_data = {
+                    "participant_id": entry.participant.id,
+                    "assessment_id":entry.assessment.id,
+                    "participant_name": entry.participant.name,
+                    "participant_email": entry.participant.email,
+                    "unique_id": entry.unique_id,
+                }
+                participants_data.append(participant_data)
+
+            return Response(participants_data)
+
+        except ParticipantUniqueId.DoesNotExist:
+            return Response(
+                {"error": "No Unique id found."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
