@@ -566,17 +566,43 @@ class AssessmentView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        serializer = AssessmentSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
+        if request.data["assessment_creation_type"] == "individual":
+            serializer = AssessmentSerializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(
+                    {"message": "Assessment created successfully."},
+                    status=status.HTTP_201_CREATED,
+                )
             return Response(
-                {"message": "Assessment created successfully."},
-                status=status.HTTP_201_CREATED,
+                {"error": "Failed to create Assessment."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        elif request.data["assessment_creation_type"] == "pre_post":
+            pre_assessment_serializer = AssessmentSerializer(
+                data=request.data["pre_assessment_data"]
+            )
+            post_assessment_serializer = AssessmentSerializer(
+                data=request.data["post_assessment_data"]
+            )
+            if (
+                pre_assessment_serializer.is_valid()
+                and post_assessment_serializer.is_valid()
+            ):
+                pre_assessment = pre_assessment_serializer.save()
+                post_assessment = post_assessment_serializer.save()
+                post_assessment.pre_assessment = pre_assessment
+                post_assessment.save()
+                return Response(
+                    {"message": "Assessment created successfully."},
+                    status=status.HTTP_201_CREATED,
+                )
+            return Response(
+                {"error": "Failed to create Assessment."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(
-            {
-                "error": "Failed to create Assessment.",
-            },
+            {"error": "Failed to create Assessment."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -810,6 +836,27 @@ class AddParticipantObserverToAssessment(APIView):
 
             particpant_data = [{"name": participant.name, "email": participant.email}]
             # send_reset_password_link(particpant_data)
+
+            if assessment.assessment_timing == "pre":
+                post_assessment = Assessment.objects.filter(
+                    pre_assessment=assessment
+                ).first()
+
+                mapping = ParticipantObserverMapping.objects.create(
+                    participant=participant
+                )
+                mapping.save()
+                post_assessment.participants_observers.add(mapping)
+                post_assessment.save()
+            elif assessment.assessment_timing == "post":
+                pre_assessment = Assessment.objects.get(id=assessment.pre_assessment.id)
+                mapping = ParticipantObserverMapping.objects.create(
+                    participant=participant
+                )
+                mapping.save()
+                pre_assessment.participants_observers.add(mapping)
+                pre_assessment.save()
+
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -1828,6 +1875,27 @@ class AddMultipleParticipants(APIView):
                 particpant_data = [{"name": name, "email": participant["email"]}]
 
                 # send_reset_password_link(particpant_data)
+                if assessment.assessment_timing == "pre":
+                    post_assessment = Assessment.objects.filter(
+                        pre_assessment=assessment
+                    ).first()
+
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    post_assessment.participants_observers.add(mapping)
+                    post_assessment.save()
+                elif assessment.assessment_timing == "post":
+                    pre_assessment = Assessment.objects.get(
+                        id=assessment.pre_assessment.id
+                    )
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    pre_assessment.participants_observers.add(mapping)
+                    pre_assessment.save()
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
