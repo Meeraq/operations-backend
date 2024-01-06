@@ -18,47 +18,60 @@
             background-color: #f0f0f0;
             border-radius: 5px;
         }
-
     </style>
 </head>
 
 <body>
-    <div>
+    <div style="text-align: center;">
+        <div>Thank you for your responses!</div>
         <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png"
-            style="width: 150px" alt="Meeraq Logo" class="fr-fic fr-dii" width="187" height="34" />
+            style="width: 150px; display: inline-block;" alt="Meeraq Logo" width="187" height="34" />
     </div>
 
+
     <p>
-      Dear {{name}},
-        <br>
-        Thank you for taking the {{assessment_name}} -  {% if assessment_timing == 'pre' %}
-            pre
-          {% else %}
-            post
-          {% endif %}  assessment. Your scores, in each
+    <p style="font-size: 24px;">
+        Dear {{name}},
+    </p>
+    <br>
+    {% if assessment_timing == 'pre' %}
+    <p>
+    <p style="font-size: 20px;">
+        Thank you for taking the {{assessment_name}} - pre assessment. Your scores, in each
         category, are as follows:
     </p>
+    {% else %}
+    <p style="font-size: 20px;">
+        Thank you for taking the {{assessment_name}} - post assessment. Here is how you fared:
+    </p>
+    </p>
+    {% endif %}
+    </p>
 
-    <img src="data:image/png;base64, {{ image_base64 }}" alt="graph"
-        style="width: 100%; height: auto; margin-top: 60pt;" />
 
-    <p>
-        Here is what these parameters mean:
+    <img src=" data:image/png;base64, {{ image_base64 }}" alt="graph"
+        style="width: 100%; height: auto; margin-top: 30pt;" />
+
+    <p style="font-size: 20px;">
+        Let's look at what these parameters mean:
     </p>
 
     <ul>
         {% for competency in compentency_with_description %}
-            <li >
-                {{ competency.competency_name }}: {{ competency.competency_description }}.
-            </li>
+        <li style="font-weight: bold;">
+            {{ competency.competency_name }}: {{ competency.competency_description }}.
+        </li>
+
         {% endfor %}
     </ul>
 
     <p>
-        The course was designed to help you move in a positive direction. We hope that the course was useful to you!
+        We have curated the course structure in a way that will enable you to experience a shift in these areas after
+        the course.
+        <br>
         Happy learning!
     </p>
-  <p>
+    <p>
         Regards,
         <br>
         Team Meeraq
@@ -66,4 +79,3 @@
 </body>
 
 </html>
-

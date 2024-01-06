@@ -52,7 +52,8 @@ from .views import (
     StartAssessmentDataForParticipant,
     StartAssessmentParticipantDisabled,
     PreReportDownloadForParticipant,
-    PreReportDownloadForAllParticipant
+    PreReportDownloadForAllParticipant,
+    MoveParticipant,
 )
 
 
@@ -231,5 +232,9 @@ urlpatterns = [
     path(
         "pre-report-download-for-all-participant/<int:assessment_id>/",
         PreReportDownloadForAllParticipant.as_view(),
+    ),
+    path(
+        "move-participant/",
+        MoveParticipant.as_view(),
     ),
 ]
