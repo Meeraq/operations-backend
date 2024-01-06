@@ -2897,7 +2897,6 @@ def generate_graph_for_participant(participant, assessment_id, assessment):
             .correct_answer
         )
 
-      
         if participant_response_value == int(correct_answer):
             competency_object[question.competency.name] = (
                 competency_object[question.competency.name] + 1
@@ -3034,7 +3033,7 @@ def generate_graph_for_participant_for_post_assessent(
             .first()
             .correct_answer
         )
-      
+
         if pre_assessment_participant_response_value == int(correct_answer):
             pre_competency_object[question.competency.name] = (
                 pre_competency_object[question.competency.name] + 1
@@ -3359,7 +3358,7 @@ class MoveParticipant(APIView):
 
             if from_assessment.assessment_timing == "pre":
                 post_assessment = Assessment.objects.filter(
-                    pre_assessment=from_assessment
+                    pre_assessment=to_assessment
                 ).first()
 
                 if not post_assessment.participants_observers.filter(
@@ -3377,29 +3376,34 @@ class MoveParticipant(APIView):
                         assessment=post_assessment,
                         unique_id=post_unique_id,
                     )
+                    from_post_assessment = Assessment.objects.filter(
+                        pre_assessment=from_assessment
+                    ).first()
                     participant_resposne = ParticipantResponse.objects.filter(
-                        participant=participant, assessment=post_assessment
+                        participant=participant, assessment=from_post_assessment
                     ).first()
 
                     if participant_resposne:
-                        participant_resposne.assessment = to_assessment
+                        participant_resposne.assessment = post_assessment
                         participant_resposne.save()
 
-                    post_assessment.participants_observers.filter(
+                    from_post_assessment.participants_observers.filter(
                         participant__id=participant.id
                     ).delete()
 
                     participant_unique_id_instance = ParticipantUniqueId.objects.filter(
                         participant=participant,
-                        assessment=post_assessment,
-                    )
+                        assessment=from_post_assessment,
+                    ).first()
                     if participant_unique_id_instance:
                         participant_unique_id_instance.delete()
             elif from_assessment.assessment_timing == "post":
-                pre_assessment = Assessment.objects.get(id=from_assessment.pre_assessment.id)
+                pre_assessment = Assessment.objects.get(
+                    id=to_assessment.pre_assessment.id
+                )
 
                 if not pre_assessment.participants_observers.filter(
-                    participant__email=participant.email
+                    participant=participant
                 ).exists():
                     mapping = ParticipantObserverMapping.objects.create(
                         participant=participant
@@ -3413,23 +3417,27 @@ class MoveParticipant(APIView):
                         assessment=pre_assessment,
                         unique_id=pre_unique_id,
                     )
-                    
+
+                    to_pre_assessment = Assessment.objects.filter(
+                        id=from_assessment.pre_assessment.id
+                    ).first()
+
                     participant_resposne = ParticipantResponse.objects.filter(
-                        participant=participant, assessment=pre_assessment
+                        participant=participant, assessment=to_pre_assessment
                     ).first()
 
                     if participant_resposne:
-                        participant_resposne.assessment = to_assessment
+                        participant_resposne.assessment = pre_assessment
                         participant_resposne.save()
 
-                    pre_assessment.participants_observers.filter(
+                    to_pre_assessment.participants_observers.filter(
                         participant__id=participant.id
                     ).delete()
 
                     participant_unique_id_instance = ParticipantUniqueId.objects.filter(
                         participant=participant,
-                        assessment=pre_assessment,
-                    )
+                        assessment=to_pre_assessment,
+                    ).first()
                     if participant_unique_id_instance:
                         participant_unique_id_instance.delete()
 
@@ -3448,7 +3456,7 @@ class MoveParticipant(APIView):
             participant_unique_id_instance = ParticipantUniqueId.objects.filter(
                 participant=participant,
                 assessment=from_assessment,
-            )
+            ).first()
             if participant_unique_id_instance:
                 participant_unique_id_instance.delete()
 
