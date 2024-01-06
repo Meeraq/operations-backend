@@ -41,6 +41,7 @@ class Question(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     label = models.JSONField(blank=True, null=True)
+    correct_answer = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return self.self_question
@@ -142,13 +143,15 @@ class Assessment(models.Model):
     )
     observer_types = models.ManyToManyField(ObserverTypes, blank=True)
     # rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
-    automated_reminder= models.BooleanField(blank=True, default=False)
+    automated_reminder = models.BooleanField(blank=True, default=False)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
-    result_released=models.BooleanField(blank=True, default=False)
-    assessment_timing=models.CharField(max_length=255, choices=ASSESSMENT_TIMING_CHOICES, default="none")
+    result_released = models.BooleanField(blank=True, default=False)
+    assessment_timing = models.CharField(
+        max_length=255, choices=ASSESSMENT_TIMING_CHOICES, default="none"
+    )
     pre_assessment = models.ForeignKey(
-    'self', on_delete=models.CASCADE, blank=True, null=True
-)
+        "self", on_delete=models.CASCADE, blank=True, null=True
+    )
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

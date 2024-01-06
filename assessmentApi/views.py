@@ -842,32 +842,39 @@ class AddParticipantObserverToAssessment(APIView):
                     pre_assessment=assessment
                 ).first()
 
-                mapping = ParticipantObserverMapping.objects.create(
-                    participant=participant
-                )
-                mapping.save()
-                post_assessment.participants_observers.add(mapping)
-                post_assessment.save()
-                post_unique_id = uuid.uuid4()
-                post_unique_id_instance = ParticipantUniqueId.objects.create(
-                    participant=participant,
-                    assessment=post_assessment,
-                    unique_id=post_unique_id,
-                )
+                if not post_assessment.participants_observers.filter(
+                    participant__email=participants[0]["participantEmail"]
+                ).exists():
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    post_assessment.participants_observers.add(mapping)
+                    post_assessment.save()
+                    post_unique_id = uuid.uuid4()
+                    post_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=post_assessment,
+                        unique_id=post_unique_id,
+                    )
             elif assessment.assessment_timing == "post":
                 pre_assessment = Assessment.objects.get(id=assessment.pre_assessment.id)
-                mapping = ParticipantObserverMapping.objects.create(
-                    participant=participant
-                )
-                mapping.save()
-                pre_assessment.participants_observers.add(mapping)
-                pre_assessment.save()
-                pre_unique_id = uuid.uuid4()
-                pre_unique_id_instance = ParticipantUniqueId.objects.create(
-                    participant=participant,
-                    assessment=pre_assessment,
-                    unique_id=pre_unique_id,
-                )
+
+                if not pre_assessment.participants_observers.filter(
+                    participant__email=participants[0]["participantEmail"]
+                ).exists():
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    pre_assessment.participants_observers.add(mapping)
+                    pre_assessment.save()
+                    pre_unique_id = uuid.uuid4()
+                    pre_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=pre_assessment,
+                        unique_id=pre_unique_id,
+                    )
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -2873,8 +2880,6 @@ def generate_graph_for_participant(participant, assessment_id, assessment):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    answers = json.loads(env("AIR_INDIA_ASSESSMENT_ID"))
-
     total_for_each_comp = {}
     compentency_with_description = []
 
@@ -2907,10 +2912,14 @@ def generate_graph_for_participant(participant, assessment_id, assessment):
         participant_response_value = participant_response.participant_response.get(
             str(question.id)
         )
-        correct_answer = answers.get(str(question.id))
-        # print(correct_answer, participant_response_value)
+        correct_answer = (
+            assessment.questionnaire.questions.filter(id=question.id)
+            .first()
+            .correct_answer
+        )
 
-        if participant_response_value == correct_answer:
+      
+        if participant_response_value == int(correct_answer):
             competency_object[question.competency.name] = (
                 competency_object[question.competency.name] + 1
             )
@@ -3001,8 +3010,6 @@ def generate_graph_for_participant_for_post_assessent(
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    answers = json.loads(env("AIR_INDIA_ASSESSMENT_ID"))
-
     total_for_each_comp = {}
     compentency_with_description = []
 
@@ -3043,14 +3050,18 @@ def generate_graph_for_participant_for_post_assessent(
                 str(question.id)
             )
         )
-        correct_answer = answers.get(str(question.id))
-
-        if pre_assessment_participant_response_value == correct_answer:
+        correct_answer = (
+            assessment.questionnaire.questions.filter(id=question.id)
+            .first()
+            .correct_answer
+        )
+      
+        if pre_assessment_participant_response_value == int(correct_answer):
             pre_competency_object[question.competency.name] = (
                 pre_competency_object[question.competency.name] + 1
             )
 
-        if participant_response_value == correct_answer:
+        if participant_response_value == int(correct_answer):
             competency_object[question.competency.name] = (
                 competency_object[question.competency.name] + 1
             )
@@ -3325,7 +3336,6 @@ class ReleaseResults(APIView):
 class MoveParticipant(APIView):
     def post(self, request):
         try:
-            print(request.data)
             from_assessment = Assessment.objects.get(
                 id=request.data.get("from_assessment_id")
             )
@@ -3367,6 +3377,82 @@ class MoveParticipant(APIView):
 
             particpant_data = [{"name": participant.name, "email": participant.email}]
             # send_reset_password_link(particpant_data)
+
+            if from_assessment.assessment_timing == "pre":
+                post_assessment = Assessment.objects.filter(
+                    pre_assessment=from_assessment
+                ).first()
+
+                if not post_assessment.participants_observers.filter(
+                    participant__email=participant.email
+                ).exists():
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    post_assessment.participants_observers.add(mapping)
+                    post_assessment.save()
+                    post_unique_id = uuid.uuid4()
+                    post_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=post_assessment,
+                        unique_id=post_unique_id,
+                    )
+                    participant_resposne = ParticipantResponse.objects.filter(
+                        participant=participant, assessment=post_assessment
+                    ).first()
+
+                    if participant_resposne:
+                        participant_resposne.assessment = to_assessment
+                        participant_resposne.save()
+
+                    post_assessment.participants_observers.filter(
+                        participant__id=participant.id
+                    ).delete()
+
+                    participant_unique_id_instance = ParticipantUniqueId.objects.filter(
+                        participant=participant,
+                        assessment=post_assessment,
+                    )
+                    if participant_unique_id_instance:
+                        participant_unique_id_instance.delete()
+            elif from_assessment.assessment_timing == "post":
+                pre_assessment = Assessment.objects.get(id=from_assessment.pre_assessment.id)
+
+                if not pre_assessment.participants_observers.filter(
+                    participant__email=participant.email
+                ).exists():
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    pre_assessment.participants_observers.add(mapping)
+                    pre_assessment.save()
+                    pre_unique_id = uuid.uuid4()
+                    pre_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=pre_assessment,
+                        unique_id=pre_unique_id,
+                    )
+                    
+                    participant_resposne = ParticipantResponse.objects.filter(
+                        participant=participant, assessment=pre_assessment
+                    ).first()
+
+                    if participant_resposne:
+                        participant_resposne.assessment = to_assessment
+                        participant_resposne.save()
+
+                    pre_assessment.participants_observers.filter(
+                        participant__id=participant.id
+                    ).delete()
+
+                    participant_unique_id_instance = ParticipantUniqueId.objects.filter(
+                        participant=participant,
+                        assessment=pre_assessment,
+                    )
+                    if participant_unique_id_instance:
+                        participant_unique_id_instance.delete()
 
             participant_resposne = ParticipantResponse.objects.filter(
                 participant=participant, assessment=from_assessment
