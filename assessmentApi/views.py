@@ -848,6 +848,12 @@ class AddParticipantObserverToAssessment(APIView):
                 mapping.save()
                 post_assessment.participants_observers.add(mapping)
                 post_assessment.save()
+                post_unique_id = uuid.uuid4()
+                post_unique_id_instance = ParticipantUniqueId.objects.create(
+                    participant=participant,
+                    assessment=post_assessment,
+                    unique_id=post_unique_id,
+                )
             elif assessment.assessment_timing == "post":
                 pre_assessment = Assessment.objects.get(id=assessment.pre_assessment.id)
                 mapping = ParticipantObserverMapping.objects.create(
@@ -856,7 +862,12 @@ class AddParticipantObserverToAssessment(APIView):
                 mapping.save()
                 pre_assessment.participants_observers.add(mapping)
                 pre_assessment.save()
-
+                pre_unique_id = uuid.uuid4()
+                pre_unique_id_instance = ParticipantUniqueId.objects.create(
+                    participant=participant,
+                    assessment=pre_assessment,
+                    unique_id=pre_unique_id,
+                )
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -1199,13 +1210,20 @@ class DeleteParticipantFromAssessment(APIView):
         try:
             assessment_id = request.data.get("assessment_id")
             participant_observers = request.data.get("participant_observers")
-
             assessment = Assessment.objects.get(id=assessment_id)
-
+            if assessment.assessment_timing == "pre":
+                post_assessment = Assessment.objects.get(pre_assessment=assessment)
+                post_assessment.participants_observers.filter(
+                    participant__id=participant_observers["participant"]["id"]
+                ).delete()
+            elif assessment.assessment_timing == "post":
+                pre_assessment = assessment.pre_assessment
+                pre_assessment.participants_observers.filter(
+                    participant__id=participant_observers["participant"]["id"]
+                ).delete()
             assessment.participants_observers.filter(
                 participant__id=participant_observers["participant"]["id"]
             ).delete()
-
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -1886,6 +1904,12 @@ class AddMultipleParticipants(APIView):
                     mapping.save()
                     post_assessment.participants_observers.add(mapping)
                     post_assessment.save()
+                    post_unique_id = uuid.uuid4()
+                    post_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=post_assessment,
+                        unique_id=post_unique_id,
+                    )
                 elif assessment.assessment_timing == "post":
                     pre_assessment = Assessment.objects.get(
                         id=assessment.pre_assessment.id
@@ -1896,6 +1920,12 @@ class AddMultipleParticipants(APIView):
                     mapping.save()
                     pre_assessment.participants_observers.add(mapping)
                     pre_assessment.save()
+                    pre_unique_id = uuid.uuid4()
+                    pre_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=pre_assessment,
+                        unique_id=pre_unique_id,
+                    )
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
