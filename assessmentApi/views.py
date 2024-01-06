@@ -1855,22 +1855,6 @@ class AddMultipleParticipants(APIView):
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-
-                # user = User.objects.filter(username=participant["email"]).first()
-                # if user:
-                #     user_profile = Profile.objects.filter(user=user).first()
-                #     if (
-                #         user_profile.type == "hr"
-                #         or user_profile.type == "pmo"
-                #         or user_profile.type == "coach"
-                #     ):
-                #         return Response(
-                #             {
-                #                 "error": f"Email {participant['email']} already exist as another user. Please try using another email.",
-                #             },
-                #             status=status.HTTP_400_BAD_REQUEST,
-                #         )
-                # name="first_name"+" "+"last_name"
                 name = (
                     participant["first_name"].capitalize()
                     + " "
@@ -1892,28 +1876,24 @@ class AddMultipleParticipants(APIView):
                     assessment=assessment,
                     unique_id=unique_id,
                 )
-
                 mapping.save()
                 assessment.participants_observers.add(mapping)
                 assessment.save()
-
                 particpant_data = [{"name": name, "email": participant["email"]}]
-
                 # send_reset_password_link(particpant_data)
                 if assessment.assessment_timing == "pre":
                     post_assessment = Assessment.objects.filter(
                         pre_assessment=assessment
                     ).first()
-
                     mapping = ParticipantObserverMapping.objects.create(
-                        participant=participant
+                        participant=new_participant
                     )
                     mapping.save()
                     post_assessment.participants_observers.add(mapping)
                     post_assessment.save()
                     post_unique_id = uuid.uuid4()
                     post_unique_id_instance = ParticipantUniqueId.objects.create(
-                        participant=participant,
+                        participant=new_participant,
                         assessment=post_assessment,
                         unique_id=post_unique_id,
                     )
@@ -1922,18 +1902,17 @@ class AddMultipleParticipants(APIView):
                         id=assessment.pre_assessment.id
                     )
                     mapping = ParticipantObserverMapping.objects.create(
-                        participant=participant
+                        participant=new_participant
                     )
                     mapping.save()
                     pre_assessment.participants_observers.add(mapping)
                     pre_assessment.save()
                     pre_unique_id = uuid.uuid4()
                     pre_unique_id_instance = ParticipantUniqueId.objects.create(
-                        participant=participant,
+                        participant=new_participant,
                         assessment=pre_assessment,
                         unique_id=pre_unique_id,
                     )
-
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
