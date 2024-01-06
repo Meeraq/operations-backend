@@ -566,17 +566,43 @@ class AssessmentView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        serializer = AssessmentSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
+        if request.data["assessment_creation_type"] == "individual":
+            serializer = AssessmentSerializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(
+                    {"message": "Assessment created successfully."},
+                    status=status.HTTP_201_CREATED,
+                )
             return Response(
-                {"message": "Assessment created successfully."},
-                status=status.HTTP_201_CREATED,
+                {"error": "Failed to create Assessment."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        elif request.data["assessment_creation_type"] == "pre_post":
+            pre_assessment_serializer = AssessmentSerializer(
+                data=request.data["pre_assessment_data"]
+            )
+            post_assessment_serializer = AssessmentSerializer(
+                data=request.data["post_assessment_data"]
+            )
+            if (
+                pre_assessment_serializer.is_valid()
+                and post_assessment_serializer.is_valid()
+            ):
+                pre_assessment = pre_assessment_serializer.save()
+                post_assessment = post_assessment_serializer.save()
+                post_assessment.pre_assessment = pre_assessment
+                post_assessment.save()
+                return Response(
+                    {"message": "Assessment created successfully."},
+                    status=status.HTTP_201_CREATED,
+                )
+            return Response(
+                {"error": "Failed to create Assessment."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(
-            {
-                "error": "Failed to create Assessment.",
-            },
+            {"error": "Failed to create Assessment."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
