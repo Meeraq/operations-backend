@@ -3559,15 +3559,15 @@ class DownloadParticipantResponseStatusData(APIView):
                         assessment=assessment,
                         participant__id=participant_observers.participant.id,
                     ).first()
-
+               
                     data = {
-                        "name": participant_responses.participant.name.capitalize(),
-                        "email": participant_responses.participant.email,
+                        "name": participant_observers.participant.name.capitalize(),
+                        "email": participant_observers.participant.email,
                         "response_status": "Responded"
                         if participant_responses
                         else "Not Responded",
                     }
-
+                   
                     response_data.append(data)
 
                 return Response(response_data)
@@ -3587,8 +3587,8 @@ class DownloadParticipantResponseStatusData(APIView):
                     ).first()
 
                     data = {
-                        "name": post_participant_responses.participant.name.capitalize(),
-                        "email": post_participant_responses.participant.email,
+                        "name": participant_observers.participant.name.capitalize(),
+                        "email": participant_observers.participant.email,
                         "pre_response_status": "Responded"
                         if pre_participant_responses
                         else "Not Responded",
