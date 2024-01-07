@@ -219,12 +219,12 @@ urlpatterns = [
         DownloadWordReport.as_view(),
     ),
     path(
-        "get/uniqueId/participant/",
-        GetAllLearnersUniqueId.as_view(),
+        "get/uniqueId/participant/<int:assessment_id>",
+        GetLearnersUniqueId.as_view(),
     ),
     path(
-        "get/all/uniqueId/participant/<int:assessment_id>",
-        GetLearnersUniqueId.as_view(),
+        "get/all/uniqueId/participant/",
+        GetAllLearnersUniqueId.as_view(),
     ),
     path(
         "get-start-assessment-data-for-participant/<str:unique_id>/",
