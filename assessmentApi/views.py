@@ -1225,7 +1225,7 @@ class DeleteParticipantFromAssessment(APIView):
                 post_assessment.participants_observers.filter(
                     participant__id=participant_observers["participant"]["id"]
                 ).delete()
-                participant_unique_id = ParticipantUniqueId.objects.get(
+                participant_unique_id = ParticipantUniqueId.objects.filter(
                     participant__id=participant_observers["participant"]["id"],
                     assessment=post_assessment,
                 )
