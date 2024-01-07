@@ -1250,9 +1250,11 @@ class DeleteParticipantFromAssessment(APIView):
                 )
                 if participant_unique_id:
                     participant_unique_id.delete()
-                pre_assessment_participant_response = ParticipantResponse.objects.filter(
-                    participant__id=participant_observers["participant"]["id"],
-                    assessment=pre_assessment,
+                pre_assessment_participant_response = (
+                    ParticipantResponse.objects.filter(
+                        participant__id=participant_observers["participant"]["id"],
+                        assessment=pre_assessment,
+                    )
                 )
                 if pre_assessment_participant_response:
                     pre_assessment_participant_response.delete()
@@ -3540,5 +3542,74 @@ class GetAllLearnersUniqueId(APIView):
         except ParticipantUniqueId.DoesNotExist:
             return Response(
                 {"error": "No Unique id found."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class DownloadParticipantResponseStatusData(APIView):
+    def get(self, request, assessment_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+
+            response_data = []
+
+            if assessment.assessment_timing == "pre":
+                for participant_observers in assessment.participants_observers.all():
+                    participant_responses = ParticipantResponse.objects.filter(
+                        assessment=assessment,
+                        participant__id=participant_observers.participant.id,
+                    ).first()
+
+                    data = {
+                        "participant_name": participant_responses.participant.name.capitalize(),
+                        "participant_email": participant_responses.participant.email,
+                        "response_status": "Responded"
+                        if participant_responses
+                        else "Not Responded",
+                    }
+
+                    response_data.append(data)
+
+                return Response(response_data)
+
+            elif assessment.assessment_timing == "post":
+                for participant_observers in assessment.participants_observers.all():
+                    post_participant_responses = ParticipantResponse.objects.filter(
+                        assessment=assessment,
+                        participant__id=participant_observers.participant.id,
+                    ).first()
+
+                    pre_assessment = assessment.pre_assessment
+
+                    pre_participant_responses = ParticipantResponse.objects.filter(
+                        assessment=pre_assessment,
+                        participant__id=participant_observers.participant.id,
+                    ).first()
+
+                    data = {
+                        "participant_name": participant_observers.participant.name.capitalize(),
+                        "participant_email": participant_observers.participant.email,
+                        "pre_response_status": "Responded"
+                        if pre_participant_responses
+                        else "Not Responded",
+                        "post_response_status": "Responded"
+                        if post_participant_responses
+                        else "Not Responded",
+                    }
+
+                    response_data.append(data)
+
+                return Response(response_data)
+
+        except Assessment.DoesNotExist:
+            return Response(
+                {"error": "Assessment not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get download response data."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

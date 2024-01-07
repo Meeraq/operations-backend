@@ -55,6 +55,7 @@ from .views import (
     PreReportDownloadForAllParticipant,
     MoveParticipant,
     GetAllLearnersUniqueId,
+    DownloadParticipantResponseStatusData,
 )
 
 
@@ -241,5 +242,9 @@ urlpatterns = [
     path(
         "move-participant/",
         MoveParticipant.as_view(),
+    ),
+    path(
+        "get-download-respose-status/<int:assessment_id>/",
+        DownloadParticipantResponseStatusData.as_view(),
     ),
 ]
