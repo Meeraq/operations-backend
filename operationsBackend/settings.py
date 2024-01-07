@@ -216,15 +216,15 @@ CELERY_BEAT_SCHEDULE = {
     },
     "send_reminder_email_to_participants_for_assessment_at_2PM": {
         "task": "schedularApi.tasks.send_reminder_email_to_participants_for_assessment_at_2PM",
-        "schedule": crontab(hour=7, minute=30, day_of_week="*"),
+        "schedule": crontab(hour=8, minute=30, day_of_week="*"),
     },
     "send_whatsapp_message_to_participants_for_assessment_at_9AM": {
         "task": "schedularApi.tasks.send_whatsapp_message_to_participants_for_assessment_at_9AM",
-        "schedule": crontab(hour=7, minute=35, day_of_week="*"),
+        "schedule": crontab(hour=3, minute=30, day_of_week="*"),
     },
     "send_whatsapp_message_to_participants_for_assessment_at_7PM": {
         "task": "schedularApi.tasks.send_whatsapp_message_to_participants_for_assessment_at_7PM",
-        "schedule": crontab(hour=7, minute=40, day_of_week="*"),
+        "schedule": crontab(hour=13, minute=30, day_of_week="*"),
     },
     "update_assessment_status": {
         "task": "schedularApi.tasks.update_assessment_status",

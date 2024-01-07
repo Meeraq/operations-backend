@@ -842,32 +842,39 @@ class AddParticipantObserverToAssessment(APIView):
                     pre_assessment=assessment
                 ).first()
 
-                mapping = ParticipantObserverMapping.objects.create(
-                    participant=participant
-                )
-                mapping.save()
-                post_assessment.participants_observers.add(mapping)
-                post_assessment.save()
-                post_unique_id = uuid.uuid4()
-                post_unique_id_instance = ParticipantUniqueId.objects.create(
-                    participant=participant,
-                    assessment=post_assessment,
-                    unique_id=post_unique_id,
-                )
+                if not post_assessment.participants_observers.filter(
+                    participant__email=participants[0]["participantEmail"]
+                ).exists():
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    post_assessment.participants_observers.add(mapping)
+                    post_assessment.save()
+                    post_unique_id = uuid.uuid4()
+                    post_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=post_assessment,
+                        unique_id=post_unique_id,
+                    )
             elif assessment.assessment_timing == "post":
                 pre_assessment = Assessment.objects.get(id=assessment.pre_assessment.id)
-                mapping = ParticipantObserverMapping.objects.create(
-                    participant=participant
-                )
-                mapping.save()
-                pre_assessment.participants_observers.add(mapping)
-                pre_assessment.save()
-                pre_unique_id = uuid.uuid4()
-                pre_unique_id_instance = ParticipantUniqueId.objects.create(
-                    participant=participant,
-                    assessment=pre_assessment,
-                    unique_id=pre_unique_id,
-                )
+
+                if not pre_assessment.participants_observers.filter(
+                    participant__email=participants[0]["participantEmail"]
+                ).exists():
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    pre_assessment.participants_observers.add(mapping)
+                    pre_assessment.save()
+                    pre_unique_id = uuid.uuid4()
+                    pre_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=pre_assessment,
+                        unique_id=pre_unique_id,
+                    )
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -1212,18 +1219,61 @@ class DeleteParticipantFromAssessment(APIView):
             participant_observers = request.data.get("participant_observers")
             assessment = Assessment.objects.get(id=assessment_id)
             if assessment.assessment_timing == "pre":
-                post_assessment = Assessment.objects.get(pre_assessment=assessment)
+                post_assessment = Assessment.objects.filter(
+                    pre_assessment=assessment
+                ).first()
                 post_assessment.participants_observers.filter(
                     participant__id=participant_observers["participant"]["id"]
                 ).delete()
+                participant_unique_id = ParticipantUniqueId.objects.filter(
+                    participant__id=participant_observers["participant"]["id"],
+                    assessment=post_assessment,
+                )
+                if participant_unique_id:
+                    participant_unique_id.delete()
+                post_assessment_participant_response = (
+                    ParticipantResponse.objects.filter(
+                        participant__id=participant_observers["participant"]["id"],
+                        assessment=post_assessment,
+                    )
+                )
+                if post_assessment_participant_response:
+                    post_assessment_participant_response.delete()
             elif assessment.assessment_timing == "post":
                 pre_assessment = assessment.pre_assessment
                 pre_assessment.participants_observers.filter(
                     participant__id=participant_observers["participant"]["id"]
                 ).delete()
+                participant_unique_id = ParticipantUniqueId.objects.filter(
+                    participant__id=participant_observers["participant"]["id"],
+                    assessment=pre_assessment,
+                )
+                if participant_unique_id:
+                    participant_unique_id.delete()
+                pre_assessment_participant_response = (
+                    ParticipantResponse.objects.filter(
+                        participant__id=participant_observers["participant"]["id"],
+                        assessment=pre_assessment,
+                    )
+                )
+                if pre_assessment_participant_response:
+                    pre_assessment_participant_response.delete()
+
             assessment.participants_observers.filter(
                 participant__id=participant_observers["participant"]["id"]
             ).delete()
+            assessment_participant_unique_id = ParticipantUniqueId.objects.filter(
+                participant__id=participant_observers["participant"]["id"],
+                assessment=assessment,
+            )
+            if assessment_participant_unique_id:
+                assessment_participant_unique_id.delete()
+            assessment_participant_response = ParticipantResponse.objects.filter(
+                participant__id=participant_observers["participant"]["id"],
+                assessment=assessment,
+            )
+            if assessment_participant_response:
+                assessment_participant_response.delete()
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -1848,22 +1898,6 @@ class AddMultipleParticipants(APIView):
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-
-                # user = User.objects.filter(username=participant["email"]).first()
-                # if user:
-                #     user_profile = Profile.objects.filter(user=user).first()
-                #     if (
-                #         user_profile.type == "hr"
-                #         or user_profile.type == "pmo"
-                #         or user_profile.type == "coach"
-                #     ):
-                #         return Response(
-                #             {
-                #                 "error": f"Email {participant['email']} already exist as another user. Please try using another email.",
-                #             },
-                #             status=status.HTTP_400_BAD_REQUEST,
-                #         )
-                # name="first_name"+" "+"last_name"
                 name = (
                     participant["first_name"].capitalize()
                     + " "
@@ -1885,28 +1919,24 @@ class AddMultipleParticipants(APIView):
                     assessment=assessment,
                     unique_id=unique_id,
                 )
-
                 mapping.save()
                 assessment.participants_observers.add(mapping)
                 assessment.save()
-
                 particpant_data = [{"name": name, "email": participant["email"]}]
-
                 # send_reset_password_link(particpant_data)
                 if assessment.assessment_timing == "pre":
                     post_assessment = Assessment.objects.filter(
                         pre_assessment=assessment
                     ).first()
-
                     mapping = ParticipantObserverMapping.objects.create(
-                        participant=participant
+                        participant=new_participant
                     )
                     mapping.save()
                     post_assessment.participants_observers.add(mapping)
                     post_assessment.save()
                     post_unique_id = uuid.uuid4()
                     post_unique_id_instance = ParticipantUniqueId.objects.create(
-                        participant=participant,
+                        participant=new_participant,
                         assessment=post_assessment,
                         unique_id=post_unique_id,
                     )
@@ -1915,18 +1945,17 @@ class AddMultipleParticipants(APIView):
                         id=assessment.pre_assessment.id
                     )
                     mapping = ParticipantObserverMapping.objects.create(
-                        participant=participant
+                        participant=new_participant
                     )
                     mapping.save()
                     pre_assessment.participants_observers.add(mapping)
                     pre_assessment.save()
                     pre_unique_id = uuid.uuid4()
                     pre_unique_id_instance = ParticipantUniqueId.objects.create(
-                        participant=participant,
+                        participant=new_participant,
                         assessment=pre_assessment,
                         unique_id=pre_unique_id,
                     )
-
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -2873,8 +2902,6 @@ def generate_graph_for_participant(participant, assessment_id, assessment):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    answers = json.loads(env("AIR_INDIA_ASSESSMENT_ID"))
-
     total_for_each_comp = {}
     compentency_with_description = []
 
@@ -2907,10 +2934,13 @@ def generate_graph_for_participant(participant, assessment_id, assessment):
         participant_response_value = participant_response.participant_response.get(
             str(question.id)
         )
-        correct_answer = answers.get(str(question.id))
-        # print(correct_answer, participant_response_value)
+        correct_answer = (
+            assessment.questionnaire.questions.filter(id=question.id)
+            .first()
+            .correct_answer
+        )
 
-        if participant_response_value == correct_answer:
+        if participant_response_value == int(correct_answer):
             competency_object[question.competency.name] = (
                 competency_object[question.competency.name] + 1
             )
@@ -3001,8 +3031,6 @@ def generate_graph_for_participant_for_post_assessent(
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    answers = json.loads(env("AIR_INDIA_ASSESSMENT_ID"))
-
     total_for_each_comp = {}
     compentency_with_description = []
 
@@ -3043,14 +3071,18 @@ def generate_graph_for_participant_for_post_assessent(
                 str(question.id)
             )
         )
-        correct_answer = answers.get(str(question.id))
+        correct_answer = (
+            assessment.questionnaire.questions.filter(id=question.id)
+            .first()
+            .correct_answer
+        )
 
-        if pre_assessment_participant_response_value == correct_answer:
+        if pre_assessment_participant_response_value == int(correct_answer):
             pre_competency_object[question.competency.name] = (
                 pre_competency_object[question.competency.name] + 1
             )
 
-        if participant_response_value == correct_answer:
+        if participant_response_value == int(correct_answer):
             competency_object[question.competency.name] = (
                 competency_object[question.competency.name] + 1
             )
@@ -3325,7 +3357,6 @@ class ReleaseResults(APIView):
 class MoveParticipant(APIView):
     def post(self, request):
         try:
-            print(request.data)
             from_assessment = Assessment.objects.get(
                 id=request.data.get("from_assessment_id")
             )
@@ -3368,6 +3399,91 @@ class MoveParticipant(APIView):
             particpant_data = [{"name": participant.name, "email": participant.email}]
             # send_reset_password_link(particpant_data)
 
+            if from_assessment.assessment_timing == "pre":
+                post_assessment = Assessment.objects.filter(
+                    pre_assessment=to_assessment
+                ).first()
+
+                if not post_assessment.participants_observers.filter(
+                    participant__email=participant.email
+                ).exists():
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    post_assessment.participants_observers.add(mapping)
+                    post_assessment.save()
+                    post_unique_id = uuid.uuid4()
+                    post_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=post_assessment,
+                        unique_id=post_unique_id,
+                    )
+                    from_post_assessment = Assessment.objects.filter(
+                        pre_assessment=from_assessment
+                    ).first()
+                    participant_resposne = ParticipantResponse.objects.filter(
+                        participant=participant, assessment=from_post_assessment
+                    ).first()
+
+                    if participant_resposne:
+                        participant_resposne.assessment = post_assessment
+                        participant_resposne.save()
+
+                    from_post_assessment.participants_observers.filter(
+                        participant__id=participant.id
+                    ).delete()
+
+                    participant_unique_id_instance = ParticipantUniqueId.objects.filter(
+                        participant=participant,
+                        assessment=from_post_assessment,
+                    ).first()
+                    if participant_unique_id_instance:
+                        participant_unique_id_instance.delete()
+            elif from_assessment.assessment_timing == "post":
+                pre_assessment = Assessment.objects.get(
+                    id=to_assessment.pre_assessment.id
+                )
+
+                if not pre_assessment.participants_observers.filter(
+                    participant=participant
+                ).exists():
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
+                    )
+                    mapping.save()
+                    pre_assessment.participants_observers.add(mapping)
+                    pre_assessment.save()
+                    pre_unique_id = uuid.uuid4()
+                    pre_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=pre_assessment,
+                        unique_id=pre_unique_id,
+                    )
+
+                    to_pre_assessment = Assessment.objects.filter(
+                        id=from_assessment.pre_assessment.id
+                    ).first()
+
+                    participant_resposne = ParticipantResponse.objects.filter(
+                        participant=participant, assessment=to_pre_assessment
+                    ).first()
+
+                    if participant_resposne:
+                        participant_resposne.assessment = pre_assessment
+                        participant_resposne.save()
+
+                    to_pre_assessment.participants_observers.filter(
+                        participant__id=participant.id
+                    ).delete()
+
+                    participant_unique_id_instance = ParticipantUniqueId.objects.filter(
+                        participant=participant,
+                        assessment=to_pre_assessment,
+                    ).first()
+                    if participant_unique_id_instance:
+                        participant_unique_id_instance.delete()
+
             participant_resposne = ParticipantResponse.objects.filter(
                 participant=participant, assessment=from_assessment
             ).first()
@@ -3383,7 +3499,7 @@ class MoveParticipant(APIView):
             participant_unique_id_instance = ParticipantUniqueId.objects.filter(
                 participant=participant,
                 assessment=from_assessment,
-            )
+            ).first()
             if participant_unique_id_instance:
                 participant_unique_id_instance.delete()
 
@@ -3398,5 +3514,102 @@ class MoveParticipant(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to Release Results"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetAllLearnersUniqueId(APIView):
+    def get(self, request):
+        try:
+            # Assuming assessment_id is a valid Assessment ID
+            participants_unique_ids = ParticipantUniqueId.objects.all().select_related(
+                "participant"
+            )
+
+            participants_data = []
+            for entry in participants_unique_ids:
+                participant_data = {
+                    "participant_id": entry.participant.id,
+                    "assessment_id": entry.assessment.id,
+                    "participant_name": entry.participant.name,
+                    "participant_email": entry.participant.email,
+                    "unique_id": entry.unique_id,
+                }
+                participants_data.append(participant_data)
+
+            return Response(participants_data)
+
+        except ParticipantUniqueId.DoesNotExist:
+            return Response(
+                {"error": "No Unique id found."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class DownloadParticipantResponseStatusData(APIView):
+    def get(self, request, assessment_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+
+            response_data = []
+
+            if assessment.assessment_timing == "pre":
+                for participant_observers in assessment.participants_observers.all():
+                    participant_responses = ParticipantResponse.objects.filter(
+                        assessment=assessment,
+                        participant__id=participant_observers.participant.id,
+                    ).first()
+               
+                    data = {
+                        "name": participant_observers.participant.name.capitalize(),
+                        "email": participant_observers.participant.email,
+                        "response_status": "Responded"
+                        if participant_responses
+                        else "Not Responded",
+                    }
+                   
+                    response_data.append(data)
+
+                return Response(response_data)
+
+            elif assessment.assessment_timing == "post":
+                for participant_observers in assessment.participants_observers.all():
+                    post_participant_responses = ParticipantResponse.objects.filter(
+                        assessment=assessment,
+                        participant__id=participant_observers.participant.id,
+                    ).first()
+
+                    pre_assessment = assessment.pre_assessment
+
+                    pre_participant_responses = ParticipantResponse.objects.filter(
+                        assessment=pre_assessment,
+                        participant__id=participant_observers.participant.id,
+                    ).first()
+
+                    data = {
+                        "name": participant_observers.participant.name.capitalize(),
+                        "email": participant_observers.participant.email,
+                        "pre_response_status": "Responded"
+                        if pre_participant_responses
+                        else "Not Responded",
+                        "post_response_status": "Responded"
+                        if post_participant_responses
+                        else "Not Responded",
+                    }
+
+                    response_data.append(data)
+
+                return Response(response_data)
+
+        except Assessment.DoesNotExist:
+            return Response(
+                {"error": "Assessment not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get download response data."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
