@@ -340,11 +340,15 @@ def send_reminder_email_to_participants_for_assessment_at_2PM():
             assessment.assessment_start_date, "%Y-%m-%d"
         ).date()
         end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
-
         # Check if today's date is within the assessment date range
         today = datetime.now().date()
+        day_of_week = today.strftime("%A")
 
-        if start_date <= today <= end_date:
+        if (
+            start_date <= today <= end_date
+            and not day_of_week == "Saturday"
+            and not day_of_week == "Sunday"
+        ):
             participants_observers = assessment.participants_observers.all()
 
             for participant_observer_mapping in participants_observers:
@@ -357,7 +361,7 @@ def send_reminder_email_to_participants_for_assessment_at_2PM():
 
                     if not participant_response:
                         participant_unique_id = ParticipantUniqueId.objects.get(
-                            participant=participant , assessment=assessment
+                            participant=participant, assessment=assessment
                         )
                         unique_id = participant_unique_id.unique_id
 
@@ -370,7 +374,7 @@ def send_reminder_email_to_participants_for_assessment_at_2PM():
                             "Meeraq - Welcome to Assessment Platform !",
                             {
                                 "assessment_name": assessment.participant_view_name,
-                                "participant_name": participant.name,
+                                "participant_name": participant.name.capitalize(),
                                 "link": assessment_link,
                             },
                             [],
@@ -393,10 +397,12 @@ def send_whatsapp_message_to_participants_for_assessment_at_9AM():
 
         # Check if today's date is within the assessment date range
         today = datetime.now().date()
-        print("start", start_date)
-        print("end", end_date)
-        print("today", today)
-        if start_date <= today <= end_date:
+        day_of_week = today.strftime("%A")
+        if (
+            start_date <= today <= end_date
+            and not day_of_week == "Saturday"
+            and not day_of_week == "Sunday"
+        ):
             participants_observers = assessment.participants_observers.all()
 
             for participant_observer_mapping in participants_observers:
@@ -431,10 +437,12 @@ def send_whatsapp_message_to_participants_for_assessment_at_7PM():
 
         # Check if today's date is within the assessment date range
         today = datetime.now().date()
-        print("start", start_date)
-        print("end", end_date)
-        print("today", today)
-        if start_date <= today <= end_date:
+        day_of_week = today.strftime("%A")
+        if (
+            start_date <= today <= end_date
+            and not day_of_week == "Saturday"
+            and not day_of_week == "Sunday"
+        ):
             participants_observers = assessment.participants_observers.all()
             for participant_observer_mapping in participants_observers:
                 participant = participant_observer_mapping.participant
