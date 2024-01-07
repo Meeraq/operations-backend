@@ -3561,8 +3561,8 @@ class DownloadParticipantResponseStatusData(APIView):
                     ).first()
 
                     data = {
-                        "participant_name": participant_responses.participant.name.capitalize(),
-                        "participant_email": participant_responses.participant.email,
+                        "name": participant_responses.participant.name.capitalize(),
+                        "email": participant_responses.participant.email,
                         "response_status": "Responded"
                         if participant_responses
                         else "Not Responded",
@@ -3587,8 +3587,8 @@ class DownloadParticipantResponseStatusData(APIView):
                     ).first()
 
                     data = {
-                        "participant_name": participant_observers.participant.name.capitalize(),
-                        "participant_email": participant_observers.participant.email,
+                        "name": post_participant_responses.participant.name.capitalize(),
+                        "email": post_participant_responses.participant.email,
                         "pre_response_status": "Responded"
                         if pre_participant_responses
                         else "Not Responded",
