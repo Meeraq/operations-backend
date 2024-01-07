@@ -1219,18 +1219,59 @@ class DeleteParticipantFromAssessment(APIView):
             participant_observers = request.data.get("participant_observers")
             assessment = Assessment.objects.get(id=assessment_id)
             if assessment.assessment_timing == "pre":
-                post_assessment = Assessment.objects.get(pre_assessment=assessment)
+                post_assessment = Assessment.objects.filter(
+                    pre_assessment=assessment
+                ).first()
                 post_assessment.participants_observers.filter(
                     participant__id=participant_observers["participant"]["id"]
                 ).delete()
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    participant__id=participant_observers["participant"]["id"],
+                    assessment=post_assessment,
+                )
+                if participant_unique_id:
+                    participant_unique_id.delete()
+                post_assessment_participant_response = (
+                    ParticipantResponse.objects.filter(
+                        participant__id=participant_observers["participant"]["id"],
+                        assessment=post_assessment,
+                    )
+                )
+                if post_assessment_participant_response:
+                    post_assessment_participant_response.delete()
             elif assessment.assessment_timing == "post":
                 pre_assessment = assessment.pre_assessment
                 pre_assessment.participants_observers.filter(
                     participant__id=participant_observers["participant"]["id"]
                 ).delete()
+                participant_unique_id = ParticipantUniqueId.objects.filter(
+                    participant__id=participant_observers["participant"]["id"],
+                    assessment=pre_assessment,
+                )
+                if participant_unique_id:
+                    participant_unique_id.delete()
+                pre_assessment_participant_response = ParticipantResponse.objects.filter(
+                    participant__id=participant_observers["participant"]["id"],
+                    assessment=pre_assessment,
+                )
+                if pre_assessment_participant_response:
+                    pre_assessment_participant_response.delete()
+
             assessment.participants_observers.filter(
                 participant__id=participant_observers["participant"]["id"]
             ).delete()
+            assessment_participant_unique_id = ParticipantUniqueId.objects.filter(
+                participant__id=participant_observers["participant"]["id"],
+                assessment=assessment,
+            )
+            if assessment_participant_unique_id:
+                assessment_participant_unique_id.delete()
+            assessment_participant_response = ParticipantResponse.objects.filter(
+                participant__id=participant_observers["participant"]["id"],
+                assessment=assessment,
+            )
+            if assessment_participant_response:
+                assessment_participant_response.delete()
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -3475,19 +3516,19 @@ class MoveParticipant(APIView):
             )
 
 
-
-
 class GetAllLearnersUniqueId(APIView):
     def get(self, request):
         try:
             # Assuming assessment_id is a valid Assessment ID
-            participants_unique_ids = ParticipantUniqueId.objects.all().select_related("participant")
+            participants_unique_ids = ParticipantUniqueId.objects.all().select_related(
+                "participant"
+            )
 
             participants_data = []
             for entry in participants_unique_ids:
                 participant_data = {
                     "participant_id": entry.participant.id,
-                    "assessment_id":entry.assessment.id,
+                    "assessment_id": entry.assessment.id,
                     "participant_name": entry.participant.name,
                     "participant_email": entry.participant.email,
                     "unique_id": entry.unique_id,
