@@ -374,7 +374,7 @@ def send_reminder_email_to_participants_for_assessment_at_2PM():
                             "Meeraq - Welcome to Assessment Platform !",
                             {
                                 "assessment_name": assessment.participant_view_name,
-                                "participant_name": participant.name,
+                                "participant_name": participant.name.capitalize(),
                                 "link": assessment_link,
                             },
                             [],
