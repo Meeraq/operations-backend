@@ -794,12 +794,12 @@ class AddParticipantObserverToAssessment(APIView):
                 )
 
             participant = create_learner(
-                participants[0]["participantName"], participants[0]["participantEmail"]
+                participants[0]["participantName"].title(), participants[0]["participantEmail"]
             )
             participant.phone = phone
             participant.save()
             unique_id = uuid.uuid4()  # Generate a UUID4
-            add_contact_in_wati("learner", participant.name, participant.phone)
+            add_contact_in_wati("learner", participant.name.title(), participant.phone)
             # Creating a ParticipantUniqueId instance with a UUID as unique_id
             unique_id_instance = ParticipantUniqueId.objects.create(
                 participant=participant,
@@ -1337,7 +1337,7 @@ class AddObserverToParticipant(APIView):
             participants_observer = ParticipantObserverMapping.objects.get(
                 id=participant_observers_id
             )
-            observerName = request.data.get("observerName")
+            observerName = request.data.get("observerName").title()
             observerEmail = request.data.get("observerEmail")
             observerType = request.data.get("observerType")
 
@@ -3330,7 +3330,7 @@ class ReleaseResults(APIView):
                             [participant.email],
                             "Meeraq Assessment Report",
                             {
-                                "name": participant.name.capitalize(),
+                                "name": participant.name.title(),
                                 "image_base64": encoded_image,
                                 "compentency_with_description": compentency_with_description,
                                 "assessment_timing": assessment.assessment_timing,
@@ -3561,7 +3561,7 @@ class DownloadParticipantResponseStatusData(APIView):
                     ).first()
                
                     data = {
-                        "name": participant_observers.participant.name.capitalize(),
+                        "name": participant_observers.participant.name.title(),
                         "email": participant_observers.participant.email,
                         "response_status": "Responded"
                         if participant_responses
@@ -3587,7 +3587,7 @@ class DownloadParticipantResponseStatusData(APIView):
                     ).first()
 
                     data = {
-                        "name": participant_observers.participant.name.capitalize(),
+                        "name": participant_observers.participant.name.title(),
                         "email": participant_observers.participant.email,
                         "pre_response_status": "Responded"
                         if pre_participant_responses
