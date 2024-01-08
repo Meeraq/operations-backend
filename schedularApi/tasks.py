@@ -240,9 +240,7 @@ def send_participant_morning_reminder_email():
     )
     for session in today_sessions:
         name = session.learner.name
-        meeting_link = (
-            f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
-        )
+        meeting_link = env("CAAS_APP_URL")
         time = datetime.fromtimestamp(
             (int(session.availibility.start_time) / 1000) + 19800
         ).strftime("%I:%M %p")
@@ -311,13 +309,17 @@ def send_participant_morning_reminder_one_day_before_email():
     )
     for session in tomorrow_sessions:
         name = session.learner.name
-        meeting_link = (
-            f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
-        )
-        time = datetime.fromtimestamp(
-            (int(session.availibility.start_time) / 1000) + 19800
-        ).strftime("%I:%M %p")
-        content = {"time": time, "meeting_link": meeting_link, "name": name}
+        meeting_link = env("CAAS_APP_URL")
+        timestamp = int(session.availability.start_time) / 1000 + 19800
+        datetime_obj = datetime.fromtimestamp(timestamp)
+        date = datetime_obj.strftime("%d-%m-%Y")
+        time = datetime_obj.strftime("%I:%M %p")
+        content = {
+            "time": time,
+            "meeting_link": meeting_link,
+            "name": name,
+            "date": date,
+        }
         send_mail_templates(
             "coachee_emails/one_day_before_remailder.html",
             [session.learner.email],
