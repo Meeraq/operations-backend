@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <style>
+        body {
+            font-family: "Calibri", sans-serif;
+        }
+
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        li {
+            margin-bottom: 10px;
+            padding: 8px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div style="text-align: center;">
+        <div>Thank you for your responses!</div>
+        <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png"
+            style="width: 150px; display: inline-block;" alt="Meeraq Logo" width="187" height="34" />
+    </div>
+
+
+    <p>
+    <p style="font-size: 24px;">
+        Dear {{name}},
+    </p>
+    <br>
+    {% if assessment_timing == 'pre' %}
+    <p>
+    <p style="font-size: 20px;">
+        Thank you for taking the {{assessment_name}} - pre assessment. Your scores, in each
+        category, are as follows:
+    </p>
+    {% else %}
+    <p style="font-size: 20px;">
+        Thank you for taking the {{assessment_name}} - post assessment. Here is how you fared:
+    </p>
+    </p>
+    {% endif %}
+    </p>
+
+
+    <img src=" data:image/png;base64, {{ image_base64 }}" alt="graph"
+        style="width: 100%; height: auto; margin-top: 30pt;" />
+
+    <p style="font-size: 20px;">
+        Let's look at what these parameters mean:
+    </p>
+
+    <ul>
+        {% for competency in compentency_with_description %}
+        <li style="font-weight: bold;">
+            {{ competency.competency_name }}: {{ competency.competency_description }}.
+        </li>
+
+        {% endfor %}
+    </ul>
+
+    <p>
+        We have curated the course structure in a way that will enable you to experience a shift in these areas after
+        the course.
+        <br>
+        Happy learning!
+    </p>
+    <p>
+        Regards,
+        <br>
+        Team Meeraq
+    </p>
+</body>
+
+</html>

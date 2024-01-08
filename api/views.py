@@ -151,6 +151,7 @@ from schedularApi.models import (
     SchedularBatch,
     SchedularSessions,
 )
+
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
@@ -587,6 +588,32 @@ FIELD_NAME_VALUES = {
 }
 
 
+def add_contact_in_wati(user_type,name,phone):
+    try:
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = (
+                f"{wati_api_endpoint}/api/v1/addContact/{phone}"
+            )
+        headers = {
+            "content-type": "text/json",
+            "Authorization":  wati_authorization,
+                }
+        payload = {
+            "customParams": [
+                {
+                    "name": "user_type",
+                    "value": user_type,
+                },
+            ],
+            "name": name
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()  # Raise an HTTPError for bad responses
+        return response.json()
+    except Exception as e:
+        pass
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def create_pmo(request):
@@ -627,6 +654,9 @@ def create_pmo(request):
             pmo_user = Pmo.objects.create(
                 user=profile, name=name, email=email, phone=phone, room_id=room_id
             )
+
+            name = pmo_user.name
+            add_contact_in_wati("pmo", name, pmo_user.phone )
 
             # Return success response without room_id
             return Response({"message": "PMO added successfully."}, status=201)
@@ -803,6 +833,9 @@ def update_coach_profile(request, id):
 
         if existing_coach:
             return Response({"error": "Coach ID must be unique"}, status=400)
+        
+    name = coach.first_name + " "  + coach.last_name
+    add_contact_in_wati("coach", name, coach.phone )
 
     if serializer.is_valid():
         serializer.save()
@@ -1223,6 +1256,8 @@ def create_learners(learners_data):
                 )
                 learners.append(learner)
             # Return response with learners created or already existing
+                name = learner.name
+                add_contact_in_wati("learner", name, learner.phone )
             serializer = LearnerSerializer(learners, many=True)
             return learners
 
@@ -2118,8 +2153,11 @@ def add_coach(request):
             # Approve coach
             coach_user.is_approved = True
             coach_user.save()
-
             # Send email notification to the coach
+
+            name = coach_user.first_name + " "  + coach_user.last_name
+            add_contact_in_wati("coach", name, coach_user.phone )
+
             full_name = coach_user.first_name + " " + coach_user.last_name
             microsoft_auth_url = (
                 f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach_user.email}/'
@@ -2616,6 +2654,8 @@ def add_hr(request):
                 phone=request.data.get("phone"),
                 organisation=organisation,
             )
+            name = hr.first_name + " "  + hr.last_name
+            add_contact_in_wati("hr", name, hr.phone )
 
             hrs = HR.objects.all()
             serializer = HrSerializer(hrs, many=True)
@@ -2655,6 +2695,10 @@ def update_hr(request, hr_id):
             # saving hr
             updated_hr = serializer.save()
             user = updated_hr.user.user
+
+            
+            name = hr.first_name + " "  + hr.last_name
+            add_contact_in_wati("hr", name, hr.phone )
 
             # if email if getting updated -> updating email in all other user present
             if not updated_hr.email == user.email:
@@ -4120,6 +4164,8 @@ def edit_learner(request):
     learner.name = request.data["name"]
     learner.phone = request.data["phone"]
     learner.save()
+    name = learner.name
+    add_contact_in_wati("learner", name, learner.phone )
     return Response({"message": "Learner details updated.", "details": ""}, status=200)
 
 
@@ -4426,6 +4472,8 @@ def add_mulitple_coaches(request):
                 coach = Coach.objects.get(id=coach_user.id)
                 coach.is_approved = True
                 coach.save()
+                name = coach_user.first_name + " "  + coach_user.last_name
+                add_contact_in_wati("coach", name, coach_user.phone )
 
         return Response({"message": "Coaches added successfully."}, status=201)
     except IntegrityError as e:
@@ -6804,6 +6852,8 @@ class AddRegisteredCoach(APIView):
                 # Change the is_approved field to True
                 coach.is_approved = False
                 coach.save()
+                name = coach_user.first_name + " "  + coach_user.last_name
+                add_contact_in_wati("coach", name, coach_user.phone )
                 coach_serializer = CoachSerializer(coach)
 
                 path = f"/profile"
@@ -8316,6 +8366,6 @@ class DownloadCoachContract(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Failed to downlaod Contract."},
+                {"error": "Failed to download Contract."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
