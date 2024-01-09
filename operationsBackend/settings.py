@@ -15,6 +15,8 @@ import environ
 import os
 import json
 from celery.schedules import crontab
+from datetime import timedelta
+
 
 env = environ.Env()
 environ.Env.read_env()
@@ -229,5 +231,9 @@ CELERY_BEAT_SCHEDULE = {
     "update_assessment_status": {
         "task": "schedularApi.tasks.update_assessment_status",
         "schedule": crontab(hour=1, minute=30, day_of_week="*"),  #  7 AM
+    },
+    "refreshing_user_tokens": {
+        "task": "schedularApi.tasks.refresh_user_tokens",
+        "schedule": timedelta(hours=12),  # every 12 hours
     },
 }

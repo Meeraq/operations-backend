@@ -5,22 +5,16 @@ from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
 from django.conf import settings
-from api.models import Coach, User
+from api.models import Coach, User, UserToken
 from django.utils import timezone
 from datetime import datetime
-from api.views import send_mail_templates
+from api.views import send_mail_templates, refresh_microsoft_access_token
 from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
 from django.db.models import Q
-
-
-# from api.views import refresh_microsoft_access_token
 import environ
-
-# from datetime import datetime, timedelta
 from time import sleep
-
 
 env = environ.Env()
 environ.Env.read_env()
@@ -110,12 +104,12 @@ def send_email_to_recipients(id):
 #         sleep(6)
 
 
-# @shared_task
-# def refresh_user_tokens():
-#     users = UserToken.objects.filter(account_type="microsoft")
-#     for user in users:
-#         refresh_microsoft_access_token(user)
-#         print(f"token refresh for {user.user_mail}")
+@shared_task
+def refresh_user_tokens():
+    users = UserToken.objects.filter(account_type="microsoft")
+    for user in users:
+        refresh_microsoft_access_token(user)
+        print(f"token refresh for {user.user_mail}")
 
 
 # @shared_task
@@ -187,6 +181,8 @@ def send_email_to_recipients(id):
 #         except Exception as e:
 #             print(f"Failed to send reminder for session {str(e)}", learner_slot.id)
 #         sleep(6)
+
+
 @shared_task
 def send_coach_morning_reminder_email():
     start_timestamp, end_timestamp = get_current_date_timestamps()
