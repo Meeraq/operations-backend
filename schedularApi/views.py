@@ -24,7 +24,7 @@ import pandas as pd
 from django.db.models import Q
 import json
 from django.core.exceptions import ObjectDoesNotExist
-from api.views import get_date, get_time,add_contact_in_wati
+from api.views import get_date, get_time, add_contact_in_wati
 from django.shortcuts import render
 from api.models import Organisation, HR, Coach, User, Learner
 from .serializers import (
@@ -61,6 +61,7 @@ from .models import (
     SchedularSessions,
     Facilitator,
     SchedularBatch,
+    CalendarInvites,
 )
 
 from courses.models import (
@@ -74,7 +75,12 @@ from courses.serializers import CourseSerializer
 from courses.views import create_or_get_learner
 
 from api.serializers import LearnerSerializer
-from api.views import create_notification, send_mail_templates
+from api.views import (
+    create_notification,
+    send_mail_templates,
+    create_outlook_calendar_invite,
+    delete_outlook_calendar_invite,
+)
 import io
 
 
@@ -485,10 +491,70 @@ def update_live_session(request, live_session_id):
         return Response(
             {"error": "LiveSession not found"}, status=status.HTTP_404_NOT_FOUND
         )
-
+    existing_date_time = live_session.date_time
     serializer = LiveSessionSerializer(live_session, data=request.data, partial=True)
     if serializer.is_valid():
-        serializer.save()
+        update_live_session = serializer.save()
+        # Calendar invites
+        try:
+            learners = live_session.batch.learners.all()
+            attendees = list(
+                map(
+                    lambda learner: {
+                        "emailAddress": {
+                            "name": learner.name,
+                            "address": learner.email,
+                        },
+                        "type": "required",
+                    },
+                    learners,
+                )
+            )
+
+            start_time_stamp = update_live_session.date_time.timestamp() * 1000
+            end_time_stamp = (
+                start_time_stamp + int(update_live_session.duration) * 60000
+            )
+            start_datetime_obj = datetime.fromtimestamp(int(start_time_stamp) / 1000)   + timedelta(hours=5, minutes=30)
+            start_datetime_str =  start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
+            
+            if not existing_date_time:
+                print("date time does not exist")
+                create_outlook_calendar_invite(
+                    "Meeraq - Live Session",
+                    f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. Please book your calendars.",
+                    start_time_stamp,
+                    end_time_stamp,
+                    attendees,
+                    env("CALENDAR_INVITATION_ORGANIZER"),
+                    None,
+                    None,
+                    update_live_session,
+                )
+            elif not existing_date_time.strftime(
+                "%d-%m-%Y %H:%M"
+            ) == update_live_session.date_time.strftime("%d-%m-%Y %H:%M"):
+                existing_calendar_invite = CalendarInvites.objects.filter(
+                    live_session=live_session
+                ).first()
+                # delete the current one
+                if existing_calendar_invite:
+                    delete_outlook_calendar_invite(existing_calendar_invite)
+                # create the new one
+                create_outlook_calendar_invite(
+                    "Meeraq - Live Session",
+                    "Meeraq is inviting you to a group live session",
+                    start_time_stamp,
+                    end_time_stamp,
+                    attendees,
+                    env("CALENDAR_INVITATION_ORGANIZER"),
+                    None,
+                    None,
+                    update_live_session,
+                )
+        except Exception as e:
+            print(str(e))
+            pass
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -855,7 +921,7 @@ def add_batch(request, project_id):
         learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
 
         name = learner.name
-        add_contact_in_wati("learner", name, learner.phone )
+        add_contact_in_wati("learner", name, learner.phone)
 
         # Add participant to the batch if not already added
         if learner and learner not in batch.learners.all():
@@ -1247,7 +1313,7 @@ def schedule_session_fixed(request):
 
             serializer = SchedularSessionsSerializer(data=session_data)
             if serializer.is_valid():
-                serializer.save()
+                scheduled_session = serializer.save()
                 coach_availability.is_confirmed = True
                 coach_availability.save()
                 coach_name = f"{coach_availability.coach.first_name} {coach_availability.coach.last_name}"
@@ -1294,7 +1360,37 @@ def schedule_session_fixed(request):
                         end_time=unblock_slot["end_time"],
                         is_confirmed=False,
                     )
-                    print("created", created_availability.id)
+                session_type_value = (
+                    "coaching"
+                    if session_type == "laser_coaching_session"
+                    else "mentoring"
+                )
+                create_outlook_calendar_invite(
+                    f"Meeraq - {session_type_value.capitalize()} Session",
+                    f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
+                    coach_availability.start_time,
+                    coach_availability.end_time,
+                    [
+                        {
+                            "emailAddress": {
+                                "name": coach_name,
+                                "address": coach_availability.coach.email,
+                            },
+                            "type": "required",
+                        },
+                        {
+                            "emailAddress": {
+                                "name": learner.name,
+                                "address": participant_email,
+                            },
+                            "type": "required",
+                        },
+                    ],
+                    env("CALENDAR_INVITATION_ORGANIZER"),
+                    None,
+                    scheduled_session,
+                    None,
+                )
 
                 send_mail_templates(
                     "schedule_session.html",
@@ -1755,7 +1851,7 @@ def add_participant_to_batch(request, batch_id):
         batch.learners.add(learner)
         batch.save()
         name = learner.name
-        add_contact_in_wati("learner", name, learner.phone )
+        add_contact_in_wati("learner", name, learner.phone)
         try:
             course = Course.objects.get(batch=batch)
             course_enrollments = CourseEnrollment.objects.filter(
@@ -1770,7 +1866,7 @@ def add_participant_to_batch(request, batch_id):
                 )
         except Exception:
             # course doesnt exists
-            pass    
+            pass
 
         return Response(
             {"message": "Participant added to the batch successfully"},

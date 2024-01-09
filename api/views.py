@@ -150,6 +150,7 @@ from schedularApi.models import (
     SchedularProject,
     SchedularBatch,
     SchedularSessions,
+    CalendarInvites
 )
 
 from django_rest_passwordreset.models import ResetPasswordToken
@@ -482,6 +483,96 @@ def delete_microsoft_calendar_event(access_token, event_id):
         return {"error": "An error occurred", "details": str(e)}
 
 
+def create_outlook_calendar_invite(
+    subject,
+    description,
+    start_time_stamp,
+    end_time_stamp,
+    attendees,
+    user_email,
+    caas_session,
+    schedular_session,
+    live_session,
+):
+    event_create_url = "https://graph.microsoft.com/v1.0/me/events"
+    try:
+        user_token = UserToken.objects.get(user_profile__user__email=user_email)
+        new_access_token = refresh_microsoft_access_token(user_token)
+        if not new_access_token:
+            new_access_token = user_token.access_token
+        headers = {
+            "Authorization": f"Bearer {new_access_token}",
+            "Content-Type": "application/json",
+        }
+        start_datetime_obj = datetime.fromtimestamp(int(start_time_stamp) / 1000)   + timedelta(hours=5, minutes=30)
+        end_datetime_obj = datetime.fromtimestamp(int(end_time_stamp) / 1000)  + timedelta(hours=5, minutes=30) 
+        start_datetime = start_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
+        end_datetime = end_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
+        event_payload = {
+            "subject": subject,
+            "body": {"contentType": "HTML", "content": description},
+            "start": {"dateTime": start_datetime, "timeZone": "Asia/Kolkata"},
+            "end": {"dateTime": end_datetime, "timeZone": "Asia/Kolkata"},
+            "attendees": attendees,
+        }
+        response = requests.post(event_create_url, json=event_payload, headers=headers)
+        if response.status_code == 201:
+            microsoft_response_data = response.json()
+            calendar_invite = CalendarInvites(
+                event_id=microsoft_response_data.get("id"),
+                title=subject,
+                description=description,
+                start_datetime=start_datetime,
+                end_datetime=end_datetime,
+                attendees=attendees,
+                creator=user_email,
+                caas_session=caas_session,
+                schedular_session=schedular_session,
+                live_session=live_session
+            )
+            calendar_invite.save()
+            print("Calendar invite sent successfully.")
+            return True
+        else:
+            print(f"Calendar invitation failed. Status code: {response.status_code}")
+            print(response.text)
+            return False
+    
+    except UserToken.DoesNotExist:
+        print(f"User token not found for email: {user_email}")
+        return False
+    
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return False
+
+
+def delete_outlook_calendar_invite(calendar_invite):
+    try:
+        user_token = UserToken.objects.get(user_profile__user__username=calendar_invite.creator)
+        new_access_token = refresh_microsoft_access_token(user_token)
+        if not new_access_token:
+            new_access_token = user_token.access_token
+        event_delete_url = f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        headers = {
+            "Authorization": f"Bearer {new_access_token}",
+        }
+        response = requests.delete(event_delete_url, headers=headers)
+        if response.status_code == 204:
+            calendar_invite.delete()
+            return {"message": "Event deleted successfully"}
+        elif response.status_code == 404:
+            return {"error": "Event not found"}
+        else:
+            return {
+                "error": "Failed to delete event",
+                "status_code": response.status_code,
+            }
+
+    except Exception as e:
+        return {"error": "An error occurred", "details": str(e)}
+
+
 def create_notification(user, path, message):
     notification = Notification.objects.create(user=user, path=path, message=message)
     return notification
@@ -588,17 +679,15 @@ FIELD_NAME_VALUES = {
 }
 
 
-def add_contact_in_wati(user_type,name,phone):
+def add_contact_in_wati(user_type, name, phone):
     try:
         wati_api_endpoint = env("WATI_API_ENDPOINT")
         wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = (
-                f"{wati_api_endpoint}/api/v1/addContact/{phone}"
-            )
+        wati_api_url = f"{wati_api_endpoint}/api/v1/addContact/{phone}"
         headers = {
             "content-type": "text/json",
-            "Authorization":  wati_authorization,
-                }
+            "Authorization": wati_authorization,
+        }
         payload = {
             "customParams": [
                 {
@@ -606,13 +695,14 @@ def add_contact_in_wati(user_type,name,phone):
                     "value": user_type,
                 },
             ],
-            "name": name
+            "name": name,
         }
         response = requests.post(wati_api_url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an HTTPError for bad responses
         return response.json()
     except Exception as e:
         pass
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -656,7 +746,7 @@ def create_pmo(request):
             )
 
             name = pmo_user.name
-            add_contact_in_wati("pmo", name, pmo_user.phone )
+            add_contact_in_wati("pmo", name, pmo_user.phone)
 
             # Return success response without room_id
             return Response({"message": "PMO added successfully."}, status=201)
@@ -833,9 +923,9 @@ def update_coach_profile(request, id):
 
         if existing_coach:
             return Response({"error": "Coach ID must be unique"}, status=400)
-        
-    name = coach.first_name + " "  + coach.last_name
-    add_contact_in_wati("coach", name, coach.phone )
+
+    name = coach.first_name + " " + coach.last_name
+    add_contact_in_wati("coach", name, coach.phone)
 
     if serializer.is_valid():
         serializer.save()
@@ -1255,9 +1345,9 @@ def create_learners(learners_data):
                     phone=learner_data.get("phone"),
                 )
                 learners.append(learner)
-            # Return response with learners created or already existing
+                # Return response with learners created or already existing
                 name = learner.name
-                add_contact_in_wati("learner", name, learner.phone )
+                add_contact_in_wati("learner", name, learner.phone)
             serializer = LearnerSerializer(learners, many=True)
             return learners
 
@@ -2155,8 +2245,8 @@ def add_coach(request):
             coach_user.save()
             # Send email notification to the coach
 
-            name = coach_user.first_name + " "  + coach_user.last_name
-            add_contact_in_wati("coach", name, coach_user.phone )
+            name = coach_user.first_name + " " + coach_user.last_name
+            add_contact_in_wati("coach", name, coach_user.phone)
 
             full_name = coach_user.first_name + " " + coach_user.last_name
             microsoft_auth_url = (
@@ -2654,8 +2744,8 @@ def add_hr(request):
                 phone=request.data.get("phone"),
                 organisation=organisation,
             )
-            name = hr.first_name + " "  + hr.last_name
-            add_contact_in_wati("hr", name, hr.phone )
+            name = hr.first_name + " " + hr.last_name
+            add_contact_in_wati("hr", name, hr.phone)
 
             hrs = HR.objects.all()
             serializer = HrSerializer(hrs, many=True)
@@ -2696,9 +2786,8 @@ def update_hr(request, hr_id):
             updated_hr = serializer.save()
             user = updated_hr.user.user
 
-            
-            name = hr.first_name + " "  + hr.last_name
-            add_contact_in_wati("hr", name, hr.phone )
+            name = hr.first_name + " " + hr.last_name
+            add_contact_in_wati("hr", name, hr.phone)
 
             # if email if getting updated -> updating email in all other user present
             if not updated_hr.email == user.email:
@@ -4165,7 +4254,7 @@ def edit_learner(request):
     learner.phone = request.data["phone"]
     learner.save()
     name = learner.name
-    add_contact_in_wati("learner", name, learner.phone )
+    add_contact_in_wati("learner", name, learner.phone)
     return Response({"message": "Learner details updated.", "details": ""}, status=200)
 
 
@@ -4472,8 +4561,8 @@ def add_mulitple_coaches(request):
                 coach = Coach.objects.get(id=coach_user.id)
                 coach.is_approved = True
                 coach.save()
-                name = coach_user.first_name + " "  + coach_user.last_name
-                add_contact_in_wati("coach", name, coach_user.phone )
+                name = coach_user.first_name + " " + coach_user.last_name
+                add_contact_in_wati("coach", name, coach_user.phone)
 
         return Response({"message": "Coaches added successfully."}, status=201)
     except IntegrityError as e:
@@ -6852,8 +6941,8 @@ class AddRegisteredCoach(APIView):
                 # Change the is_approved field to True
                 coach.is_approved = False
                 coach.save()
-                name = coach_user.first_name + " "  + coach_user.last_name
-                add_contact_in_wati("coach", name, coach_user.phone )
+                name = coach_user.first_name + " " + coach_user.last_name
+                add_contact_in_wati("coach", name, coach_user.phone)
                 coach_serializer = CoachSerializer(coach)
 
                 path = f"/profile"
@@ -8369,3 +8458,4 @@ class DownloadCoachContract(APIView):
                 {"error": "Failed to download Contract."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
