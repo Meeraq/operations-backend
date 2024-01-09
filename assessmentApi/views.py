@@ -3346,7 +3346,7 @@ class ReleaseResults(APIView):
                                 participant, assessment_id, assessment
                             )
 
-                            send_mail_templates(
+                        send_mail_templates(
                                 "assessment/air_india_report_mail.html",
                                 [participant.email],
                                 "Meeraq Assessment Report",
