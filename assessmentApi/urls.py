@@ -232,7 +232,7 @@ urlpatterns = [
         "get-start-assessment-data-for-participant/<str:unique_id>/",
         StartAssessmentDataForParticipant.as_view(),
     ),
-     path(
+    path(
         "pre-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
         PreReportDownloadForParticipant.as_view(),
     ),
