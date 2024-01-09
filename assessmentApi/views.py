@@ -150,6 +150,8 @@ def send_whatsapp_message(user_type, participant, assessment, unique_id):
         assessment_name = assessment.participant_view_name
         participant_phone = participant.phone
         participant_name = participant.name
+        if not participant_phone:
+            return {"error": 'Participant phone not available'}, 500
         wati_api_endpoint = env("WATI_API_ENDPOINT")
         wati_authorization = env("WATI_AUTHORIZATION")
         wati_api_url = f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
