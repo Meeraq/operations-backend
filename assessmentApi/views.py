@@ -19,6 +19,7 @@ from .models import (
     ObserverTypes,
     AssessmentNotification,
     ParticipantUniqueId,
+    ParticipantReleasedResults,
 )
 from .serializers import (
     CompetencySerializerDepthOne,
@@ -35,6 +36,7 @@ from .serializers import (
     ObserverUniqueIdSerializerDepthTwo,
     ObserverTypeSerializer,
     AssessmentNotificationSerializer,
+    ParticipantReleasedResultsSerializerDepthOne,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -783,7 +785,8 @@ class AddParticipantObserverToAssessment(APIView):
                 {"error": "Assessment not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
-
+        assessment.result_released = False
+        assessment.save()
         try:
             participants = request.data.get("participants", [])
 
@@ -796,7 +799,8 @@ class AddParticipantObserverToAssessment(APIView):
                 )
 
             participant = create_learner(
-                participants[0]["participantName"].title(), participants[0]["participantEmail"]
+                participants[0]["participantName"].title(),
+                participants[0]["participantEmail"],
             )
             if phone:
                 participant.phone = phone
@@ -2897,282 +2901,265 @@ class StartAssessmentDataForParticipant(APIView):
 
 
 def generate_graph_for_participant(participant, assessment_id, assessment):
-    try:
-        participant_response = ParticipantResponse.objects.get(
-            participant__id=participant.id, assessment__id=assessment_id
-        )
-    except ParticipantResponse.DoesNotExist as e:
-        print(str(e))
-        return Response(
-            {"error": "ParticipantResponse not found."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+    participant_response = ParticipantResponse.objects.filter(
+        participant__id=participant.id, assessment__id=assessment_id
+    ).first()
 
-    total_for_each_comp = {}
-    compentency_with_description = []
+    if participant_response:
+        total_for_each_comp = {}
+        compentency_with_description = []
 
-    for competency in assessment.questionnaire.questions.values(
-        "competency"
-    ).distinct():
-        competency_id = competency["competency"]
+        for competency in assessment.questionnaire.questions.values(
+            "competency"
+        ).distinct():
+            competency_id = competency["competency"]
 
-        competency_name_for_object = Competency.objects.get(id=competency_id).name
-        competency_description_for_object = Competency.objects.get(
-            id=competency_id
-        ).description
-        competency_object = {
-            "competency_name": competency_name_for_object,
-            "competency_description": competency_description_for_object,
-        }
-        compentency_with_description.append(competency_object)
+            competency_name_for_object = Competency.objects.get(id=competency_id).name
+            competency_description_for_object = Competency.objects.get(
+                id=competency_id
+            ).description
+            competency_object = {
+                "competency_name": competency_name_for_object,
+                "competency_description": competency_description_for_object,
+            }
+            compentency_with_description.append(competency_object)
 
-    for question in assessment.questionnaire.questions.all():
-        if question.competency.name not in total_for_each_comp:
-            total_for_each_comp[question.competency.name] = 1
-        else:
-            total_for_each_comp[question.competency.name] += 1
+        for question in assessment.questionnaire.questions.all():
+            if question.competency.name not in total_for_each_comp:
+                total_for_each_comp[question.competency.name] = 1
+            else:
+                total_for_each_comp[question.competency.name] += 1
 
-    competency_object = {}
-    for question in assessment.questionnaire.questions.all():
-        if question.competency.name not in competency_object:
-            competency_object[question.competency.name] = 0
+        competency_object = {}
+        for question in assessment.questionnaire.questions.all():
+            if question.competency.name not in competency_object:
+                competency_object[question.competency.name] = 0
 
-        participant_response_value = participant_response.participant_response.get(
-            str(question.id)
-        )
-        correct_answer = (
-            assessment.questionnaire.questions.filter(id=question.id)
-            .first()
-            .correct_answer
-        )
-
-        if participant_response_value == int(correct_answer):
-            competency_object[question.competency.name] = (
-                competency_object[question.competency.name] + 1
+            participant_response_value = participant_response.participant_response.get(
+                str(question.id)
+            )
+            correct_answer = (
+                assessment.questionnaire.questions.filter(id=question.id)
+                .first()
+                .correct_answer
             )
 
-    competency_percentage = {}
-    for comp in total_for_each_comp:
-        competency_percentage[comp] = round(
-            (competency_object[comp] / total_for_each_comp[comp]) * 100
+            if participant_response_value == int(correct_answer):
+                competency_object[question.competency.name] = (
+                    competency_object[question.competency.name] + 1
+                )
+
+        competency_percentage = {}
+        for comp in total_for_each_comp:
+            competency_percentage[comp] = round(
+                (competency_object[comp] / total_for_each_comp[comp]) * 100
+            )
+
+        comp_labels = list(competency_percentage.keys())
+        percentage_values = list(competency_percentage.values())
+        colors1 = ["#eb0081", "#d1cdcd"]
+        colors2 = ["#b91689", "#d1cdcd"]
+        colors3 = ["#7a3191", "#d1cdcd"]
+        colors4 = ["#374e9c", "#d1cdcd"]
+
+        fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 3))
+        ax = fig.add_subplot(111)
+
+        bottom = np.zeros(len(comp_labels))
+        bar_positions = np.arange(len(comp_labels))
+        for i in range(len(comp_labels)):
+            color_index = i % 4  # Use modulo to repeat colors after every four bars
+
+            if color_index == 0:
+                color = colors1
+            elif color_index == 1:
+                color = colors2
+            elif color_index == 2:
+                color = colors3
+            else:
+                color = colors4
+
+            ax.barh(comp_labels[i], percentage_values[i], color=color, left=bottom[i])
+
+        for index, value in enumerate(percentage_values):
+            new_value = value / 100 * total_for_each_comp[comp_labels[index]]
+            ax.text(
+                value,
+                bar_positions[index],
+                f"{value}%",
+                ha="left",
+                va="center",
+                color="black",
+            )
+        ax.set_yticks(bar_positions)
+        ax.set_yticklabels(
+            [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
+            fontweight="bold",
+            fontsize=14,
         )
+        plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
+        plt.xlim(0, 100)
+        plt.xlabel("Percentage")
+        plt.tight_layout()
 
-    comp_labels = list(competency_percentage.keys())
-    percentage_values = list(competency_percentage.values())
-    colors1 = ["#eb0081", "#d1cdcd"]
-    colors2 = ["#b91689", "#d1cdcd"]
-    colors3 = ["#7a3191", "#d1cdcd"]
-    colors4 = ["#374e9c", "#d1cdcd"]
+        image_stream = io.BytesIO()
+        plt.savefig(image_stream, format="png")
+        plt.close()
 
-    fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 3))
-    ax = fig.add_subplot(111)
-
-    bottom = np.zeros(len(comp_labels))
-    bar_positions = np.arange(len(comp_labels))
-    for i in range(len(comp_labels)):
-        color_index = i % 4  # Use modulo to repeat colors after every four bars
-
-        if color_index == 0:
-            color = colors1
-        elif color_index == 1:
-            color = colors2
-        elif color_index == 2:
-            color = colors3
-        else:
-            color = colors4
-
-        ax.barh(comp_labels[i], percentage_values[i], color=color, left=bottom[i])
-
-    for index, value in enumerate(percentage_values):
-        new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-        ax.text(
-            value,
-            bar_positions[index],
-            f"{value}%",
-            ha="left",
-            va="center",
-            color="black",
-        )
-    ax.set_yticks(bar_positions)
-    ax.set_yticklabels(
-        [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
-        fontweight="bold",
-        fontsize=14,
-    )
-    plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
-    plt.xlim(0, 100)
-    plt.xlabel("Percentage")
-    plt.tight_layout()
-
-    image_stream = io.BytesIO()
-    plt.savefig(image_stream, format="png")
-    plt.close()
-
-    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
-    return encoded_image, compentency_with_description
+        encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
+        return encoded_image, compentency_with_description
+    return None, None
 
 
 def generate_graph_for_participant_for_post_assessent(
     participant, assessment_id, assessment
 ):
-    try:
-        participant_response = ParticipantResponse.objects.get(
-            participant__id=participant.id, assessment__id=assessment_id
-        )
-    except ParticipantResponse.DoesNotExist as e:
-        print(str(e))
-        return Response(
-            {"error": "Participant Response not found."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-    try:
-        pre_assessment_participant_response = ParticipantResponse.objects.get(
-            participant__id=participant.id, assessment__id=assessment.pre_assessment.id
-        )
+    participant_response = ParticipantResponse.objects.filter(
+        participant__id=participant.id, assessment__id=assessment_id
+    ).first()
 
-    except ParticipantResponse.DoesNotExist as e:
-        print(str(e))
-        return Response(
-            {"error": "Participant Response for pre assessment not found."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
+    pre_assessment_participant_response = ParticipantResponse.objects.filter(
+        participant__id=participant.id, assessment__id=assessment.pre_assessment.id
+    ).first()
 
-    total_for_each_comp = {}
-    compentency_with_description = []
+    if participant_response and pre_assessment_participant_response:
+        total_for_each_comp = {}
+        compentency_with_description = []
 
-    for competency in assessment.questionnaire.questions.values(
-        "competency"
-    ).distinct():
-        competency_id = competency["competency"]
+        for competency in assessment.questionnaire.questions.values(
+            "competency"
+        ).distinct():
+            competency_id = competency["competency"]
 
-        competency_name_for_object = Competency.objects.get(id=competency_id).name
-        competency_description_for_object = Competency.objects.get(
-            id=competency_id
-        ).description
-        competency_object = {
-            "competency_name": competency_name_for_object,
-            "competency_description": competency_description_for_object,
-        }
-        compentency_with_description.append(competency_object)
+            competency_name_for_object = Competency.objects.get(id=competency_id).name
+            competency_description_for_object = Competency.objects.get(
+                id=competency_id
+            ).description
+            competency_object = {
+                "competency_name": competency_name_for_object,
+                "competency_description": competency_description_for_object,
+            }
+            compentency_with_description.append(competency_object)
 
-    for question in assessment.questionnaire.questions.all():
-        if question.competency.name not in total_for_each_comp:
-            total_for_each_comp[question.competency.name] = 1
-        else:
-            total_for_each_comp[question.competency.name] += 1
+        for question in assessment.questionnaire.questions.all():
+            if question.competency.name not in total_for_each_comp:
+                total_for_each_comp[question.competency.name] = 1
+            else:
+                total_for_each_comp[question.competency.name] += 1
 
-    competency_object = {}
-    pre_competency_object = {}
-    for question in assessment.questionnaire.questions.all():
-        if question.competency.name not in competency_object:
-            competency_object[question.competency.name] = 0
-        if question.competency.name not in pre_competency_object:
-            pre_competency_object[question.competency.name] = 0
+        competency_object = {}
+        pre_competency_object = {}
+        for question in assessment.questionnaire.questions.all():
+            if question.competency.name not in competency_object:
+                competency_object[question.competency.name] = 0
+            if question.competency.name not in pre_competency_object:
+                pre_competency_object[question.competency.name] = 0
 
-        participant_response_value = participant_response.participant_response.get(
-            str(question.id)
-        )
-        pre_assessment_participant_response_value = (
-            pre_assessment_participant_response.participant_response.get(
+            participant_response_value = participant_response.participant_response.get(
                 str(question.id)
             )
-        )
-        correct_answer = (
-            assessment.questionnaire.questions.filter(id=question.id)
-            .first()
-            .correct_answer
-        )
-
-        if pre_assessment_participant_response_value == int(correct_answer):
-            pre_competency_object[question.competency.name] = (
-                pre_competency_object[question.competency.name] + 1
+            pre_assessment_participant_response_value = (
+                pre_assessment_participant_response.participant_response.get(
+                    str(question.id)
+                )
+            )
+            correct_answer = (
+                assessment.questionnaire.questions.filter(id=question.id)
+                .first()
+                .correct_answer
             )
 
-        if participant_response_value == int(correct_answer):
-            competency_object[question.competency.name] = (
-                competency_object[question.competency.name] + 1
+            if pre_assessment_participant_response_value == int(correct_answer):
+                pre_competency_object[question.competency.name] = (
+                    pre_competency_object[question.competency.name] + 1
+                )
+
+            if participant_response_value == int(correct_answer):
+                competency_object[question.competency.name] = (
+                    competency_object[question.competency.name] + 1
+                )
+
+        competency_percentage = {}
+        pre_competency_percentage = {}
+        for comp in total_for_each_comp:
+            competency_percentage[comp] = round(
+                (competency_object[comp] / total_for_each_comp[comp]) * 100
+            )
+            pre_competency_percentage[comp] = round(
+                (pre_competency_object[comp] / total_for_each_comp[comp]) * 100
             )
 
-    competency_percentage = {}
-    pre_competency_percentage = {}
-    for comp in total_for_each_comp:
-        competency_percentage[comp] = round(
-            (competency_object[comp] / total_for_each_comp[comp]) * 100
-        )
-        pre_competency_percentage[comp] = round(
-            (pre_competency_object[comp] / total_for_each_comp[comp]) * 100
-        )
+        comp_labels = list(competency_percentage.keys())
+        pre_percentage_values = list(pre_competency_percentage.values())
+        post_percentage_values = list(competency_percentage.values())
 
-    comp_labels = list(competency_percentage.keys())
-    pre_percentage_values = list(pre_competency_percentage.values())
-    post_percentage_values = list(competency_percentage.values())
+        fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 5))
+        ax = fig.add_subplot(111)
 
-    fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 5))
-    ax = fig.add_subplot(111)
+        width = 0.4  # Width of each bar
+        bar_positions = np.arange(len(comp_labels))
 
-    width = 0.4  # Width of each bar
-    bar_positions = np.arange(len(comp_labels))
-
-    # Plot pre-assessment values
-    pre_bars = ax.barh(
-        bar_positions - width / 2,
-        pre_percentage_values,
-        height=width,
-        label="Pre-Assessment",
-        color="#eb0081",
-    )
-
-    # Plot post-assessment values
-    post_bars = ax.barh(
-        bar_positions + width / 2,
-        post_percentage_values,
-        height=width,
-        label="Post-Assessment",
-        color="#374e9c",
-    )
-
-    ax.set_yticks(bar_positions)
-    ax.set_yticklabels(comp_labels)
-    ax.legend()
-    ax.set_yticklabels(
-        [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
-        fontweight="bold",
-    )
-    plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
-    plt.xlabel("Percentage")
-    plt.xlim(0, 100)
-    plt.tight_layout()
-
-    # Add numbers on top of the pre-assessment bars
-    for index, value in enumerate(pre_percentage_values):
-        new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-        ax.text(
-            value,
-            bar_positions[index] - width / 2,
-            f"{value}%",
-            ha="left",
-            va="center",
-            color="black",
+        # Plot pre-assessment values
+        pre_bars = ax.barh(
+            bar_positions - width / 2,
+            pre_percentage_values,
+            height=width,
+            label="Pre-Assessment",
+            color="#eb0081",
         )
 
-    # Add numbers on top of the post-assessment bars
-    for index, value in enumerate(post_percentage_values):
-        new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-        ax.text(
-            value,
-            bar_positions[index] + width / 2,
-            f"{value}%",
-            ha="left",
-            va="center",
-            color="black",
+        # Plot post-assessment values
+        post_bars = ax.barh(
+            bar_positions + width / 2,
+            post_percentage_values,
+            height=width,
+            label="Post-Assessment",
+            color="#374e9c",
         )
 
-    image_stream = io.BytesIO()
-    plt.savefig(image_stream, format="png")
-    plt.close()
+        ax.set_yticks(bar_positions)
+        ax.set_yticklabels(comp_labels)
+        ax.legend()
+        ax.set_yticklabels(
+            [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
+            fontweight="bold",
+        )
+        plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
+        plt.xlabel("Percentage")
+        plt.xlim(0, 100)
+        plt.tight_layout()
 
-    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
-    return encoded_image, compentency_with_description
+        # Add numbers on top of the pre-assessment bars
+        for index, value in enumerate(pre_percentage_values):
+            new_value = value / 100 * total_for_each_comp[comp_labels[index]]
+            ax.text(
+                value,
+                bar_positions[index] - width / 2,
+                f"{value}%",
+                ha="left",
+                va="center",
+                color="black",
+            )
+
+        # Add numbers on top of the post-assessment bars
+        for index, value in enumerate(post_percentage_values):
+            new_value = value / 100 * total_for_each_comp[comp_labels[index]]
+            ax.text(
+                value,
+                bar_positions[index] + width / 2,
+                f"{value}%",
+                ha="left",
+                va="center",
+                color="black",
+            )
+
+        image_stream = io.BytesIO()
+        plt.savefig(image_stream, format="png")
+        plt.close()
+
+        encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
+        return encoded_image, compentency_with_description
+    return None, None
 
 
 class PreReportDownloadForParticipant(APIView):
@@ -3208,8 +3195,8 @@ class PreReportDownloadForParticipant(APIView):
             email_message = render_to_string(
                 "assessment/air_india_assessement_report.html",
                 {
-                    "name": participant.name,
-                    "image_base64": encoded_image,
+                    "name": participant.name.title(),
+                    "image_base64": encoded_image ,
                     "compentency_with_description": compentency_with_description,
                     "assessment_timing": assessment.assessment_timing,
                     "assessment_name": assessment.participant_view_name,
@@ -3267,13 +3254,13 @@ class PreReportDownloadForAllParticipant(APIView):
 
                 participant_context.append(
                     {
-                        "name": participant.name,
+                        "name": participant.name.title(),
                         "image_base64": encoded_image,
                         "compentency_with_description": compentency_with_description,
                         "assessment_timing": assessment.assessment_timing,
                     }
                 )
-
+                
             email_message = render_to_string(
                 "assessment/air_india_assessment_report_batch_wise.html",
                 {
@@ -3303,47 +3290,84 @@ class ReleaseResults(APIView):
     def put(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
-
-            assessment.result_released = True
-            assessment.save()
-            if assessment.assessment_timing != "none":
+            if (
+                assessment.assessment_timing == "pre"
+                or assessment.assessment_timing == "post"
+            ):
+                (
+                    participant_released_results,
+                    created,
+                ) = ParticipantReleasedResults.objects.get_or_create(
+                    assessment=assessment
+                )
+                participant_with_released_results = []
+                if not created:
+                    participant_with_released_results = (
+                        participant_released_results.participants.all()
+                    )
+               
+                participant_with_not_released_results = []
                 for participant_observer in assessment.participants_observers.all():
-                    participant = participant_observer.participant
-                    encoded_image = None
-                    compentency_with_description = None
-                    if assessment.assessment_timing == "pre":
-                        (
-                            encoded_image,
-                            compentency_with_description,
-                        ) = generate_graph_for_participant(
-                            participant, assessment_id, assessment
-                        )
-                    elif assessment.assessment_timing == "post":
-                        (
-                            encoded_image,
-                            compentency_with_description,
-                        ) = generate_graph_for_participant_for_post_assessent(
-                            participant, assessment_id, assessment
-                        )
+                    participant_response_present = ParticipantResponse.objects.filter(
+                        assessment=assessment,
+                        participant=participant_observer.participant,
+                    ).exists()
+                    if participant_response_present:
+                        if (
+                            participant_observer.participant
+                            not in participant_with_released_results
+                        ):
+                            participant_with_not_released_results.append(
+                                participant_observer.participant
+                            )
+                            participant_released_results.participants.add(
+                                participant_observer.participant
+                            )
+               
+                participant_released_results.save()
 
-                    participant_response = ParticipantResponse.objects.filter(
-                        participant__id=participant.id, assessment__id=assessment_id
-                    ).first()
+                if len(assessment.participants_observers.all()) == (
+                    len(participant_with_released_results)
+                    + len(participant_with_not_released_results)
+                ):
+                    assessment.result_released = True
+                    assessment.save()
 
-                    if participant_response:
+                if assessment.assessment_timing != "none":
+                    for participant in participant_with_not_released_results:
+                        encoded_image = None
+                        compentency_with_description = None
+                        if assessment.assessment_timing == "pre":
+                            (
+                                encoded_image,
+                                compentency_with_description,
+                            ) = generate_graph_for_participant(
+                                participant, assessment_id, assessment
+                            )
+                        elif assessment.assessment_timing == "post":
+                            (
+                                encoded_image,
+                                compentency_with_description,
+                            ) = generate_graph_for_participant_for_post_assessent(
+                                participant, assessment_id, assessment
+                            )
+
                         send_mail_templates(
-                            "assessment/air_india_report_mail.html",
-                            [participant.email],
-                            "Meeraq Assessment Report",
-                            {
-                                "name": participant.name.title(),
-                                "image_base64": encoded_image,
-                                "compentency_with_description": compentency_with_description,
-                                "assessment_timing": assessment.assessment_timing,
-                                "assessment_name": assessment.participant_view_name,
-                            },
-                            [],
-                        )
+                                "assessment/air_india_report_mail.html",
+                                [participant.email],
+                                "Meeraq Assessment Report",
+                                {
+                                    "name": participant.name.title(),
+                                    "image_base64": encoded_image,
+                                    "compentency_with_description": compentency_with_description,
+                                    "assessment_timing": assessment.assessment_timing,
+                                    "assessment_name": assessment.participant_view_name,
+                                },
+                                [],
+                            )
+            else:
+                assessment.result_released = True
+                assessment.save()
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
@@ -3519,7 +3543,7 @@ class MoveParticipant(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Failed to Release Results"},
+                {"error": "Failed to move participant"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -3565,7 +3589,7 @@ class DownloadParticipantResponseStatusData(APIView):
                         assessment=assessment,
                         participant__id=participant_observers.participant.id,
                     ).first()
-               
+
                     data = {
                         "name": participant_observers.participant.name.title(),
                         "email": participant_observers.participant.email,
@@ -3573,7 +3597,7 @@ class DownloadParticipantResponseStatusData(APIView):
                         if participant_responses
                         else "Not Responded",
                     }
-                   
+
                     response_data.append(data)
 
                 return Response(response_data)
@@ -3612,6 +3636,27 @@ class DownloadParticipantResponseStatusData(APIView):
                 {"error": "Assessment not found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get download response data."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetParticipantReleasedResults(APIView):
+    def get(self, request, assessment_id):
+        try:
+            participant_released_results = ParticipantReleasedResults.objects.filter(
+                assessment__id=assessment_id
+            ).first()
+
+            serializer = ParticipantReleasedResultsSerializerDepthOne(
+                participant_released_results
+            )
+
+            return Response(serializer.data)
 
         except Exception as e:
             print(str(e))

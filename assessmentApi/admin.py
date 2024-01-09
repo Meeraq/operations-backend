@@ -13,6 +13,7 @@ from .models import (
     Behavior,
     AssessmentNotification,
     ParticipantUniqueId,
+    ParticipantReleasedResults,
 )
 
 # Register your models here.
@@ -31,3 +32,4 @@ admin.site.register(ObserverUniqueId)
 admin.site.register(Behavior)
 admin.site.register(AssessmentNotification)
 admin.site.register(ParticipantUniqueId)
+admin.site.register(ParticipantReleasedResults)
