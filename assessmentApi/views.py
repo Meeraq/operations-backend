@@ -150,6 +150,8 @@ def send_whatsapp_message(user_type, participant, assessment, unique_id):
         assessment_name = assessment.participant_view_name
         participant_phone = participant.phone
         participant_name = participant.name
+        if not participant_phone:
+            return {"error": 'Participant phone not available'}, 500
         wati_api_endpoint = env("WATI_API_ENDPOINT")
         wati_authorization = env("WATI_AUTHORIZATION")
         wati_api_url = f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
@@ -796,10 +798,12 @@ class AddParticipantObserverToAssessment(APIView):
             participant = create_learner(
                 participants[0]["participantName"].title(), participants[0]["participantEmail"]
             )
-            participant.phone = phone
-            participant.save()
+            if phone:
+                participant.phone = phone
+                participant.save()
             unique_id = uuid.uuid4()  # Generate a UUID4
-            add_contact_in_wati("learner", participant.name.title(), participant.phone)
+            if phone:
+                add_contact_in_wati("learner", participant.name.title(), participant.phone)
             # Creating a ParticipantUniqueId instance with a UUID as unique_id
             unique_id_instance = ParticipantUniqueId.objects.create(
                 participant=participant,
@@ -1904,14 +1908,16 @@ class AddMultipleParticipants(APIView):
                     + participant["last_name"].capitalize()
                 )
                 new_participant = create_learner(name, participant["email"])
-                new_participant.phone = participant["phone"]
+                if participant["phone"]:
+                    new_participant.phone = participant["phone"]
                 new_participant.save()
                 mapping = ParticipantObserverMapping.objects.create(
                     participant=new_participant
                 )
-                add_contact_in_wati(
-                    "learner", new_participant.name, new_participant.phone
-                )
+                if participant["phone"]:
+                    add_contact_in_wati(
+                        "learner", new_participant.name, new_participant.phone
+                    )
                 unique_id = uuid.uuid4()  # Generate a UUID4
                 # Creating a ParticipantUniqueId instance with a UUID as unique_id
                 unique_id_instance = ParticipantUniqueId.objects.create(
