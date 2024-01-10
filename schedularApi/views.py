@@ -1404,6 +1404,36 @@ def schedule_session_fixed(request):
                     [],
                 )
 
+                #WHATSAPP MESSAGE CHECK
+                
+                #before 5 mins whatsapp msg
+                start_datetime_obj = datetime.fromtimestamp(int(coach_availability.start_time)/1000) 
+                # Decrease 5 minutes
+                five_minutes_prior_start_datetime = start_datetime_obj - timedelta(minutes=5)
+                clocked = ClockedSchedule.objects.create(clocked_time=five_minutes_prior_start_datetime)
+                periodic_task = PeriodicTask.objects.create(
+                    name=uuid.uuid1(),
+                    task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_seeq",
+                    args=[scheduled_session.id],
+                    clocked=clocked,
+                    one_off=True,
+                )
+                periodic_task.save()
+
+                #after 3 mins whatsapp msg
+                three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(minutes=3)
+                clocked = ClockedSchedule.objects.create(clocked_time=three_minutes_ahead_start_datetime)
+                periodic_task = PeriodicTask.objects.create(
+                    name=uuid.uuid1(),
+                    task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_seeq",
+                    args=[scheduled_session.id],
+                    clocked=clocked,
+                    one_off=True,
+                )
+                periodic_task.save()
+
+                #WHATSAPP MESSAGE CHECK
+
                 send_mail_templates(
                     "coach_templates/coaching_email_template.html",
                     [participant_email],

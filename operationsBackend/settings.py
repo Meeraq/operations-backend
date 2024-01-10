@@ -69,7 +69,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 EMAIL_HOST = env("EMAIL_HOST")
 EMAIL_PORT = env("EMAIL_PORT")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
@@ -215,6 +215,14 @@ CELERY_BEAT_SCHEDULE = {
     "send_participant_morning_reminder_one_day_before_email": {
         "task": "schedularApi.tasks.send_participant_morning_reminder_one_day_before_email",
         "schedule": crontab(hour=3, minute=0, day_of_week="*"),
+    },
+    "send_coach_morning_reminder_whatsapp_message_at_8AM":{
+        "task": "schedularApi.tasks.send_coach_morning_reminder_whatsapp_message_at_8AM",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"), 
+    },
+    "send_participant_morning_reminder_whatsapp_message_at_8AM":{
+        "task": "schedularApi.tasks.send_participant_morning_reminder_whatsapp_message_at_8AM",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"), 
     },
     "send_reminder_email_to_participants_for_assessment_at_2PM": {
         "task": "schedularApi.tasks.send_reminder_email_to_participants_for_assessment_at_2PM",
