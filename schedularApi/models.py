@@ -5,6 +5,14 @@ from api.models import Organisation, HR, Coach, Learner, SessionRequestCaas
 
 # Create your models here.
 class SchedularProject(models.Model):
+
+    PLATFORM_TYPES_FOR_SESSIONS = [
+        ("system", "System"),
+        ("meet", "Meet"),
+        ("teams", "Teams"),
+        ("zoom", "Zoom"),
+    ]
+
     name = models.CharField(max_length=100, unique=True, default=None)
     project_structure = models.JSONField(default=list, blank=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
@@ -12,7 +20,7 @@ class SchedularProject(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
     is_project_structure_finalized = models.BooleanField(default=False)
-
+    platform_for_sessions = models.CharField(max_length=20, choices=PLATFORM_TYPES_FOR_SESSIONS, blank=True)
     class Meta:
         ordering = ["-created_at"]
 

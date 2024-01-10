@@ -19,12 +19,23 @@ from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
 from django_celery_beat.models import PeriodicTask
-
+from django.utils import timezone
 
 import environ
 
 env = environ.Env()
 
+def create_send_email(user_email, file_name):
+    try:
+        user = User.objects.get(username=user_email)
+        sent_email = SentEmailActivity.objects.create(
+            user=user,
+            email_subject=file_name,
+            timestamp=timezone.now(),
+        )
+        sent_email.save()
+    except Exception as e:
+        pass
 
 def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
     try:
@@ -39,6 +50,8 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
         email.content_subtype = "html"
 
         email.send(fail_silently=False)
+        for email in user_email:
+            create_send_email(email, file_name)
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
 
@@ -189,6 +202,9 @@ class Coach(models.Model):
     reason_for_inactive = models.JSONField(default=list, blank=True)
     client_companies = models.JSONField(default=list, blank=True)
     education_pic = models.ImageField(upload_to="post_images", blank=True)
+    zoom_link = models.TextField(blank=True)
+    teams_link = models.TextField(blank=True)
+    meet_link = models.TextField(blank=True)
 
     educational_qualification = models.JSONField(default=list, blank=True)
 

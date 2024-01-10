@@ -142,6 +142,7 @@ def create_project_schedular(request):
         schedularProject = SchedularProject(
             name=request.data["project_name"],
             organisation=organisation,
+            platform_for_sessions=request.data["platform_for_sessions"],
         )
         schedularProject.save()
     except IntegrityError:
@@ -515,9 +516,11 @@ def update_live_session(request, live_session_id):
             end_time_stamp = (
                 start_time_stamp + int(update_live_session.duration) * 60000
             )
-            start_datetime_obj = datetime.fromtimestamp(int(start_time_stamp) / 1000)   + timedelta(hours=5, minutes=30)
-            start_datetime_str =  start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
-            
+            start_datetime_obj = datetime.fromtimestamp(
+                int(start_time_stamp) / 1000
+            ) + timedelta(hours=5, minutes=30)
+            start_datetime_str = start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
+
             if not existing_date_time:
                 print("date time does not exist")
                 create_outlook_calendar_invite(
@@ -1177,6 +1180,31 @@ def schedule_session(request):
                 [],
             )
 
+            meeting_link = None
+
+            if (
+                existing_session.coaching_session.batch.project.platform_for_sessions
+                == "system"
+            ):
+                meeting_link = (
+                    f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}"
+                )
+            elif (
+                existing_session.coaching_session.batch.project.platform_for_sessions
+                == "meet"
+            ):
+                meeting_link = coach_availability.coach.meet_link
+            elif (
+                existing_session.coaching_session.batch.project.platform_for_sessions
+                == "teams"
+            ):
+                meeting_link = coach_availability.coach.teams_link
+            elif (
+                existing_session.coaching_session.batch.project.platform_for_sessions
+                == "zoom"
+            ):
+                meeting_link = coach_availability.coach.zoom_link
+
             send_mail_templates(
                 "coach_templates/coaching_email_template.html",
                 [participant_email],
@@ -1187,7 +1215,7 @@ def schedule_session(request):
                     "name": learner.name,
                     "date": date_for_mail,
                     "time": session_time,
-                    "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                    "meeting_link": meeting_link,
                     "session_type": "Mentoring"
                     if session_type == "mentoring_session"
                     else "Laser Coaching",
@@ -1403,6 +1431,30 @@ def schedule_session_fixed(request):
                     },
                     [],
                 )
+                meeting_link = None
+
+                if (
+                    existing_session.coaching_session.batch.project.platform_for_sessions
+                    == "system"
+                ):
+                    meeting_link = (
+                        f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}"
+                    )
+                elif (
+                    existing_session.coaching_session.batch.project.platform_for_sessions
+                    == "meet"
+                ):
+                    meeting_link = coach_availability.coach.meet_link
+                elif (
+                    existing_session.coaching_session.batch.project.platform_for_sessions
+                    == "teams"
+                ):
+                    meeting_link = coach_availability.coach.teams_link
+                elif (
+                    existing_session.coaching_session.batch.project.platform_for_sessions
+                    == "zoom"
+                ):
+                    meeting_link = coach_availability.coach.zoom_link
 
                 send_mail_templates(
                     "coach_templates/coaching_email_template.html",
@@ -1414,7 +1466,7 @@ def schedule_session_fixed(request):
                         "name": learner.name,
                         "date": date_for_mail,
                         "time": session_time,
-                        "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                        "meeting_link": meeting_link,
                         "session_type": "Mentoring"
                         if session_type == "mentoring_session"
                         else "Laser Coaching",
@@ -1517,6 +1569,19 @@ def get_sessions(request):
         sessions = SchedularSessions.objects.all()
     session_details = []
     for session in sessions:
+        meeting_link = None
+
+        if session.coaching_session.batch.project.platform_for_sessions == "system":
+            meeting_link = (
+                f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}"
+            )
+        elif session.coaching_session.batch.project.platform_for_sessions == "meet":
+            meeting_link = session.availibility.coach.meet_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "teams":
+            meeting_link = session.availibility.coach.teams_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "zoom":
+            meeting_link = session.availibility.coach.zoom_link
+
         session_detail = {
             "batch_name": session.coaching_session.batch.name,
             "coach_name": session.availibility.coach.first_name
@@ -1525,7 +1590,7 @@ def get_sessions(request):
             "participant_name": session.learner.name,
             "coaching_session_number": session.coaching_session.coaching_session_number,
             "participant_email": session.learner.email,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": meeting_link,
             "room_id": f"{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
         }
@@ -1554,6 +1619,19 @@ def get_sessions_by_type(request, sessions_type):
 
     session_details = []
     for session in sessions:
+        meeting_link = None
+
+        if session.coaching_session.batch.project.platform_for_sessions == "system":
+            meeting_link = (
+                f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}"
+            )
+        elif session.coaching_session.batch.project.platform_for_sessions == "meet":
+            meeting_link = session.availibility.coach.meet_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "teams":
+            meeting_link = session.availibility.coach.teams_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "zoom":
+            meeting_link = session.availibility.coach.zoom_link
+
         session_detail = {
             "id": session.id,
             "batch_name": session.coaching_session.batch.name
@@ -1576,7 +1654,7 @@ def get_sessions_by_type(request, sessions_type):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": meeting_link,
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,

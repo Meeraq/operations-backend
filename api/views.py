@@ -150,7 +150,7 @@ from schedularApi.models import (
     SchedularProject,
     SchedularBatch,
     SchedularSessions,
-    CalendarInvites
+    CalendarInvites,
 )
 
 from django_rest_passwordreset.models import ResetPasswordToken
@@ -504,8 +504,12 @@ def create_outlook_calendar_invite(
             "Authorization": f"Bearer {new_access_token}",
             "Content-Type": "application/json",
         }
-        start_datetime_obj = datetime.fromtimestamp(int(start_time_stamp) / 1000)   + timedelta(hours=5, minutes=30)
-        end_datetime_obj = datetime.fromtimestamp(int(end_time_stamp) / 1000)  + timedelta(hours=5, minutes=30) 
+        start_datetime_obj = datetime.fromtimestamp(
+            int(start_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
+        end_datetime_obj = datetime.fromtimestamp(
+            int(end_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
         start_datetime = start_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
         end_datetime = end_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
         event_payload = {
@@ -528,7 +532,7 @@ def create_outlook_calendar_invite(
                 creator=user_email,
                 caas_session=caas_session,
                 schedular_session=schedular_session,
-                live_session=live_session
+                live_session=live_session,
             )
             calendar_invite.save()
             print("Calendar invite sent successfully.")
@@ -537,11 +541,11 @@ def create_outlook_calendar_invite(
             print(f"Calendar invitation failed. Status code: {response.status_code}")
             print(response.text)
             return False
-    
+
     except UserToken.DoesNotExist:
         print(f"User token not found for email: {user_email}")
         return False
-    
+
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         return False
@@ -549,11 +553,15 @@ def create_outlook_calendar_invite(
 
 def delete_outlook_calendar_invite(calendar_invite):
     try:
-        user_token = UserToken.objects.get(user_profile__user__username=calendar_invite.creator)
+        user_token = UserToken.objects.get(
+            user_profile__user__username=calendar_invite.creator
+        )
         new_access_token = refresh_microsoft_access_token(user_token)
         if not new_access_token:
             new_access_token = user_token.access_token
-        event_delete_url = f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        event_delete_url = (
+            f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        )
         headers = {
             "Authorization": f"Bearer {new_access_token}",
         }
@@ -2147,7 +2155,9 @@ def add_coach(request):
     education_pic = request.data.get("education_pic", None)
     educational_qualification = json.loads(request.data["educational_qualification"])
     education_upload_file = request.data.get("education_upload_file", None)
-
+    teams_link = request.data.get("teams_link", "")
+    zoom_link = request.data.get("zoom_link", "")
+    meet_link = request.data.get("meet_link", "")
     # Check if required data is provided
     if not all(
         [
@@ -2238,6 +2248,9 @@ def add_coach(request):
                 education_pic=education_pic,
                 educational_qualification=educational_qualification,
                 education_upload_file=education_upload_file,
+                teams_link=teams_link,
+                zoom_link=zoom_link,
+                meet_link=meet_link,
             )
 
             # Approve coach
@@ -5130,12 +5143,24 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     if user_type == "coach":
         coach_id = user_id
     for session in avaliable_sessions:
+        meeting_link = None
+        if session.coaching_session.batch.project.platform_for_sessions == "system":
+            meeting_link = (
+                f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}"
+            )
+        elif session.coaching_session.batch.project.platform_for_sessions == "meet":
+            meeting_link = session.availibility.coach.meet_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "teams":
+            meeting_link = session.availibility.coach.teams_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "zoom":
+            meeting_link = session.availibility.coach.zoom_link
         session_detail = {
             "id": session.id,
             "batch_name": session.coaching_session.batch.name
             if coach_id is None
             else None,
             "project_name": session.coaching_session.batch.project.name,
+            "platform_for_sessions": session.coaching_session.batch.project.platform_for_sessions,
             "organisation_name": session.coaching_session.batch.project.organisation.name,
             "project_id": session.coaching_session.batch.project.id
             if coach_id is None
@@ -5144,6 +5169,9 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             + " "
             + session.availibility.coach.last_name,
             "coach_email": session.availibility.coach.email,
+            "coach_teams_link": session.availibility.coach.teams_link,
+            "coach_zoom_link": session.availibility.coach.zoom_link,
+            "coach_meet_link": session.availibility.coach.meet_link,
             "coach_phone": "+"
             + session.availibility.coach.phone_country_code
             + session.availibility.coach.phone,
@@ -5153,7 +5181,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": meeting_link,
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
@@ -5295,6 +5323,19 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
     if user_type == "coach":
         coach_id = user_id
     for session in avaliable_sessions:
+        meeting_link = None
+
+        if session.coaching_session.batch.project.platform_for_sessions == "system":
+            meeting_link = (
+                f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}"
+            )
+        elif session.coaching_session.batch.project.platform_for_sessions == "meet":
+            meeting_link = session.availibility.coach.meet_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "teams":
+            meeting_link = session.availibility.coach.teams_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "zoom":
+            meeting_link = session.availibility.coach.zoom_link
+
         session_detail = {
             "id": session.id,
             "batch_name": session.coaching_session.batch.name
@@ -5318,7 +5359,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": meeting_link,
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
@@ -8458,4 +8499,3 @@ class DownloadCoachContract(APIView):
                 {"error": "Failed to download Contract."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-

@@ -236,9 +236,19 @@ def send_participant_morning_reminder_email():
     )
     for session in today_sessions:
         name = session.learner.name
-        meeting_link = (
-            f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
-        )
+        meeting_link = None
+
+        if session.coaching_session.batch.project.platform_for_sessions == "system":
+            meeting_link = (
+                f"{env('CAAS_APP_URL')}"
+            )
+        elif session.coaching_session.batch.project.platform_for_sessions == "meet":
+            meeting_link = session.availibility.coach.meet_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "teams":
+            meeting_link = session.availibility.coach.teams_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "zoom":
+            meeting_link = session.availibility.coach.zoom_link
+
         time = datetime.fromtimestamp(
             (int(session.availibility.start_time) / 1000) + 19800
         ).strftime("%I:%M %p")
@@ -307,9 +317,19 @@ def send_participant_morning_reminder_one_day_before_email():
     )
     for session in tomorrow_sessions:
         name = session.learner.name
-        meeting_link = (
-            f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}"
-        )
+        meeting_link = None
+
+        if session.coaching_session.batch.project.platform_for_sessions == "system":
+            meeting_link = (
+                f"{env('CAAS_APP_URL')}"
+            )
+        elif session.coaching_session.batch.project.platform_for_sessions == "meet":
+            meeting_link = session.availibility.coach.meet_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "teams":
+            meeting_link = session.availibility.coach.teams_link
+        elif session.coaching_session.batch.project.platform_for_sessions == "zoom":
+            meeting_link = session.availibility.coach.zoom_link
+
         time = datetime.fromtimestamp(
             (int(session.availibility.start_time) / 1000) + 19800
         ).strftime("%I:%M %p")
