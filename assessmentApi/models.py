@@ -152,6 +152,7 @@ class Assessment(models.Model):
     pre_assessment = models.ForeignKey(
         "self", on_delete=models.CASCADE, blank=True, null=True
     )
+    initial_reminder = models.BooleanField(blank=True, default=False)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -216,3 +217,11 @@ class ParticipantUniqueId(models.Model):
 
     def __str__(self):
         return f"Unique Id for Participant {self.participant.name} in Assessment {self.assessment.name}."
+
+class ParticipantReleasedResults(models.Model):
+    participants =models.ManyToManyField(Learner, blank=True) 
+    assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    
