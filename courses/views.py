@@ -2140,3 +2140,6 @@ class DownloadableLessonCreateView(generics.CreateAPIView):
 class DownloadableLessonUpdateView(generics.UpdateAPIView):
     queryset = DownloadableLesson.objects.all()
     serializer_class = DownloadableLessonSerializer
+
+
+

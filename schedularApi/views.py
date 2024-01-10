@@ -24,9 +24,9 @@ import pandas as pd
 from django.db.models import Q
 import json
 from django.core.exceptions import ObjectDoesNotExist
-from api.views import get_date, get_time,add_contact_in_wati
+from api.views import get_date, get_time, add_contact_in_wati
 from django.shortcuts import render
-from api.models import Organisation, HR, Coach, User, Learner
+from api.models import Organisation, HR, Coach, User, Learner, Pmo
 from .serializers import (
     SchedularProjectSerializer,
     SchedularBatchSerializer,
@@ -48,6 +48,8 @@ from .serializers import (
     RequestAvailibiltySerializerDepthOne,
     RequestAvailibiltySerializer,
     FacilitatorSerializer,
+    UpdateSerializer,
+    SchedularUpdateDepthOneSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -61,6 +63,7 @@ from .models import (
     SchedularSessions,
     Facilitator,
     SchedularBatch,
+    SchedularUpdate,
 )
 
 from courses.models import (
@@ -182,6 +185,13 @@ def create_project_schedular(request):
 def get_all_Schedular_Projects(request):
     projects = SchedularProject.objects.all()
     serializer = SchedularProjectSerializer(projects, many=True)
+    for project_data in serializer.data:
+        latest_update = (
+            SchedularUpdate.objects.filter(project__id=project_data["id"])
+            .order_by("-created_at")
+            .first()
+        )
+        project_data["latest_update"] = latest_update.message if latest_update else None
     return Response(serializer.data, status=200)
 
 
@@ -855,7 +865,7 @@ def add_batch(request, project_id):
         learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
 
         name = learner.name
-        add_contact_in_wati("learner", name, learner.phone )
+        add_contact_in_wati("learner", name, learner.phone)
 
         # Add participant to the batch if not already added
         if learner and learner not in batch.learners.all():
@@ -1755,7 +1765,7 @@ def add_participant_to_batch(request, batch_id):
         batch.learners.add(learner)
         batch.save()
         name = learner.name
-        add_contact_in_wati("learner", name, learner.phone )
+        add_contact_in_wati("learner", name, learner.phone)
         try:
             course = Course.objects.get(batch=batch)
             course_enrollments = CourseEnrollment.objects.filter(
@@ -1770,7 +1780,7 @@ def add_participant_to_batch(request, batch_id):
                 )
         except Exception:
             # course doesnt exists
-            pass    
+            pass
 
         return Response(
             {"message": "Participant added to the batch successfully"},
@@ -2145,3 +2155,86 @@ def delete_learner_from_course(request):
 
     except ObjectDoesNotExist:
         return Response({"message": "Object not found."}, status=404)
+
+
+@api_view(["PUT"])
+def edit_schedular_project(request, project_id):
+    try:
+        project = SchedularProject.objects.get(pk=project_id)
+    except SchedularProject.DoesNotExist:
+        return Response(
+            {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Assuming 'request.data' contains the updated project information
+    project_name = request.data.get("project_name")
+    organisation_id = request.data.get("organisation_id")
+    hr_ids = request.data.get("hr", [])
+
+    if project_name:
+        project.name = project_name
+    if organisation_id:
+        try:
+            organisation = Organisation.objects.get(pk=organisation_id)
+            project.organisation = organisation
+        except Organisation.DoesNotExist:
+            return Response(
+                {"error": "Organisation not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+    # Clear existing HR associations and add the provided ones
+    project.hr.clear()
+    for hr_id in hr_ids:
+        try:
+            hr = HR.objects.get(pk=hr_id)
+            project.hr.add(hr)
+        except HR.DoesNotExist:
+            return Response(
+                {"error": f"HR with ID {hr_id} not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+    # Update other fields as needed (assuming request.data contains all fields)
+    project.is_project_structure_finalized = request.data.get(
+        "is_project_structure_finalized", project.is_project_structure_finalized
+    )
+    # Update other fields similarly...
+
+    project.save()
+    return Response(
+        {"message": "Project updated successfully"}, status=status.HTTP_200_OK
+    )
+
+
+@api_view(["POST"])
+def add_schedular_project_update(request, project_id):
+    print(request.data)
+    print(project_id)
+    try:
+        project = SchedularProject.objects.get(id=project_id)
+    except SchedularProject.DoesNotExist:
+        return Response({"error": "Project not found"}, status=404)
+    # Assuming your request data has a "message" field for the update message
+    update_data = {
+        "pmo": request.data.get(
+            "pmo", ""
+        ),  # Assuming the PMO is associated with the user
+        "project": project.id,
+        "message": request.data.get("message", ""),
+    }
+    serializer = UpdateSerializer(data=update_data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            {"message": "Update added to project successfully!"}, status=201
+        )
+    return Response(serializer.errors, status=400)
+
+
+@api_view(["GET"])
+def get_schedular_project_updates(request, project_id):
+    updates = SchedularUpdate.objects.filter(project__id=project_id).order_by(
+        "-created_at"
+    )
+    serializer = SchedularUpdateDepthOneSerializer(updates, many=True)
+    return Response(serializer.data)
