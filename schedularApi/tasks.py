@@ -9,15 +9,64 @@ from api.models import Coach, User, UserToken
 from django.utils import timezone
 from datetime import datetime
 from api.views import send_mail_templates, refresh_microsoft_access_token
-from assessmentApi.views import send_whatsapp_message
+
+# /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
 from django.db.models import Q
 import environ
 from time import sleep
+import requests
 
 env = environ.Env()
 environ.Env.read_env()
+
+
+def send_whatsapp_message(user_type, participant, assessment, unique_id):
+    try:
+        assessment_name = assessment.participant_view_name
+        participant_phone = participant.phone
+        participant_name = participant.name
+        if not participant_phone:
+            return {"error": "Participant phone not available"}, 500
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        participant_id = unique_id
+        payload = {
+            "broadcast_name": "Testing 19th postman",
+            "parameters": [
+                {
+                    "name": "participant_name",
+                    "value": participant_name,
+                },
+                {
+                    "name": "assessment_name",
+                    "value": assessment_name,
+                },
+                {
+                    "name": "participant_id",
+                    "value": participant_id,
+                },
+            ],
+            "template_name": "assessment_reminders_message",
+        }
+
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()
+
+        return response.json(), response.status_code
+
+    except requests.exceptions.HTTPError as errh:
+        return {"error": f"HTTP Error: {errh}"}, 500
+    except requests.exceptions.RequestException as err:
+        return {"error": f"Request Error: {err}"}, 500
+    except Exception as e:
+        return {"error": str(e)}, 500
 
 
 def get_current_date_timestamps():
@@ -378,6 +427,7 @@ def send_reminder_email_to_participants_for_assessment_at_2PM():
 
                 except ObjectDoesNotExist:
                     print(f"No unique ID found for participant {participant.name}")
+                sleep(5)
 
 
 @shared_task
@@ -418,6 +468,7 @@ def send_whatsapp_message_to_participants_for_assessment_at_9AM():
                         )
                 except ObjectDoesNotExist:
                     print(f"No unique ID found for participant {participant.name}")
+                sleep(2)
 
 
 @shared_task
@@ -457,6 +508,7 @@ def send_whatsapp_message_to_participants_for_assessment_at_7PM():
                         )
                 except ObjectDoesNotExist:
                     print(f"No unique ID found for participant {participant.name}")
+                sleep(2)
 
 
 @shared_task
@@ -479,3 +531,36 @@ def update_assessment_status():
             assessment.status = "completed"
         # Save the updated assessment
         assessment.save()
+
+
+@shared_task
+def send_assessment_invitation_mail(assessment_id):
+    print("called")
+    assessment = Assessment.objects.get(id=assessment_id)
+    for participant_observers in assessment.participants_observers.all():
+        try:
+            participant = participant_observers.participant
+            participant_response = ParticipantResponse.objects.filter(
+                participant=participant, assessment=assessment
+            ).first()
+            if not participant_response:
+                participant_unique_id = ParticipantUniqueId.objects.filter(
+                    participant=participant, assessment=assessment
+                ).first()
+                if participant_unique_id:
+                    assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{participant_unique_id.unique_id}"
+                    send_mail_templates(
+                        "assessment/assessment_initial_reminder.html",
+                        [participant.email],
+                        "Meeraq - Welcome to Assessment Platform !",
+                        {
+                            "assessment_name": assessment.participant_view_name,
+                            "participant_name": participant.name.title(),
+                            "link": assessment_link,
+                        },
+                        [],
+                    )
+        except Exception as e:
+            print(str(e))
+            pass
+        sleep(5)
