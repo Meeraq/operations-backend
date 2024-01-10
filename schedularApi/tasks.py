@@ -9,12 +9,14 @@ from api.models import Coach, User, UserToken
 from django.utils import timezone
 from datetime import datetime
 from api.views import send_mail_templates, refresh_microsoft_access_token
+
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
 from django.db.models import Q
 import environ
 from time import sleep
+import requests
 
 env = environ.Env()
 environ.Env.read_env()
@@ -65,6 +67,7 @@ def send_whatsapp_message(user_type, participant, assessment, unique_id):
         return {"error": f"Request Error: {err}"}, 500
     except Exception as e:
         return {"error": str(e)}, 500
+
 
 def get_current_date_timestamps():
     now = timezone.now()
@@ -465,6 +468,7 @@ def send_whatsapp_message_to_participants_for_assessment_at_9AM():
                         )
                 except ObjectDoesNotExist:
                     print(f"No unique ID found for participant {participant.name}")
+                sleep(2)
 
 
 @shared_task
@@ -504,6 +508,7 @@ def send_whatsapp_message_to_participants_for_assessment_at_7PM():
                         )
                 except ObjectDoesNotExist:
                     print(f"No unique ID found for participant {participant.name}")
+                sleep(2)
 
 
 @shared_task
@@ -555,8 +560,7 @@ def send_assessment_invitation_mail(assessment_id):
                         },
                         [],
                     )
-        except Exception as  e:
+        except Exception as e:
             print(str(e))
             pass
         sleep(5)
-        

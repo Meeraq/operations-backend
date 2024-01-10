@@ -148,53 +148,6 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
         print(f"Error occurred while sending emails: {str(e)}")
 
 
-def send_whatsapp_message(user_type, participant, assessment, unique_id):
-    try:
-        assessment_name = assessment.participant_view_name
-        participant_phone = participant.phone
-        participant_name = participant.name
-        if not participant_phone:
-            return {"error": "Participant phone not available"}, 500
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
-        headers = {
-            "content-type": "text/json",
-            "Authorization": wati_authorization,
-        }
-        participant_id = unique_id
-        payload = {
-            "broadcast_name": "Testing 19th postman",
-            "parameters": [
-                {
-                    "name": "participant_name",
-                    "value": participant_name,
-                },
-                {
-                    "name": "assessment_name",
-                    "value": assessment_name,
-                },
-                {
-                    "name": "participant_id",
-                    "value": participant_id,
-                },
-            ],
-            "template_name": "assessment_reminders_message",
-        }
-
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()
-
-        return response.json(), response.status_code
-
-    except requests.exceptions.HTTPError as errh:
-        return {"error": f"HTTP Error: {errh}"}, 500
-    except requests.exceptions.RequestException as err:
-        return {"error": f"Request Error: {err}"}, 500
-    except Exception as e:
-        return {"error": str(e)}, 500
-
-
 # def whatsapp_message_for_participant():
 #     ongoing_assessments = Assessment.objects.filter(status="ongoing")
 
@@ -708,7 +661,11 @@ class AssessmentStatusChange(APIView):
             assessment.status = request.data.get("status")
             # assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
-            if prev_status == "draft" and assessment.status == "ongoing" and not assessment.initial_reminder:
+            if (
+                prev_status == "draft"
+                and assessment.status == "ongoing"
+                and not assessment.initial_reminder
+            ):
                 send_assessment_invitation_mail.delay(assessment.id)
                 assessment.initial_reminder = True
                 assessment.save()
@@ -761,9 +718,9 @@ class AssessmentStatusChange(APIView):
                 #                     },
                 #                     [],
                 #                 )
-                    # send_assessment_invitation_mail.delay(assessment.id)
-                    # assessment.initial_reminder = True
-                    # assessment.save()
+                # send_assessment_invitation_mail.delay(assessment.id)
+                # assessment.initial_reminder = True
+                # assessment.save()
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
