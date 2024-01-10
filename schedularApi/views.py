@@ -515,9 +515,11 @@ def update_live_session(request, live_session_id):
             end_time_stamp = (
                 start_time_stamp + int(update_live_session.duration) * 60000
             )
-            start_datetime_obj = datetime.fromtimestamp(int(start_time_stamp) / 1000)   + timedelta(hours=5, minutes=30)
-            start_datetime_str =  start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
-            
+            start_datetime_obj = datetime.fromtimestamp(
+                int(start_time_stamp) / 1000
+            ) + timedelta(hours=5, minutes=30)
+            start_datetime_str = start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
+
             if not existing_date_time:
                 print("date time does not exist")
                 create_outlook_calendar_invite(
@@ -1585,6 +1587,36 @@ def get_sessions_by_type(request, sessions_type):
         }
         session_details.append(session_detail)
     return Response(session_details, status=status.HTTP_200_OK)
+
+
+@api_view(["PUT"])
+def edit_session_status(request, session_id):
+    try:
+        session = SchedularSessions.objects.get(id=session_id)
+    except SchedularSessions.DoesNotExist:
+        return Response({"error": "Session not found."}, status=404)
+    new_status = request.data.get("status")
+    if not new_status:
+        return Response({"error": "Status is required."}, status=400)
+    session.status = new_status
+    session.save()
+    return Response({"message": "Session status updated successfully."}, status=200)
+
+
+@api_view(["PUT"])
+def update_session_date_time(request, session_id):
+    try:
+        session = SchedularSessions.objects.get(id=session_id)
+    except SchedularSessions.DoesNotExist:
+        return Response({"error": "Session not found."}, status=404)
+    start_time = request.data.get("start_time")
+    end_time = request.data.get("end_time")
+    if not start_time or not end_time:
+        return Response({"error": "Start or end time is not provided."}, status=400)
+    session.availibility.start_time = start_time
+    session.availibility.end_time = end_time
+    session.availibility.save()
+    return Response({"message": "Session time updated successfully."}, status=200)
 
 
 @api_view(["GET"])
