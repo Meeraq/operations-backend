@@ -367,7 +367,7 @@ def send_reminder_email_to_participants_for_assessment_at_2PM():
                         send_mail_templates(
                             "assessment/assessment_reminder_mail_to_participant.html",
                             [participant.email],
-                            "Meeraq - Welcome to Assessment Platform !",
+                            "Meeraq - Assessment Reminder !",
                             {
                                 "assessment_name": assessment.participant_view_name,
                                 "participant_name": participant.name.capitalize(),
