@@ -153,7 +153,7 @@ def send_whatsapp_message(user_type, participant, assessment, unique_id):
         participant_phone = participant.phone
         participant_name = participant.name
         if not participant_phone:
-            return {"error": 'Participant phone not available'}, 500
+            return {"error": "Participant phone not available"}, 500
         wati_api_endpoint = env("WATI_API_ENDPOINT")
         wati_authorization = env("WATI_AUTHORIZATION")
         wati_api_url = f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
@@ -708,28 +708,57 @@ class AssessmentStatusChange(APIView):
             # assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
             if prev_status == "draft" and assessment.status == "ongoing":
-                for hr in assessment.hr.all():
-                    user = User.objects.get(email=hr.email)
+                # for hr in assessment.hr.all():
+                #     user = User.objects.get(email=hr.email)
 
-                    token = get_token_generator().generate_token()
+                #     token = get_token_generator().generate_token()
 
-                    ResetPasswordToken.objects.create(user=user, key=token)
+                #     ResetPasswordToken.objects.create(user=user, key=token)
 
-                    create_password_link = (
-                        f"https://assessment.meeraq.com/create-password/{token}"
-                    )
+                #     create_password_link = (
+                #         f"https://assessment.meeraq.com/create-password/{token}"
+                #     )
 
-                    # send_mail_templates(
-                    #     "assessment/create_password_to_hr.html",
-                    #     [hr.email],
-                    #     "Meeraq - Welcome to Assessment Platform !",
-                    #     {
-                    #         "hr_name": hr.first_name,
-                    #         "link": create_password_link,
-                    #         "assessment_name": assessment.participant_view_name,
-                    #     },
-                    #     [],
-                    # )
+                # send_mail_templates(
+                #     "assessment/create_password_to_hr.html",
+                #     [hr.email],
+                #     "Meeraq - Welcome to Assessment Platform !",
+                #     {
+                #         "hr_name": hr.first_name,
+                #         "link": create_password_link,
+                #         "assessment_name": assessment.participant_view_name,
+                #     },
+                #     [],
+                # )
+                if not assessment.initial_reminder:
+                    for (
+                        participant_observers
+                    ) in assessment.participants_observers.all():
+                        participant = participant_observers.participant
+                        participant_response = ParticipantResponse.objects.filter(
+                            participant=participant, assessment=assessment
+                        ).first()
+
+                        if not participant_response:
+                            participant_unique_id = ParticipantUniqueId.objects.filter(
+                                participant=participant, assessment=assessment
+                            ).first()
+
+                            if participant_unique_id:
+                                assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{participant_unique_id.unique_id}"
+                                send_mail_templates(
+                                    "assessment/assessment_initial_reminder.html",
+                                    [participant.email],
+                                    "Meeraq - Welcome to Assessment Platform !",
+                                    {
+                                        "assessment_name": assessment.participant_view_name,
+                                        "participant_name": participant.name.title(),
+                                        "link": assessment_link,
+                                    },
+                                    [],
+                                )
+                    assessment.initial_reminder = True
+                    assessment.save()
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
@@ -807,7 +836,9 @@ class AddParticipantObserverToAssessment(APIView):
                 participant.save()
             unique_id = uuid.uuid4()  # Generate a UUID4
             if phone:
-                add_contact_in_wati("learner", participant.name.title(), participant.phone)
+                add_contact_in_wati(
+                    "learner", participant.name.title(), participant.phone
+                )
             # Creating a ParticipantUniqueId instance with a UUID as unique_id
             unique_id_instance = ParticipantUniqueId.objects.create(
                 participant=participant,
@@ -1909,7 +1940,7 @@ class AddMultipleParticipants(APIView):
                 name = (
                     participant["first_name"].capitalize()
                     + " "
-                    + participant["last_name"].capitalize()
+                    + participant.get("last_name", "").capitalize()
                 )
                 new_participant = create_learner(name, participant["email"])
                 if participant["phone"]:
@@ -3196,7 +3227,7 @@ class PreReportDownloadForParticipant(APIView):
                 "assessment/air_india_assessement_report.html",
                 {
                     "name": participant.name.title(),
-                    "image_base64": encoded_image ,
+                    "image_base64": encoded_image,
                     "compentency_with_description": compentency_with_description,
                     "assessment_timing": assessment.assessment_timing,
                     "assessment_name": assessment.participant_view_name,
@@ -3260,7 +3291,7 @@ class PreReportDownloadForAllParticipant(APIView):
                         "assessment_timing": assessment.assessment_timing,
                     }
                 )
-                
+
             email_message = render_to_string(
                 "assessment/air_india_assessment_report_batch_wise.html",
                 {
@@ -3305,7 +3336,7 @@ class ReleaseResults(APIView):
                     participant_with_released_results = (
                         participant_released_results.participants.all()
                     )
-               
+
                 participant_with_not_released_results = []
                 for participant_observer in assessment.participants_observers.all():
                     participant_response_present = ParticipantResponse.objects.filter(
@@ -3323,7 +3354,7 @@ class ReleaseResults(APIView):
                             participant_released_results.participants.add(
                                 participant_observer.participant
                             )
-               
+
                 participant_released_results.save()
 
                 if len(assessment.participants_observers.all()) == (
@@ -3353,18 +3384,18 @@ class ReleaseResults(APIView):
                             )
 
                         send_mail_templates(
-                                "assessment/air_india_report_mail.html",
-                                [participant.email],
-                                "Meeraq Assessment Report",
-                                {
-                                    "name": participant.name.title(),
-                                    "image_base64": encoded_image,
-                                    "compentency_with_description": compentency_with_description,
-                                    "assessment_timing": assessment.assessment_timing,
-                                    "assessment_name": assessment.participant_view_name,
-                                },
-                                [],
-                            )
+                            "assessment/air_india_report_mail.html",
+                            [participant.email],
+                            "Meeraq Assessment Report",
+                            {
+                                "name": participant.name.title(),
+                                "image_base64": encoded_image,
+                                "compentency_with_description": compentency_with_description,
+                                "assessment_timing": assessment.assessment_timing,
+                                "assessment_name": assessment.participant_view_name,
+                            },
+                            [],
+                        )
             else:
                 assessment.result_released = True
                 assessment.save()
