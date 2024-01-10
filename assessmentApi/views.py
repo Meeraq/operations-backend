@@ -71,6 +71,7 @@ from django.http import HttpResponse
 from datetime import datetime
 import io
 from api.views import add_contact_in_wati
+from schedularApi.tasks import send_assessment_invitation_mail, send_whatsapp_message
 
 matplotlib.use("Agg")
 env = environ.Env()
@@ -707,7 +708,10 @@ class AssessmentStatusChange(APIView):
             assessment.status = request.data.get("status")
             # assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
-            if prev_status == "draft" and assessment.status == "ongoing":
+            if prev_status == "draft" and assessment.status == "ongoing" and not assessment.initial_reminder:
+                send_assessment_invitation_mail.delay(assessment.id)
+                assessment.initial_reminder = True
+                assessment.save()
                 # for hr in assessment.hr.all():
                 #     user = User.objects.get(email=hr.email)
 
@@ -730,35 +734,36 @@ class AssessmentStatusChange(APIView):
                 #     },
                 #     [],
                 # )
-                if not assessment.initial_reminder:
-                    for (
-                        participant_observers
-                    ) in assessment.participants_observers.all():
-                        participant = participant_observers.participant
-                        participant_response = ParticipantResponse.objects.filter(
-                            participant=participant, assessment=assessment
-                        ).first()
+                # if not assessment.initial_reminder:
+                #     for (
+                #         participant_observers
+                #     ) in assessment.participants_observers.all():
+                #         participant = participant_observers.participant
+                #         participant_response = ParticipantResponse.objects.filter(
+                #             participant=participant, assessment=assessment
+                #         ).first()
 
-                        if not participant_response:
-                            participant_unique_id = ParticipantUniqueId.objects.filter(
-                                participant=participant, assessment=assessment
-                            ).first()
+                #         if not participant_response:
+                #             participant_unique_id = ParticipantUniqueId.objects.filter(
+                #                 participant=participant, assessment=assessment
+                #             ).first()
 
-                            if participant_unique_id:
-                                assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{participant_unique_id.unique_id}"
-                                send_mail_templates(
-                                    "assessment/assessment_initial_reminder.html",
-                                    [participant.email],
-                                    "Meeraq - Welcome to Assessment Platform !",
-                                    {
-                                        "assessment_name": assessment.participant_view_name,
-                                        "participant_name": participant.name.title(),
-                                        "link": assessment_link,
-                                    },
-                                    [],
-                                )
-                    assessment.initial_reminder = True
-                    assessment.save()
+                #             if participant_unique_id:
+                #                 assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{participant_unique_id.unique_id}"
+                #                 send_mail_templates(
+                #                     "assessment/assessment_initial_reminder.html",
+                #                     [participant.email],
+                #                     "Meeraq - Welcome to Assessment Platform !",
+                #                     {
+                #                         "assessment_name": assessment.participant_view_name,
+                #                         "participant_name": participant.name.title(),
+                #                         "link": assessment_link,
+                #                     },
+                #                     [],
+                #                 )
+                    # send_assessment_invitation_mail.delay(assessment.id)
+                    # assessment.initial_reminder = True
+                    # assessment.save()
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
