@@ -1940,7 +1940,7 @@ class AddMultipleParticipants(APIView):
                 name = (
                     participant["first_name"].capitalize()
                     + " "
-                    + participant["last_name"].capitalize()
+                    + participant.get("last_name", "").capitalize()
                 )
                 new_participant = create_learner(name, participant["email"])
                 if participant["phone"]:
