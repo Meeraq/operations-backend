@@ -71,6 +71,7 @@ from django.http import HttpResponse
 from datetime import datetime
 import io
 from api.views import add_contact_in_wati
+from schedularApi.tasks import send_assessment_invitation_mail, send_whatsapp_message
 
 matplotlib.use("Agg")
 env = environ.Env()
@@ -145,53 +146,6 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
             create_send_email(email, file_name)
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-
-
-def send_whatsapp_message(user_type, participant, assessment, unique_id):
-    try:
-        assessment_name = assessment.participant_view_name
-        participant_phone = participant.phone
-        participant_name = participant.name
-        if not participant_phone:
-            return {"error": "Participant phone not available"}, 500
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
-        headers = {
-            "content-type": "text/json",
-            "Authorization": wati_authorization,
-        }
-        participant_id = unique_id
-        payload = {
-            "broadcast_name": "Testing 19th postman",
-            "parameters": [
-                {
-                    "name": "participant_name",
-                    "value": participant_name,
-                },
-                {
-                    "name": "assessment_name",
-                    "value": assessment_name,
-                },
-                {
-                    "name": "participant_id",
-                    "value": participant_id,
-                },
-            ],
-            "template_name": "assessment_reminders_message",
-        }
-
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()
-
-        return response.json(), response.status_code
-
-    except requests.exceptions.HTTPError as errh:
-        return {"error": f"HTTP Error: {errh}"}, 500
-    except requests.exceptions.RequestException as err:
-        return {"error": f"Request Error: {err}"}, 500
-    except Exception as e:
-        return {"error": str(e)}, 500
 
 
 # def whatsapp_message_for_participant():
@@ -707,7 +661,14 @@ class AssessmentStatusChange(APIView):
             assessment.status = request.data.get("status")
             # assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
-            if prev_status == "draft" and assessment.status == "ongoing":
+            if (
+                prev_status == "draft"
+                and assessment.status == "ongoing"
+                and not assessment.initial_reminder
+            ):
+                send_assessment_invitation_mail.delay(assessment.id)
+                assessment.initial_reminder = True
+                assessment.save()
                 # for hr in assessment.hr.all():
                 #     user = User.objects.get(email=hr.email)
 
@@ -730,35 +691,36 @@ class AssessmentStatusChange(APIView):
                 #     },
                 #     [],
                 # )
-                if not assessment.initial_reminder:
-                    for (
-                        participant_observers
-                    ) in assessment.participants_observers.all():
-                        participant = participant_observers.participant
-                        participant_response = ParticipantResponse.objects.filter(
-                            participant=participant, assessment=assessment
-                        ).first()
+                # if not assessment.initial_reminder:
+                #     for (
+                #         participant_observers
+                #     ) in assessment.participants_observers.all():
+                #         participant = participant_observers.participant
+                #         participant_response = ParticipantResponse.objects.filter(
+                #             participant=participant, assessment=assessment
+                #         ).first()
 
-                        if not participant_response:
-                            participant_unique_id = ParticipantUniqueId.objects.filter(
-                                participant=participant, assessment=assessment
-                            ).first()
+                #         if not participant_response:
+                #             participant_unique_id = ParticipantUniqueId.objects.filter(
+                #                 participant=participant, assessment=assessment
+                #             ).first()
 
-                            if participant_unique_id:
-                                assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{participant_unique_id.unique_id}"
-                                send_mail_templates(
-                                    "assessment/assessment_initial_reminder.html",
-                                    [participant.email],
-                                    "Meeraq - Welcome to Assessment Platform !",
-                                    {
-                                        "assessment_name": assessment.participant_view_name,
-                                        "participant_name": participant.name.title(),
-                                        "link": assessment_link,
-                                    },
-                                    [],
-                                )
-                    assessment.initial_reminder = True
-                    assessment.save()
+                #             if participant_unique_id:
+                #                 assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{participant_unique_id.unique_id}"
+                #                 send_mail_templates(
+                #                     "assessment/assessment_initial_reminder.html",
+                #                     [participant.email],
+                #                     "Meeraq - Welcome to Assessment Platform !",
+                #                     {
+                #                         "assessment_name": assessment.participant_view_name,
+                #                         "participant_name": participant.name.title(),
+                #                         "link": assessment_link,
+                #                     },
+                #                     [],
+                #                 )
+                # send_assessment_invitation_mail.delay(assessment.id)
+                # assessment.initial_reminder = True
+                # assessment.save()
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
