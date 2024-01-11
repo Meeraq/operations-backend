@@ -172,7 +172,7 @@ def create_project_schedular(request):
     #     print(f"Error occurred while creating notification: {str(e)}")
     # return Response({"message": "Project created succesfully"}, status=200)
     try:
-        path = f"/projects/caas/progress/{schedularProject.id}"
+        path = ""
         message = f"A new project - {schedularProject.name} has been created for the organisation - {schedularProject.organisation.name}"
         for hr_member in schedularProject.hr.all():
             create_notification(hr_member.user.user, path, message)
