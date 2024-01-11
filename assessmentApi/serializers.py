@@ -39,6 +39,12 @@ class AssessmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Assessment
         fields = "__all__"
+
+class AssessmentSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = Assessment
+        fields = "__all__"
+        depth = 1
         
 
 class AssessmentSerializerDepthFour(serializers.ModelSerializer):
