@@ -140,4 +140,13 @@ urlpatterns = [
         "delete-learner_from_course/",
         views.delete_learner_from_course,
     ),
+    path("edit-project-schedular/<int:project_id>/", views.edit_schedular_project),
+    path(
+        "schedular-projects/<int:project_id>/updates/create/",
+        views.add_schedular_project_update,
+    ),
+    path(
+        "schedular-projects/<int:project_id>/updates/",
+        views.get_schedular_project_updates,
+    ),
 ]

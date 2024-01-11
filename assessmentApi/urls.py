@@ -57,6 +57,8 @@ from .views import (
     GetAllLearnersUniqueId,
     DownloadParticipantResponseStatusData,
     GetParticipantReleasedResults,
+    GetAllAssessments,
+    GetOneAssessment
 )
 
 
@@ -252,4 +254,9 @@ urlpatterns = [
         "get-participant-released-results/<int:assessment_id>/",
         GetParticipantReleasedResults.as_view(),
     ),
+    path(
+        "get-all-assessments/",
+        GetAllAssessments.as_view(),
+    ),
+    path('assessment/<int:assessment_id>/',GetOneAssessment.as_view())
 ]
