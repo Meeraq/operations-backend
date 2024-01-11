@@ -1181,6 +1181,10 @@ def schedule_session(request):
             )
 
             meeting_link = None
+            
+            existing_session = SchedularSessions.objects.filter(
+                learner=learner, coaching_session=coaching_session
+            ).first()
 
             if (
                 existing_session.coaching_session.batch.project.platform_for_sessions
@@ -1432,7 +1436,10 @@ def schedule_session_fixed(request):
                     [],
                 )
                 meeting_link = None
-
+                existing_session = SchedularSessions.objects.filter(
+                    learner=learner, coaching_session=coaching_session
+                ).first()
+                
                 if (
                     existing_session.coaching_session.batch.project.platform_for_sessions
                     == "system"
