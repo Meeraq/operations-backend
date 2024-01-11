@@ -152,6 +152,7 @@ class Assessment(models.Model):
     pre_assessment = models.ForeignKey(
         "self", on_delete=models.CASCADE, blank=True, null=True
     )
+    initial_reminder = models.BooleanField(blank=True, default=False)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
