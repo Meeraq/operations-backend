@@ -389,11 +389,7 @@ def send_reminder_email_to_participants_for_assessment_at_2PM():
         today = datetime.now().date()
         day_of_week = today.strftime("%A")
 
-        if (
-            start_date <= today <= end_date
-            and not day_of_week == "Saturday"
-            and not day_of_week == "Sunday"
-        ):
+        if start_date <= today <= end_date and not day_of_week == "Sunday":
             participants_observers = assessment.participants_observers.all()
 
             for participant_observer_mapping in participants_observers:
@@ -444,11 +440,7 @@ def send_whatsapp_message_to_participants_for_assessment_at_9AM():
         # Check if today's date is within the assessment date range
         today = datetime.now().date()
         day_of_week = today.strftime("%A")
-        if (
-            start_date <= today <= end_date
-            and not day_of_week == "Saturday"
-            and not day_of_week == "Sunday"
-        ):
+        if start_date <= today <= end_date and not day_of_week == "Sunday":
             participants_observers = assessment.participants_observers.all()
 
             for participant_observer_mapping in participants_observers:
@@ -485,11 +477,7 @@ def send_whatsapp_message_to_participants_for_assessment_at_7PM():
         # Check if today's date is within the assessment date range
         today = datetime.now().date()
         day_of_week = today.strftime("%A")
-        if (
-            start_date <= today <= end_date
-            and not day_of_week == "Saturday"
-            and not day_of_week == "Sunday"
-        ):
+        if start_date <= today <= end_date and not day_of_week == "Sunday":
             participants_observers = assessment.participants_observers.all()
             for participant_observer_mapping in participants_observers:
                 participant = participant_observer_mapping.participant

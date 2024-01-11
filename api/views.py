@@ -152,6 +152,7 @@ from schedularApi.models import (
     SchedularSessions,
     CalendarInvites
 )
+from schedularApi.serializers import SchedularProjectSerializer
 
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
@@ -1744,8 +1745,13 @@ def get_projects_of_learner(request, learner_id):
 @api_view(["GET"])
 def get_ongoing_projects_of_hr(request, hr_id):
     projects = Project.objects.filter(hr__id=hr_id, steps__project_live="pending")
+    schedular_projects = SchedularProject.objects.filter(hr__id=hr_id)
+    schedular_project_serializer =  SchedularProjectSerializer(schedular_projects, many=True)
     serializer = ProjectDepthTwoSerializer(projects, many=True)
-    return Response(serializer.data, status=200)
+    return Response({
+        "caas_projects": serializer.data,
+        "schedular_projects": schedular_project_serializer.data
+		}, status=200)
 
 
 # @api_view(['GET'])
