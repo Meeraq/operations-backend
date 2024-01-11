@@ -1173,6 +1173,7 @@ def create_project_cass(request):
                 project_live="pending",
             ),
             status="presales",
+            masked_coach_profile = request.data["masked_coach_profile"],
         )
 
         project.save()
@@ -7220,6 +7221,10 @@ def edit_project_caas(request, project_id):
         )
         project.enable_emails_to_hr_and_coachee = request.data.get(
             "enable_emails_to_hr_and_coachee", project.enable_emails_to_hr_and_coachee
+        )
+      
+        project.masked_coach_profile = request.data.get(
+            "masked_coach_profile", project.masked_coach_profile
         )
         project.hr.clear()
         for hr in request.data["hr"]:

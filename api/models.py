@@ -295,6 +295,7 @@ class Project(models.Model):
     )
     coach_consent_mandatory = models.BooleanField(default=True)
     enable_emails_to_hr_and_coachee = models.BooleanField(default=True)
+    masked_coach_profile = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_at"]
