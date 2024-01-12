@@ -529,12 +529,14 @@ def update_live_session(request, live_session_id):
                 int(start_time_stamp) / 1000
             ) + timedelta(hours=5, minutes=30)
             start_datetime_str = start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
-
+            description = (
+                f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
+                + update_live_session.description
+            )
             if not existing_date_time:
-                print("date time does not exist")
                 create_outlook_calendar_invite(
                     "Meeraq - Live Session",
-                    f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. Please book your calendars.",
+                    description,
                     start_time_stamp,
                     end_time_stamp,
                     attendees,
@@ -555,7 +557,7 @@ def update_live_session(request, live_session_id):
                 # create the new one
                 create_outlook_calendar_invite(
                     "Meeraq - Live Session",
-                    "Meeraq is inviting you to a group live session",
+                    description,
                     start_time_stamp,
                     end_time_stamp,
                     attendees,

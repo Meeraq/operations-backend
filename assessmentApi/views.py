@@ -3698,3 +3698,29 @@ class GetOneAssessment(APIView):
             return Response(
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class GetAssessmentsOfHr(APIView):
+    def get(self, request, hr_id):
+        assessments = Assessment.objects.filter(Q(hr__id=hr_id), Q(status="ongoing") | Q(status ="completed"))
+        assessment_list = []
+        for assessment in assessments:
+            total_responses_count = ParticipantResponse.objects.filter(
+                assessment=assessment
+            ).count()
+            assessment_data = {
+                "id": assessment.id,
+                "name": assessment.name,
+                "participant_view_name" : assessment.participant_view_name,
+                "assessment_type": assessment.assessment_type,
+                "assessment_timing": assessment.assessment_timing,
+                "assessment_start_date": assessment.assessment_start_date,
+                "assessment_end_date": assessment.assessment_end_date,
+                "status": assessment.status,
+                "total_learners_count": assessment.participants_observers.count(),
+                "total_responses_count": total_responses_count,
+                "created_at": assessment.created_at,
+            }
+            assessment_list.append(assessment_data)
+
+        return Response(assessment_list)
