@@ -90,7 +90,7 @@ class FeedbackLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     questions = models.ManyToManyField(Question)
     unique_id = models.CharField(
-        max_length=225, unique=True, blank=True, 
+        max_length=225,  blank=True, 
     )
 
 
