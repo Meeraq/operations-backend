@@ -1734,7 +1734,7 @@ class AssignCourseTemplateToBatch(APIView):
                         new_lesson = Lesson.objects.create(
                             course=new_course,
                             name=original_lesson.name,
-                            status="draft",
+                            status=original_lesson.status,
                             lesson_type=original_lesson.lesson_type,
                             # Duplicate specific lesson types
                             order=original_lesson.order,
@@ -1758,7 +1758,7 @@ class AssignCourseTemplateToBatch(APIView):
                             DownloadableLesson.objects.create(
                                 lesson=new_lesson,
                                 file=original_lesson.downloadablelesson.file,
-                                description = original_lesson.downloadablelesson.description
+                                description=original_lesson.downloadablelesson.description,
                             )
                         elif original_lesson.lesson_type == "assessment":
                             Assessment.objects.create(lesson=new_lesson)
