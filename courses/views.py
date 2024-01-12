@@ -71,6 +71,7 @@ import base64
 from openpyxl import Workbook
 from django.db.models import Max
 import environ
+import uuid
 
 env = environ.Env()
 
@@ -259,8 +260,9 @@ class DuplicateCourseAPIView(APIView):
                             new_quiz_lesson.questions.add(new_question)
 
                     elif original_lesson.lesson_type == "feedback":
+                        unique_id = uuid.uuid4()
                         new_feedback_lesson = FeedbackLesson.objects.create(
-                            lesson=new_lesson
+                            lesson=new_lesson, unique_id=unique_id
                         )
                         for question in original_lesson.feedbacklesson.questions.all():
                             new_question = Question.objects.create(
@@ -557,7 +559,10 @@ def create_feedback_lesson(request):
                 )
 
         # Create QuizLesson and associate it with the Lesson
-        feedback_lesson = FeedbackLesson.objects.create(lesson=lesson)
+        unique_id = uuid.uuid4()
+        feedback_lesson = FeedbackLesson.objects.create(
+            lesson=lesson, unique_id=unique_id
+        )
         feedback_lesson.questions.set(questions)
         lesson_serializer = LessonSerializer(lesson)
         response_data = {
@@ -1077,6 +1082,7 @@ def submit_feedback_answers(request, feedback_lesson_id, learner_id):
 
     if serializer.is_valid():
         answers = serializer.save()
+
         feedback_lesson_response = FeedbackLessonResponse.objects.create(
             feedback_lesson=feedback_lesson, learner=learner
         )
@@ -1734,7 +1740,7 @@ class AssignCourseTemplateToBatch(APIView):
                         new_lesson = Lesson.objects.create(
                             course=new_course,
                             name=original_lesson.name,
-                            status="draft",
+                            status=original_lesson.status,
                             lesson_type=original_lesson.lesson_type,
                             # Duplicate specific lesson types
                             order=original_lesson.order,
@@ -1758,7 +1764,7 @@ class AssignCourseTemplateToBatch(APIView):
                             DownloadableLesson.objects.create(
                                 lesson=new_lesson,
                                 file=original_lesson.downloadablelesson.file,
-                                description = original_lesson.downloadablelesson.description
+                                description=original_lesson.downloadablelesson.description,
                             )
                         elif original_lesson.lesson_type == "assessment":
                             Assessment.objects.create(lesson=new_lesson)
@@ -1774,8 +1780,9 @@ class AssignCourseTemplateToBatch(APIView):
                                 )
                                 new_quiz_lesson.questions.add(new_question)
                         elif original_lesson.lesson_type == "feedback":
+                            unique_id = uuid.uuid4()
                             new_feedback_lesson = FeedbackLesson.objects.create(
-                                lesson=new_lesson
+                                lesson=new_lesson, unique_id=unique_id
                             )
                             for (
                                 question
@@ -2140,3 +2147,80 @@ class DownloadableLessonCreateView(generics.CreateAPIView):
 class DownloadableLessonUpdateView(generics.UpdateAPIView):
     queryset = DownloadableLesson.objects.all()
     serializer_class = DownloadableLessonSerializer
+
+
+class FeedbackEmailValidation(APIView):
+    def post(self, request):
+        try:
+            unique_id = request.data.get("unique_id")
+            email = request.data.get("email")
+
+            feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
+            lesson = feedback_lesson.lesson
+
+            participants = lesson.course.batch.learners.all()
+
+            for participant in participants:
+                if participant.email == email:
+                    feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+                        feedback_lesson=feedback_lesson, learner__id=participant.id
+                    ).first()
+                    if not feedback_lesson_response:
+                        lesson_serializer = LessonSerializer(lesson)
+                        feedback_lesson_serializer = FeedbackLessonDepthOneSerializer(
+                            feedback_lesson
+                        )
+
+                        return Response(
+                            {
+                                "message": "Validation Successful",
+                                "participant_exists": True,
+                                "lesson_details": lesson_serializer.data,
+                                "feedback_lesson_details": feedback_lesson_serializer.data,
+                                "participant_id": participant.id,
+                            },
+                            status=status.HTTP_200_OK,
+                        )
+                    else:
+                        return Response(
+                            {"error": "Already Responded."},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        )
+
+            return Response(
+                {"error": "Email not found in participants."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        except FeedbackLesson.DoesNotExist:
+            return Response(
+                {"error": "FeedbackLesson not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to validate email."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetFeedbackForm(APIView):
+    def get(self, request, unique_id):
+        try:
+            feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
+
+            return Response(
+                {
+                    "lesson_name": feedback_lesson.lesson.name,
+                    "lesson_status": feedback_lesson.lesson.status
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get feedback lesson details."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
