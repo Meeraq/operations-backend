@@ -380,6 +380,8 @@ def send_reminder_email_to_participants_for_assessment_at_2PM():
     )
 
     for assessment in ongoing_assessments:
+        if assessment.organisation.id == 16:
+            continue
         # Convert assessment_start_date and assessment_end_date to datetime objects
         start_date = datetime.strptime(
             assessment.assessment_start_date, "%Y-%m-%d"
