@@ -2213,6 +2213,7 @@ class GetFeedbackForm(APIView):
             return Response(
                 {
                     "lesson_name": feedback_lesson.lesson.name,
+                    "lesson_status": feedback_lesson.lesson.status
                 },
                 status=status.HTTP_200_OK,
             )
