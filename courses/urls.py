@@ -25,6 +25,8 @@ from .views import (
     update_file,
     DownloadableLessonUpdateView,
     DownloadableLessonCreateView,
+    FeedbackEmailValidation,
+    GetFeedbackForm,
 )
 import environ
 
@@ -257,5 +259,14 @@ urlpatterns = [
         "downloadable-lessons/update/<int:pk>/",
         DownloadableLessonUpdateView.as_view(),
         name="update-downloadable-lesson",
+    ),
+    path(
+        "feedback-email-validation/",
+        FeedbackEmailValidation.as_view(),
+        name="update-downloadable-lesson",
+    ),
+    path(
+        "get-feedback-form/<str:unique_id>/",
+        GetFeedbackForm.as_view(),
     ),
 ]
