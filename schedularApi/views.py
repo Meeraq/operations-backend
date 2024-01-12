@@ -73,7 +73,7 @@ from courses.models import (
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
 from courses.views import create_or_get_learner
-
+from rest_framework.views import APIView
 from api.serializers import LearnerSerializer
 from api.views import (
     create_notification,
@@ -515,9 +515,11 @@ def update_live_session(request, live_session_id):
             end_time_stamp = (
                 start_time_stamp + int(update_live_session.duration) * 60000
             )
-            start_datetime_obj = datetime.fromtimestamp(int(start_time_stamp) / 1000)   + timedelta(hours=5, minutes=30)
-            start_datetime_str =  start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
-            
+            start_datetime_obj = datetime.fromtimestamp(
+                int(start_time_stamp) / 1000
+            ) + timedelta(hours=5, minutes=30)
+            start_datetime_str = start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
+
             if not existing_date_time:
                 print("date time does not exist")
                 create_outlook_calendar_invite(
@@ -2241,3 +2243,80 @@ def delete_learner_from_course(request):
 
     except ObjectDoesNotExist:
         return Response({"message": "Object not found."}, status=404)
+
+
+class GetAllBatchesCoachDetails(APIView):
+    def get(self, request, project_id):
+        try:
+            batches = SchedularBatch.objects.filter(project__id=project_id)
+            all_coaches = []
+
+            # Iterate through batches and collect coaches
+            for batch in batches:
+                for coach in batch.coaches.all():
+                    coach_data = {
+                        "id": coach.id,
+                        "first_name": coach.first_name,
+                        "last_name": coach.last_name,
+                        "email": coach.email,
+                        "batchName": batch.name,
+                        "phone": coach.phone,
+                    }
+                    all_coaches.append(coach_data)
+
+            # Remove duplicate coaches based on 'id'
+            unique_coaches = []
+            seen_ids = set()
+
+            for coach_data in all_coaches:
+                coach_id = coach_data["id"]
+                if coach_id not in seen_ids:
+                    seen_ids.add(coach_id)
+                    unique_coaches.append(coach_data)
+
+            return Response(unique_coaches, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get coaches data."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetAllBatchesParticipantDetails(APIView):
+    def get(self, request, project_id):
+        try:
+            batches = SchedularBatch.objects.filter(project__id=project_id)
+            all_learners = []
+
+            # Iterate through batches and collect coaches
+            for batch in batches:
+                for learner in batch.learners.all():
+                    learner_data = {
+                        "id": learner.id,
+                        "name": learner.name,
+                        "email": learner.email,
+                        "batchName": batch.name,
+                        "phone": learner.phone,
+                    }
+                    all_learners.append(learner_data)
+
+            # Remove duplicate coaches based on 'id'
+            unique_learner = []
+            seen_ids = set()
+
+            for learner_data in all_learners:
+                learner_id = learner_data["id"]
+                if learner_id not in seen_ids:
+                    seen_ids.add(learner_id)
+                    unique_learner.append(learner_data)
+
+            return Response(unique_learner, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get learners data."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

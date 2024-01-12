@@ -1,6 +1,6 @@
 from django.urls import path, include
 from . import views
-
+from .views import GetAllBatchesCoachDetails ,GetAllBatchesParticipantDetails
 
 urlpatterns = [
     path(
@@ -25,6 +25,9 @@ urlpatterns = [
         name="schedular-batch-list",
     ),
     path("batch-details/<str:batch_id>/", views.get_batch_calendar),
+    path("batches-coach-details/<int:project_id>/", GetAllBatchesCoachDetails.as_view()),
+    path("batches-learner-details/<int:project_id>/", GetAllBatchesParticipantDetails.as_view()),
+    
     path(
         "live-sessions/<int:live_session_id>/update/",
         views.update_live_session,
