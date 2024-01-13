@@ -505,6 +505,8 @@ def update_live_session(request, live_session_id):
     serializer = LiveSessionSerializer(live_session, data=request.data, partial=True)
     if serializer.is_valid():
         update_live_session = serializer.save()
+        # skipping the calendar invites, dont remove the below calendar invite, can be used in the future.
+        return Response(serializer.data)
         # Calendar invites
         try:
             learners = live_session.batch.learners.all()
