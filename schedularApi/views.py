@@ -1203,7 +1203,7 @@ def schedule_session(request):
                     "name": learner.name,
                     "date": date_for_mail,
                     "time": session_time,
-                    "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                    "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
                     "session_type": "Mentoring"
                     if session_type == "mentoring_session"
                     else "Laser Coaching",
@@ -1430,7 +1430,7 @@ def schedule_session_fixed(request):
                         "name": learner.name,
                         "date": date_for_mail,
                         "time": session_time,
-                        "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                        "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
                         "session_type": "Mentoring"
                         if session_type == "mentoring_session"
                         else "Laser Coaching",
@@ -1541,7 +1541,7 @@ def get_sessions(request):
             "participant_name": session.learner.name,
             "coaching_session_number": session.coaching_session.coaching_session_number,
             "participant_email": session.learner.email,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "room_id": f"{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
         }
@@ -1592,7 +1592,7 @@ def get_sessions_by_type(request, sessions_type):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
