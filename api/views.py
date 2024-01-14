@@ -150,7 +150,7 @@ from schedularApi.models import (
     SchedularProject,
     SchedularBatch,
     SchedularSessions,
-    CalendarInvites
+    CalendarInvites,
 )
 from schedularApi.serializers import SchedularProjectSerializer
 
@@ -505,8 +505,12 @@ def create_outlook_calendar_invite(
             "Authorization": f"Bearer {new_access_token}",
             "Content-Type": "application/json",
         }
-        start_datetime_obj = datetime.fromtimestamp(int(start_time_stamp) / 1000)   + timedelta(hours=5, minutes=30)
-        end_datetime_obj = datetime.fromtimestamp(int(end_time_stamp) / 1000)  + timedelta(hours=5, minutes=30) 
+        start_datetime_obj = datetime.fromtimestamp(
+            int(start_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
+        end_datetime_obj = datetime.fromtimestamp(
+            int(end_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
         start_datetime = start_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
         end_datetime = end_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
         event_payload = {
@@ -529,7 +533,7 @@ def create_outlook_calendar_invite(
                 creator=user_email,
                 caas_session=caas_session,
                 schedular_session=schedular_session,
-                live_session=live_session
+                live_session=live_session,
             )
             calendar_invite.save()
             print("Calendar invite sent successfully.")
@@ -538,11 +542,11 @@ def create_outlook_calendar_invite(
             print(f"Calendar invitation failed. Status code: {response.status_code}")
             print(response.text)
             return False
-    
+
     except UserToken.DoesNotExist:
         print(f"User token not found for email: {user_email}")
         return False
-    
+
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         return False
@@ -550,11 +554,15 @@ def create_outlook_calendar_invite(
 
 def delete_outlook_calendar_invite(calendar_invite):
     try:
-        user_token = UserToken.objects.get(user_profile__user__username=calendar_invite.creator)
+        user_token = UserToken.objects.get(
+            user_profile__user__username=calendar_invite.creator
+        )
         new_access_token = refresh_microsoft_access_token(user_token)
         if not new_access_token:
             new_access_token = user_token.access_token
-        event_delete_url = f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        event_delete_url = (
+            f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        )
         headers = {
             "Authorization": f"Bearer {new_access_token}",
         }
@@ -5238,7 +5246,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     current_time_seeq = timezone.now()
-    timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+    timestamp_milliseconds = int(current_time_seeq.timestamp() * 1000)
     avaliable_sessions = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
@@ -5330,6 +5338,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "status": session.status,
             "session_type": session.coaching_session.session_type,
             "end_time": session.availibility.end_time,
+            "session_duration": session.coaching_session.duration,
             "is_seeq_project": True,
         }
         session_details.append(session_detail)
@@ -8464,4 +8473,3 @@ class DownloadCoachContract(APIView):
                 {"error": "Failed to download Contract."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-

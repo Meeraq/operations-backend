@@ -1603,6 +1603,36 @@ def get_sessions_by_type(request, sessions_type):
     return Response(session_details, status=status.HTTP_200_OK)
 
 
+@api_view(["PUT"])
+def edit_session_status(request, session_id):
+    try:
+        session = SchedularSessions.objects.get(id=session_id)
+    except SchedularSessions.DoesNotExist:
+        return Response({"error": "Session not found."}, status=404)
+    new_status = request.data.get("status")
+    if not new_status:
+        return Response({"error": "Status is required."}, status=400)
+    session.status = new_status
+    session.save()
+    return Response({"message": "Session status updated successfully."}, status=200)
+
+
+@api_view(["PUT"])
+def update_session_date_time(request, session_id):
+    try:
+        session = SchedularSessions.objects.get(id=session_id)
+    except SchedularSessions.DoesNotExist:
+        return Response({"error": "Session not found."}, status=404)
+    start_time = request.data.get("start_time")
+    end_time = request.data.get("end_time")
+    if not start_time or not end_time:
+        return Response({"error": "Start or end time is not provided."}, status=400)
+    session.availibility.start_time = start_time
+    session.availibility.end_time = end_time
+    session.availibility.save()
+    return Response({"message": "Session time updated successfully."}, status=200)
+
+
 @api_view(["GET"])
 def get_current_session(request, user_type, room_id, user_id):
     five_minutes_in_milliseconds = 300000
