@@ -1754,12 +1754,17 @@ def get_projects_of_learner(request, learner_id):
 def get_ongoing_projects_of_hr(request, hr_id):
     projects = Project.objects.filter(hr__id=hr_id, steps__project_live="pending")
     schedular_projects = SchedularProject.objects.filter(hr__id=hr_id)
-    schedular_project_serializer =  SchedularProjectSerializer(schedular_projects, many=True)
+    schedular_project_serializer = SchedularProjectSerializer(
+        schedular_projects, many=True
+    )
     serializer = ProjectDepthTwoSerializer(projects, many=True)
-    return Response({
-        "caas_projects": serializer.data,
-        "schedular_projects": schedular_project_serializer.data
-		}, status=200)
+    return Response(
+        {
+            "caas_projects": serializer.data,
+            "schedular_projects": schedular_project_serializer.data,
+        },
+        status=200,
+    )
 
 
 # @api_view(['GET'])
@@ -5129,6 +5134,12 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__gt=timestamp_milliseconds
+        )
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -5293,6 +5304,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             | Q(status="completed"),
             Q(project__hr__id=user_id),
             Q(is_archive=False),
+        )
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__lt=timestamp_milliseconds
         )
 
     session_requests = session_requests.annotate(
