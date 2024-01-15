@@ -11,18 +11,19 @@ def populate_pt_30_min_before(apps, schema_editor):
     try:
         live_sessions  = LiveSession.objects.all()
         for live_session in live_sessions:
-            scheduled_for = live_session.date_time - timedelta(minutes=30)
-            clocked = ClockedSchedule.objects.create(
-                    clocked_time=scheduled_for
-                )  # time is utc one here
-            periodic_task = PeriodicTask.objects.create(
-                    name=uuid.uuid1(),
-                    task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
-                    args=[live_session.id],
-                    clocked=clocked,
-                    one_off=True,
-                )
-            periodic_task.save()
+            if live_session.date_time:
+                scheduled_for = live_session.date_time - timedelta(minutes=30)
+                clocked = ClockedSchedule.objects.create(
+                        clocked_time=scheduled_for
+                    )  # time is utc one here
+                periodic_task = PeriodicTask.objects.create(
+                        name=uuid.uuid1(),
+                        task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
+                        args=[live_session.id],
+                        clocked=clocked,
+                        one_off=True,
+                    )
+                periodic_task.save()
     except Exception as e:
             print(str(e))
 
