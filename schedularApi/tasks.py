@@ -622,7 +622,7 @@ def send_whatsapp_reminder_same_day_morning():
 
         for session in live_sessions:
             learners = session.batch.learners.all()
-            session_datetime_str = session.date_time.strftime("%H:%M")
+            session_datetime_str = session.date_time.strftime("%I:%M %p")
             for learner in learners:
                 send_whatsapp_message_template(
                     learner.phone,
