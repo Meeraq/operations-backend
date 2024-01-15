@@ -100,6 +100,10 @@ class LiveSession(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     duration = models.CharField(max_length=50, default=None)
+    pt_30_min_before = models.ForeignKey(
+        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
+    )
+   
 
 
 class EmailTemplate(models.Model):

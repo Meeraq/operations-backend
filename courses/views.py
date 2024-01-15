@@ -1525,6 +1525,9 @@ class GetLaserCoachingTime(APIView):
 def get_all_courses_progress(request):
     res = []
     courses = Course.objects.filter(status="public")
+    hr_id = request.query_params.get("hr", None)
+    if hr_id:
+        courses = courses.filter(batch__project__hr__id=hr_id)
     for course in courses:
         course_serializer = CourseSerializer(course)
         lessons = Lesson.objects.filter(status="public", course=course)
@@ -1547,6 +1550,7 @@ def get_all_courses_progress(request):
         res.append(
             {
                 **course_serializer.data,
+                "batch_name": course.batch.name,
                 "total_learners": course_enrollments.count(),
                 "completion_percentage": completion_percentage,
             }
@@ -1628,6 +1632,9 @@ def get_all_quizes_report(request):
     quizes = QuizLesson.objects.filter(
         lesson__status="public", lesson__course__status="public"
     )
+    hr_id = request.query_params.get("hr", None)
+    if hr_id:
+        quizes = quizes.filter(lesson__course__batch__project__hr__id=hr_id)
     for quiz in quizes:
         course_enrollments = CourseEnrollment.objects.filter(course=quiz.lesson.course)
         total_participants = course_enrollments.count()
@@ -1645,6 +1652,7 @@ def get_all_quizes_report(request):
                 "id": quiz.id,
                 "quiz_name": quiz.lesson.name,
                 "course_name": quiz.lesson.course.name,
+                "batch_name": quiz.lesson.course.batch.name,
                 "total_participants": total_participants,
                 "total_responses": total_responses,
                 "average_percentage": average_percentage,
@@ -2213,7 +2221,7 @@ class GetFeedbackForm(APIView):
             return Response(
                 {
                     "lesson_name": feedback_lesson.lesson.name,
-                    "lesson_status": feedback_lesson.lesson.status
+                    "lesson_status": feedback_lesson.lesson.status,
                 },
                 status=status.HTTP_200_OK,
             )
