@@ -69,7 +69,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 EMAIL_HOST = env("EMAIL_HOST")
 EMAIL_PORT = env("EMAIL_PORT")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
@@ -236,4 +236,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.refresh_user_tokens",
         "schedule": timedelta(hours=12),  # every 12 hours
     },
+    "send_reminder_to_book_slots_to_coachee":{
+        "task": "schedularApi.tasks.send_reminder_to_book_slots_to_coachee",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
+    "coach_has_to_give_slots_availability_reminder":{
+        "task":"schedularApi.tasks.coach_has_to_give_slots_availability_reminder",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    }
 }
