@@ -1,6 +1,6 @@
 import string
 from celery import shared_task
-from .models import SentEmail, SchedularSessions
+from .models import SentEmail, SchedularSessions, LiveSession
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
@@ -9,6 +9,7 @@ from api.models import Coach, User, UserToken
 from django.utils import timezone
 from datetime import datetime
 from api.views import send_mail_templates, refresh_microsoft_access_token
+from datetime import timedelta
 
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
@@ -67,6 +68,26 @@ def send_whatsapp_message(user_type, participant, assessment, unique_id):
         return {"error": f"Request Error: {err}"}, 500
     except Exception as e:
         return {"error": str(e)}, 500
+
+
+def send_whatsapp_message_template(phone, payload):
+    try:
+        if not phone:
+            return {"error": "Phone not available"}, 500
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = (
+            f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
+        )
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json(), response.status_code
+    except Exception as e:
+        print(str(e))
 
 
 def get_current_date_timestamps():
@@ -552,3 +573,113 @@ def send_assessment_invitation_mail(assessment_id):
             print(str(e))
             pass
         sleep(5)
+
+
+@shared_task
+def send_whatsapp_reminder_1_day_before_live_session():
+    try:
+        tomorrow = timezone.now() + timedelta(days=1)
+        live_sessions = LiveSession.objects.filter(date_time__date=tomorrow)
+
+        for session in live_sessions:
+            learners = session.batch.learners.all()
+
+            for learner in learners:
+                send_whatsapp_message_template(
+                    learner.phone,
+                    {
+                        "broadcast_name": "1 day before live session starts!",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": learner.name,
+                            },
+                            {
+                                "name": "live_session_name",
+                                "value": f"Live Session {session.order}",
+                            },
+                            {
+                                "name": "project_name",
+                                "value": session.batch.project.name,
+                            },
+                        ],
+                        "template_name": "coachee_reminder_live_session_1_day_before",
+                    },
+                )
+                sleep(5)
+    except Exception as e:
+        print(str(e))
+        pass
+
+
+@shared_task
+def send_whatsapp_reminder_same_day_morning():
+    try:
+        today_morning = timezone.now().replace(
+            hour=8, minute=0, second=0, microsecond=0
+        )
+        live_sessions = LiveSession.objects.filter(date_time__date=today_morning.date())
+
+        for session in live_sessions:
+            learners = session.batch.learners.all()
+            session_datetime_str = session.date_time.strftime("%H:%M")
+            for learner in learners:
+                send_whatsapp_message_template(
+                    learner.phone,
+                    {
+                        "broadcast_name": "Same day morning reminder",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": learner.name,
+                            },
+                            {
+                                "name": "live_session_name",
+                                "value": f"Live Session {session.order}",
+                            },
+                            {
+                                "name": "description",
+                                "value": session.description,
+                            },
+                            {
+                                "name": "time",
+                                "value": session_datetime_str,
+                            },
+                        ],
+                        "template_name": "coachee_reminder_live_session_same_day_morning",
+                    },
+                )
+                sleep(5)
+    except Exception as e:
+        print(str(e))
+        pass
+
+
+@shared_task
+def send_whatsapp_reminder_30_min_before_live_session(id):
+    try:
+        live_session = LiveSession.objects.get(id=id)
+
+        learners = live_session.batch.learners.all()
+        for learner in learners:
+            send_whatsapp_message_template(
+                learner.phone,
+                {
+                    "broadcast_name": "30 min before live session reminder",
+                    "parameters": [
+                        {
+                            "name": "live_session_name",
+                            "value": f"Live Session {live_session.order}",
+                        },
+                        {
+                            "name": "description",
+                            "value": live_session.description,
+                        },
+                    ],
+                    "template_name": "coachee_reminder_live_session_30minutes_before",
+                },
+            )
+            sleep(5)
+
+    except Exception as e:
+        print(str(e))
