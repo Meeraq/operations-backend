@@ -10,6 +10,7 @@ from django.utils import timezone
 from datetime import datetime
 from api.views import send_mail_templates, refresh_microsoft_access_token
 from datetime import timedelta
+import pytz
 
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
@@ -622,7 +623,9 @@ def send_whatsapp_reminder_same_day_morning():
 
         for session in live_sessions:
             learners = session.batch.learners.all()
-            session_datetime_str = session.date_time.strftime("%I:%M %p")
+            session_datetime_str = session.date_time.astimezone(
+                pytz.timezone("Asia/Kolkata")
+            ).strftime("%I:%M %p")
             for learner in learners:
                 send_whatsapp_message_template(
                     learner.phone,
@@ -643,7 +646,7 @@ def send_whatsapp_reminder_same_day_morning():
                             },
                             {
                                 "name": "time",
-                                "value": session_datetime_str,
+                                "value": f"{session_datetime_str} IST",
                             },
                         ],
                         "template_name": "coachee_reminder_live_session_same_day_morning",
