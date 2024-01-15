@@ -6,11 +6,15 @@ from schedularApi.models import LiveSession
 from datetime import timedelta
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 import uuid
+from django.utils import timezone
 
 
 def populate_pt_30_min_before(apps, schema_editor):
     try:
-        live_sessions = LiveSession.objects.all()
+        current_time = timezone.now()
+        live_sessions = LiveSession.objects.filter(
+            date_time__isnull=False, date_time__gt=current_time
+        )
         for live_session in live_sessions:
             if live_session.date_time:
                 scheduled_for = live_session.date_time - timedelta(minutes=30)
