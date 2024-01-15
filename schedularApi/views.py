@@ -94,6 +94,26 @@ import environ
 env = environ.Env()
 
 
+def send_whatsapp_message_template(phone, payload):
+    try:
+        if not phone:
+            return {"error": "Phone not available"}, 500
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = (
+            f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
+        )
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json(), response.status_code
+    except Exception as e:
+        print(str(e))
+
+
 def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
     coaching_session = CoachingSession.objects.get(id=coaching_session_id)
     if (
@@ -1913,21 +1933,55 @@ def finalize_project_structure(request, project_id):
 
 @api_view(["POST"])
 def send_live_session_link(request):
-    data = request.data
-    participants = data["participant"]
-    for participant in participants:
-        content = {
-            "description": data["description"],
-            "participant_name": participant["name"],
-        }
+    live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
+    for learner in live_session.batch.learners.all():
+    
         send_mail_templates(
             "send_live_session_link.html",
-            [participant["email"]],
+            [learner.email],
             "Meeraq - Live Session",
-            content,
+            {
+                "participant_name": learner.name,
+                "live_session_name": f"Live Session {live_session.order}",
+                "project_name": live_session.batch.project.name,
+                "description": live_session.description,
+            },
             [],
         )
     return Response({"message": "Emails sent successfully"})
+
+
+@api_view(["POST"])
+def send_live_session_link_whatsapp(request):
+    live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
+    for learner in live_session.batch.learners.all():
+        send_whatsapp_message_template(
+            learner.phone,
+            {
+                "broadcast_name": "Instant_live_session_whatsapp_reminder",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "value": learner.name,
+                    },
+                    {
+                        "name": "live_session_name",
+                        "value": f"Live Session {live_session.order}",
+                    },
+                    {
+                        "name": "project_name",
+                        "value": live_session.batch.project.name,
+                    },
+                    {
+                        "name": "description",
+                        "value": live_session.description,
+                    },
+                ],
+                "template_name": "instant_whatsapp_live_session",
+            },
+        )
+
+    return Response({"message": "Message sent successfully"})
 
 
 @api_view(["PUT"])
