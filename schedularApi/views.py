@@ -525,37 +525,31 @@ def update_live_session(request, live_session_id):
     serializer = LiveSessionSerializer(live_session, data=request.data, partial=True)
     if serializer.is_valid():
         update_live_session = serializer.save()
-        try:
-            scheduled_for = live_session.date_time - timedelta(minutes=30)
-            clocked = ClockedSchedule.objects.create(
-                clocked_time=scheduled_for
-            )  # time is utc one here
-            periodic_task = PeriodicTask.objects.create(
-                name=uuid.uuid1(),
-                task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
-                args=[live_session.id],
-                clocked=clocked,
-                one_off=True,
-            )
-            periodic_task.save()
-            if live_session.pt_30_min_before:
-                prev_periodic_task = PeriodicTask.objects.get(
-                    live_session.pt_30_min_before.id
+        current_time = timezone.now()
+        if update_live_session.date_time > current_time:
+            try:
+                scheduled_for = update_live_session.date_time - timedelta(minutes=30)
+                clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
+                # time is utc one here
+                periodic_task = PeriodicTask.objects.create(
+                    name=f"send_whatsapp_reminder_30_min_before_live_session_{uuid.uuid1()}",
+                    task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
+                    args=[update_live_session.id],
+                    clocked=clocked,
+                    one_off=True,
                 )
-                prev_periodic_task.delete()
-
-            live_session.pt_30_min_before = periodic_task
-            live_session.save()
-        except Exception as e:
-            # Handle any exceptions that may occur during task creation
-            return Response(
-                {"error": "Falied to update details."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+                periodic_task.save()
+                if update_live_session.pt_30_min_before:
+                    update_live_session.delete()
+                live_session.pt_30_min_before = periodic_task
+                live_session.save()
+            except Exception as e:
+                # Handle any exceptions that may occur during task creation
+                print(str(e))
+                pass
         # skipping the calendar invites, dont remove the below calendar invite, can be used in the future.
         return Response(serializer.data)
         # Calendar invites
-
         try:
             learners = live_session.batch.learners.all()
             attendees = list(
@@ -1993,7 +1987,6 @@ def finalize_project_structure(request, project_id):
 def send_live_session_link(request):
     live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
     for learner in live_session.batch.learners.all():
-    
         send_mail_templates(
             "send_live_session_link.html",
             [learner.email],
