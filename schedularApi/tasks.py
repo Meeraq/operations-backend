@@ -584,7 +584,9 @@ def send_whatsapp_reminder_1_day_before_live_session():
 
         for session in live_sessions:
             learners = session.batch.learners.all()
-
+            session_datetime_str = session.date_time.astimezone(
+                pytz.timezone("Asia/Kolkata")
+            ).strftime("%I:%M %p")
             for learner in learners:
                 send_whatsapp_message_template(
                     learner.phone,
@@ -603,8 +605,12 @@ def send_whatsapp_reminder_1_day_before_live_session():
                                 "name": "project_name",
                                 "value": session.batch.project.name,
                             },
+                            {
+                                "name": "time",
+                                "value": f"{session_datetime_str} IST",
+                            },
                         ],
-                        "template_name": "coachee_reminder_live_session_1_day_before",
+                        "template_name": "reminder_coachee_live_session_one_day_before",
                     },
                 )
                 sleep(5)
@@ -649,7 +655,7 @@ def send_whatsapp_reminder_same_day_morning():
                                 "value": f"{session_datetime_str} IST",
                             },
                         ],
-                        "template_name": "coachee_reminder_live_session_same_day_morning",
+                        "template_name": "reminder_coachee_live_session_same_day",
                     },
                 )
                 sleep(5)
@@ -671,6 +677,10 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
                     "broadcast_name": "30 min before live session reminder",
                     "parameters": [
                         {
+                            "name": "project_name",
+                            "value": live_session.batch.project.name,
+                        },
+                        {
                             "name": "live_session_name",
                             "value": f"Live Session {live_session.order}",
                         },
@@ -679,7 +689,7 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
                             "value": live_session.description,
                         },
                     ],
-                    "template_name": "coachee_reminder_live_session_30minutes_before",
+                    "template_name": "reminder_coachee_live_session_30min_before",
                 },
             )
             sleep(5)
