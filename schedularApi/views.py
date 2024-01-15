@@ -2386,3 +2386,37 @@ def get_schedular_project_updates(request, project_id):
     )
     serializer = SchedularUpdateDepthOneSerializer(updates, many=True)
     return Response(serializer.data)
+
+
+@api_view(["GET"])
+def get_live_sessions_by_status(request):
+    status = request.query_params.get("status", None)
+    now = timezone.now()
+    if status == "upcoming":
+        queryset = LiveSession.objects.filter(date_time__gt=now).order_by("date_time")
+    elif status == "past":
+        queryset = LiveSession.objects.filter(date_time__lt=now).order_by("-date_time")
+    elif status == "unscheduled":
+        queryset = LiveSession.objects.filter(date_time__isnull=True).order_by(
+            "created_at"
+        )
+    else:
+        queryset = LiveSession.objects.all()
+    res = []
+    for live_session in queryset:
+        res.append(
+            {
+                "id": live_session.id,
+                "name": f"Live Session {live_session.live_session_number}",
+                "organization": live_session.batch.project.organisation.name,
+                "batch_name": live_session.batch.name,
+                "batch_id": live_session.batch.id,
+                "project_name": live_session.batch.project.name,
+                "project_id": live_session.batch.project.id,
+                "date_time": live_session.date_time,
+                "description": live_session.description,
+                "attendees": len(live_session.attendees),
+                "total_learners": live_session.batch.learners.count(),
+            }
+        )
+    return Response(res)

@@ -151,4 +151,5 @@ urlpatterns = [
         "schedular-projects/<int:project_id>/updates/",
         views.get_schedular_project_updates,
     ),
+    path("live-sessions/", views.get_live_sessions_by_status),
 ]
