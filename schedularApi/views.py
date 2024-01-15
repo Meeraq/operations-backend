@@ -85,6 +85,7 @@ from api.views import (
     delete_outlook_calendar_invite,
 )
 import io
+from time import sleep
 
 
 # Create your views here.
@@ -1999,6 +2000,7 @@ def send_live_session_link(request):
             },
             [],
         )
+        sleep(4)
     return Response({"message": "Emails sent successfully"})
 
 
