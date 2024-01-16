@@ -60,6 +60,7 @@ from .views import (
     GetAllAssessments,
     GetOneAssessment,
     GetAssessmentsOfHr,
+    GetAssessmentsDataForMoveParticipant,
 )
 
 
@@ -261,4 +262,5 @@ urlpatterns = [
     ),
     path("assessment/<int:assessment_id>/", GetOneAssessment.as_view()),
     path("assessments/hr/<int:hr_id>/", GetAssessmentsOfHr.as_view()),
+    path("get-assessments-for-move-participant/", GetAssessmentsDataForMoveParticipant.as_view()),
 ]
