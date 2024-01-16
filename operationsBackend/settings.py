@@ -244,4 +244,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_whatsapp_reminder_same_day_morning",
         "schedule": crontab(hour=2, minute=30),  # 8 AM
     },
+    "send_feedback_lesson_reminders": {
+        "task": "schedularApi.tasks.send_feedback_lesson_reminders",
+        "schedule": crontab(hour=13, minute=0),  # 8 AM
+    },
 }
