@@ -15,7 +15,7 @@ import pytz
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
-from courses.models import Course, Lesson, FeedbackLesson
+from courses.models import Course, Lesson, FeedbackLesson, FeedbackLessonResponse
 from django.db.models import Q
 import environ
 from time import sleep
@@ -738,27 +738,34 @@ def send_feedback_lesson_reminders():
                                     learner
                                 ) in feedback_lesson.lesson.course.batch.learners.all():
                                     try:
-                                        send_whatsapp_message_template(
-                                            learner.phone,
-                                            {
-                                                "broadcast_name": "Feedback Reminder",
-                                                "parameters": [
-                                                    {
-                                                        "name": "name",
-                                                        "value": learner.name,
-                                                    },
-                                                    {
-                                                        "name": "live_session_name",
-                                                        "value": f"Live Session {live_session.live_session_number}",
-                                                    },
-                                                    {
-                                                        "name": "feedback_lesson_id",
-                                                        "value": feedback_lesson.unique_id,
-                                                    },
-                                                ],
-                                                "template_name": "one_time_reminder_feedback_form_live_session",
-                                            },
+                                        feedback_lesson_response_exists = (
+                                            FeedbackLessonResponse.objects.filter(
+                                                feedback_lesson=feedback_lesson,
+                                                learner=learner,
+                                            ).exists()
                                         )
+                                        if not feedback_lesson_response_exists:
+                                            send_whatsapp_message_template(
+                                                learner.phone,
+                                                {
+                                                    "broadcast_name": "Feedback Reminder",
+                                                    "parameters": [
+                                                        {
+                                                            "name": "name",
+                                                            "value": learner.name,
+                                                        },
+                                                        {
+                                                            "name": "live_session_name",
+                                                            "value": f"Live Session {live_session.live_session_number}",
+                                                        },
+                                                        {
+                                                            "name": "feedback_lesson_id",
+                                                            "value": feedback_lesson.unique_id,
+                                                        },
+                                                    ],
+                                                    "template_name": "one_time_reminder_feedback_form_live_session",
+                                                },
+                                            )
                                     except Exception as e:
                                         print(
                                             f"error sending whatsapp message to {learner}: {str(e)}"

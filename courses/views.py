@@ -153,8 +153,6 @@ class CourseListView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         name = serializer.validated_data.get("name", None)
-        if name and Course.objects.filter(name=name.strip()).exists():
-            raise serializers.ValidationError("Course with this name already exists.")
         serializer.save()
 
 
@@ -186,13 +184,6 @@ class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer):
         name = serializer.validated_data.get("name", None)
         instance = self.get_object()
-        if (
-            name
-            and Course.objects.exclude(pk=instance.pk)
-            .filter(name=name.strip())
-            .exists()
-        ):
-            raise serializers.ValidationError("Course with this name already exists.")
         serializer.save()
 
 
@@ -222,7 +213,7 @@ class DuplicateCourseAPIView(APIView):
 
             # Duplicate the course
             new_course = Course.objects.create(
-                name=f"Copy of - {original_course.name}",
+                name=f"{original_course.name}",
                 description=original_course.description,
                 status="draft",
             )
@@ -1728,7 +1719,7 @@ class AssignCourseTemplateToBatch(APIView):
                 batch = get_object_or_404(SchedularBatch, pk=batch_id)
                 # Duplicate the course
                 new_course = Course.objects.create(
-                    name=f"Copy of - {course_template.name}",
+                    name=f"{course_template.name}",
                     description=course_template.description,
                     status="draft",
                     course_template=course_template,
