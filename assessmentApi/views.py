@@ -37,6 +37,7 @@ from .serializers import (
     ObserverTypeSerializer,
     AssessmentNotificationSerializer,
     ParticipantReleasedResultsSerializerDepthOne,
+    ParticipantObserverMappingSerializerDepthOne,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -72,6 +73,7 @@ from datetime import datetime
 import io
 from api.views import add_contact_in_wati
 from schedularApi.tasks import send_assessment_invitation_mail, send_whatsapp_message
+from django.shortcuts import render, get_object_or_404
 
 matplotlib.use("Agg")
 env = environ.Env()
@@ -3657,3 +3659,89 @@ class GetParticipantReleasedResults(APIView):
                 {"error": "Failed to get download response data."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class GetAllAssessments(APIView):
+    def get(self, request):
+        assessments = Assessment.objects.all()
+        assessment_list = []
+        for assessment in assessments:
+            total_responses_count = ParticipantResponse.objects.filter(
+                assessment=assessment
+            ).count()
+            assessment_data = {
+                "id": assessment.id,
+                "name": assessment.name,
+                "organisation": assessment.organisation.name
+                if assessment.organisation
+                else "",
+                "assessment_type": assessment.assessment_type,
+                "assessment_timing": assessment.assessment_timing,
+                "assessment_start_date": assessment.assessment_start_date,
+                "assessment_end_date": assessment.assessment_end_date,
+                "status": assessment.status,
+                "total_learners_count": assessment.participants_observers.count(),
+                "total_responses_count": total_responses_count,
+                "created_at": assessment.created_at,
+            }
+            assessment_list.append(assessment_data)
+
+        return Response(assessment_list)
+
+
+class GetOneAssessment(APIView):
+    def get(self, request, assessment_id):
+        assessment = get_object_or_404(Assessment, id=assessment_id)
+        try:
+            serializer = AssessmentSerializerDepthFour(assessment)
+            return Response(serializer.data)
+        except Exception as e:
+            # Handle specific exceptions if needed
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetAssessmentsOfHr(APIView):
+    def get(self, request, hr_id):
+        assessments = Assessment.objects.filter(
+            Q(hr__id=hr_id), Q(status="ongoing") | Q(status="completed")
+        )
+        assessment_list = []
+        for assessment in assessments:
+            total_responses_count = ParticipantResponse.objects.filter(
+                assessment=assessment
+            ).count()
+            assessment_data = {
+                "id": assessment.id,
+                "name": assessment.name,
+                "participant_view_name": assessment.participant_view_name,
+                "assessment_type": assessment.assessment_type,
+                "assessment_timing": assessment.assessment_timing,
+                "assessment_start_date": assessment.assessment_start_date,
+                "assessment_end_date": assessment.assessment_end_date,
+                "status": assessment.status,
+                "total_learners_count": assessment.participants_observers.count(),
+                "total_responses_count": total_responses_count,
+                "created_at": assessment.created_at,
+            }
+            assessment_list.append(assessment_data)
+
+        return Response(assessment_list)
+
+
+class GetAssessmentsDataForMoveParticipant(APIView):
+    def get(self, request):
+        assessments = Assessment.objects.all()
+        assessment_data = []
+        for assessment in assessments:
+            temp_assessmeent = {
+                "id": assessment.id,
+                "name": assessment.name,
+                "assessment_timing": assessment.assessment_timing,
+                "participants_observers": ParticipantObserverMappingSerializerDepthOne(
+                    assessment.participants_observers, many=True
+                ).data,
+            }
+            assessment_data.append(temp_assessmeent)
+        return Response(assessment_data)

@@ -224,10 +224,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_whatsapp_message_to_participants_for_assessment_at_9AM",
         "schedule": crontab(hour=3, minute=30, day_of_week="*"),
     },
-    "send_whatsapp_message_to_participants_for_assessment_at_7PM": {
-        "task": "schedularApi.tasks.send_whatsapp_message_to_participants_for_assessment_at_7PM",
-        "schedule": crontab(hour=13, minute=30, day_of_week="*"),
-    },
+    # "send_whatsapp_message_to_participants_for_assessment_at_7PM": {
+    #     "task": "schedularApi.tasks.send_whatsapp_message_to_participants_for_assessment_at_7PM",
+    #     "schedule": crontab(hour=13, minute=30, day_of_week="*"),
+    # },
     "update_assessment_status": {
         "task": "schedularApi.tasks.update_assessment_status",
         "schedule": crontab(hour=1, minute=30, day_of_week="*"),  #  7 AM
@@ -235,5 +235,17 @@ CELERY_BEAT_SCHEDULE = {
     "refreshing_user_tokens": {
         "task": "schedularApi.tasks.refresh_user_tokens",
         "schedule": timedelta(hours=12),  # every 12 hours
+    },
+    "send_whatsapp_reminder_1_day_before_live_session": {
+        "task": "schedularApi.tasks.send_whatsapp_reminder_1_day_before_live_session",
+        "schedule": crontab(hour=12, minute=30),  # 6 PM
+    },
+    "send_whatsapp_reminder_same_day_morning": {
+        "task": "schedularApi.tasks.send_whatsapp_reminder_same_day_morning",
+        "schedule": crontab(hour=2, minute=30),  # 8 AM
+    },
+    "send_feedback_lesson_reminders": {
+        "task": "schedularApi.tasks.send_feedback_lesson_reminders",
+        "schedule": crontab(hour=13, minute=0),  # 8 AM
     },
 }
