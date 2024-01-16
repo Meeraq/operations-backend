@@ -15,6 +15,7 @@ import pytz
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
+from courses.models import Course, Lesson, FeedbackLesson
 from django.db.models import Q
 import environ
 from time import sleep
@@ -599,7 +600,7 @@ def send_whatsapp_reminder_1_day_before_live_session():
                             },
                             {
                                 "name": "live_session_name",
-                                "value": f"Live Session {session.order}",
+                                "value": f"Live Session {session.live_session_number}",
                             },
                             {
                                 "name": "project_name",
@@ -644,7 +645,7 @@ def send_whatsapp_reminder_same_day_morning():
                             },
                             {
                                 "name": "live_session_name",
-                                "value": f"Live Session {session.order}",
+                                "value": f"Live Session {session.live_session_number}",
                             },
                             {
                                 "name": "description",
@@ -682,7 +683,7 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
                         },
                         {
                             "name": "live_session_name",
-                            "value": f"Live Session {live_session.order}",
+                            "value": f"Live Session {live_session.live_session_number}",
                         },
                         {
                             "name": "description",
@@ -696,3 +697,82 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
 
     except Exception as e:
         print(str(e))
+
+
+def get_feedback_lesson_name(lesson_name):
+    # Trim leading and trailing whitespaces
+    trimmed_string = lesson_name.strip()
+    # Convert to lowercase
+    lowercased_string = trimmed_string.lower()
+    # Replace spaces between words with underscores
+    underscored_string = "_".join(lowercased_string.split())
+    return underscored_string
+
+
+@shared_task
+def send_feedback_lesson_reminders():
+    today = timezone.now().date()
+    today_live_sessions = LiveSession.objects.filter(date_time__date=today)
+    for live_session in today_live_sessions:
+        try:
+            # Get the associated SchedularBatch for each LiveSession
+            schedular_batch = live_session.batch
+            if schedular_batch:
+                # Now, you can access the associated Course through the SchedularBatch
+                course = Course.objects.filter(batch=schedular_batch).first()
+                if course:
+                    feedback_lesson_name_should_be = (
+                        f"feedback_for_live_session_{live_session.live_session_number}"
+                    )
+                    feedback_lessons = FeedbackLesson.objects.filter(
+                        lesson__course=course
+                    )
+                    for feedback_lesson in feedback_lessons:
+                        try:
+                            current_lesson_name = feedback_lesson.lesson.name
+                            formatted_lesson_name = get_feedback_lesson_name(
+                                current_lesson_name
+                            )
+                            if formatted_lesson_name == feedback_lesson_name_should_be:
+                                for (
+                                    learner
+                                ) in feedback_lesson.lesson.course.batch.learners.all():
+                                    try:
+                                        send_whatsapp_message_template(
+                                            learner.phone,
+                                            {
+                                                "broadcast_name": "Feedback Reminder",
+                                                "parameters": [
+                                                    {
+                                                        "name": "name",
+                                                        "value": learner.name,
+                                                    },
+                                                    {
+                                                        "name": "live_session_name",
+                                                        "value": f"Live Session {live_session.live_session_number}",
+                                                    },
+                                                    {
+                                                        "name": "feedback_lesson_id",
+                                                        "value": feedback_lesson.unique_id,
+                                                    },
+                                                ],
+                                                "template_name": "one_time_reminder_feedback_form_live_session",
+                                            },
+                                        )
+                                    except Exception as e:
+                                        print(
+                                            f"error sending whatsapp message to {learner}: {str(e)}"
+                                        )
+                                # send whatsapp message to all participants
+                        except Exception as e_inner:
+                            print(f"Error processing feedback lesson: {str(e_inner)}")
+                else:
+                    print(
+                        f"Live Session {live_session.id} is associated with a batch but not with any Course"
+                    )
+            else:
+                print(
+                    f"Live Session {live_session.id} is not associated with any SchedularBatch"
+                )
+        except Exception as e_outer:
+            print(f"Error processing live session: {str(e_outer)}")
