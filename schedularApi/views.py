@@ -95,43 +95,6 @@ import environ
 
 env = environ.Env()
 
-def send_live_session_link_as_whatsapp_message_to_participant(name,phone,description):
-    try:
-        if not phone:
-            return {"error": "Participant phone not available"}, 500
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
-        headers = {
-            "content-type": "text/json",
-            "Authorization": wati_authorization,
-        }
-        payload = {
-            "broadcast_name": "Testing 19th postman",
-            "parameters": [
-                {
-                    "name": "name",
-                    "value": name,
-                },
-                {
-                    "name": "description",
-                    "value": description,
-                },
-            ],
-            "template_name": "live_session_at_instance",
-        }
-
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()
-        print(response.json())
-        return response.json(), response.status_code
-
-    except requests.exceptions.HTTPError as errh:
-        return {"error": f"HTTP Error: {errh}"}, 500
-    except requests.exceptions.RequestException as err:
-        return {"error": f"Request Error: {err}"}, 500
-    except:
-        pass
 
 
 def send_whatsapp_message_template(phone, payload):
@@ -2072,22 +2035,7 @@ def send_live_session_link(request):
         sleep(4)
     return Response({"message": "Emails sent successfully"})
 
-@api_view(["POST"])
-def send_live_session_link_whatsapp(request):
-    print(request.data)
-    data = request.data
-    participants = data["participant"]
-    for participant in participants:
-        content = {
-            "description": data["description"],
-            "participant_name": participant["name"],
-        }
-        name=participant["name"]
-        phone=participant["phone"]
-        description=data["description"]
-        print(name,phone,description)
-        send_live_session_link_as_whatsapp_message_to_participant(name,phone,description)
-    return Response({"message": "Message sent successfully"})
+
 
 
 @api_view(["POST"])
