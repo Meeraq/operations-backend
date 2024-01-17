@@ -2336,13 +2336,13 @@ class EditAllowedFeedbackLesson(APIView):
                     },
                     status=status.HTTP_200_OK,
                 )
-            else:
-                return Response(
-                    {
-                        "edit_allowed": True,
-                    },
-                    status=status.HTTP_200_OK,
-                )
+
+            return Response(
+                {
+                    "edit_allowed": True,
+                },
+                status=status.HTTP_200_OK,
+            )
         except Exception as e:
             print(str(e))
             return Response(
