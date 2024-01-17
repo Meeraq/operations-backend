@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date,datetime,time
 import requests
 from django.http import JsonResponse
 import calendar
@@ -6,6 +6,7 @@ from os import name
 from django.shortcuts import render, get_object_or_404
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
+from django.utils.timezone import make_aware
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.db import transaction, IntegrityError
 from django.core.mail import EmailMessage
@@ -176,6 +177,17 @@ env = environ.Env()
 wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
+def get_current_date_timestamps():
+    now = timezone.now()
+    current_date = now.date()
+    start_timestamp = str(
+        int(datetime.combine(current_date, datetime.min.time()).timestamp() * 1000)
+    )
+    end_timestamp = str(
+        int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
+    )
+    return start_timestamp, end_timestamp
 
 
 def create_send_email(user_email, file_name):
@@ -657,7 +669,7 @@ def generate_room_id(email):
 def get_trimmed_emails(emails):
     res = []
     for email in emails:
-        res.append(email.strip())
+        res.append(email.strip().lower())
     return res
 
 
@@ -712,13 +724,32 @@ def add_contact_in_wati(user_type, name, phone):
     except Exception as e:
         pass
 
+def send_whatsapp_message_template(phone, payload):
+    try:
+        if not phone:
+            return {"error": "Phone not available"}, 500
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = (
+            f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
+        )
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json(), response.status_code
+    except Exception as e:
+        print(str(e))
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def create_pmo(request):
     # Get data from request
     name = request.data.get("name")
-    email = request.data.get("email", "").strip()
+    email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
     username = email  # username and email are the same
     password = request.data.get("password")
@@ -875,7 +906,7 @@ def update_coach_profile(request, id):
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email", "").strip()
+    new_email = mutable_data.get("email", "").strip().lower()
     #  other user exists with the new email
     if (
         new_email
@@ -1016,7 +1047,7 @@ def pmo_login(request):
 
 @api_view(["POST"])
 def coach_login(request):
-    email = request.data.get("email")
+    email = request.data.get("email").strip().lower()
     password = request.data.get("password")
 
     if email is None or password is None:
@@ -1310,7 +1341,7 @@ def create_learners(learners_data):
             learners = []
             for learner_data in learners_data:
                 # Check if username field is provided
-                email = learner_data.get("email", "").strip()
+                email = learner_data.get("email", "").strip().lower()
                 if "email" not in learner_data:
                     raise ValueError("Username field is required")
                 # Check if user already exists
@@ -2131,7 +2162,7 @@ def add_coach(request):
     coach_id = request.data.get("coach_id")
     first_name = request.data.get("first_name")
     last_name = request.data.get("last_name")
-    email = request.data.get("email", "").strip()
+    email = request.data.get("email", "").strip().lower()
     age = request.data.get("age")
     gender = request.data.get("gender")
     domain = json.loads(request.data["domain"])
@@ -2156,7 +2187,7 @@ def add_coach(request):
     ctt_nctt = json.loads(request.data["ctt_nctt"])
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
-    username = request.data.get("email", "").strip()  # keeping username and email same
+    username = request.data.get("email", "").strip().lower()  # keeping username and email same
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
@@ -2730,7 +2761,7 @@ def update_organisation(request, org_id):
 @api_view(["POST"])
 def add_hr(request):
     try:
-        email = request.data.get("email", "").strip()
+        email = request.data.get("email", "").strip().lower()
         with transaction.atomic():
             user = User.objects.filter(email=email).first()
             if not user:
@@ -2792,7 +2823,7 @@ def update_hr(request, hr_id):
         if serializer.is_valid():
             new_email = request.data.get(
                 "email", ""
-            ).strip()  # Get the new email from the request
+            ).strip().lower()  # Get the new email from the request
             existing_user = (
                 User.objects.filter(email=new_email).exclude(username=hr.email).first()
             )
@@ -2810,7 +2841,7 @@ def update_hr(request, hr_id):
             add_contact_in_wati("hr", name, hr.phone)
 
             # if email if getting updated -> updating email in all other user present
-            if not updated_hr.email == user.email:
+            if not updated_hr.email.strip().lower() == user.email.strip().lower():
                 user.email = new_email
                 user.username = new_email
                 user.save()
@@ -3487,6 +3518,38 @@ def book_session_caas(request):
             message = f"{coach_name.title()} has booked the {SESSION_TYPE_VALUE[session_request.session_type]} for Project - {project.name}.The booked slot is "
             message += slot_message
             create_notification(pmo_user, path, message)
+
+            #WHATSAPP MESSAGE CHECK
+            #before 5 mins whatsapp msg
+            confirmed_availability_start_time = session_request.confirmed_availability.start_time
+            start_datetime_obj = datetime.fromtimestamp(int(confirmed_availability_start_time)/1000) 
+            # Decrease 5 minutes
+            five_minutes_prior_start_datetime = start_datetime_obj - timedelta(minutes=5)
+            clocked = ClockedSchedule.objects.create(clocked_time=five_minutes_prior_start_datetime)
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_caas",
+                args=[session_request.id],
+                clocked=clocked,
+                one_off=True,
+            )
+            periodic_task.save()
+
+            #after 3 minutes whatsapp message
+            # increase 5 minutes
+            three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(minutes=3)
+            clocked = ClockedSchedule.objects.create(clocked_time=three_minutes_ahead_start_datetime)
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_caas",
+                args=[session_request.id],
+                clocked=clocked,
+                one_off=True,
+            )
+            periodic_task.save()
+
+            #WHATSAPP MESSAGE CHECK
+            
             if coachee:
                 microsoft_auth_url = (
                     f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
@@ -5571,14 +5634,6 @@ def request_session(request, session_id, coach_id):
 @api_view(["POST"])
 def reschedule_session_of_coachee(request, session_id):
     session = SessionRequestCaas.objects.get(id=session_id)
-
-    google_calendar_event = CalendarEvent.objects.filter(
-        session=session, account_type="google"
-    ).first()
-    microsoft_calendar_event = CalendarEvent.objects.filter(
-        session=session, account_type="microsoft"
-    ).first()
-
     session.is_archive = True
 
     time_arr = create_time_arr(request.data["availibility"])
@@ -5595,14 +5650,7 @@ def reschedule_session_of_coachee(request, session_id):
     new_session.availibility.set(time_arr)
     new_session.save()
     session.save()
-
-    if google_calendar_event:
-        google_calendar_event.session = new_session
-        google_calendar_event.save()
-    if microsoft_calendar_event:
-        microsoft_calendar_event.session = new_session
-        microsoft_calendar_event.save()
-
+    
     return Response({"message": "Session reschedule successfully"}, status=200)
 
 
@@ -6095,6 +6143,34 @@ def schedule_session_directly(request, session_id):
             "endDate": session_date,
             "endTime": end_time,
         }
+
+        #WHATSAPP MESSAGE CHECK
+        start_datetime_obj = datetime.fromtimestamp(int(session.confirmed_availability.start_time)/1000) 
+        # Decrease 5 minutes
+        five_minutes_prior_start_datetime = start_datetime_obj - timedelta(minutes=5)
+        clocked = ClockedSchedule.objects.create(clocked_time=five_minutes_prior_start_datetime)
+        periodic_task = PeriodicTask.objects.create(
+            name=uuid.uuid1(),
+            task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_caas",
+            args=[session_id],
+            clocked=clocked,
+            one_off=True,
+        )
+        periodic_task.save()
+
+        #after 3 minutes
+        three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(minutes=3)
+        clocked = ClockedSchedule.objects.create(clocked_time=three_minutes_ahead_start_datetime)
+        periodic_task = PeriodicTask.objects.create(
+            name=uuid.uuid1(),
+            task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_caas",
+            args=[session_id],
+            clocked=clocked,
+            one_off=True,
+        )
+        periodic_task.save()
+        #WHATSAPP MESSAGE CHECK
+
         if session.project.enable_emails_to_hr_and_coachee:
             microsoft_auth_url = (
                 f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
