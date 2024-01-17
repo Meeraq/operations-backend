@@ -2449,8 +2449,12 @@ def get_live_sessions_by_status(request):
         queryset = LiveSession.objects.filter(date_time__isnull=True).order_by(
             "created_at"
         )
+    
     else:
         queryset = LiveSession.objects.all()
+    hr_id =  request.query_params.get("hr", None)
+    if hr_id:
+        queryset = queryset.filter(batch__project__hr__id=hr_id)
     res = []
     for live_session in queryset:
         res.append(
