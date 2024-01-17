@@ -27,6 +27,7 @@ from .views import (
     DownloadableLessonCreateView,
     FeedbackEmailValidation,
     GetFeedbackForm,
+    DuplicateLesson,
 )
 import environ
 
@@ -268,5 +269,9 @@ urlpatterns = [
     path(
         "get-feedback-form/<str:unique_id>/",
         GetFeedbackForm.as_view(),
+    ),
+    path(
+        "duplicate-lesson/",
+        DuplicateLesson.as_view(),
     ),
 ]
