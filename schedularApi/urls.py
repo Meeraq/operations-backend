@@ -76,6 +76,8 @@ urlpatterns = [
     ),
     path("sessions/", views.get_sessions),
     path("sessions/<str:sessions_type>/", views.get_sessions_by_type),
+    path("sessions/status/update/<int:session_id>/", views.edit_session_status),
+    path("sessions/time/update/<int:session_id>/", views.update_session_date_time),
     path(
         "current-session/<str:user_type>/<str:room_id>/<int:user_id>/",
         views.get_current_session,
@@ -150,4 +152,5 @@ urlpatterns = [
         "schedular-projects/<int:project_id>/updates/",
         views.get_schedular_project_updates,
     ),
+    path("live-sessions/", views.get_live_sessions_by_status),
 ]

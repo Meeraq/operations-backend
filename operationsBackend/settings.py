@@ -70,6 +70,7 @@ MIDDLEWARE = [
 ]
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 EMAIL_HOST = env("EMAIL_HOST")
 EMAIL_PORT = env("EMAIL_PORT")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
@@ -216,6 +217,22 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_participant_morning_reminder_one_day_before_email",
         "schedule": crontab(hour=3, minute=0, day_of_week="*"),
     },
+    "send_coach_morning_reminder_whatsapp_message_at_8AM_seeq": {
+        "task": "schedularApi.tasks.send_coach_morning_reminder_whatsapp_message_at_8AM_seeq",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
+    "send_coach_morning_reminder_whatsapp_message_at_8AM_caas": {
+        "task": "schedularApi.tasks.send_coach_morning_reminder_whatsapp_message_at_8AM_caas",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
+    "send_participant_morning_reminder_whatsapp_message_at_8AM_seeq": {
+        "task": "schedularApi.tasks.send_participant_morning_reminder_whatsapp_message_at_8AM_seeq",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
+    "send_participant_morning_reminder_whatsapp_message_at_8AM_caas": {
+        "task": "schedularApi.tasks.send_participant_morning_reminder_whatsapp_message_at_8AM_caas",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
     "send_reminder_email_to_participants_for_assessment_at_2PM": {
         "task": "schedularApi.tasks.send_reminder_email_to_participants_for_assessment_at_2PM",
         "schedule": crontab(hour=8, minute=30, day_of_week="*"),
@@ -235,6 +252,18 @@ CELERY_BEAT_SCHEDULE = {
     "refreshing_user_tokens": {
         "task": "schedularApi.tasks.refresh_user_tokens",
         "schedule": timedelta(hours=12),  # every 12 hours
+    },
+    "send_whatsapp_reminder_1_day_before_live_session": {
+        "task": "schedularApi.tasks.send_whatsapp_reminder_1_day_before_live_session",
+        "schedule": crontab(hour=12, minute=30),  # 6 PM
+    },
+    "send_whatsapp_reminder_same_day_morning": {
+        "task": "schedularApi.tasks.send_whatsapp_reminder_same_day_morning",
+        "schedule": crontab(hour=2, minute=30),  # 8 AM
+    },
+    "send_feedback_lesson_reminders": {
+        "task": "schedularApi.tasks.send_feedback_lesson_reminders",
+        "schedule": crontab(hour=13, minute=0),  # 8 AM
     },
     "send_reminder_to_book_slots_to_coachee":{
         "task": "schedularApi.tasks.send_reminder_to_book_slots_to_coachee",
