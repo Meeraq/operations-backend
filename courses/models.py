@@ -3,7 +3,7 @@ from api.models import Learner
 from schedularApi.models import SchedularBatch, LiveSession, CoachingSession
 import os
 from django.core.exceptions import ValidationError
-
+import uuid
 
 # Create your models here.
 
@@ -74,6 +74,7 @@ class Question(models.Model):
         ("rating_1_to_5", "1 to 5 Rating"),
         ("rating_1_to_10", "1 to 10 Rating"),
         ("descriptive_answer", "Descriptive Answer"),
+        ("rating_0_to_10", "0 to 10 Rating"),
     ]
     text = models.CharField(max_length=255)
     options = models.JSONField(default=list)
@@ -88,6 +89,9 @@ class QuizLesson(models.Model):
 class FeedbackLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     questions = models.ManyToManyField(Question)
+    unique_id = models.CharField(
+        max_length=225,  blank=True, 
+    )
 
 
 class LiveSessionLesson(models.Model):

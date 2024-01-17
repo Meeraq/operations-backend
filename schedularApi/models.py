@@ -1,6 +1,6 @@
 from django.db import models
 from django_celery_beat.models import PeriodicTask
-from api.models import Organisation, HR, Coach, Learner, SessionRequestCaas
+from api.models import Organisation, HR, Coach, Learner, Pmo, SessionRequestCaas
 
 
 # Create your models here.
@@ -100,6 +100,10 @@ class LiveSession(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     duration = models.CharField(max_length=50, default=None)
+    pt_30_min_before = models.ForeignKey(
+        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
+    )
+   
 
 
 class EmailTemplate(models.Model):
@@ -181,3 +185,14 @@ class CalendarInvites(models.Model):
     live_session = models.ForeignKey(
         LiveSession, on_delete=models.CASCADE, blank=True, null=True
     )
+
+
+class SchedularUpdate(models.Model):
+    pmo = models.ForeignKey(Pmo, on_delete=models.CASCADE)
+    project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
+    message = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.project.name} update by {self.pmo.name}"

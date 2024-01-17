@@ -151,8 +151,9 @@ from schedularApi.models import (
     SchedularProject,
     SchedularBatch,
     SchedularSessions,
-    CalendarInvites
+    CalendarInvites,
 )
+from schedularApi.serializers import SchedularProjectSerializer
 
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
@@ -516,8 +517,12 @@ def create_outlook_calendar_invite(
             "Authorization": f"Bearer {new_access_token}",
             "Content-Type": "application/json",
         }
-        start_datetime_obj = datetime.fromtimestamp(int(start_time_stamp) / 1000)   + timedelta(hours=5, minutes=30)
-        end_datetime_obj = datetime.fromtimestamp(int(end_time_stamp) / 1000)  + timedelta(hours=5, minutes=30) 
+        start_datetime_obj = datetime.fromtimestamp(
+            int(start_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
+        end_datetime_obj = datetime.fromtimestamp(
+            int(end_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
         start_datetime = start_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
         end_datetime = end_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
         event_payload = {
@@ -540,7 +545,7 @@ def create_outlook_calendar_invite(
                 creator=user_email,
                 caas_session=caas_session,
                 schedular_session=schedular_session,
-                live_session=live_session
+                live_session=live_session,
             )
             calendar_invite.save()
             print("Calendar invite sent successfully.")
@@ -549,11 +554,11 @@ def create_outlook_calendar_invite(
             print(f"Calendar invitation failed. Status code: {response.status_code}")
             print(response.text)
             return False
-    
+
     except UserToken.DoesNotExist:
         print(f"User token not found for email: {user_email}")
         return False
-    
+
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         return False
@@ -561,11 +566,15 @@ def create_outlook_calendar_invite(
 
 def delete_outlook_calendar_invite(calendar_invite):
     try:
-        user_token = UserToken.objects.get(user_profile__user__username=calendar_invite.creator)
+        user_token = UserToken.objects.get(
+            user_profile__user__username=calendar_invite.creator
+        )
         new_access_token = refresh_microsoft_access_token(user_token)
         if not new_access_token:
             new_access_token = user_token.access_token
-        event_delete_url = f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        event_delete_url = (
+            f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        )
         headers = {
             "Authorization": f"Bearer {new_access_token}",
         }
@@ -1204,6 +1213,7 @@ def create_project_cass(request):
                 project_live="pending",
             ),
             status="presales",
+            masked_coach_profile = request.data["masked_coach_profile"],
         )
 
         project.save()
@@ -1775,8 +1785,18 @@ def get_projects_of_learner(request, learner_id):
 @api_view(["GET"])
 def get_ongoing_projects_of_hr(request, hr_id):
     projects = Project.objects.filter(hr__id=hr_id, steps__project_live="pending")
+    schedular_projects = SchedularProject.objects.filter(hr__id=hr_id)
+    schedular_project_serializer = SchedularProjectSerializer(
+        schedular_projects, many=True
+    )
     serializer = ProjectDepthTwoSerializer(projects, many=True)
-    return Response(serializer.data, status=200)
+    return Response(
+        {
+            "caas_projects": serializer.data,
+            "schedular_projects": schedular_project_serializer.data,
+        },
+        status=200,
+    )
 
 
 # @api_view(['GET'])
@@ -5178,6 +5198,12 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__gt=timestamp_milliseconds
+        )
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -5216,7 +5242,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
@@ -5295,7 +5321,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     current_time_seeq = timezone.now()
-    timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+    timestamp_milliseconds = int(current_time_seeq.timestamp() * 1000)
     avaliable_sessions = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
@@ -5343,6 +5369,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             Q(project__hr__id=user_id),
             Q(is_archive=False),
         )
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__lt=timestamp_milliseconds
+        )
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -5381,12 +5413,13 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
             "session_type": session.coaching_session.session_type,
             "end_time": session.availibility.end_time,
+            "session_duration": session.coaching_session.duration,
             "is_seeq_project": True,
         }
         session_details.append(session_detail)
@@ -7297,6 +7330,10 @@ def edit_project_caas(request, project_id):
         project.enable_emails_to_hr_and_coachee = request.data.get(
             "enable_emails_to_hr_and_coachee", project.enable_emails_to_hr_and_coachee
         )
+      
+        project.masked_coach_profile = request.data.get(
+            "masked_coach_profile", project.masked_coach_profile
+        )
         project.hr.clear()
         for hr in request.data["hr"]:
             single_hr = HR.objects.get(id=hr)
@@ -8534,4 +8571,3 @@ class DownloadCoachContract(APIView):
                 {"error": "Failed to download Contract."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-

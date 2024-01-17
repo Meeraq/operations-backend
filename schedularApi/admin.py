@@ -11,6 +11,7 @@ from .models import (
     SentEmail,
     RequestAvailibilty,
     Facilitator,
+    SchedularUpdate,
     CalendarInvites,
 )
 
@@ -27,4 +28,5 @@ admin.site.register(EmailTemplate)
 admin.site.register(SentEmail)
 admin.site.register(RequestAvailibilty)
 admin.site.register(Facilitator)
+admin.site.register(SchedularUpdate)
 admin.site.register(CalendarInvites)

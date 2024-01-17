@@ -37,6 +37,7 @@ from .serializers import (
     ObserverTypeSerializer,
     AssessmentNotificationSerializer,
     ParticipantReleasedResultsSerializerDepthOne,
+    ParticipantObserverMappingSerializerDepthOne,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -71,6 +72,8 @@ from django.http import HttpResponse
 from datetime import datetime
 import io
 from api.views import add_contact_in_wati
+from schedularApi.tasks import send_assessment_invitation_mail, send_whatsapp_message
+from django.shortcuts import render, get_object_or_404
 
 matplotlib.use("Agg")
 env = environ.Env()
@@ -145,53 +148,6 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
             create_send_email(email, file_name)
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
-
-
-def send_whatsapp_message(user_type, participant, assessment, unique_id):
-    try:
-        assessment_name = assessment.participant_view_name
-        participant_phone = participant.phone
-        participant_name = participant.name
-        if not participant_phone:
-            return {"error": 'Participant phone not available'}, 500
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={participant_phone}"
-        headers = {
-            "content-type": "text/json",
-            "Authorization": wati_authorization,
-        }
-        participant_id = unique_id
-        payload = {
-            "broadcast_name": "Testing 19th postman",
-            "parameters": [
-                {
-                    "name": "participant_name",
-                    "value": participant_name,
-                },
-                {
-                    "name": "assessment_name",
-                    "value": assessment_name,
-                },
-                {
-                    "name": "participant_id",
-                    "value": participant_id,
-                },
-            ],
-            "template_name": "assessment_reminders_message",
-        }
-
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()
-
-        return response.json(), response.status_code
-
-    except requests.exceptions.HTTPError as errh:
-        return {"error": f"HTTP Error: {errh}"}, 500
-    except requests.exceptions.RequestException as err:
-        return {"error": f"Request Error: {err}"}, 500
-    except Exception as e:
-        return {"error": str(e)}, 500
 
 
 # def whatsapp_message_for_participant():
@@ -707,29 +663,66 @@ class AssessmentStatusChange(APIView):
             assessment.status = request.data.get("status")
             # assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
-            if prev_status == "draft" and assessment.status == "ongoing":
-                for hr in assessment.hr.all():
-                    user = User.objects.get(email=hr.email)
+            if (
+                prev_status == "draft"
+                and assessment.status == "ongoing"
+                and not assessment.initial_reminder
+            ):
+                send_assessment_invitation_mail.delay(assessment.id)
+                assessment.initial_reminder = True
+                assessment.save()
+                # for hr in assessment.hr.all():
+                #     user = User.objects.get(email=hr.email)
 
-                    token = get_token_generator().generate_token()
+                #     token = get_token_generator().generate_token()
 
-                    ResetPasswordToken.objects.create(user=user, key=token)
+                #     ResetPasswordToken.objects.create(user=user, key=token)
 
-                    create_password_link = (
-                        f"https://assessment.meeraq.com/create-password/{token}"
-                    )
+                #     create_password_link = (
+                #         f"https://assessment.meeraq.com/create-password/{token}"
+                #     )
 
-                    # send_mail_templates(
-                    #     "assessment/create_password_to_hr.html",
-                    #     [hr.email],
-                    #     "Meeraq - Welcome to Assessment Platform !",
-                    #     {
-                    #         "hr_name": hr.first_name,
-                    #         "link": create_password_link,
-                    #         "assessment_name": assessment.participant_view_name,
-                    #     },
-                    #     [],
-                    # )
+                # send_mail_templates(
+                #     "assessment/create_password_to_hr.html",
+                #     [hr.email],
+                #     "Meeraq - Welcome to Assessment Platform !",
+                #     {
+                #         "hr_name": hr.first_name,
+                #         "link": create_password_link,
+                #         "assessment_name": assessment.participant_view_name,
+                #     },
+                #     [],
+                # )
+                # if not assessment.initial_reminder:
+                #     for (
+                #         participant_observers
+                #     ) in assessment.participants_observers.all():
+                #         participant = participant_observers.participant
+                #         participant_response = ParticipantResponse.objects.filter(
+                #             participant=participant, assessment=assessment
+                #         ).first()
+
+                #         if not participant_response:
+                #             participant_unique_id = ParticipantUniqueId.objects.filter(
+                #                 participant=participant, assessment=assessment
+                #             ).first()
+
+                #             if participant_unique_id:
+                #                 assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{participant_unique_id.unique_id}"
+                #                 send_mail_templates(
+                #                     "assessment/assessment_initial_reminder.html",
+                #                     [participant.email],
+                #                     "Meeraq - Welcome to Assessment Platform !",
+                #                     {
+                #                         "assessment_name": assessment.participant_view_name,
+                #                         "participant_name": participant.name.title(),
+                #                         "link": assessment_link,
+                #                     },
+                #                     [],
+                #                 )
+                # send_assessment_invitation_mail.delay(assessment.id)
+                # assessment.initial_reminder = True
+                # assessment.save()
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
@@ -807,7 +800,9 @@ class AddParticipantObserverToAssessment(APIView):
                 participant.save()
             unique_id = uuid.uuid4()  # Generate a UUID4
             if phone:
-                add_contact_in_wati("learner", participant.name.title(), participant.phone)
+                add_contact_in_wati(
+                    "learner", participant.name.title(), participant.phone
+                )
             # Creating a ParticipantUniqueId instance with a UUID as unique_id
             unique_id_instance = ParticipantUniqueId.objects.create(
                 participant=participant,
@@ -1909,7 +1904,7 @@ class AddMultipleParticipants(APIView):
                 name = (
                     participant["first_name"].capitalize()
                     + " "
-                    + participant["last_name"].capitalize()
+                    + participant.get("last_name", "").capitalize()
                 )
                 new_participant = create_learner(name, participant["email"])
                 if participant["phone"]:
@@ -3196,7 +3191,7 @@ class PreReportDownloadForParticipant(APIView):
                 "assessment/air_india_assessement_report.html",
                 {
                     "name": participant.name.title(),
-                    "image_base64": encoded_image ,
+                    "image_base64": encoded_image,
                     "compentency_with_description": compentency_with_description,
                     "assessment_timing": assessment.assessment_timing,
                     "assessment_name": assessment.participant_view_name,
@@ -3260,7 +3255,7 @@ class PreReportDownloadForAllParticipant(APIView):
                         "assessment_timing": assessment.assessment_timing,
                     }
                 )
-                
+
             email_message = render_to_string(
                 "assessment/air_india_assessment_report_batch_wise.html",
                 {
@@ -3305,7 +3300,7 @@ class ReleaseResults(APIView):
                     participant_with_released_results = (
                         participant_released_results.participants.all()
                     )
-               
+
                 participant_with_not_released_results = []
                 for participant_observer in assessment.participants_observers.all():
                     participant_response_present = ParticipantResponse.objects.filter(
@@ -3323,7 +3318,7 @@ class ReleaseResults(APIView):
                             participant_released_results.participants.add(
                                 participant_observer.participant
                             )
-               
+
                 participant_released_results.save()
 
                 if len(assessment.participants_observers.all()) == (
@@ -3353,18 +3348,18 @@ class ReleaseResults(APIView):
                             )
 
                         send_mail_templates(
-                                "assessment/air_india_report_mail.html",
-                                [participant.email],
-                                "Meeraq Assessment Report",
-                                {
-                                    "name": participant.name.title(),
-                                    "image_base64": encoded_image,
-                                    "compentency_with_description": compentency_with_description,
-                                    "assessment_timing": assessment.assessment_timing,
-                                    "assessment_name": assessment.participant_view_name,
-                                },
-                                [],
-                            )
+                            "assessment/air_india_report_mail.html",
+                            [participant.email],
+                            "Meeraq Assessment Report",
+                            {
+                                "name": participant.name.title(),
+                                "image_base64": encoded_image,
+                                "compentency_with_description": compentency_with_description,
+                                "assessment_timing": assessment.assessment_timing,
+                                "assessment_name": assessment.participant_view_name,
+                            },
+                            [],
+                        )
             else:
                 assessment.result_released = True
                 assessment.save()
@@ -3664,3 +3659,89 @@ class GetParticipantReleasedResults(APIView):
                 {"error": "Failed to get download response data."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class GetAllAssessments(APIView):
+    def get(self, request):
+        assessments = Assessment.objects.all()
+        assessment_list = []
+        for assessment in assessments:
+            total_responses_count = ParticipantResponse.objects.filter(
+                assessment=assessment
+            ).count()
+            assessment_data = {
+                "id": assessment.id,
+                "name": assessment.name,
+                "organisation": assessment.organisation.name
+                if assessment.organisation
+                else "",
+                "assessment_type": assessment.assessment_type,
+                "assessment_timing": assessment.assessment_timing,
+                "assessment_start_date": assessment.assessment_start_date,
+                "assessment_end_date": assessment.assessment_end_date,
+                "status": assessment.status,
+                "total_learners_count": assessment.participants_observers.count(),
+                "total_responses_count": total_responses_count,
+                "created_at": assessment.created_at,
+            }
+            assessment_list.append(assessment_data)
+
+        return Response(assessment_list)
+
+
+class GetOneAssessment(APIView):
+    def get(self, request, assessment_id):
+        assessment = get_object_or_404(Assessment, id=assessment_id)
+        try:
+            serializer = AssessmentSerializerDepthFour(assessment)
+            return Response(serializer.data)
+        except Exception as e:
+            # Handle specific exceptions if needed
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetAssessmentsOfHr(APIView):
+    def get(self, request, hr_id):
+        assessments = Assessment.objects.filter(
+            Q(hr__id=hr_id), Q(status="ongoing") | Q(status="completed")
+        )
+        assessment_list = []
+        for assessment in assessments:
+            total_responses_count = ParticipantResponse.objects.filter(
+                assessment=assessment
+            ).count()
+            assessment_data = {
+                "id": assessment.id,
+                "name": assessment.name,
+                "participant_view_name": assessment.participant_view_name,
+                "assessment_type": assessment.assessment_type,
+                "assessment_timing": assessment.assessment_timing,
+                "assessment_start_date": assessment.assessment_start_date,
+                "assessment_end_date": assessment.assessment_end_date,
+                "status": assessment.status,
+                "total_learners_count": assessment.participants_observers.count(),
+                "total_responses_count": total_responses_count,
+                "created_at": assessment.created_at,
+            }
+            assessment_list.append(assessment_data)
+
+        return Response(assessment_list)
+
+
+class GetAssessmentsDataForMoveParticipant(APIView):
+    def get(self, request):
+        assessments = Assessment.objects.all()
+        assessment_data = []
+        for assessment in assessments:
+            temp_assessmeent = {
+                "id": assessment.id,
+                "name": assessment.name,
+                "assessment_timing": assessment.assessment_timing,
+                "participants_observers": ParticipantObserverMappingSerializerDepthOne(
+                    assessment.participants_observers, many=True
+                ).data,
+            }
+            assessment_data.append(temp_assessmeent)
+        return Response(assessment_data)
