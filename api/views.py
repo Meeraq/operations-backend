@@ -150,7 +150,10 @@ from schedularApi.models import (
     SchedularProject,
     SchedularBatch,
     SchedularSessions,
+    CalendarInvites,
 )
+from schedularApi.serializers import SchedularProjectSerializer
+
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
@@ -481,6 +484,104 @@ def delete_microsoft_calendar_event(access_token, event_id):
         return {"error": "An error occurred", "details": str(e)}
 
 
+def create_outlook_calendar_invite(
+    subject,
+    description,
+    start_time_stamp,
+    end_time_stamp,
+    attendees,
+    user_email,
+    caas_session,
+    schedular_session,
+    live_session,
+):
+    event_create_url = "https://graph.microsoft.com/v1.0/me/events"
+    try:
+        user_token = UserToken.objects.get(user_profile__user__email=user_email)
+        new_access_token = refresh_microsoft_access_token(user_token)
+        if not new_access_token:
+            new_access_token = user_token.access_token
+        headers = {
+            "Authorization": f"Bearer {new_access_token}",
+            "Content-Type": "application/json",
+        }
+        start_datetime_obj = datetime.fromtimestamp(
+            int(start_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
+        end_datetime_obj = datetime.fromtimestamp(
+            int(end_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
+        start_datetime = start_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
+        end_datetime = end_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
+        event_payload = {
+            "subject": subject,
+            "body": {"contentType": "HTML", "content": description},
+            "start": {"dateTime": start_datetime, "timeZone": "Asia/Kolkata"},
+            "end": {"dateTime": end_datetime, "timeZone": "Asia/Kolkata"},
+            "attendees": attendees,
+        }
+        response = requests.post(event_create_url, json=event_payload, headers=headers)
+        if response.status_code == 201:
+            microsoft_response_data = response.json()
+            calendar_invite = CalendarInvites(
+                event_id=microsoft_response_data.get("id"),
+                title=subject,
+                description=description,
+                start_datetime=start_datetime,
+                end_datetime=end_datetime,
+                attendees=attendees,
+                creator=user_email,
+                caas_session=caas_session,
+                schedular_session=schedular_session,
+                live_session=live_session,
+            )
+            calendar_invite.save()
+            print("Calendar invite sent successfully.")
+            return True
+        else:
+            print(f"Calendar invitation failed. Status code: {response.status_code}")
+            print(response.text)
+            return False
+
+    except UserToken.DoesNotExist:
+        print(f"User token not found for email: {user_email}")
+        return False
+
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return False
+
+
+def delete_outlook_calendar_invite(calendar_invite):
+    try:
+        user_token = UserToken.objects.get(
+            user_profile__user__username=calendar_invite.creator
+        )
+        new_access_token = refresh_microsoft_access_token(user_token)
+        if not new_access_token:
+            new_access_token = user_token.access_token
+        event_delete_url = (
+            f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        )
+        headers = {
+            "Authorization": f"Bearer {new_access_token}",
+        }
+        response = requests.delete(event_delete_url, headers=headers)
+        if response.status_code == 204:
+            calendar_invite.delete()
+            return {"message": "Event deleted successfully"}
+        elif response.status_code == 404:
+            return {"error": "Event not found"}
+        else:
+            return {
+                "error": "Failed to delete event",
+                "status_code": response.status_code,
+            }
+
+    except Exception as e:
+        return {"error": "An error occurred", "details": str(e)}
+
+
 def create_notification(user, path, message):
     notification = Notification.objects.create(user=user, path=path, message=message)
     return notification
@@ -587,6 +688,31 @@ FIELD_NAME_VALUES = {
 }
 
 
+def add_contact_in_wati(user_type, name, phone):
+    try:
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = f"{wati_api_endpoint}/api/v1/addContact/{phone}"
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        payload = {
+            "customParams": [
+                {
+                    "name": "user_type",
+                    "value": user_type,
+                },
+            ],
+            "name": name,
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()  # Raise an HTTPError for bad responses
+        return response.json()
+    except Exception as e:
+        pass
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def create_pmo(request):
@@ -627,6 +753,9 @@ def create_pmo(request):
             pmo_user = Pmo.objects.create(
                 user=profile, name=name, email=email, phone=phone, room_id=room_id
             )
+
+            name = pmo_user.name
+            add_contact_in_wati("pmo", name, pmo_user.phone)
 
             # Return success response without room_id
             return Response({"message": "PMO added successfully."}, status=201)
@@ -753,6 +882,9 @@ def update_coach_profile(request, id):
         if existing_coach:
             return Response({"error": "Coach ID must be unique"}, status=400)
 
+    name = coach.first_name + " " + coach.last_name
+    add_contact_in_wati("coach", name, coach.phone)
+
     if serializer.is_valid():
         serializer.save()
         depth_serializer = CoachDepthOneSerializer(coach)
@@ -863,6 +995,7 @@ def create_project_cass(request):
                 project_live="pending",
             ),
             status="presales",
+            masked_coach_profile = request.data["masked_coach_profile"],
         )
 
         project.save()
@@ -974,7 +1107,9 @@ def create_learners(learners_data):
                     phone=learner_data.get("phone"),
                 )
                 learners.append(learner)
-            # Return response with learners created or already existing
+                # Return response with learners created or already existing
+                name = learner.name
+                add_contact_in_wati("learner", name, learner.phone)
             serializer = LearnerSerializer(learners, many=True)
             return learners
 
@@ -1047,8 +1182,18 @@ def get_projects_of_learner(request, learner_id):
 @permission_classes([IsAuthenticated])
 def get_ongoing_projects_of_hr(request, hr_id):
     projects = Project.objects.filter(hr__id=hr_id, steps__project_live="pending")
+    schedular_projects = SchedularProject.objects.filter(hr__id=hr_id)
+    schedular_project_serializer = SchedularProjectSerializer(
+        schedular_projects, many=True
+    )
     serializer = ProjectDepthTwoSerializer(projects, many=True)
-    return Response(serializer.data, status=200)
+    return Response(
+        {
+            "caas_projects": serializer.data,
+            "schedular_projects": schedular_project_serializer.data,
+        },
+        status=200,
+    )
 
 
 @api_view(["GET"])
@@ -1250,8 +1395,11 @@ def add_coach(request):
             # Approve coach
             coach_user.is_approved = True
             coach_user.save()
-
             # Send email notification to the coach
+
+            name = coach_user.first_name + " " + coach_user.last_name
+            add_contact_in_wati("coach", name, coach_user.phone)
+
             full_name = coach_user.first_name + " " + coach_user.last_name
             microsoft_auth_url = (
                 f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach_user.email}/'
@@ -1445,6 +1593,19 @@ def get_user_data(user):
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
+        is_caas_allowed = Engagement.objects.filter(
+            learner=user.profile.learner
+        ).exists()
+        is_seeq_allowed = SchedularBatch.objects.filter(
+            learners=user.profile.learner
+        ).exists()
+        return {
+            **serializer.data,
+            "is_caas_allowed": is_caas_allowed,
+            "is_seeq_allowed": is_seeq_allowed,
+            "roles": roles,
+            "user": {**serializer.data["user"], "type": user_profile_role},
+        }
     elif user_profile_role == "hr":
         serializer = HrDepthOneSerializer(user.profile.hr)
     else:
@@ -1673,6 +1834,8 @@ def add_hr(request):
                 phone=request.data.get("phone"),
                 organisation=organisation,
             )
+            name = hr.first_name + " " + hr.last_name
+            add_contact_in_wati("hr", name, hr.phone)
 
             hrs = HR.objects.all()
             serializer = HrSerializer(hrs, many=True)
@@ -1713,6 +1876,9 @@ def update_hr(request, hr_id):
             # saving hr
             updated_hr = serializer.save()
             user = updated_hr.user.user
+
+            name = hr.first_name + " " + hr.last_name
+            add_contact_in_wati("hr", name, hr.phone)
 
             # if email if getting updated -> updating email in all other user present
             if not updated_hr.email == user.email:
@@ -3107,6 +3273,8 @@ def edit_learner(request):
     learner.name = request.data["name"]
     learner.phone = request.data["phone"]
     learner.save()
+    name = learner.name
+    add_contact_in_wati("learner", name, learner.phone)
     return Response({"message": "Learner details updated.", "details": ""}, status=200)
 
 
@@ -3418,6 +3586,8 @@ def add_mulitple_coaches(request):
                 coach = Coach.objects.get(id=coach_user.id)
                 coach.is_approved = True
                 coach.save()
+                name = coach_user.first_name + " " + coach_user.last_name
+                add_contact_in_wati("coach", name, coach_user.phone)
 
         return Response({"message": "Coaches added successfully."}, status=201)
     except IntegrityError as e:
@@ -3990,6 +4160,12 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__gt=timestamp_milliseconds
+        )
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -4028,7 +4204,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
@@ -4109,7 +4285,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     current_time_seeq = timezone.now()
-    timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+    timestamp_milliseconds = int(current_time_seeq.timestamp() * 1000)
     avaliable_sessions = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
@@ -4157,6 +4333,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             Q(project__hr__id=user_id),
             Q(is_archive=False),
         )
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__lt=timestamp_milliseconds
+        )
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -4195,12 +4377,13 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
             "session_type": session.coaching_session.session_type,
             "end_time": session.availibility.end_time,
+            "session_duration": session.coaching_session.duration,
             "is_seeq_project": True,
         }
         session_details.append(session_detail)
@@ -5849,6 +6032,8 @@ class AddRegisteredCoach(APIView):
                 # Change the is_approved field to True
                 coach.is_approved = False
                 coach.save()
+                name = coach_user.first_name + " " + coach_user.last_name
+                add_contact_in_wati("coach", name, coach_user.phone)
                 coach_serializer = CoachSerializer(coach)
 
                 path = f"/profile"
@@ -6129,6 +6314,10 @@ def edit_project_caas(request, project_id):
         )
         project.enable_emails_to_hr_and_coachee = request.data.get(
             "enable_emails_to_hr_and_coachee", project.enable_emails_to_hr_and_coachee
+        )
+      
+        project.masked_coach_profile = request.data.get(
+            "masked_coach_profile", project.masked_coach_profile
         )
         project.hr.clear()
         for hr in request.data["hr"]:
@@ -7015,6 +7204,23 @@ def change_user_role(request, user_id):
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
+        is_caas_allowed = Engagement.objects.filter(
+            learner=user.profile.learner
+        ).exists()
+        is_seeq_allowed = SchedularBatch.objects.filter(
+            learners=user.profile.learner
+        ).exists()
+        return Response(
+            {
+                **serializer.data,
+                "is_caas_allowed": is_caas_allowed,
+                "is_seeq_allowed": is_seeq_allowed,
+                "roles": roles,
+                "user": {**serializer.data["user"], "type": user_profile_role},
+                "last_login": user.last_login,
+                "message": "Role changed to Learner",
+            }
+        )
     elif user_profile_role == "hr":
         serializer = HrDepthOneSerializer(user.profile.hr)
     else:
@@ -7118,7 +7324,7 @@ class SessionData(APIView):
         weeks = get_weeks_for_current_month()
         for project in projects:
             engagements = Engagement.objects.filter(project=project)
-            planned_learner_count=0
+            planned_learner_count = 0
             for engagement in engagements:
                 completed_sessions_count = SessionRequestCaas.objects.filter(
                     status="completed",
@@ -7131,8 +7337,11 @@ class SessionData(APIView):
                     learner__id=engagement.learner.id,
                     is_archive=False,
                 ).count()
-                if engagement.status=="active" and completed_sessions_count != total_sessions_count:
-                    planned_learner_count+=1
+                if (
+                    engagement.status == "active"
+                    and completed_sessions_count != total_sessions_count
+                ):
+                    planned_learner_count += 1
             res_obj = {}
             is_involved_in_sessions = SessionRequestCaas.objects.filter(
                 project=project, is_booked=True
@@ -7396,6 +7605,6 @@ class DownloadCoachContract(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Failed to downlaod Contract."},
+                {"error": "Failed to download Contract."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

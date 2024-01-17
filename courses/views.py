@@ -1,6 +1,8 @@
 from django.shortcuts import render
 
 # Create your views here.
+import boto3
+import requests
 from rest_framework import generics, serializers, status
 from .models import (
     Course,
@@ -20,6 +22,8 @@ from .models import (
     CourseTemplate,
     Resources,
     PdfLesson,
+    File,
+    DownloadableLesson,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -46,6 +50,8 @@ from .serializers import (
     ResourcesSerializer,
     PdfLessonSerializer,
     LessonUpdateSerializer,
+    FileSerializer,
+    DownloadableLessonSerializer,
 )
 from rest_framework.views import APIView
 from api.models import User, Learner, Profile, Role
@@ -64,7 +70,12 @@ from django.template.loader import render_to_string
 import base64
 from openpyxl import Workbook
 from django.db.models import Max
+import environ
+import uuid
 from rest_framework.permissions import AllowAny, IsAuthenticated
+
+env = environ.Env()
+
 
 from schedularApi.models import CoachingSession, SchedularSessions
 
@@ -144,8 +155,6 @@ class CourseListView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         name = serializer.validated_data.get("name", None)
-        if name and Course.objects.filter(name=name.strip()).exists():
-            raise serializers.ValidationError("Course with this name already exists.")
         serializer.save()
 
 
@@ -179,13 +188,6 @@ class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer):
         name = serializer.validated_data.get("name", None)
         instance = self.get_object()
-        if (
-            name
-            and Course.objects.exclude(pk=instance.pk)
-            .filter(name=name.strip())
-            .exists()
-        ):
-            raise serializers.ValidationError("Course with this name already exists.")
         serializer.save()
 
 
@@ -218,7 +220,7 @@ class DuplicateCourseAPIView(APIView):
 
             # Duplicate the course
             new_course = Course.objects.create(
-                name=f"Copy of - {original_course.name}",
+                name=f"{original_course.name}",
                 description=original_course.description,
                 status="draft",
             )
@@ -256,8 +258,9 @@ class DuplicateCourseAPIView(APIView):
                             new_quiz_lesson.questions.add(new_question)
 
                     elif original_lesson.lesson_type == "feedback":
+                        unique_id = uuid.uuid4()
                         new_feedback_lesson = FeedbackLesson.objects.create(
-                            lesson=new_lesson
+                            lesson=new_lesson, unique_id=unique_id
                         )
                         for question in original_lesson.feedbacklesson.questions.all():
                             new_question = Question.objects.create(
@@ -388,6 +391,9 @@ class LessonDetailView(generics.RetrieveAPIView):
         elif lesson_type == "ppt":
             ppt = PdfLesson.objects.get(lesson=lesson)
             serializer = PdfLessonSerializer(ppt)
+        elif lesson_type == "downloadable_file":
+            downloadable_file_lesson = DownloadableLesson.objects.get(lesson=lesson)
+            serializer = DownloadableLessonSerializer(downloadable_file_lesson)
         else:
             return Response({"error": f"Failed to get the lessons"}, status=400)
 
@@ -564,7 +570,10 @@ def create_feedback_lesson(request):
                 )
 
         # Create QuizLesson and associate it with the Lesson
-        feedback_lesson = FeedbackLesson.objects.create(lesson=lesson)
+        unique_id = uuid.uuid4()
+        feedback_lesson = FeedbackLesson.objects.create(
+            lesson=lesson, unique_id=unique_id
+        )
         feedback_lesson.questions.set(questions)
         lesson_serializer = LessonSerializer(lesson)
         response_data = {
@@ -1077,7 +1086,7 @@ def get_quiz_result(request, quiz_lesson_id, learner_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def submit_feedback_answers(request, feedback_lesson_id, learner_id):
     try:
         feedback_lesson = get_object_or_404(FeedbackLesson, id=feedback_lesson_id)
@@ -1101,6 +1110,7 @@ def submit_feedback_answers(request, feedback_lesson_id, learner_id):
 
     if serializer.is_valid():
         answers = serializer.save()
+
         feedback_lesson_response = FeedbackLessonResponse.objects.create(
             feedback_lesson=feedback_lesson, learner=learner
         )
@@ -1333,7 +1343,7 @@ class DownlaodLessonCertificate(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Failed to downlaod certificate."},
+                {"error": "Failed to download certificate."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -1566,6 +1576,9 @@ class GetLaserCoachingTime(APIView):
 def get_all_courses_progress(request):
     res = []
     courses = Course.objects.filter(status="public")
+    hr_id = request.query_params.get("hr", None)
+    if hr_id:
+        courses = courses.filter(batch__project__hr__id=hr_id)
     for course in courses:
         course_serializer = CourseSerializer(course)
         lessons = Lesson.objects.filter(status="public", course=course)
@@ -1588,6 +1601,7 @@ def get_all_courses_progress(request):
         res.append(
             {
                 **course_serializer.data,
+                "batch_name": course.batch.name,
                 "total_learners": course_enrollments.count(),
                 "completion_percentage": completion_percentage,
             }
@@ -1672,6 +1686,9 @@ def get_all_quizes_report(request):
     quizes = QuizLesson.objects.filter(
         lesson__status="public", lesson__course__status="public"
     )
+    hr_id = request.query_params.get("hr", None)
+    if hr_id:
+        quizes = quizes.filter(lesson__course__batch__project__hr__id=hr_id)
     for quiz in quizes:
         course_enrollments = CourseEnrollment.objects.filter(course=quiz.lesson.course)
         total_participants = course_enrollments.count()
@@ -1689,6 +1706,7 @@ def get_all_quizes_report(request):
                 "id": quiz.id,
                 "quiz_name": quiz.lesson.name,
                 "course_name": quiz.lesson.course.name,
+                "batch_name": quiz.lesson.course.batch.name,
                 "total_participants": total_participants,
                 "total_responses": total_responses,
                 "average_percentage": average_percentage,
@@ -1756,6 +1774,95 @@ def quiz_report_download(request, quiz_id):
     return response
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_feedbacks_report(request):
+    res = []
+    feedbacks = FeedbackLesson.objects.filter(
+        lesson__status="public", lesson__course__status="public"
+    )
+    hr_id = request.query_params.get("hr", None)
+    if hr_id:
+        feedbacks = feedbacks.filter(lesson__course__batch__project__hr__id=hr_id)
+    for feedback in feedbacks:
+        course_enrollments = CourseEnrollment.objects.filter(
+            course=feedback.lesson.course
+        )
+        total_participants = course_enrollments.count()
+        feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+            feedback_lesson=feedback
+        )
+        total_responses = feedback_lesson_responses.count()
+        response_percentage = (
+            ((total_responses / total_participants) * 100)
+            if total_participants > 0
+            else 0
+        )
+        res.append(
+            {
+                "id": feedback.id,
+                "feedback_name": feedback.lesson.name,
+                "course_name": feedback.lesson.course.name,
+                "batch_name": feedback.lesson.course.batch.name,
+                "total_participants": total_participants,
+                "total_responses": total_responses,
+                "response_percentage": response_percentage,
+            }
+        )
+
+    return Response(res)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_feedback_report(request, feedback_id):
+    try:
+        feedback_lesson = FeedbackLesson.objects.get(id=feedback_id)
+        questions_serializer = QuestionSerializer(feedback_lesson.questions, many=True)
+        question_data = {
+            question["id"]: {**question, "descriptive_answers": [], "ratings": []}
+            for question in questions_serializer.data
+        }
+        feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+            feedback_lesson=feedback_lesson
+        )
+        for response in feedback_lesson_responses:
+            for answer in response.answers.all():
+                question_id = answer.question.id
+                if answer.question.type.startswith("rating"):
+                    question_data[question_id]["ratings"].append(answer.rating)
+                elif answer.question.type == "descriptive_answer":
+                    question_data[question_id]["descriptive_answers"].append(
+                        answer.text_answer
+                    )
+        for question_id, data in question_data.items():
+            # Calculate average rating for each question
+            ratings = data["ratings"]
+            if ratings:
+                if data["type"] == "rating_0_to_10":
+                    # Calculate NPS
+                    promoters = sum(rating >= 9 for rating in ratings)
+                    detractors = sum(rating <= 6 for rating in ratings)
+                    nps = promoters - detractors
+                    data["nps"] = nps * 10
+                else:
+                    # Calculate average rating
+                    data["average_rating"] = sum(ratings) / len(ratings)
+            else:
+                if data["type"] == "rating_0_to_10":
+                    data["nps"] = 0  # Default NPS value if no ratings
+                else:
+                    data["average_rating"] = 0  # default rating 0 if not ratings
+
+        return Response(question_data.values())
+    except FeedbackLesson.DoesNotExist:
+        return Response(
+            {"error": "Feedback lesson not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class AssignCourseTemplateToBatch(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1768,7 +1875,7 @@ class AssignCourseTemplateToBatch(APIView):
                 batch = get_object_or_404(SchedularBatch, pk=batch_id)
                 # Duplicate the course
                 new_course = Course.objects.create(
-                    name=f"Copy of - {course_template.name}",
+                    name=f"{course_template.name}",
                     description=course_template.description,
                     status="draft",
                     course_template=course_template,
@@ -1788,7 +1895,7 @@ class AssignCourseTemplateToBatch(APIView):
                         new_lesson = Lesson.objects.create(
                             course=new_course,
                             name=original_lesson.name,
-                            status="draft",
+                            status=original_lesson.status,
                             lesson_type=original_lesson.lesson_type,
                             # Duplicate specific lesson types
                             order=original_lesson.order,
@@ -1808,6 +1915,12 @@ class AssignCourseTemplateToBatch(APIView):
                                 lesson=new_lesson,
                                 pdf=original_lesson.pdflesson.pdf,
                             )
+                        elif original_lesson.lesson_type == "downloadable_file":
+                            DownloadableLesson.objects.create(
+                                lesson=new_lesson,
+                                file=original_lesson.downloadablelesson.file,
+                                description=original_lesson.downloadablelesson.description,
+                            )
                         elif original_lesson.lesson_type == "assessment":
                             Assessment.objects.create(lesson=new_lesson)
                         elif original_lesson.lesson_type == "quiz":
@@ -1822,8 +1935,9 @@ class AssignCourseTemplateToBatch(APIView):
                                 )
                                 new_quiz_lesson.questions.add(new_question)
                         elif original_lesson.lesson_type == "feedback":
+                            unique_id = uuid.uuid4()
                             new_feedback_lesson = FeedbackLesson.objects.create(
-                                lesson=new_lesson
+                                lesson=new_lesson, unique_id=unique_id
                             )
                             for (
                                 question
@@ -2107,3 +2221,175 @@ def lesson_update_status(request):
         return Response(
             {"message": "Invalid method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
         )
+
+
+class FileListAPIView(generics.ListAPIView):
+    queryset = File.objects.all()
+    serializer_class = FileSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class FileUploadView(APIView):
+    permission_classes = [IsAuthenticated]  
+    def post(self, request, *args, **kwargs):
+        serializer = FileSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+@api_view([IsAuthenticated])
+def update_file(request, file_id):
+    try:
+        file = File.objects.get(id=file_id)
+    except File.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    serializer = FileSerializer(file, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+def get_file_name_from_url(url):
+    # Split the URL by '/' to get an array of parts
+    url_parts = url.split("/")
+
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+
+    # Extract the file name without the query parameters
+    file_name = full_file_name.split("?")[0]
+
+    return file_name
+
+
+def get_file_extension(url):
+    # Split the URL by '.' to get an array of parts
+    url_parts = url.split(".")
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+    # Extract the file extension
+    file_extension = full_file_name.split("?")[0]
+    return file_extension
+
+
+class FileDownloadView(APIView):
+    permission_classes = [AllowAny]
+    def get(self, request, file_id):
+        file_obj = get_object_or_404(File, id=file_id)
+
+        try:
+            serializer = FileSerializer(file_obj)
+            response = requests.get(serializer.data["file"])
+            if response.status_code == 200:
+                file_content = response.content
+                extension = get_file_extension(serializer.data["file"])
+                content_type = response.headers.get(
+                    "Content-Type", f"application/{extension}"
+                )
+                file_name = get_file_name_from_url(serializer.data["file"])
+                file_response = HttpResponse(file_content, content_type=content_type)
+                file_response[
+                    "Content-Disposition"
+                ] = 'attachment; filename="{}"'.format(file_name)
+                return file_response
+            else:
+                return HttpResponse(
+                    "Failed to download the file", status=response.status_code
+                )
+        except Exception as e:
+            return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
+
+
+class DownloadableLessonCreateView(generics.CreateAPIView):
+    queryset = DownloadableLesson.objects.all()
+    serializer_class = DownloadableLessonSerializer
+    permission_classes=[IsAuthenticated]
+
+
+class DownloadableLessonUpdateView(generics.UpdateAPIView):
+    queryset = DownloadableLesson.objects.all()
+    serializer_class = DownloadableLessonSerializer
+    permission_classes=[IsAuthenticated]
+
+class FeedbackEmailValidation(APIView):
+    permission_classes=[AllowAny]
+    def post(self, request):
+        try:
+            unique_id = request.data.get("unique_id")
+            email = request.data.get("email")
+
+            feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
+            lesson = feedback_lesson.lesson
+
+            participants = lesson.course.batch.learners.all()
+
+            for participant in participants:
+                if participant.email == email:
+                    feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+                        feedback_lesson=feedback_lesson, learner__id=participant.id
+                    ).first()
+                    if not feedback_lesson_response:
+                        lesson_serializer = LessonSerializer(lesson)
+                        feedback_lesson_serializer = FeedbackLessonDepthOneSerializer(
+                            feedback_lesson
+                        )
+
+                        return Response(
+                            {
+                                "message": "Validation Successful",
+                                "participant_exists": True,
+                                "lesson_details": lesson_serializer.data,
+                                "feedback_lesson_details": feedback_lesson_serializer.data,
+                                "participant_id": participant.id,
+                            },
+                            status=status.HTTP_200_OK,
+                        )
+                    else:
+                        return Response(
+                            {"error": "Already Responded."},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        )
+
+            return Response(
+                {"error": "Email not found in participants."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        except FeedbackLesson.DoesNotExist:
+            return Response(
+                {"error": "FeedbackLesson not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to validate email."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetFeedbackForm(APIView):
+    permission_classes=[AllowAny]
+    def get(self, request, unique_id):
+        try:
+            feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
+
+            return Response(
+                {
+                    "lesson_name": feedback_lesson.lesson.name,
+                    "lesson_status": feedback_lesson.lesson.status,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get feedback lesson details."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
