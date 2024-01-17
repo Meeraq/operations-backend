@@ -5,8 +5,8 @@ from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
 from django.conf import settings
-from api.models import Coach, User, UserToken,Learner
-from schedularApi.models import CoachingSession,SchedularSessions,RequestAvailibilty
+from api.models import Coach, User, UserToken, Learner
+from schedularApi.models import CoachingSession, SchedularSessions, RequestAvailibilty
 from django.utils import timezone
 from datetime import datetime
 from api.views import send_mail_templates, refresh_microsoft_access_token
@@ -68,76 +68,25 @@ def send_whatsapp_message(user_type, participant, assessment, unique_id):
         return {"error": f"Request Error: {err}"}, 500
     except:
         pass
-    
-def send_reminder_to_book_slots_to_coachee(name, phone, session_name, project_name,booking_id):
-    try:
-        if not phone:
-                return {"error": "Learner phone not available"}, 500
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
-        headers = {
-            "content-type": "text/json",
-            "Authorization": wati_authorization,
-        }
-        payload = {
-            "broadcast_name": "Testing 19th postman",
-            "parameters": [
-                {
-                    "name": "name",
-                    "value": name,
-                },
-                {
-                    "name": "session_name",
-                    "value": session_name,
-                },
-                {
-                    "name": "project_name",
-                    "value": project_name,
-                }, 
-                {
-                    "name": "1",
-                    "value": booking_id,
-                },
-            ],
-            "template_name": "reminder_coachee_coaching_session",
-        }
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()
-        print(response.json())
-    except:
-        pass
 
-def send_reminder_to_coach_to_give_slots(name,date,phone):
+
+def send_whatsapp_message_template(phone, payload):
     try:
         if not phone:
-                return {"error": "Coach phone not available"}, 500
+            return {"error": "Phone not available"}, 500
         wati_api_endpoint = env("WATI_API_ENDPOINT")
         wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
+        wati_api_url = (
+            f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
+        )
         headers = {
             "content-type": "text/json",
             "Authorization": wati_authorization,
         }
-        print("yes phone")
-        payload = {
-            "broadcast_name": "Testing 19th postman",
-            "parameters": [
-                {
-                    "name": "name",
-                    "value": name,
-                },
-                {
-                    "name": "date",
-                    "value": date,
-                },
-            ],
-            "template_name": "reminder_for_coach_availability",
-        }
         response = requests.post(wati_api_url, headers=headers, json=payload)
-        print(response.json())
         response.raise_for_status()
-    except Exception as e: 
+        return response.json(), response.status_code
+    except Exception as e:
         pass
 
 
@@ -638,8 +587,7 @@ def coachee_booking_reminder_whatsapp_at_8am():
             for learner in learners_in_coaching_session:
                 try:
                     SchedularSessions.objects.get(
-                        learner=learner,
-                        coaching_session=coaching_session
+                        learner=learner, coaching_session=coaching_session
                     ).exists()
                     print(f"Don't send WhatsApp message to {learner.name}")
                 except:
@@ -647,12 +595,37 @@ def coachee_booking_reminder_whatsapp_at_8am():
                     phone = learner.phone
                     session_name = coaching_session.session_type
                     project_name = coaching_session.batch.project.name
-                    path_parts = coaching_session.booking_link.split('/')
-                    booking_id= path_parts[-1]
-                    send_reminder_to_book_slots_to_coachee(name, phone, session_name, project_name, booking_id)
+                    path_parts = coaching_session.booking_link.split("/")
+                    booking_id = path_parts[-1]
+                    send_whatsapp_message_template(
+                        phone,
+                        {
+                            "broadcast_name": "Testing 19th postman",
+                            "parameters": [
+                                {
+                                    "name": "name",
+                                    "value": name,
+                                },
+                                {
+                                    "name": "session_name",
+                                    "value": session_name,
+                                },
+                                {
+                                    "name": "project_name",
+                                    "value": project_name,
+                                },
+                                {
+                                    "name": "1",
+                                    "value": booking_id,
+                                },
+                            ],
+                            "template_name": "reminder_coachee_coaching_session",
+                        },
+                    )
     except ObjectDoesNotExist:
         pass
     sleep(2)
+
 
 @shared_task
 def coach_has_to_give_slots_availability_reminder():
@@ -661,16 +634,31 @@ def coach_has_to_give_slots_availability_reminder():
         for request_availability in RequestAvailibilty.objects.all():
             coaches = request_availability.coach.all()
             coaches_not_gave_availibility = coaches.exclude(
-                Q(id__in=request_availability.provided_by) | 
-                Q(requestavailibilty__expiry_date__lte=current_date)
+                Q(id__in=request_availability.provided_by)
+                | Q(requestavailibilty__expiry_date__lte=current_date)
             )
             for coach in coaches_not_gave_availibility:
-                name=(coach.first_name +" "+ coach.last_name)
-                expiry_date=request_availability.expiry_date
-                phone=coach.phone_country_code + coach.phone
-                expiry_date_string = expiry_date.strftime('%d-%m-%Y')
-                send_reminder_to_coach_to_give_slots(name,expiry_date_string,phone)
+                name = coach.first_name + " " + coach.last_name
+                expiry_date = request_availability.expiry_date
+                phone = coach.phone_country_code + coach.phone
+                expiry_date_string = expiry_date.strftime("%d-%m-%Y")
+                send_whatsapp_message_template(
+                    phone,
+                    {
+                        "broadcast_name": "reminder_for_coach_to_give_availability",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": name,
+                            },
+                            {
+                                "name": "date",
+                                "value": expiry_date_string,
+                            },
+                        ],
+                        "template_name": "reminder_for_coach_availability",
+                    },
+                )
     except ObjectDoesNotExist:
         pass
     sleep(2)
-

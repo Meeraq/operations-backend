@@ -27,7 +27,6 @@ import json
 from django.core.exceptions import ObjectDoesNotExist
 from api.views import get_date, get_time, add_contact_in_wati
 from django.shortcuts import render
-from .tasks import send_reminder_to_book_slots_to_coachee
 from api.models import Organisation, HR, Coach, User, Learner, Pmo
 from .serializers import (
     SchedularProjectSerializer,
