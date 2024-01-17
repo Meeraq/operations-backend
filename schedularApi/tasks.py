@@ -1176,7 +1176,7 @@ def coachee_booking_reminder_whatsapp_at_8am():
                     )
     except ObjectDoesNotExist:
         pass
-    sleep(2)
+
 
 
 @shared_task
@@ -1213,4 +1213,4 @@ def coach_has_to_give_slots_availability_reminder():
                 )
     except ObjectDoesNotExist:
         pass
-    sleep(2)
+   
