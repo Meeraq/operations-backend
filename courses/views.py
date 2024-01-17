@@ -577,7 +577,16 @@ def edit_feedback_lesson(request, feedback_lesson_id):
         return Response(
             {"message": "Feedback Lesson not found"}, status=status.HTTP_404_NOT_FOUND
         )
-
+    feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+        feedback_lesson=feedback_lesson
+    )
+    if feedback_lesson_response:
+        return Response(
+            {
+                "message": "Feedback editing is unavailable as responses have already been received for this lesson."
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     # Deserialize the incoming data
     data = request.data
     lesson_data = data.get("lesson")
@@ -1769,7 +1778,7 @@ def get_feedback_report(request, feedback_id):
                         answer.text_answer
                     )
         for question_id, data in question_data.items():
-        # Calculate average rating for each question
+            # Calculate average rating for each question
             ratings = data["ratings"]
             if ratings:
                 if data["type"] == "rating_0_to_10":
@@ -2308,5 +2317,35 @@ class GetFeedbackForm(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to get feedback lesson details."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class EditAllowedFeedbackLesson(APIView):
+    def get(self, request, feedback_lesson_id):
+        try:
+            feedback_lesson = FeedbackLesson.objects.get(id=feedback_lesson_id)
+            feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+                feedback_lesson=feedback_lesson
+            )
+
+            if feedback_lesson_response:
+                return Response(
+                    {
+                        "edit_allowed": False,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response(
+                {
+                    "edit_allowed": True,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get details."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

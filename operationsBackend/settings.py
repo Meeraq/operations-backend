@@ -216,6 +216,22 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_participant_morning_reminder_one_day_before_email",
         "schedule": crontab(hour=3, minute=0, day_of_week="*"),
     },
+    "send_coach_morning_reminder_whatsapp_message_at_8AM_seeq": {
+        "task": "schedularApi.tasks.send_coach_morning_reminder_whatsapp_message_at_8AM_seeq",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
+    "send_coach_morning_reminder_whatsapp_message_at_8AM_caas": {
+        "task": "schedularApi.tasks.send_coach_morning_reminder_whatsapp_message_at_8AM_caas",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
+    "send_participant_morning_reminder_whatsapp_message_at_8AM_seeq": {
+        "task": "schedularApi.tasks.send_participant_morning_reminder_whatsapp_message_at_8AM_seeq",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
+    "send_participant_morning_reminder_whatsapp_message_at_8AM_caas": {
+        "task": "schedularApi.tasks.send_participant_morning_reminder_whatsapp_message_at_8AM_caas",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
     "send_reminder_email_to_participants_for_assessment_at_2PM": {
         "task": "schedularApi.tasks.send_reminder_email_to_participants_for_assessment_at_2PM",
         "schedule": crontab(hour=8, minute=30, day_of_week="*"),
@@ -248,4 +264,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_feedback_lesson_reminders",
         "schedule": crontab(hour=13, minute=0),  # 8 AM
     },
+    "send_reminder_to_book_slots_to_coachee":{
+        "task": "schedularApi.tasks.send_reminder_to_book_slots_to_coachee",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
+    "coach_has_to_give_slots_availability_reminder":{
+        "task":"schedularApi.tasks.coach_has_to_give_slots_availability_reminder",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    }
 }
