@@ -2469,3 +2469,22 @@ def get_live_sessions_by_status(request):
             }
         )
     return Response(res)
+
+
+@api_view(["GET"])
+def live_session_detail_view(request, pk):
+    try:
+        live_session = LiveSession.objects.get(pk=pk)
+    except LiveSession.DoesNotExist:
+        return Response({"error": "LiveSession not found"}, status=404)
+
+    participants = Learner.objects.filter(schedularbatch__id=live_session.batch.id)
+    participants_serializer = LearnerSerializer(participants, many=True)
+    live_session_serializer = LiveSessionSerializerDepthOne(live_session)
+
+    response_data = {
+        "live_session": live_session_serializer.data,
+        "participants": participants_serializer.data,
+    }
+
+    return Response(response_data)
