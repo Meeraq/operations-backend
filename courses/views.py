@@ -153,8 +153,6 @@ class CourseListView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         name = serializer.validated_data.get("name", None)
-        if name and Course.objects.filter(name=name.strip()).exists():
-            raise serializers.ValidationError("Course with this name already exists.")
         serializer.save()
 
 
@@ -186,13 +184,6 @@ class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
     def perform_update(self, serializer):
         name = serializer.validated_data.get("name", None)
         instance = self.get_object()
-        if (
-            name
-            and Course.objects.exclude(pk=instance.pk)
-            .filter(name=name.strip())
-            .exists()
-        ):
-            raise serializers.ValidationError("Course with this name already exists.")
         serializer.save()
 
 
@@ -222,7 +213,7 @@ class DuplicateCourseAPIView(APIView):
 
             # Duplicate the course
             new_course = Course.objects.create(
-                name=f"Copy of - {original_course.name}",
+                name=f"{original_course.name}",
                 description=original_course.description,
                 status="draft",
             )
@@ -1718,6 +1709,93 @@ def quiz_report_download(request, quiz_id):
     return response
 
 
+@api_view(["GET"])
+def get_all_feedbacks_report(request):
+    res = []
+    feedbacks = FeedbackLesson.objects.filter(
+        lesson__status="public", lesson__course__status="public"
+    )
+    hr_id = request.query_params.get("hr", None)
+    if hr_id:
+        feedbacks = feedbacks.filter(lesson__course__batch__project__hr__id=hr_id)
+    for feedback in feedbacks:
+        course_enrollments = CourseEnrollment.objects.filter(
+            course=feedback.lesson.course
+        )
+        total_participants = course_enrollments.count()
+        feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+            feedback_lesson=feedback
+        )
+        total_responses = feedback_lesson_responses.count()
+        response_percentage = (
+            ((total_responses / total_participants) * 100)
+            if total_participants > 0
+            else 0
+        )
+        res.append(
+            {
+                "id": feedback.id,
+                "feedback_name": feedback.lesson.name,
+                "course_name": feedback.lesson.course.name,
+                "batch_name": feedback.lesson.course.batch.name,
+                "total_participants": total_participants,
+                "total_responses": total_responses,
+                "response_percentage": response_percentage,
+            }
+        )
+
+    return Response(res)
+
+
+@api_view(["GET"])
+def get_feedback_report(request, feedback_id):
+    try:
+        feedback_lesson = FeedbackLesson.objects.get(id=feedback_id)
+        questions_serializer = QuestionSerializer(feedback_lesson.questions, many=True)
+        question_data = {
+            question["id"]: {**question, "descriptive_answers": [], "ratings": []}
+            for question in questions_serializer.data
+        }
+        feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+            feedback_lesson=feedback_lesson
+        )
+        for response in feedback_lesson_responses:
+            for answer in response.answers.all():
+                question_id = answer.question.id
+                if answer.question.type.startswith("rating"):
+                    question_data[question_id]["ratings"].append(answer.rating)
+                elif answer.question.type == "descriptive_answer":
+                    question_data[question_id]["descriptive_answers"].append(
+                        answer.text_answer
+                    )
+        for question_id, data in question_data.items():
+        # Calculate average rating for each question
+            ratings = data["ratings"]
+            if ratings:
+                if data["type"] == "rating_0_to_10":
+                    # Calculate NPS
+                    promoters = sum(rating >= 9 for rating in ratings)
+                    detractors = sum(rating <= 6 for rating in ratings)
+                    nps = promoters - detractors
+                    data["nps"] = nps * 10
+                else:
+                    # Calculate average rating
+                    data["average_rating"] = sum(ratings) / len(ratings)
+            else:
+                if data["type"] == "rating_0_to_10":
+                    data["nps"] = 0  # Default NPS value if no ratings
+                else:
+                    data["average_rating"] = 0  # default rating 0 if not ratings
+
+        return Response(question_data.values())
+    except FeedbackLesson.DoesNotExist:
+        return Response(
+            {"error": "Feedback lesson not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class AssignCourseTemplateToBatch(APIView):
     def post(self, request, course_template_id, batch_id):
         try:
@@ -1728,7 +1806,7 @@ class AssignCourseTemplateToBatch(APIView):
                 batch = get_object_or_404(SchedularBatch, pk=batch_id)
                 # Duplicate the course
                 new_course = Course.objects.create(
-                    name=f"Copy of - {course_template.name}",
+                    name=f"{course_template.name}",
                     description=course_template.description,
                     status="draft",
                     course_template=course_template,

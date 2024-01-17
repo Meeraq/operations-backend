@@ -37,6 +37,7 @@ from .serializers import (
     ObserverTypeSerializer,
     AssessmentNotificationSerializer,
     ParticipantReleasedResultsSerializerDepthOne,
+    ParticipantObserverMappingSerializerDepthOne,
 )
 from django.db import transaction, IntegrityError
 import json
@@ -3687,6 +3688,7 @@ class GetAllAssessments(APIView):
 
         return Response(assessment_list)
 
+
 class GetOneAssessment(APIView):
     def get(self, request, assessment_id):
         assessment = get_object_or_404(Assessment, id=assessment_id)
@@ -3702,7 +3704,9 @@ class GetOneAssessment(APIView):
 
 class GetAssessmentsOfHr(APIView):
     def get(self, request, hr_id):
-        assessments = Assessment.objects.filter(Q(hr__id=hr_id), Q(status="ongoing") | Q(status ="completed"))
+        assessments = Assessment.objects.filter(
+            Q(hr__id=hr_id), Q(status="ongoing") | Q(status="completed")
+        )
         assessment_list = []
         for assessment in assessments:
             total_responses_count = ParticipantResponse.objects.filter(
@@ -3711,7 +3715,7 @@ class GetAssessmentsOfHr(APIView):
             assessment_data = {
                 "id": assessment.id,
                 "name": assessment.name,
-                "participant_view_name" : assessment.participant_view_name,
+                "participant_view_name": assessment.participant_view_name,
                 "assessment_type": assessment.assessment_type,
                 "assessment_timing": assessment.assessment_timing,
                 "assessment_start_date": assessment.assessment_start_date,
@@ -3724,3 +3728,20 @@ class GetAssessmentsOfHr(APIView):
             assessment_list.append(assessment_data)
 
         return Response(assessment_list)
+
+
+class GetAssessmentsDataForMoveParticipant(APIView):
+    def get(self, request):
+        assessments = Assessment.objects.all()
+        assessment_data = []
+        for assessment in assessments:
+            temp_assessmeent = {
+                "id": assessment.id,
+                "name": assessment.name,
+                "assessment_timing": assessment.assessment_timing,
+                "participants_observers": ParticipantObserverMappingSerializerDepthOne(
+                    assessment.participants_observers, many=True
+                ).data,
+            }
+            assessment_data.append(temp_assessmeent)
+        return Response(assessment_data)
