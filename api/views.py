@@ -669,7 +669,7 @@ def generate_room_id(email):
 def get_trimmed_emails(emails):
     res = []
     for email in emails:
-        res.append(email.strip())
+        res.append(email.strip().lower())
     return res
 
 
@@ -749,7 +749,7 @@ def send_whatsapp_message_template(phone, payload):
 def create_pmo(request):
     # Get data from request
     name = request.data.get("name")
-    email = request.data.get("email", "").strip()
+    email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
     username = email  # username and email are the same
     password = request.data.get("password")
@@ -906,7 +906,7 @@ def update_coach_profile(request, id):
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email", "").strip()
+    new_email = mutable_data.get("email", "").strip().lower()
     #  other user exists with the new email
     if (
         new_email
@@ -1047,7 +1047,7 @@ def pmo_login(request):
 
 @api_view(["POST"])
 def coach_login(request):
-    email = request.data.get("email")
+    email = request.data.get("email").strip().lower()
     password = request.data.get("password")
 
     if email is None or password is None:
@@ -1341,7 +1341,7 @@ def create_learners(learners_data):
             learners = []
             for learner_data in learners_data:
                 # Check if username field is provided
-                email = learner_data.get("email", "").strip()
+                email = learner_data.get("email", "").strip().lower()
                 if "email" not in learner_data:
                     raise ValueError("Username field is required")
                 # Check if user already exists
@@ -2162,7 +2162,7 @@ def add_coach(request):
     coach_id = request.data.get("coach_id")
     first_name = request.data.get("first_name")
     last_name = request.data.get("last_name")
-    email = request.data.get("email", "").strip()
+    email = request.data.get("email", "").strip().lower()
     age = request.data.get("age")
     gender = request.data.get("gender")
     domain = json.loads(request.data["domain"])
@@ -2187,7 +2187,7 @@ def add_coach(request):
     ctt_nctt = json.loads(request.data["ctt_nctt"])
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
-    username = request.data.get("email", "").strip()  # keeping username and email same
+    username = request.data.get("email", "").strip().lower()  # keeping username and email same
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
@@ -2761,7 +2761,7 @@ def update_organisation(request, org_id):
 @api_view(["POST"])
 def add_hr(request):
     try:
-        email = request.data.get("email", "").strip()
+        email = request.data.get("email", "").strip().lower()
         with transaction.atomic():
             user = User.objects.filter(email=email).first()
             if not user:
@@ -2823,7 +2823,7 @@ def update_hr(request, hr_id):
         if serializer.is_valid():
             new_email = request.data.get(
                 "email", ""
-            ).strip()  # Get the new email from the request
+            ).strip().lower()  # Get the new email from the request
             existing_user = (
                 User.objects.filter(email=new_email).exclude(username=hr.email).first()
             )
@@ -2841,7 +2841,7 @@ def update_hr(request, hr_id):
             add_contact_in_wati("hr", name, hr.phone)
 
             # if email if getting updated -> updating email in all other user present
-            if not updated_hr.email == user.email:
+            if not updated_hr.email.strip().lower() == user.email.strip().lower():
                 user.email = new_email
                 user.username = new_email
                 user.save()

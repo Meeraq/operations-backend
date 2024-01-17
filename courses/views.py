@@ -86,7 +86,7 @@ pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 def create_learner(learner_name, learner_email, learner_phone):
     try:
         with transaction.atomic():
-            learner_email = learner_email.strip()
+            learner_email = learner_email.strip().lower()
             temp_password = "".join(
                 random.choices(
                     string.ascii_uppercase + string.ascii_lowercase + string.digits,
@@ -2256,7 +2256,7 @@ class FeedbackEmailValidation(APIView):
             participants = lesson.course.batch.learners.all()
 
             for participant in participants:
-                if participant.email == email:
+                if participant.email.strip().lower() == email.strip().lower():
                     feedback_lesson_response = FeedbackLessonResponse.objects.filter(
                         feedback_lesson=feedback_lesson, learner__id=participant.id
                     ).first()
