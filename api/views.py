@@ -5503,7 +5503,7 @@ def get_coachee_of_user(request, user_type, user_id):
         learners = Learner.objects.filter(
             Q(engagement__project__hr__id=user_id)
             | Q(schedularbatch__project__hr__id=user_id)
-        )
+        ).distinct()
     for learner in learners:
         learner_dict = {
             "id": learner.id,
