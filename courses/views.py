@@ -1785,8 +1785,8 @@ def get_feedback_report(request, feedback_id):
                     # Calculate NPS
                     promoters = sum(rating >= 9 for rating in ratings)
                     detractors = sum(rating <= 6 for rating in ratings)
-                    nps = promoters - detractors
-                    data["nps"] = nps * 10
+                    nps = ((promoters - detractors)/len(ratings))*100
+                    data["nps"] = nps
                 else:
                     # Calculate average rating
                     data["average_rating"] = sum(ratings) / len(ratings)
