@@ -24,6 +24,7 @@ from .models import (
     PdfLesson,
     File,
     DownloadableLesson,
+    ThinkificLessonCompleted,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -72,9 +73,11 @@ from openpyxl import Workbook
 from django.db.models import Max
 import environ
 import uuid
-
+import logging
 env = environ.Env()
 
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 from schedularApi.models import CoachingSession, SchedularSessions
 
@@ -2383,9 +2386,9 @@ class DuplicateLesson(APIView):
                 ]:
                     if not is_course_tepmlate:
                         max_order = (
-                            Lesson.objects.filter(course=course).aggregate(Max("order"))[
-                                "order__max"
-                            ]
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
                             or 0
                         )
                         new_lesson = Lesson.objects.create(
@@ -2456,11 +2459,45 @@ class DuplicateLesson(APIView):
                             new_feedback_lesson.questions.add(new_question)
 
             return Response(
-                    {"message": "Lesson duplicated Sucessfully."},
-                    status=status.HTTP_200_OK,
-                )
+                {"message": "Lesson duplicated Sucessfully."},
+                status=status.HTTP_200_OK,
+            )
         except Exception as e:
             print(str(e))
+            return Response(
+                {"error": "Failed to duplicate lesson."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class LessonCompletedWebhook(APIView):
+    def post(self, request):
+        try:
+            payload = request.data.get("payload", {})
+            
+            lesson_name = payload.get("lesson", {}).get("name", "")
+            user = payload.get("user", {})
+            student_name = f"{user.get('first_name', '')} {user.get('last_name', '')}"
+            course_name = payload.get("course", {}).get("name", "")
+            completion_data = request.data
+
+            ThinkificLessonCompleted.objects.create(
+                lesson_name=lesson_name,
+                student_name=student_name,
+                course_name=course_name,
+                completion_data=completion_data,
+            )
+
+            return Response(status=status.HTTP_200_OK)
+        except KeyError as key_error:
+            # Handle KeyError (missing key in dictionary)
+            return Response(
+                {"error": f"KeyError: {str(key_error)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            # Handle other exceptions and log the error
+            logger.error(f"An error occurred: {str(e)}")
             return Response(
                 {"error": "Failed to duplicate lesson."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
