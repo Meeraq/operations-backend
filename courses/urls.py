@@ -28,6 +28,7 @@ from .views import (
     FeedbackEmailValidation,
     GetFeedbackForm,
     EditAllowedFeedbackLesson,
+    DuplicateLesson,
 )
 import environ
 
@@ -275,5 +276,9 @@ urlpatterns = [
     path(
         "feedback-lesson-edit-allowed/<str:feedback_lesson_id>/",
         EditAllowedFeedbackLesson.as_view(),
+    ),
+    path(
+        "duplicate-lesson/",
+        DuplicateLesson.as_view(),
     ),
 ]

@@ -720,6 +720,7 @@ def add_contact_in_wati(user_type, name, phone):
         }
         response = requests.post(wati_api_url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an HTTPError for bad responses
+        print(response.json())
         return response.json()
     except Exception as e:
         pass
@@ -4326,18 +4327,27 @@ def request_more_profiles_by_hr(request):
 def edit_learner(request):
     try:
         learner = Learner.objects.get(id=request.data.get("learner_id", ""))
-    except Project.DoesNotExist:
+    except Learner.DoesNotExist:
         return Response({"message": "Learner does not exist"}, status=400)
-    user = learner.user.user
-    user.username = request.data["email"]
-    user.email = request.data["email"]
-    user.save()
+
+    existing_user = (
+        User.objects.filter(username=request.data["email"])
+        .exclude(username=learner.email)
+        .first()
+    )
+    if existing_user:
+        return Response(
+            {"error": "User with this email already exists."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     learner.email = request.data["email"]
     learner.name = request.data["name"]
-    learner.phone = request.data["phone"]
+    learner.phone = request.data.get("phone", "")
     learner.save()
-    name = learner.name
-    add_contact_in_wati("learner", name, learner.phone)
+    if learner.phone:
+        add_contact_in_wati("learner", learner.name , learner.phone)
+
     return Response({"message": "Learner details updated.", "details": ""}, status=200)
 
 
