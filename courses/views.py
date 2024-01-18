@@ -122,6 +122,9 @@ def create_or_get_learner(learner_data):
         if user:
             if user.profile.roles.all().filter(name="learner").exists():
                 learner = Learner.objects.get(user=user.profile)
+                learner.name = learner_data["name"].strip()
+                learner.phone = learner_data["phone"].strip()
+                learner.save()
                 return learner
             else:
                 learner_role, created = Role.objects.get_or_create(name="learner")
