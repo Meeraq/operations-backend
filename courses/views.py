@@ -1305,7 +1305,7 @@ class LessonMarkAsCompleteAndNotComplete(APIView):
             )
 
 
-class DownlaodLessonCertificate(APIView):
+class DownloadLessonCertificate(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, lesson_id, learner_id):
@@ -2230,7 +2230,8 @@ class FileListAPIView(generics.ListAPIView):
 
 
 class FileUploadView(APIView):
-    permission_classes = [IsAuthenticated]  
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, *args, **kwargs):
         serializer = FileSerializer(data=request.data)
         if serializer.is_valid():
@@ -2240,7 +2241,7 @@ class FileUploadView(APIView):
 
 
 @api_view(["PUT"])
-@api_view([IsAuthenticated])
+@permission_classes([IsAuthenticated])
 def update_file(request, file_id):
     try:
         file = File.objects.get(id=file_id)
@@ -2279,6 +2280,7 @@ def get_file_extension(url):
 
 class FileDownloadView(APIView):
     permission_classes = [AllowAny]
+
     def get(self, request, file_id):
         file_obj = get_object_or_404(File, id=file_id)
 
@@ -2308,16 +2310,18 @@ class FileDownloadView(APIView):
 class DownloadableLessonCreateView(generics.CreateAPIView):
     queryset = DownloadableLesson.objects.all()
     serializer_class = DownloadableLessonSerializer
-    permission_classes=[IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
 
 class DownloadableLessonUpdateView(generics.UpdateAPIView):
     queryset = DownloadableLesson.objects.all()
     serializer_class = DownloadableLessonSerializer
-    permission_classes=[IsAuthenticated]
+    permission_classes = [IsAuthenticated]
+
 
 class FeedbackEmailValidation(APIView):
-    permission_classes=[AllowAny]
+    permission_classes = [AllowAny]
+
     def post(self, request):
         try:
             unique_id = request.data.get("unique_id")
@@ -2374,7 +2378,8 @@ class FeedbackEmailValidation(APIView):
 
 
 class GetFeedbackForm(APIView):
-    permission_classes=[AllowAny]
+    permission_classes = [AllowAny]
+
     def get(self, request, unique_id):
         try:
             feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)

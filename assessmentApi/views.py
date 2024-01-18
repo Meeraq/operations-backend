@@ -667,9 +667,8 @@ class AssessmentView(APIView):
         )
 
 
-class AssessmentStatusOrEndDataChange(APIView):
-    permission_classes = [IsAuthenticated]
 
+class AssessmentStatusChange(APIView):
     @transaction.atomic()
     def put(self, request):
         assessment_id = request.data.get("id")
