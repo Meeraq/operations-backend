@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date,datetime,time
 import requests
 from django.http import JsonResponse
 import calendar
@@ -6,6 +6,7 @@ from os import name
 from django.shortcuts import render, get_object_or_404
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
+from django.utils.timezone import make_aware
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.db import transaction, IntegrityError
 from django.core.mail import EmailMessage
@@ -150,8 +151,9 @@ from schedularApi.models import (
     SchedularProject,
     SchedularBatch,
     SchedularSessions,
-    CalendarInvites
+    CalendarInvites,
 )
+from schedularApi.serializers import SchedularProjectSerializer
 
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
@@ -175,6 +177,17 @@ env = environ.Env()
 wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
+def get_current_date_timestamps():
+    now = timezone.now()
+    current_date = now.date()
+    start_timestamp = str(
+        int(datetime.combine(current_date, datetime.min.time()).timestamp() * 1000)
+    )
+    end_timestamp = str(
+        int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
+    )
+    return start_timestamp, end_timestamp
 
 
 def create_send_email(user_email, file_name):
@@ -504,8 +517,12 @@ def create_outlook_calendar_invite(
             "Authorization": f"Bearer {new_access_token}",
             "Content-Type": "application/json",
         }
-        start_datetime_obj = datetime.fromtimestamp(int(start_time_stamp) / 1000)   + timedelta(hours=5, minutes=30)
-        end_datetime_obj = datetime.fromtimestamp(int(end_time_stamp) / 1000)  + timedelta(hours=5, minutes=30) 
+        start_datetime_obj = datetime.fromtimestamp(
+            int(start_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
+        end_datetime_obj = datetime.fromtimestamp(
+            int(end_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
         start_datetime = start_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
         end_datetime = end_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
         event_payload = {
@@ -528,7 +545,7 @@ def create_outlook_calendar_invite(
                 creator=user_email,
                 caas_session=caas_session,
                 schedular_session=schedular_session,
-                live_session=live_session
+                live_session=live_session,
             )
             calendar_invite.save()
             print("Calendar invite sent successfully.")
@@ -537,11 +554,11 @@ def create_outlook_calendar_invite(
             print(f"Calendar invitation failed. Status code: {response.status_code}")
             print(response.text)
             return False
-    
+
     except UserToken.DoesNotExist:
         print(f"User token not found for email: {user_email}")
         return False
-    
+
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         return False
@@ -549,11 +566,15 @@ def create_outlook_calendar_invite(
 
 def delete_outlook_calendar_invite(calendar_invite):
     try:
-        user_token = UserToken.objects.get(user_profile__user__username=calendar_invite.creator)
+        user_token = UserToken.objects.get(
+            user_profile__user__username=calendar_invite.creator
+        )
         new_access_token = refresh_microsoft_access_token(user_token)
         if not new_access_token:
             new_access_token = user_token.access_token
-        event_delete_url = f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        event_delete_url = (
+            f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        )
         headers = {
             "Authorization": f"Bearer {new_access_token}",
         }
@@ -648,7 +669,7 @@ def generate_room_id(email):
 def get_trimmed_emails(emails):
     res = []
     for email in emails:
-        res.append(email.strip())
+        res.append(email.strip().lower())
     return res
 
 
@@ -704,13 +725,32 @@ def add_contact_in_wati(user_type, name, phone):
     except Exception as e:
         pass
 
+def send_whatsapp_message_template(phone, payload):
+    try:
+        if not phone:
+            return {"error": "Phone not available"}, 500
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = (
+            f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
+        )
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json(), response.status_code
+    except Exception as e:
+        print(str(e))
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def create_pmo(request):
     # Get data from request
     name = request.data.get("name")
-    email = request.data.get("email", "").strip()
+    email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
     username = email  # username and email are the same
     password = request.data.get("password")
@@ -867,7 +907,7 @@ def update_coach_profile(request, id):
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email", "").strip()
+    new_email = mutable_data.get("email", "").strip().lower()
     #  other user exists with the new email
     if (
         new_email
@@ -1008,7 +1048,7 @@ def pmo_login(request):
 
 @api_view(["POST"])
 def coach_login(request):
-    email = request.data.get("email")
+    email = request.data.get("email").strip().lower()
     password = request.data.get("password")
 
     if email is None or password is None:
@@ -1174,6 +1214,7 @@ def create_project_cass(request):
                 project_live="pending",
             ),
             status="presales",
+            masked_coach_profile = request.data["masked_coach_profile"],
         )
 
         project.save()
@@ -1301,7 +1342,7 @@ def create_learners(learners_data):
             learners = []
             for learner_data in learners_data:
                 # Check if username field is provided
-                email = learner_data.get("email", "").strip()
+                email = learner_data.get("email", "").strip().lower()
                 if "email" not in learner_data:
                     raise ValueError("Username field is required")
                 # Check if user already exists
@@ -1745,8 +1786,18 @@ def get_projects_of_learner(request, learner_id):
 @api_view(["GET"])
 def get_ongoing_projects_of_hr(request, hr_id):
     projects = Project.objects.filter(hr__id=hr_id, steps__project_live="pending")
+    schedular_projects = SchedularProject.objects.filter(hr__id=hr_id)
+    schedular_project_serializer = SchedularProjectSerializer(
+        schedular_projects, many=True
+    )
     serializer = ProjectDepthTwoSerializer(projects, many=True)
-    return Response(serializer.data, status=200)
+    return Response(
+        {
+            "caas_projects": serializer.data,
+            "schedular_projects": schedular_project_serializer.data,
+        },
+        status=200,
+    )
 
 
 # @api_view(['GET'])
@@ -2112,7 +2163,7 @@ def add_coach(request):
     coach_id = request.data.get("coach_id")
     first_name = request.data.get("first_name")
     last_name = request.data.get("last_name")
-    email = request.data.get("email", "").strip()
+    email = request.data.get("email", "").strip().lower()
     age = request.data.get("age")
     gender = request.data.get("gender")
     domain = json.loads(request.data["domain"])
@@ -2137,7 +2188,7 @@ def add_coach(request):
     ctt_nctt = json.loads(request.data["ctt_nctt"])
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
-    username = request.data.get("email", "").strip()  # keeping username and email same
+    username = request.data.get("email", "").strip().lower()  # keeping username and email same
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
@@ -2711,7 +2762,7 @@ def update_organisation(request, org_id):
 @api_view(["POST"])
 def add_hr(request):
     try:
-        email = request.data.get("email", "").strip()
+        email = request.data.get("email", "").strip().lower()
         with transaction.atomic():
             user = User.objects.filter(email=email).first()
             if not user:
@@ -2773,7 +2824,7 @@ def update_hr(request, hr_id):
         if serializer.is_valid():
             new_email = request.data.get(
                 "email", ""
-            ).strip()  # Get the new email from the request
+            ).strip().lower()  # Get the new email from the request
             existing_user = (
                 User.objects.filter(email=new_email).exclude(username=hr.email).first()
             )
@@ -2791,7 +2842,7 @@ def update_hr(request, hr_id):
             add_contact_in_wati("hr", name, hr.phone)
 
             # if email if getting updated -> updating email in all other user present
-            if not updated_hr.email == user.email:
+            if not updated_hr.email.strip().lower() == user.email.strip().lower():
                 user.email = new_email
                 user.username = new_email
                 user.save()
@@ -3468,6 +3519,38 @@ def book_session_caas(request):
             message = f"{coach_name.title()} has booked the {SESSION_TYPE_VALUE[session_request.session_type]} for Project - {project.name}.The booked slot is "
             message += slot_message
             create_notification(pmo_user, path, message)
+
+            #WHATSAPP MESSAGE CHECK
+            #before 5 mins whatsapp msg
+            confirmed_availability_start_time = session_request.confirmed_availability.start_time
+            start_datetime_obj = datetime.fromtimestamp(int(confirmed_availability_start_time)/1000) 
+            # Decrease 5 minutes
+            five_minutes_prior_start_datetime = start_datetime_obj - timedelta(minutes=5)
+            clocked = ClockedSchedule.objects.create(clocked_time=five_minutes_prior_start_datetime)
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_caas",
+                args=[session_request.id],
+                clocked=clocked,
+                one_off=True,
+            )
+            periodic_task.save()
+
+            #after 3 minutes whatsapp message
+            # increase 5 minutes
+            three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(minutes=3)
+            clocked = ClockedSchedule.objects.create(clocked_time=three_minutes_ahead_start_datetime)
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_caas",
+                args=[session_request.id],
+                clocked=clocked,
+                one_off=True,
+            )
+            periodic_task.save()
+
+            #WHATSAPP MESSAGE CHECK
+            
             if coachee:
                 microsoft_auth_url = (
                     f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
@@ -5125,6 +5208,12 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__gt=timestamp_milliseconds
+        )
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -5163,7 +5252,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
@@ -5242,7 +5331,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     current_time_seeq = timezone.now()
-    timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+    timestamp_milliseconds = int(current_time_seeq.timestamp() * 1000)
     avaliable_sessions = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
@@ -5290,6 +5379,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             Q(project__hr__id=user_id),
             Q(is_archive=False),
         )
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__lt=timestamp_milliseconds
+        )
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -5328,12 +5423,13 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
             "session_type": session.coaching_session.session_type,
             "end_time": session.availibility.end_time,
+            "session_duration": session.coaching_session.duration,
             "is_seeq_project": True,
         }
         session_details.append(session_detail)
@@ -5548,14 +5644,6 @@ def request_session(request, session_id, coach_id):
 @api_view(["POST"])
 def reschedule_session_of_coachee(request, session_id):
     session = SessionRequestCaas.objects.get(id=session_id)
-
-    google_calendar_event = CalendarEvent.objects.filter(
-        session=session, account_type="google"
-    ).first()
-    microsoft_calendar_event = CalendarEvent.objects.filter(
-        session=session, account_type="microsoft"
-    ).first()
-
     session.is_archive = True
 
     time_arr = create_time_arr(request.data["availibility"])
@@ -5572,14 +5660,7 @@ def reschedule_session_of_coachee(request, session_id):
     new_session.availibility.set(time_arr)
     new_session.save()
     session.save()
-
-    if google_calendar_event:
-        google_calendar_event.session = new_session
-        google_calendar_event.save()
-    if microsoft_calendar_event:
-        microsoft_calendar_event.session = new_session
-        microsoft_calendar_event.save()
-
+    
     return Response({"message": "Session reschedule successfully"}, status=200)
 
 
@@ -6072,6 +6153,34 @@ def schedule_session_directly(request, session_id):
             "endDate": session_date,
             "endTime": end_time,
         }
+
+        #WHATSAPP MESSAGE CHECK
+        start_datetime_obj = datetime.fromtimestamp(int(session.confirmed_availability.start_time)/1000) 
+        # Decrease 5 minutes
+        five_minutes_prior_start_datetime = start_datetime_obj - timedelta(minutes=5)
+        clocked = ClockedSchedule.objects.create(clocked_time=five_minutes_prior_start_datetime)
+        periodic_task = PeriodicTask.objects.create(
+            name=uuid.uuid1(),
+            task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_caas",
+            args=[session_id],
+            clocked=clocked,
+            one_off=True,
+        )
+        periodic_task.save()
+
+        #after 3 minutes
+        three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(minutes=3)
+        clocked = ClockedSchedule.objects.create(clocked_time=three_minutes_ahead_start_datetime)
+        periodic_task = PeriodicTask.objects.create(
+            name=uuid.uuid1(),
+            task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_caas",
+            args=[session_id],
+            clocked=clocked,
+            one_off=True,
+        )
+        periodic_task.save()
+        #WHATSAPP MESSAGE CHECK
+
         if session.project.enable_emails_to_hr_and_coachee:
             microsoft_auth_url = (
                 f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
@@ -7230,6 +7339,10 @@ def edit_project_caas(request, project_id):
         )
         project.enable_emails_to_hr_and_coachee = request.data.get(
             "enable_emails_to_hr_and_coachee", project.enable_emails_to_hr_and_coachee
+        )
+      
+        project.masked_coach_profile = request.data.get(
+            "masked_coach_profile", project.masked_coach_profile
         )
         project.hr.clear()
         for hr in request.data["hr"]:
@@ -8468,4 +8581,3 @@ class DownloadCoachContract(APIView):
                 {"error": "Failed to download Contract."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-

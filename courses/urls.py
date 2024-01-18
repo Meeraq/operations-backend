@@ -25,6 +25,9 @@ from .views import (
     update_file,
     DownloadableLessonUpdateView,
     DownloadableLessonCreateView,
+    FeedbackEmailValidation,
+    GetFeedbackForm,
+    EditAllowedFeedbackLesson,
 )
 import environ
 
@@ -207,6 +210,8 @@ urlpatterns = [
     path("quizes/report/all/", views.get_all_quizes_report),
     path("quizes/<int:quiz_id>/report/", views.get_quiz_report),
     path("quizes/<int:quiz_id>/report/download/", views.quiz_report_download),
+    path("feedbacks/report/all/", views.get_all_feedbacks_report),
+    path("feedbacks/<int:feedback_id>/report/", views.get_feedback_report),
     path(
         "get-laser-coaching-time/<int:laser_coaching_id>/<str:participant_email>/",
         GetLaserCoachingTime.as_view(),
@@ -257,5 +262,18 @@ urlpatterns = [
         "downloadable-lessons/update/<int:pk>/",
         DownloadableLessonUpdateView.as_view(),
         name="update-downloadable-lesson",
+    ),
+    path(
+        "feedback-email-validation/",
+        FeedbackEmailValidation.as_view(),
+        name="update-downloadable-lesson",
+    ),
+    path(
+        "get-feedback-form/<str:unique_id>/",
+        GetFeedbackForm.as_view(),
+    ),
+    path(
+        "feedback-lesson-edit-allowed/<str:feedback_lesson_id>/",
+        EditAllowedFeedbackLesson.as_view(),
     ),
 ]
