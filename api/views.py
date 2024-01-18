@@ -1352,6 +1352,9 @@ def create_learners(learners_data):
                     learner = Learner.objects.filter(user__user=user).first()
 
                     if learner:
+                        learner.name = learner_data.get("name").strip()
+                        learner.phone = learner_data.get("phone").strip()
+                        learner.save()
                         learners.append(learner)
                         continue
                     else:
