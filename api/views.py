@@ -5503,7 +5503,7 @@ def get_coachee_of_user(request, user_type, user_id):
         learners = Learner.objects.filter(
             Q(engagement__project__hr__id=user_id)
             | Q(schedularbatch__project__hr__id=user_id)
-        )
+        ).distinct()
     for learner in learners:
         learner_dict = {
             "id": learner.id,
@@ -5542,12 +5542,12 @@ def get_coachee_of_user(request, user_type, user_id):
                 courses_names.append(course_enrollment.course.name)
             learner_dict["coursesEnrolled"] = courses_names
         for project in projects:
-            project_dict = {"name": project.name, "type": "CAAS"}
+            project_dict =  { "project_id" : project.id, "name": project.name, "type": "CAAS"}
             learner_dict["organisation"].add(project.organisation.name)
             learner_dict["projects"].append(project_dict)
         if user_type == "pmo" or user_type == "hr":
             for batch in schedular_batches:
-                project_dict = {"name": batch.project.name, "type": "SEEQ"}
+                project_dict = { "project_id" : batch.project.id, "batch_id" : batch.id, "name": batch.project.name, "type": "SEEQ"}
                 learner_dict["organisation"].add(batch.project.organisation.name)
                 if project_dict["name"] not in [
                     proj["name"] for proj in learner_dict["projects"]
