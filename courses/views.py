@@ -1785,7 +1785,7 @@ def get_feedback_report(request, feedback_id):
                     # Calculate NPS
                     promoters = sum(rating >= 9 for rating in ratings)
                     detractors = sum(rating <= 6 for rating in ratings)
-                    nps = ((promoters - detractors)/len(ratings))*100
+                    nps = ((promoters - detractors) / len(ratings)) * 100
                     data["nps"] = nps
                 else:
                     # Calculate average rating
@@ -2371,11 +2371,12 @@ class DuplicateLesson(APIView):
                 )
 
             lesson = Lesson.objects.get(id=duplicate_from_lesson_id)
-            
             new_lesson = None
-
             # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
-            if lesson.lesson_type in ["text", "quiz", "feedback"]:
+            if lesson.lesson_type not in [
+                "live_session",
+                "laser_coaching",
+            ]:
                 if not is_course_tepmlate:
                     max_order = (
                         Lesson.objects.filter(course=course).aggregate(Max("order"))[
@@ -2405,13 +2406,29 @@ class DuplicateLesson(APIView):
                         lesson_type=lesson.lesson_type,
                         order=max_order + 1,
                     )
-                # Duplicate specific lesson types
                 if lesson.lesson_type == "text":
                     TextLesson.objects.create(
                         lesson=new_lesson,
                         content=lesson.textlesson.content,
                     )
-
+                elif lesson.lesson_type == "video":
+                    VideoLesson.objects.create(
+                        lesson=new_lesson,
+                        video=lesson.videolesson.video,
+                    )
+                elif lesson.lesson_type == "ppt":
+                    PdfLesson.objects.create(
+                        lesson=new_lesson,
+                        pdf=lesson.pdflesson.pdf,
+                    )
+                elif lesson.lesson_type == "downloadable_file":
+                    DownloadableLesson.objects.create(
+                        lesson=new_lesson,
+                        file=lesson.downloadablelesson.file,
+                        description=lesson.downloadablelesson.description,
+                    )
+                elif lesson.lesson_type == "assessment":
+                    Assessment.objects.create(lesson=new_lesson)
                 elif lesson.lesson_type == "quiz":
                     new_quiz_lesson = QuizLesson.objects.create(lesson=new_lesson)
                     for question in lesson.quizlesson.questions.all():
@@ -2421,7 +2438,6 @@ class DuplicateLesson(APIView):
                             type=question.type,
                         )
                         new_quiz_lesson.questions.add(new_question)
-
                 elif lesson.lesson_type == "feedback":
                     unique_id = uuid.uuid4()
                     new_feedback_lesson = FeedbackLesson.objects.create(

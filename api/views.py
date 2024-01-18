@@ -4329,9 +4329,9 @@ def edit_learner(request):
         learner = Learner.objects.get(id=request.data.get("learner_id", ""))
     except Learner.DoesNotExist:
         return Response({"message": "Learner does not exist"}, status=400)
-
+    email = request.data["email"].strip().lower()
     existing_user = (
-        User.objects.filter(username=request.data["email"])
+        User.objects.filter(username=email)
         .exclude(username=learner.email)
         .first()
     )
@@ -4341,7 +4341,7 @@ def edit_learner(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    learner.email = request.data["email"]
+    learner.email = email
     learner.name = request.data["name"]
     learner.phone = request.data.get("phone", "")
     learner.save()
