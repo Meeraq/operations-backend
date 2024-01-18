@@ -1224,7 +1224,7 @@ def schedule_session(request):
                     is_confirmed=False,
                 )
                 print(slot_created)
-
+            booking_id=coach_availability.coach.room_id
             print(json.dumps(unblock_slots))
             send_mail_templates(
                 "schedule_session.html",
@@ -1234,6 +1234,7 @@ def schedule_session(request):
                     "name": coach_name,
                     "date": date_for_mail,
                     "time": session_time,
+                    "booking_id":booking_id,
                 },
                 [],
             )
@@ -1452,7 +1453,7 @@ def schedule_session_fixed(request):
                     scheduled_session,
                     None,
                 )
-
+                booking_id=coach_availability.coach.room_id
                 send_mail_templates(
                     "schedule_session.html",
                     [coach_availability.coach.email],
@@ -1461,6 +1462,7 @@ def schedule_session_fixed(request):
                         "name": coach_name,
                         "date": date_for_mail,
                         "time": session_time,
+                        "booking_id":booking_id,
                     },
                     [],
                 )

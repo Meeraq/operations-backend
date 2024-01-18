@@ -724,26 +724,6 @@ def add_contact_in_wati(user_type, name, phone):
     except Exception as e:
         pass
 
-def send_whatsapp_message_template(phone, payload):
-    try:
-        if not phone:
-            return {"error": "Phone not available"}, 500
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = (
-            f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
-        )
-        headers = {
-            "content-type": "text/json",
-            "Authorization": wati_authorization,
-        }
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()
-        return response.json(), response.status_code
-    except Exception as e:
-        print(str(e))
-
-
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def create_pmo(request):
@@ -3549,6 +3529,7 @@ def book_session_caas(request):
             periodic_task.save()
 
             #WHATSAPP MESSAGE CHECK
+            booking_id=coach.room_id
             
             if coachee:
                 microsoft_auth_url = (
@@ -3576,6 +3557,7 @@ def book_session_caas(request):
                             ],
                             "slot_date": session_date,
                             "slot_time": session_time,
+                            "booking_id":booking_id,
                             "email": coachee.email,
                             "microsoft_auth_url": microsoft_auth_url,
                             "user_token_present": user_token_present,
@@ -6170,6 +6152,7 @@ def schedule_session_directly(request, session_id):
         )
         periodic_task.save()
         #WHATSAPP MESSAGE CHECK
+        booking_id=coach.room_id
 
         if session.project.enable_emails_to_hr_and_coachee:
             microsoft_auth_url = (
@@ -6195,6 +6178,7 @@ def schedule_session_directly(request, session_id):
                     "sessionName": SESSION_TYPE_VALUE[session.session_type],
                     "slot_date": session_date,
                     "slot_time": session_time,
+                    "booking_id":booking_id,
                     "email": coachee.email,
                     "microsoft_auth_url": microsoft_auth_url,
                     "user_token_present": user_token_present,
