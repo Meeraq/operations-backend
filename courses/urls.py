@@ -29,6 +29,7 @@ from .views import (
     GetFeedbackForm,
     EditAllowedFeedbackLesson,
     DuplicateLesson,
+    LessonCompletedWebhook,
 )
 import environ
 
@@ -280,5 +281,9 @@ urlpatterns = [
     path(
         "duplicate-lesson/",
         DuplicateLesson.as_view(),
+    ),
+    path(
+        "lesson-completed-webhook/",
+        LessonCompletedWebhook.as_view(),
     ),
 ]
