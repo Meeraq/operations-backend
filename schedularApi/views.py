@@ -22,6 +22,7 @@ from openpyxl import Workbook
 from django.http import HttpResponse
 import pandas as pd
 from django.db.models import Q
+from time import sleep
 import json
 from django.core.exceptions import ObjectDoesNotExist
 from api.views import get_date, get_time, add_contact_in_wati
@@ -93,6 +94,7 @@ from time import sleep
 import environ
 
 env = environ.Env()
+
 
 
 def send_whatsapp_message_template(phone, payload):
@@ -1463,6 +1465,36 @@ def schedule_session_fixed(request):
                     [],
                 )
 
+                #WHATSAPP MESSAGE CHECK
+                
+                #before 5 mins whatsapp msg
+                start_datetime_obj = datetime.fromtimestamp(int(coach_availability.start_time)/1000) 
+                # Decrease 5 minutes
+                five_minutes_prior_start_datetime = start_datetime_obj - timedelta(minutes=5)
+                clocked = ClockedSchedule.objects.create(clocked_time=five_minutes_prior_start_datetime)
+                periodic_task = PeriodicTask.objects.create(
+                    name=uuid.uuid1(),
+                    task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_seeq",
+                    args=[scheduled_session.id],
+                    clocked=clocked,
+                    one_off=True,
+                )
+                periodic_task.save()
+
+                #after 3 mins whatsapp msg
+                three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(minutes=3)
+                clocked = ClockedSchedule.objects.create(clocked_time=three_minutes_ahead_start_datetime)
+                periodic_task = PeriodicTask.objects.create(
+                    name=uuid.uuid1(),
+                    task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_seeq",
+                    args=[scheduled_session.id],
+                    clocked=clocked,
+                    one_off=True,
+                )
+                periodic_task.save()
+
+                #WHATSAPP MESSAGE CHECK
+
                 send_mail_templates(
                     "coach_templates/coaching_email_template.html",
                     [participant_email],
@@ -2004,6 +2036,8 @@ def send_live_session_link(request):
     return Response({"message": "Emails sent successfully"})
 
 
+
+
 @api_view(["POST"])
 def send_live_session_link_whatsapp(request):
     live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
@@ -2449,8 +2483,12 @@ def get_live_sessions_by_status(request):
         queryset = LiveSession.objects.filter(date_time__isnull=True).order_by(
             "created_at"
         )
+    
     else:
         queryset = LiveSession.objects.all()
+    hr_id =  request.query_params.get("hr", None)
+    if hr_id:
+        queryset = queryset.filter(batch__project__hr__id=hr_id)
     res = []
     for live_session in queryset:
         res.append(
@@ -2469,3 +2507,22 @@ def get_live_sessions_by_status(request):
             }
         )
     return Response(res)
+
+
+@api_view(["GET"])
+def live_session_detail_view(request, pk):
+    try:
+        live_session = LiveSession.objects.get(pk=pk)
+    except LiveSession.DoesNotExist:
+        return Response({"error": "LiveSession not found"}, status=404)
+
+    participants = Learner.objects.filter(schedularbatch__id=live_session.batch.id)
+    participants_serializer = LearnerSerializer(participants, many=True)
+    live_session_serializer = LiveSessionSerializerDepthOne(live_session)
+
+    response_data = {
+        "live_session": live_session_serializer.data,
+        "participants": participants_serializer.data,
+    }
+
+    return Response(response_data)

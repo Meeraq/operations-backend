@@ -86,7 +86,7 @@ pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 def create_learner(learner_name, learner_email, learner_phone):
     try:
         with transaction.atomic():
-            learner_email = learner_email.strip()
+            learner_email = learner_email.strip().lower()
             temp_password = "".join(
                 random.choices(
                     string.ascii_uppercase + string.ascii_lowercase + string.digits,
@@ -577,7 +577,16 @@ def edit_feedback_lesson(request, feedback_lesson_id):
         return Response(
             {"message": "Feedback Lesson not found"}, status=status.HTTP_404_NOT_FOUND
         )
-
+    feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+        feedback_lesson=feedback_lesson
+    )
+    if feedback_lesson_response:
+        return Response(
+            {
+                "message": "Feedback editing is unavailable as responses have already been received for this lesson."
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     # Deserialize the incoming data
     data = request.data
     lesson_data = data.get("lesson")
@@ -1709,6 +1718,93 @@ def quiz_report_download(request, quiz_id):
     return response
 
 
+@api_view(["GET"])
+def get_all_feedbacks_report(request):
+    res = []
+    feedbacks = FeedbackLesson.objects.filter(
+        lesson__status="public", lesson__course__status="public"
+    )
+    hr_id = request.query_params.get("hr", None)
+    if hr_id:
+        feedbacks = feedbacks.filter(lesson__course__batch__project__hr__id=hr_id)
+    for feedback in feedbacks:
+        course_enrollments = CourseEnrollment.objects.filter(
+            course=feedback.lesson.course
+        )
+        total_participants = course_enrollments.count()
+        feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+            feedback_lesson=feedback
+        )
+        total_responses = feedback_lesson_responses.count()
+        response_percentage = (
+            ((total_responses / total_participants) * 100)
+            if total_participants > 0
+            else 0
+        )
+        res.append(
+            {
+                "id": feedback.id,
+                "feedback_name": feedback.lesson.name,
+                "course_name": feedback.lesson.course.name,
+                "batch_name": feedback.lesson.course.batch.name,
+                "total_participants": total_participants,
+                "total_responses": total_responses,
+                "response_percentage": response_percentage,
+            }
+        )
+
+    return Response(res)
+
+
+@api_view(["GET"])
+def get_feedback_report(request, feedback_id):
+    try:
+        feedback_lesson = FeedbackLesson.objects.get(id=feedback_id)
+        questions_serializer = QuestionSerializer(feedback_lesson.questions, many=True)
+        question_data = {
+            question["id"]: {**question, "descriptive_answers": [], "ratings": []}
+            for question in questions_serializer.data
+        }
+        feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+            feedback_lesson=feedback_lesson
+        )
+        for response in feedback_lesson_responses:
+            for answer in response.answers.all():
+                question_id = answer.question.id
+                if answer.question.type.startswith("rating"):
+                    question_data[question_id]["ratings"].append(answer.rating)
+                elif answer.question.type == "descriptive_answer":
+                    question_data[question_id]["descriptive_answers"].append(
+                        answer.text_answer
+                    )
+        for question_id, data in question_data.items():
+            # Calculate average rating for each question
+            ratings = data["ratings"]
+            if ratings:
+                if data["type"] == "rating_0_to_10":
+                    # Calculate NPS
+                    promoters = sum(rating >= 9 for rating in ratings)
+                    detractors = sum(rating <= 6 for rating in ratings)
+                    nps = ((promoters - detractors)/len(ratings))*100
+                    data["nps"] = nps
+                else:
+                    # Calculate average rating
+                    data["average_rating"] = sum(ratings) / len(ratings)
+            else:
+                if data["type"] == "rating_0_to_10":
+                    data["nps"] = 0  # Default NPS value if no ratings
+                else:
+                    data["average_rating"] = 0  # default rating 0 if not ratings
+
+        return Response(question_data.values())
+    except FeedbackLesson.DoesNotExist:
+        return Response(
+            {"error": "Feedback lesson not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class AssignCourseTemplateToBatch(APIView):
     def post(self, request, course_template_id, batch_id):
         try:
@@ -2160,7 +2256,7 @@ class FeedbackEmailValidation(APIView):
             participants = lesson.course.batch.learners.all()
 
             for participant in participants:
-                if participant.email == email:
+                if participant.email.strip().lower() == email.strip().lower():
                     feedback_lesson_response = FeedbackLessonResponse.objects.filter(
                         feedback_lesson=feedback_lesson, learner__id=participant.id
                     ).first()
@@ -2221,6 +2317,36 @@ class GetFeedbackForm(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to get feedback lesson details."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class EditAllowedFeedbackLesson(APIView):
+    def get(self, request, feedback_lesson_id):
+        try:
+            feedback_lesson = FeedbackLesson.objects.get(id=feedback_lesson_id)
+            feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+                feedback_lesson=feedback_lesson
+            )
+
+            if feedback_lesson_response:
+                return Response(
+                    {
+                        "edit_allowed": False,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response(
+                {
+                    "edit_allowed": True,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get details."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
