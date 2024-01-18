@@ -86,7 +86,7 @@ pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 def create_learner(learner_name, learner_email, learner_phone):
     try:
         with transaction.atomic():
-            learner_email = learner_email.strip()
+            learner_email = learner_email.strip().lower()
             temp_password = "".join(
                 random.choices(
                     string.ascii_uppercase + string.ascii_lowercase + string.digits,
@@ -577,7 +577,16 @@ def edit_feedback_lesson(request, feedback_lesson_id):
         return Response(
             {"message": "Feedback Lesson not found"}, status=status.HTTP_404_NOT_FOUND
         )
-
+    feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+        feedback_lesson=feedback_lesson
+    )
+    if feedback_lesson_response:
+        return Response(
+            {
+                "message": "Feedback editing is unavailable as responses have already been received for this lesson."
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     # Deserialize the incoming data
     data = request.data
     lesson_data = data.get("lesson")
@@ -1769,15 +1778,15 @@ def get_feedback_report(request, feedback_id):
                         answer.text_answer
                     )
         for question_id, data in question_data.items():
-        # Calculate average rating for each question
+            # Calculate average rating for each question
             ratings = data["ratings"]
             if ratings:
                 if data["type"] == "rating_0_to_10":
                     # Calculate NPS
                     promoters = sum(rating >= 9 for rating in ratings)
                     detractors = sum(rating <= 6 for rating in ratings)
-                    nps = promoters - detractors
-                    data["nps"] = nps * 10
+                    nps = ((promoters - detractors)/len(ratings))*100
+                    data["nps"] = nps
                 else:
                     # Calculate average rating
                     data["average_rating"] = sum(ratings) / len(ratings)
@@ -2247,7 +2256,7 @@ class FeedbackEmailValidation(APIView):
             participants = lesson.course.batch.learners.all()
 
             for participant in participants:
-                if participant.email == email:
+                if participant.email.strip().lower() == email.strip().lower():
                     feedback_lesson_response = FeedbackLessonResponse.objects.filter(
                         feedback_lesson=feedback_lesson, learner__id=participant.id
                     ).first()
@@ -2308,5 +2317,35 @@ class GetFeedbackForm(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to get feedback lesson details."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class EditAllowedFeedbackLesson(APIView):
+    def get(self, request, feedback_lesson_id):
+        try:
+            feedback_lesson = FeedbackLesson.objects.get(id=feedback_lesson_id)
+            feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+                feedback_lesson=feedback_lesson
+            )
+
+            if feedback_lesson_response:
+                return Response(
+                    {
+                        "edit_allowed": False,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response(
+                {
+                    "edit_allowed": True,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get details."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
