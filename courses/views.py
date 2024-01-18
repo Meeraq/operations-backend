@@ -2357,107 +2357,108 @@ class EditAllowedFeedbackLesson(APIView):
 class DuplicateLesson(APIView):
     def post(self, request):
         try:
-            is_course_tepmlate = request.data.get("is_course_tepmlate")
-            duplicate_to_course_template_or_course_id = request.data.get(
-                "duplicate_to_course_template_or_course_id"
-            )
-            duplicate_from_lesson_id = request.data.get("duplicate_from_lesson_id")
-            course = None
-
-            if is_course_tepmlate:
-                course = CourseTemplate.objects.get(
-                    id=duplicate_to_course_template_or_course_id
+            with transaction.atomic():
+                is_course_tepmlate = request.data.get("is_course_tepmlate")
+                duplicate_to_course_template_or_course_id = request.data.get(
+                    "duplicate_to_course_template_or_course_id"
                 )
-            else:
-                course = Course.objects.get(
-                    id=duplicate_to_course_template_or_course_id
-                )
+                duplicate_from_lesson_id = request.data.get("duplicate_from_lesson_id")
+                course = None
 
-            lesson = Lesson.objects.get(id=duplicate_from_lesson_id)
-            new_lesson = None
-            # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
-            if lesson.lesson_type not in [
-                "live_session",
-                "laser_coaching",
-            ]:
-                if not is_course_tepmlate:
-                    max_order = (
-                        Lesson.objects.filter(course=course).aggregate(Max("order"))[
-                            "order__max"
-                        ]
-                        or 0
+                if is_course_tepmlate:
+                    course = CourseTemplate.objects.get(
+                        id=duplicate_to_course_template_or_course_id
                     )
-                    new_lesson = Lesson.objects.create(
-                        course=course,
-                        name=lesson.name,
-                        status="draft",
-                        lesson_type=lesson.lesson_type,
-                        order=max_order + 1,
-                    )
-
                 else:
-                    max_order = (
-                        Lesson.objects.filter(course_template=course).aggregate(
-                            Max("order")
-                        )["order__max"]
-                        or 0
+                    course = Course.objects.get(
+                        id=duplicate_to_course_template_or_course_id
                     )
-                    new_lesson = Lesson.objects.create(
-                        course_template=course,
-                        name=lesson.name,
-                        status="draft",
-                        lesson_type=lesson.lesson_type,
-                        order=max_order + 1,
-                    )
-                if lesson.lesson_type == "text":
-                    TextLesson.objects.create(
-                        lesson=new_lesson,
-                        content=lesson.textlesson.content,
-                    )
-                elif lesson.lesson_type == "video":
-                    VideoLesson.objects.create(
-                        lesson=new_lesson,
-                        video=lesson.videolesson.video,
-                    )
-                elif lesson.lesson_type == "ppt":
-                    PdfLesson.objects.create(
-                        lesson=new_lesson,
-                        pdf=lesson.pdflesson.pdf,
-                    )
-                elif lesson.lesson_type == "downloadable_file":
-                    DownloadableLesson.objects.create(
-                        lesson=new_lesson,
-                        file=lesson.downloadablelesson.file,
-                        description=lesson.downloadablelesson.description,
-                    )
-                elif lesson.lesson_type == "assessment":
-                    Assessment.objects.create(lesson=new_lesson)
-                elif lesson.lesson_type == "quiz":
-                    new_quiz_lesson = QuizLesson.objects.create(lesson=new_lesson)
-                    for question in lesson.quizlesson.questions.all():
-                        new_question = Question.objects.create(
-                            text=question.text,
-                            options=question.options,
-                            type=question.type,
+
+                lesson = Lesson.objects.get(id=duplicate_from_lesson_id)
+                new_lesson = None
+                # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
+                if lesson.lesson_type not in [
+                    "live_session",
+                    "laser_coaching",
+                ]:
+                    if not is_course_tepmlate:
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                                "order__max"
+                            ]
+                            or 0
                         )
-                        new_quiz_lesson.questions.add(new_question)
-                elif lesson.lesson_type == "feedback":
-                    unique_id = uuid.uuid4()
-                    new_feedback_lesson = FeedbackLesson.objects.create(
-                        lesson=new_lesson, unique_id=unique_id
-                    )
-                    for question in lesson.feedbacklesson.questions.all():
-                        new_question = Question.objects.create(
-                            text=question.text,
-                            options=question.options,
-                            type=question.type,
+                        new_lesson = Lesson.objects.create(
+                            course=course,
+                            name=lesson.name,
+                            status="draft",
+                            lesson_type=lesson.lesson_type,
+                            order=max_order + 1,
                         )
-                        new_feedback_lesson.questions.add(new_question)
+
+                    else:
+                        max_order = (
+                            Lesson.objects.filter(course_template=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+                        new_lesson = Lesson.objects.create(
+                            course_template=course,
+                            name=lesson.name,
+                            status="draft",
+                            lesson_type=lesson.lesson_type,
+                            order=max_order + 1,
+                        )
+                    if lesson.lesson_type == "text":
+                        TextLesson.objects.create(
+                            lesson=new_lesson,
+                            content=lesson.textlesson.content,
+                        )
+                    elif lesson.lesson_type == "video":
+                        VideoLesson.objects.create(
+                            lesson=new_lesson,
+                            video=lesson.videolesson.video,
+                        )
+                    elif lesson.lesson_type == "ppt":
+                        PdfLesson.objects.create(
+                            lesson=new_lesson,
+                            pdf=lesson.pdflesson.pdf,
+                        )
+                    elif lesson.lesson_type == "downloadable_file":
+                        DownloadableLesson.objects.create(
+                            lesson=new_lesson,
+                            file=lesson.downloadablelesson.file,
+                            description=lesson.downloadablelesson.description,
+                        )
+                    elif lesson.lesson_type == "assessment":
+                        Assessment.objects.create(lesson=new_lesson)
+                    elif lesson.lesson_type == "quiz":
+                        new_quiz_lesson = QuizLesson.objects.create(lesson=new_lesson)
+                        for question in lesson.quizlesson.questions.all():
+                            new_question = Question.objects.create(
+                                text=question.text,
+                                options=question.options,
+                                type=question.type,
+                            )
+                            new_quiz_lesson.questions.add(new_question)
+                    elif lesson.lesson_type == "feedback":
+                        unique_id = uuid.uuid4()
+                        new_feedback_lesson = FeedbackLesson.objects.create(
+                            lesson=new_lesson, unique_id=unique_id
+                        )
+                        for question in lesson.feedbacklesson.questions.all():
+                            new_question = Question.objects.create(
+                                text=question.text,
+                                options=question.options,
+                                type=question.type,
+                            )
+                            new_feedback_lesson.questions.add(new_question)
 
             return Response(
-                {"message": "Lesson duplicated Sucessfully."},
-                status=status.HTTP_200_OK,
-            )
+                    {"message": "Lesson duplicated Sucessfully."},
+                    status=status.HTTP_200_OK,
+                )
         except Exception as e:
             print(str(e))
             return Response(
