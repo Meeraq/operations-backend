@@ -5,10 +5,14 @@ from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
 from django.conf import settings
-from api.models import Coach, User, UserToken
+from api.models import Coach, User, UserToken, SessionRequestCaas, Learner
+from schedularApi.models import CoachingSession, SchedularSessions, RequestAvailibilty
 from django.utils import timezone
 from datetime import datetime
-from api.views import send_mail_templates, refresh_microsoft_access_token
+from api.views import (
+    send_mail_templates,
+    refresh_microsoft_access_token,
+)
 from datetime import timedelta
 import pytz
 
@@ -17,6 +21,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
 from courses.models import Course, Lesson, FeedbackLesson, FeedbackLessonResponse
 from django.db.models import Q
+from assessmentApi.models import Assessment, ParticipantResponse
 import environ
 from time import sleep
 import requests
@@ -41,7 +46,7 @@ def send_whatsapp_message(user_type, participant, assessment, unique_id):
         }
         participant_id = unique_id
         payload = {
-            "broadcast_name": "Testing 19th postman",
+            "broadcast_name": "send_whatsapp_message",
             "parameters": [
                 {
                     "name": "participant_name",
@@ -68,8 +73,8 @@ def send_whatsapp_message(user_type, participant, assessment, unique_id):
         return {"error": f"HTTP Error: {errh}"}, 500
     except requests.exceptions.RequestException as err:
         return {"error": f"Request Error: {err}"}, 500
-    except Exception as e:
-        return {"error": str(e)}, 500
+    except:
+        pass
 
 
 def send_whatsapp_message_template(phone, payload):
@@ -783,3 +788,493 @@ def send_feedback_lesson_reminders():
                 )
         except Exception as e_outer:
             print(f"Error processing live session: {str(e_outer)}")
+
+
+@shared_task
+def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
+    try:
+        start_timestamp, end_timestamp = get_current_date_timestamps()
+        # schedular sessions scheduled today
+        today_sessions = SchedularSessions.objects.filter(
+            availibility__start_time__lte=end_timestamp,
+            availibility__end_time__gte=start_timestamp,
+        )
+        # Format sessions coach-wise
+        coach_sessions = {}
+        for session in today_sessions:
+            coach_id = session.availibility.coach.id
+            if coach_id not in coach_sessions:
+                coach_sessions[coach_id] = []
+            coach_sessions[coach_id].append(session)
+        # Create time slots for each coach
+        for coach_id, sessions in coach_sessions.items():
+            slots = []
+            for session in sessions:
+                start_time_for_mail = datetime.fromtimestamp(
+                    (int(session.availibility.start_time) / 1000) + 19800
+                ).strftime("%I:%M %p")
+                phone = (
+                    session.availibility.coach.phone_country_code
+                    + session.availibility.coach.phone
+                )
+                coach_name = (
+                    session.availibility.coach.first_name
+                    + " "
+                    + session.availibility.coach.last_name
+                )
+                booking_id = session.availibility.coach.room_id
+                send_whatsapp_message_template(
+                    phone,
+                    {
+                        "broadcast_name": "send_coach_morning_reminder_whatsapp_message_at_8AM_seeq",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": coach_name,
+                            },
+                            {
+                                "name": "time",
+                                "value": start_time_for_mail,
+                            },
+                            {
+                                "name": "booking_id",
+                                "value": booking_id,
+                            },
+                        ],
+                        "template_name": "training_reminders_final",
+                    },
+                )
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
+    try:
+        start_timestamp, end_timestamp = get_current_date_timestamps()
+        # caas_Sessions scheduled today
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__gte=start_timestamp),
+            Q(confirmed_availability__start_time__lte=end_timestamp),
+            ~Q(status="completed"),
+        )
+        for caas_session in session_requests:
+            if caas_session.coach:
+                coach = caas_session.coach
+                coach_name = coach.first_name + " " + coach.last_name
+                phone = coach.phone_country_code + coach.phone
+                time = caas_session.confirmed_availability.start_time
+                final_time = datetime.fromtimestamp(
+                    (int(time) / 1000) + 19800
+                ).strftime("%I:%M %p")
+                booking_id = caas_session.coach.room_id
+                print(booking_id)
+                send_whatsapp_message_template(
+                    phone,
+                    {
+                        "broadcast_name": "send_coach_morning_reminder_whatsapp_message_at_8AM_caas",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": coach_name,
+                            },
+                            {
+                                "name": "time",
+                                "value": final_time,
+                            },
+                            {
+                                "name": "booking_id",
+                                "value": booking_id,
+                            },
+                        ],
+                        "template_name": "training_reminders_final",
+                    },
+                )
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_participant_morning_reminder_whatsapp_message_at_8AM_seeq():
+    try:
+        start_timestamp, end_timestamp = get_current_date_timestamps()
+        # schedular sessions scheduled today
+        today_sessions = SchedularSessions.objects.filter(
+            availibility__start_time__lte=end_timestamp,
+            availibility__end_time__gte=start_timestamp,
+        )
+        for session in today_sessions:
+            name = session.learner.name
+            phone = session.learner.phone
+            booking_id = session.availibility.coach.room_id
+            time = datetime.fromtimestamp(
+                (int(session.availibility.start_time) / 1000) + 19800
+            ).strftime("%I:%M %p")
+
+            send_whatsapp_message_template(
+                phone,
+                {
+                    "broadcast_name": "send_participant_morning_reminder_whatsapp_message_at_8AM_seeq",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value": name,
+                        },
+                        {
+                            "name": "time",
+                            "value": time,
+                        },
+                        {
+                            "name": "booking_id",
+                            "value": booking_id,
+                        },
+                    ],
+                    "template_name": "training_reminders_final",
+                },
+            )
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_participant_morning_reminder_whatsapp_message_at_8AM_caas():
+    try:
+        start_timestamp, end_timestamp = get_current_date_timestamps()
+        # caas_Sessions scheduled today
+        session_requests = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__start_time__gte=start_timestamp),
+            Q(confirmed_availability__start_time__lte=end_timestamp),
+            ~Q(status="completed"),
+        )
+        for caas_session in session_requests:
+            learner = caas_session.learner
+            learner_name = learner.name
+            phone = learner.phone
+            time = caas_session.confirmed_availability.start_time
+            final_time = datetime.fromtimestamp((int(time) / 1000) + 19800).strftime(
+                "%I:%M %p"
+            )
+            booking_id = caas_session.coach.room_id
+            send_whatsapp_message_template(
+                phone,
+                {
+                    "broadcast_name": "send_participant_morning_reminder_whatsapp_message_at_8AM_caas",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value": learner_name,
+                        },
+                        {
+                            "name": "time",
+                            "value": final_time,
+                        },
+                        {
+                            "name": "booking_id",
+                            "value": booking_id,
+                        },
+                    ],
+                    "template_name": "training_reminders_final",
+                },
+            )
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
+    try:
+        # for caas sessions
+        caas_session = SessionRequestCaas.objects.get(id=session_id)
+        if caas_session.coach:
+            coach = caas_session.coach
+            caas_coach_name = coach.first_name + " " + coach.last_name
+            caas_coach_phone = coach.phone_country_code + coach.phone
+            time = caas_session.confirmed_availability.start_time
+            caas_coach_final_time = datetime.fromtimestamp(
+                (int(time) / 1000) + 19800
+            ).strftime("%I:%M %p")
+            booking_id = caas_session.coach.room_id
+            send_whatsapp_message_template(
+                caas_coach_phone,
+                {
+                    "broadcast_name": "send_whatsapp_reminder_to_users_before_5mins_in_caas_to_coach",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value": caas_coach_name,
+                        },
+                        {
+                            "name": "time",
+                            "value": caas_coach_final_time,
+                        },
+                        {
+                            "name": "booking_id",
+                            "value": booking_id,
+                        },
+                    ],
+                    "template_name": "session_reminder_5_mins_before_final",
+                },
+            )
+        learner = caas_session.learner
+        caas_learner_name = learner.name
+        caas_learner_phone = learner.phone
+        time = caas_session.confirmed_availability.start_time
+        caas_learner_final_time = datetime.fromtimestamp(
+            (int(time) / 1000) + 19800
+        ).strftime("%I:%M %p")
+        send_whatsapp_message_template(
+            caas_learner_phone,
+            {
+                "broadcast_name": "send_whatsapp_reminder_to_users_before_5mins_in_caas_to_learner",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "value": caas_learner_name,
+                    },
+                    {
+                        "name": "time",
+                        "value": caas_learner_final_time,
+                    },
+                    {
+                        "name": "booking_id",
+                        "value": booking_id,
+                    },
+                ],
+                "template_name": "session_reminder_5_mins_before_final",
+            },
+        )
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
+    try:
+        # for seeq sessions
+        session = SchedularSessions.objects.get(id=session_id)
+        seeq_coach_start_time_for_mail = datetime.fromtimestamp(
+            (int(session.availibility.start_time) / 1000) + 19800
+        ).strftime("%I:%M %p")
+        seeq_coach_phone = (
+            session.availibility.coach.phone_country_code
+            + session.availibility.coach.phone
+        )
+        coach_name = (
+            session.availibility.coach.first_name
+            + " "
+            + session.availibility.coach.last_name
+        )
+        booking_id = session.availibility.coach.room_id
+        send_whatsapp_message_template(
+            seeq_coach_phone,
+            {
+                "broadcast_name": "send_whatsapp_message_reminder_before_5mins_to_joinees_in_seeq_to_Coach",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "value": coach_name,
+                    },
+                    {
+                        "name": "time",
+                        "value": seeq_coach_start_time_for_mail,
+                    },
+                    {
+                        "name": "booking_id",
+                        "value": booking_id,
+                    },
+                ],
+                "template_name": "session_reminder_5_mins_before_final",
+            },
+        )
+        seeq_participant_name = session.learner.name
+        seeq_participant_phone = session.learner.phone
+        seeq_participant_time = datetime.fromtimestamp(
+            (int(session.availibility.start_time) / 1000) + 19800
+        ).strftime("%I:%M %p")
+
+        send_whatsapp_message_template(
+            seeq_participant_phone,
+            {
+                "broadcast_name": "send_whatsapp_message_reminder_before_5mins_to_joinees_in_seeq_to_participant",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "value": seeq_participant_name,
+                    },
+                    {
+                        "name": "time",
+                        "value": seeq_participant_time,
+                    },
+                    {
+                        "name": "booking_id",
+                        "value": booking_id,
+                    },
+                ],
+                "template_name": "session_reminder_5_mins_before_final",
+            },
+        )
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
+    try:
+        # for seeq sessions
+        session = SchedularSessions.objects.get(id=session_id)
+        seeq_coach_start_time_for_mail = datetime.fromtimestamp(
+            (int(session.availibility.start_time) / 1000) + 19800
+        ).strftime("%I:%M %p")
+        seeq_coach_phone = (
+            session.availibility.coach.phone_country_code
+            + session.availibility.coach.phone
+        )
+        coach_name = (
+            session.availibility.coach.first_name
+            + " "
+            + session.availibility.coach.last_name
+        )
+        send_whatsapp_message_template(
+            seeq_coach_phone,
+            {
+                "broadcast_name": "send_whatsapp_reminder_to_users_after_3mins_in_seeq",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "value": coach_name,
+                    },
+                    {
+                        "name": "time",
+                        "value": seeq_coach_start_time_for_mail,
+                    },
+                ],
+                "template_name": "did_you_start_session_msg_to_coach",
+            },
+        )
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
+    try:
+        # for caas sessions
+        caas_session = SessionRequestCaas.objects.get(id=session_id)
+        if caas_session.coach:
+            coach = caas_session.coach
+            caas_coach_name = coach.first_name + " " + coach.last_name
+            caas_coach_phone = coach.phone_country_code + coach.phone
+            time = caas_session.confirmed_availability.start_time
+            caas_coach_final_time = datetime.fromtimestamp(
+                (int(time) / 1000) + 19800
+            ).strftime("%I:%M %p")
+
+            send_whatsapp_message_template(
+                caas_coach_phone,
+                {
+                    "broadcast_name": "whatsapp reminder after 3 mins",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value": caas_coach_name,
+                        },
+                        {
+                            "name": "time",
+                            "value": caas_coach_final_time,
+                        },
+                    ],
+                    "template_name": "did_you_start_session_msg_to_coach",
+                },
+            )
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def coachee_booking_reminder_whatsapp_at_8am():
+    try:
+        current_date = timezone.now().date()
+        coaching_sessions_exist = CoachingSession.objects.filter(
+            expiry_date__isnull=False, expiry_date__gt=current_date
+        )
+        for coaching_session in coaching_sessions_exist:
+            learners_in_coaching_session = coaching_session.batch.learners.all()
+            for learner in learners_in_coaching_session:
+                try:
+                    SchedularSessions.objects.get(
+                        learner=learner, coaching_session=coaching_session
+                    ).exists()
+                    print(f"Don't send WhatsApp message to {learner.name}")
+                except ObjectDoesNotExist:
+                    name = learner.name
+                    phone = learner.phone
+                    session_name = coaching_session.session_type
+                    project_name = coaching_session.batch.project.name
+                    path_parts = coaching_session.booking_link.split("/")
+                    booking_id = path_parts[-1]
+                    send_whatsapp_message_template(
+                        phone,
+                        {
+                            "broadcast_name": "coachee_booking_reminder_whatsapp_at_8am",
+                            "parameters": [
+                                {
+                                    "name": "name",
+                                    "value": name,
+                                },
+                                {
+                                    "name": "session_name",
+                                    "value": session_name,
+                                },
+                                {
+                                    "name": "project_name",
+                                    "value": project_name,
+                                },
+                                {
+                                    "name": "1",
+                                    "value": booking_id,
+                                },
+                            ],
+                            "template_name": "reminder_coachee_coaching_session",
+                        },
+                    )
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def coach_has_to_give_slots_availability_reminder():
+    try:
+        current_date = timezone.now().date()
+        for request_availability in RequestAvailibilty.objects.all():
+            coaches = request_availability.coach.all()
+            coaches_not_gave_availibility = coaches.exclude(
+                Q(id__in=request_availability.provided_by)
+                | Q(requestavailibilty__expiry_date__lte=current_date)
+            )
+            for coach in coaches_not_gave_availibility:
+                name = coach.first_name + " " + coach.last_name
+                expiry_date = request_availability.expiry_date
+                phone = coach.phone_country_code + coach.phone
+                expiry_date_string = expiry_date.strftime("%d-%m-%Y")
+                send_whatsapp_message_template(
+                    phone,
+                    {
+                        "broadcast_name": "reminder_for_coach_to_give_availability",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": name,
+                            },
+                            {
+                                "name": "date",
+                                "value": expiry_date_string,
+                            },
+                        ],
+                        "template_name": "reminder_for_coach_availability",
+                    },
+                )
+    except Exception as e:
+        print(str(e))
+   

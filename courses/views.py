@@ -24,6 +24,7 @@ from .models import (
     PdfLesson,
     File,
     DownloadableLesson,
+    ThinkificLessonCompleted,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -72,10 +73,13 @@ from openpyxl import Workbook
 from django.db.models import Max
 import environ
 import uuid
+import logging
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 env = environ.Env()
 
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 from schedularApi.models import CoachingSession, SchedularSessions
 
@@ -87,7 +91,7 @@ pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 def create_learner(learner_name, learner_email, learner_phone):
     try:
         with transaction.atomic():
-            learner_email = learner_email.strip()
+            learner_email = learner_email.strip().lower()
             temp_password = "".join(
                 random.choices(
                     string.ascii_uppercase + string.ascii_lowercase + string.digits,
@@ -123,6 +127,9 @@ def create_or_get_learner(learner_data):
         if user:
             if user.profile.roles.all().filter(name="learner").exists():
                 learner = Learner.objects.get(user=user.profile)
+                learner.name = learner_data["name"].strip()
+                learner.phone = learner_data["phone"].strip()
+                learner.save()
                 return learner
             else:
                 learner_role, created = Role.objects.get_or_create(name="learner")
@@ -598,7 +605,16 @@ def edit_feedback_lesson(request, feedback_lesson_id):
         return Response(
             {"message": "Feedback Lesson not found"}, status=status.HTTP_404_NOT_FOUND
         )
-
+    feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+        feedback_lesson=feedback_lesson
+    )
+    if feedback_lesson_response:
+        return Response(
+            {
+                "message": "Feedback editing is unavailable as responses have already been received for this lesson."
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     # Deserialize the incoming data
     data = request.data
     lesson_data = data.get("lesson")
@@ -1843,8 +1859,8 @@ def get_feedback_report(request, feedback_id):
                     # Calculate NPS
                     promoters = sum(rating >= 9 for rating in ratings)
                     detractors = sum(rating <= 6 for rating in ratings)
-                    nps = promoters - detractors
-                    data["nps"] = nps * 10
+                    nps = ((promoters - detractors) / len(ratings)) * 100
+                    data["nps"] = nps
                 else:
                     # Calculate average rating
                     data["average_rating"] = sum(ratings) / len(ratings)
@@ -2333,7 +2349,7 @@ class FeedbackEmailValidation(APIView):
             participants = lesson.course.batch.learners.all()
 
             for participant in participants:
-                if participant.email == email:
+                if participant.email.strip().lower() == email.strip().lower():
                     feedback_lesson_response = FeedbackLessonResponse.objects.filter(
                         feedback_lesson=feedback_lesson, learner__id=participant.id
                     ).first()
@@ -2396,5 +2412,182 @@ class GetFeedbackForm(APIView):
             print(str(e))
             return Response(
                 {"error": "Failed to get feedback lesson details."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class EditAllowedFeedbackLesson(APIView):
+    def get(self, request, feedback_lesson_id):
+        try:
+            feedback_lesson = FeedbackLesson.objects.get(id=feedback_lesson_id)
+            feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+                feedback_lesson=feedback_lesson
+            )
+
+            if feedback_lesson_response:
+                return Response(
+                    {
+                        "edit_allowed": False,
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+            return Response(
+                {
+                    "edit_allowed": True,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get details."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class DuplicateLesson(APIView):
+    def post(self, request):
+        try:
+            with transaction.atomic():
+                is_course_tepmlate = request.data.get("is_course_tepmlate")
+                duplicate_to_course_template_or_course_id = request.data.get(
+                    "duplicate_to_course_template_or_course_id"
+                )
+                duplicate_from_lesson_id = request.data.get("duplicate_from_lesson_id")
+                course = None
+
+                if is_course_tepmlate:
+                    course = CourseTemplate.objects.get(
+                        id=duplicate_to_course_template_or_course_id
+                    )
+                else:
+                    course = Course.objects.get(
+                        id=duplicate_to_course_template_or_course_id
+                    )
+
+                lesson = Lesson.objects.get(id=duplicate_from_lesson_id)
+                new_lesson = None
+                # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
+                if lesson.lesson_type not in [
+                    "live_session",
+                    "laser_coaching",
+                ]:
+                    if not is_course_tepmlate:
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+                        new_lesson = Lesson.objects.create(
+                            course=course,
+                            name=lesson.name,
+                            status="draft",
+                            lesson_type=lesson.lesson_type,
+                            order=max_order + 1,
+                        )
+
+                    else:
+                        max_order = (
+                            Lesson.objects.filter(course_template=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+                        new_lesson = Lesson.objects.create(
+                            course_template=course,
+                            name=lesson.name,
+                            status="draft",
+                            lesson_type=lesson.lesson_type,
+                            order=max_order + 1,
+                        )
+                    if lesson.lesson_type == "text":
+                        TextLesson.objects.create(
+                            lesson=new_lesson,
+                            content=lesson.textlesson.content,
+                        )
+                    elif lesson.lesson_type == "video":
+                        VideoLesson.objects.create(
+                            lesson=new_lesson,
+                            video=lesson.videolesson.video,
+                        )
+                    elif lesson.lesson_type == "ppt":
+                        PdfLesson.objects.create(
+                            lesson=new_lesson,
+                            pdf=lesson.pdflesson.pdf,
+                        )
+                    elif lesson.lesson_type == "downloadable_file":
+                        DownloadableLesson.objects.create(
+                            lesson=new_lesson,
+                            file=lesson.downloadablelesson.file,
+                            description=lesson.downloadablelesson.description,
+                        )
+                    elif lesson.lesson_type == "assessment":
+                        Assessment.objects.create(lesson=new_lesson)
+                    elif lesson.lesson_type == "quiz":
+                        new_quiz_lesson = QuizLesson.objects.create(lesson=new_lesson)
+                        for question in lesson.quizlesson.questions.all():
+                            new_question = Question.objects.create(
+                                text=question.text,
+                                options=question.options,
+                                type=question.type,
+                            )
+                            new_quiz_lesson.questions.add(new_question)
+                    elif lesson.lesson_type == "feedback":
+                        unique_id = uuid.uuid4()
+                        new_feedback_lesson = FeedbackLesson.objects.create(
+                            lesson=new_lesson, unique_id=unique_id
+                        )
+                        for question in lesson.feedbacklesson.questions.all():
+                            new_question = Question.objects.create(
+                                text=question.text,
+                                options=question.options,
+                                type=question.type,
+                            )
+                            new_feedback_lesson.questions.add(new_question)
+
+            return Response(
+                {"message": "Lesson duplicated Sucessfully."},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to duplicate lesson."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class LessonCompletedWebhook(APIView):
+    def post(self, request):
+        try:
+            payload = request.data.get("payload", {})
+            
+            lesson_name = payload.get("lesson", {}).get("name", "")
+            user = payload.get("user", {})
+            student_name = f"{user.get('first_name', '')} {user.get('last_name', '')}"
+            course_name = payload.get("course", {}).get("name", "")
+            completion_data = request.data
+
+            ThinkificLessonCompleted.objects.create(
+                lesson_name=lesson_name,
+                student_name=student_name,
+                course_name=course_name,
+                completion_data=completion_data,
+            )
+
+            return Response(status=status.HTTP_200_OK)
+        except KeyError as key_error:
+            # Handle KeyError (missing key in dictionary)
+            return Response(
+                {"error": f"KeyError: {str(key_error)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            # Handle other exceptions and log the error
+            logger.error(f"An error occurred: {str(e)}")
+            return Response(
+                {"error": "Failed to duplicate lesson."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
