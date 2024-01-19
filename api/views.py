@@ -669,7 +669,7 @@ def generate_room_id(email):
 def get_trimmed_emails(emails):
     res = []
     for email in emails:
-        res.append(email.strip())
+        res.append(email.strip().lower())
     return res
 
 
@@ -720,6 +720,7 @@ def add_contact_in_wati(user_type, name, phone):
         }
         response = requests.post(wati_api_url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an HTTPError for bad responses
+        print(response.json())
         return response.json()
     except Exception as e:
         pass
@@ -729,7 +730,7 @@ def add_contact_in_wati(user_type, name, phone):
 def create_pmo(request):
     # Get data from request
     name = request.data.get("name")
-    email = request.data.get("email", "").strip()
+    email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
     username = email  # username and email are the same
     password = request.data.get("password")
@@ -886,7 +887,7 @@ def update_coach_profile(request, id):
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email", "").strip()
+    new_email = mutable_data.get("email", "").strip().lower()
     #  other user exists with the new email
     if (
         new_email
@@ -1027,7 +1028,7 @@ def pmo_login(request):
 
 @api_view(["POST"])
 def coach_login(request):
-    email = request.data.get("email")
+    email = request.data.get("email").strip().lower()
     password = request.data.get("password")
 
     if email is None or password is None:
@@ -1321,7 +1322,7 @@ def create_learners(learners_data):
             learners = []
             for learner_data in learners_data:
                 # Check if username field is provided
-                email = learner_data.get("email", "").strip()
+                email = learner_data.get("email", "").strip().lower()
                 if "email" not in learner_data:
                     raise ValueError("Username field is required")
                 # Check if user already exists
@@ -1331,6 +1332,9 @@ def create_learners(learners_data):
                     learner = Learner.objects.filter(user__user=user).first()
 
                     if learner:
+                        learner.name = learner_data.get("name").strip()
+                        learner.phone = learner_data.get("phone").strip()
+                        learner.save()
                         learners.append(learner)
                         continue
                     else:
@@ -2142,7 +2146,7 @@ def add_coach(request):
     coach_id = request.data.get("coach_id")
     first_name = request.data.get("first_name")
     last_name = request.data.get("last_name")
-    email = request.data.get("email", "").strip()
+    email = request.data.get("email", "").strip().lower()
     age = request.data.get("age")
     gender = request.data.get("gender")
     domain = json.loads(request.data["domain"])
@@ -2167,7 +2171,7 @@ def add_coach(request):
     ctt_nctt = json.loads(request.data["ctt_nctt"])
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
-    username = request.data.get("email", "").strip()  # keeping username and email same
+    username = request.data.get("email", "").strip().lower()  # keeping username and email same
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
@@ -2741,7 +2745,7 @@ def update_organisation(request, org_id):
 @api_view(["POST"])
 def add_hr(request):
     try:
-        email = request.data.get("email", "").strip()
+        email = request.data.get("email", "").strip().lower()
         with transaction.atomic():
             user = User.objects.filter(email=email).first()
             if not user:
@@ -2803,7 +2807,7 @@ def update_hr(request, hr_id):
         if serializer.is_valid():
             new_email = request.data.get(
                 "email", ""
-            ).strip()  # Get the new email from the request
+            ).strip().lower()  # Get the new email from the request
             existing_user = (
                 User.objects.filter(email=new_email).exclude(username=hr.email).first()
             )
@@ -2821,7 +2825,7 @@ def update_hr(request, hr_id):
             add_contact_in_wati("hr", name, hr.phone)
 
             # if email if getting updated -> updating email in all other user present
-            if not updated_hr.email == user.email:
+            if not updated_hr.email.strip().lower() == user.email.strip().lower():
                 user.email = new_email
                 user.username = new_email
                 user.save()
@@ -4308,18 +4312,27 @@ def request_more_profiles_by_hr(request):
 def edit_learner(request):
     try:
         learner = Learner.objects.get(id=request.data.get("learner_id", ""))
-    except Project.DoesNotExist:
+    except Learner.DoesNotExist:
         return Response({"message": "Learner does not exist"}, status=400)
-    user = learner.user.user
-    user.username = request.data["email"]
-    user.email = request.data["email"]
-    user.save()
-    learner.email = request.data["email"]
+    email = request.data["email"].strip().lower()
+    existing_user = (
+        User.objects.filter(username=email)
+        .exclude(username=learner.email)
+        .first()
+    )
+    if existing_user:
+        return Response(
+            {"error": "User with this email already exists."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    learner.email = email
     learner.name = request.data["name"]
-    learner.phone = request.data["phone"]
+    learner.phone = request.data.get("phone", "")
     learner.save()
-    name = learner.name
-    add_contact_in_wati("learner", name, learner.phone)
+    if learner.phone:
+        add_contact_in_wati("learner", learner.name , learner.phone)
+
     return Response({"message": "Learner details updated.", "details": ""}, status=200)
 
 
@@ -5472,7 +5485,7 @@ def get_coachee_of_user(request, user_type, user_id):
         learners = Learner.objects.filter(
             Q(engagement__project__hr__id=user_id)
             | Q(schedularbatch__project__hr__id=user_id)
-        )
+        ).distinct()
     for learner in learners:
         learner_dict = {
             "id": learner.id,
@@ -5511,12 +5524,12 @@ def get_coachee_of_user(request, user_type, user_id):
                 courses_names.append(course_enrollment.course.name)
             learner_dict["coursesEnrolled"] = courses_names
         for project in projects:
-            project_dict = {"name": project.name, "type": "CAAS"}
+            project_dict =  { "project_id" : project.id, "name": project.name, "type": "CAAS"}
             learner_dict["organisation"].add(project.organisation.name)
             learner_dict["projects"].append(project_dict)
         if user_type == "pmo" or user_type == "hr":
             for batch in schedular_batches:
-                project_dict = {"name": batch.project.name, "type": "SEEQ"}
+                project_dict = { "project_id" : batch.project.id, "batch_id" : batch.id, "name": batch.project.name, "type": "SEEQ"}
                 learner_dict["organisation"].add(batch.project.organisation.name)
                 if project_dict["name"] not in [
                     proj["name"] for proj in learner_dict["projects"]
