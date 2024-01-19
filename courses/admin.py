@@ -19,6 +19,7 @@ from .models import (
     CourseTemplate,
     Resources,
     PdfLesson,
+    ThinkificLessonCompleted,
 )
 
 # Register your models here.
@@ -41,3 +42,4 @@ admin.site.register(VideoLesson)
 admin.site.register(CourseTemplate)
 admin.site.register(Resources)
 admin.site.register(PdfLesson)
+admin.site.register(ThinkificLessonCompleted)

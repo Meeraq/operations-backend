@@ -720,6 +720,7 @@ def add_contact_in_wati(user_type, name, phone):
         }
         response = requests.post(wati_api_url, headers=headers, json=payload)
         response.raise_for_status()  # Raise an HTTPError for bad responses
+        print(response.json())
         return response.json()
     except Exception as e:
         pass
@@ -1351,6 +1352,9 @@ def create_learners(learners_data):
                     learner = Learner.objects.filter(user__user=user).first()
 
                     if learner:
+                        learner.name = learner_data.get("name").strip()
+                        learner.phone = learner_data.get("phone").strip()
+                        learner.save()
                         learners.append(learner)
                         continue
                     else:
@@ -4326,18 +4330,27 @@ def request_more_profiles_by_hr(request):
 def edit_learner(request):
     try:
         learner = Learner.objects.get(id=request.data.get("learner_id", ""))
-    except Project.DoesNotExist:
+    except Learner.DoesNotExist:
         return Response({"message": "Learner does not exist"}, status=400)
-    user = learner.user.user
-    user.username = request.data["email"]
-    user.email = request.data["email"]
-    user.save()
-    learner.email = request.data["email"]
+    email = request.data["email"].strip().lower()
+    existing_user = (
+        User.objects.filter(username=email)
+        .exclude(username=learner.email)
+        .first()
+    )
+    if existing_user:
+        return Response(
+            {"error": "User with this email already exists."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    learner.email = email
     learner.name = request.data["name"]
-    learner.phone = request.data["phone"]
+    learner.phone = request.data.get("phone", "")
     learner.save()
-    name = learner.name
-    add_contact_in_wati("learner", name, learner.phone)
+    if learner.phone:
+        add_contact_in_wati("learner", learner.name , learner.phone)
+
     return Response({"message": "Learner details updated.", "details": ""}, status=200)
 
 
@@ -5490,7 +5503,7 @@ def get_coachee_of_user(request, user_type, user_id):
         learners = Learner.objects.filter(
             Q(engagement__project__hr__id=user_id)
             | Q(schedularbatch__project__hr__id=user_id)
-        )
+        ).distinct()
     for learner in learners:
         learner_dict = {
             "id": learner.id,
@@ -5529,12 +5542,12 @@ def get_coachee_of_user(request, user_type, user_id):
                 courses_names.append(course_enrollment.course.name)
             learner_dict["coursesEnrolled"] = courses_names
         for project in projects:
-            project_dict = {"name": project.name, "type": "CAAS"}
+            project_dict =  { "project_id" : project.id, "name": project.name, "type": "CAAS"}
             learner_dict["organisation"].add(project.organisation.name)
             learner_dict["projects"].append(project_dict)
         if user_type == "pmo" or user_type == "hr":
             for batch in schedular_batches:
-                project_dict = {"name": batch.project.name, "type": "SEEQ"}
+                project_dict = { "project_id" : batch.project.id, "batch_id" : batch.id, "name": batch.project.name, "type": "SEEQ"}
                 learner_dict["organisation"].add(batch.project.organisation.name)
                 if project_dict["name"] not in [
                     proj["name"] for proj in learner_dict["projects"]

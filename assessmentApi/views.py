@@ -218,6 +218,8 @@ def create_learner(learner_name, learner_email):
                     profile = Profile.objects.get(user=user)
                     learner_role, created = Role.objects.get_or_create(name="learner")
                     profile.roles.add(learner_role)
+                    learner.name = learner_name.strip()
+                    learner.save()
                     return learner
                 else:
                     profile = Profile.objects.get(user=user)

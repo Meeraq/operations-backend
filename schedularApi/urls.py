@@ -113,7 +113,7 @@ urlpatterns = [
         name="finalize_project_structure",
     ),
     path("send_live_session_link/", views.send_live_session_link),
-    path("send-live-session-link-whatsapp/",views.send_live_session_link_whatsapp),
+    path("send-live-session-link-whatsapp/", views.send_live_session_link_whatsapp),
     path(
         "update-session-status/<int:session_id>/",
         views.update_session_status,
@@ -153,4 +153,8 @@ urlpatterns = [
         views.get_schedular_project_updates,
     ),
     path("live-sessions/", views.get_live_sessions_by_status),
+    path(
+        "live-session/<int:pk>/",
+        views.live_session_detail_view,
+    ),
 ]
