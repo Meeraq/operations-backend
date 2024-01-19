@@ -1072,7 +1072,7 @@ class ObserverAssessment(APIView):
 
 
 class CreateParticipantResponseView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     @transaction.atomic
     def post(self, request):
