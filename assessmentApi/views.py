@@ -953,7 +953,7 @@ class AssessmentsOfParticipant(APIView):
 
 
 class QuestionsForAssessment(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request, assessment_id):
         try:
