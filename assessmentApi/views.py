@@ -74,6 +74,7 @@ import io
 from api.views import add_contact_in_wati
 from schedularApi.tasks import send_assessment_invitation_mail, send_whatsapp_message
 from django.shortcuts import render, get_object_or_404
+from courses.models import Course, Lesson, Assessment as AssessmentLesson
 
 matplotlib.use("Agg")
 env = environ.Env()
@@ -521,6 +522,29 @@ class OneQuestionnaireDetail(APIView):
         return Response(serializer.data)
 
 
+def create_pre_post_assessments(request):
+    try:
+        pre_assessment_serializer = AssessmentSerializer(
+            data=request.data["pre_assessment_data"]
+        )
+        post_assessment_serializer = AssessmentSerializer(
+            data=request.data["post_assessment_data"]
+        )
+        if (
+            pre_assessment_serializer.is_valid()
+            and post_assessment_serializer.is_valid()
+        ):
+            pre_assessment = pre_assessment_serializer.save()
+            post_assessment = post_assessment_serializer.save()
+            post_assessment.pre_assessment = pre_assessment
+            post_assessment.save()
+            print("done")
+            return True, pre_assessment.id, post_assessment.id
+        return False, None, None
+    except Exception as e:
+        return False, None, None
+
+
 class AssessmentView(APIView):
     def get(self, request):
         assessments = Assessment.objects.all()
@@ -541,20 +565,12 @@ class AssessmentView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         elif request.data["assessment_creation_type"] == "pre_post":
-            pre_assessment_serializer = AssessmentSerializer(
-                data=request.data["pre_assessment_data"]
-            )
-            post_assessment_serializer = AssessmentSerializer(
-                data=request.data["post_assessment_data"]
-            )
-            if (
-                pre_assessment_serializer.is_valid()
-                and post_assessment_serializer.is_valid()
-            ):
-                pre_assessment = pre_assessment_serializer.save()
-                post_assessment = post_assessment_serializer.save()
-                post_assessment.pre_assessment = pre_assessment
-                post_assessment.save()
+            (
+                created,
+                pre_assessment_id,
+                post_assessment_id,
+            ) = create_pre_post_assessments(request)
+            if created:
                 return Response(
                     {"message": "Assessment created successfully."},
                     status=status.HTTP_201_CREATED,
@@ -1886,6 +1902,72 @@ class AddMultipleQuestions(APIView):
             )
 
 
+def add_multiple_participants(participant, assessment_id, assessment, name_seperated):
+    if assessment.participants_observers.filter(
+        participant__email=participant["email"]
+    ).exists():
+        return Response(
+            {
+                "error": f"Participant with email {participant['email']} already exists in the assessment."
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    name = None
+    if name_seperated:
+        name = (
+            participant["first_name"].capitalize()
+            + " "
+            + participant.get("last_name", "").capitalize()
+        )
+    else:
+        name = participant["name"]
+    new_participant = create_learner(name, participant["email"])
+    if participant["phone"]:
+        new_participant.phone = participant["phone"]
+    new_participant.save()
+    mapping = ParticipantObserverMapping.objects.create(participant=new_participant)
+    if participant["phone"]:
+        add_contact_in_wati("learner", new_participant.name, new_participant.phone)
+    unique_id = uuid.uuid4()  # Generate a UUID4
+    # Creating a ParticipantUniqueId instance with a UUID as unique_id
+    unique_id_instance = ParticipantUniqueId.objects.create(
+        participant=new_participant,
+        assessment=assessment,
+        unique_id=unique_id,
+    )
+    mapping.save()
+    assessment.participants_observers.add(mapping)
+    assessment.save()
+    particpant_data = [{"name": name, "email": participant["email"]}]
+    # send_reset_password_link(particpant_data)
+    if assessment.assessment_timing == "pre":
+        post_assessment = Assessment.objects.filter(pre_assessment=assessment).first()
+        mapping = ParticipantObserverMapping.objects.create(participant=new_participant)
+        mapping.save()
+        post_assessment.participants_observers.add(mapping)
+        post_assessment.save()
+        post_unique_id = uuid.uuid4()
+        post_unique_id_instance = ParticipantUniqueId.objects.create(
+            participant=new_participant,
+            assessment=post_assessment,
+            unique_id=post_unique_id,
+        )
+    elif assessment.assessment_timing == "post":
+        pre_assessment = Assessment.objects.get(id=assessment.pre_assessment.id)
+        mapping = ParticipantObserverMapping.objects.create(participant=new_participant)
+        mapping.save()
+        pre_assessment.participants_observers.add(mapping)
+        pre_assessment.save()
+        pre_unique_id = uuid.uuid4()
+        pre_unique_id_instance = ParticipantUniqueId.objects.create(
+            participant=new_participant,
+            assessment=pre_assessment,
+            unique_id=pre_unique_id,
+        )
+    serializer = AssessmentSerializerDepthFour(assessment)
+    return serializer
+
+
 class AddMultipleParticipants(APIView):
     @transaction.atomic
     def post(self, request):
@@ -1894,76 +1976,9 @@ class AddMultipleParticipants(APIView):
             assessment_id = request.data.get("assessment_id")
             assessment = Assessment.objects.get(id=assessment_id)
             for participant in participants:
-                if assessment.participants_observers.filter(
-                    participant__email=participant["email"]
-                ).exists():
-                    return Response(
-                        {
-                            "error": f"Participant with email {participant['email']} already exists in the assessment."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                name = (
-                    participant["first_name"].capitalize()
-                    + " "
-                    + participant.get("last_name", "").capitalize()
+                serializer = add_multiple_participants(
+                    participant, assessment_id, assessment, True
                 )
-                new_participant = create_learner(name, participant["email"])
-                if participant["phone"]:
-                    new_participant.phone = participant["phone"]
-                new_participant.save()
-                mapping = ParticipantObserverMapping.objects.create(
-                    participant=new_participant
-                )
-                if participant["phone"]:
-                    add_contact_in_wati(
-                        "learner", new_participant.name, new_participant.phone
-                    )
-                unique_id = uuid.uuid4()  # Generate a UUID4
-                # Creating a ParticipantUniqueId instance with a UUID as unique_id
-                unique_id_instance = ParticipantUniqueId.objects.create(
-                    participant=new_participant,
-                    assessment=assessment,
-                    unique_id=unique_id,
-                )
-                mapping.save()
-                assessment.participants_observers.add(mapping)
-                assessment.save()
-                particpant_data = [{"name": name, "email": participant["email"]}]
-                # send_reset_password_link(particpant_data)
-                if assessment.assessment_timing == "pre":
-                    post_assessment = Assessment.objects.filter(
-                        pre_assessment=assessment
-                    ).first()
-                    mapping = ParticipantObserverMapping.objects.create(
-                        participant=new_participant
-                    )
-                    mapping.save()
-                    post_assessment.participants_observers.add(mapping)
-                    post_assessment.save()
-                    post_unique_id = uuid.uuid4()
-                    post_unique_id_instance = ParticipantUniqueId.objects.create(
-                        participant=new_participant,
-                        assessment=post_assessment,
-                        unique_id=post_unique_id,
-                    )
-                elif assessment.assessment_timing == "post":
-                    pre_assessment = Assessment.objects.get(
-                        id=assessment.pre_assessment.id
-                    )
-                    mapping = ParticipantObserverMapping.objects.create(
-                        participant=new_participant
-                    )
-                    mapping.save()
-                    pre_assessment.participants_observers.add(mapping)
-                    pre_assessment.save()
-                    pre_unique_id = uuid.uuid4()
-                    pre_unique_id_instance = ParticipantUniqueId.objects.create(
-                        participant=new_participant,
-                        assessment=pre_assessment,
-                        unique_id=pre_unique_id,
-                    )
-            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "message": "Participants added successfully.",
@@ -3747,3 +3762,72 @@ class GetAssessmentsDataForMoveParticipant(APIView):
             }
             assessment_data.append(temp_assessmeent)
         return Response(assessment_data)
+
+
+class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
+    def post(self, request):
+        try:
+            with transaction.atomic():
+                (
+                    created,
+                    pre_assessment_id,
+                    post_assessment_id,
+                ) = create_pre_post_assessments(request)
+
+                pre_assessment = Assessment.objects.get(id=pre_assessment_id)
+
+                if created:
+                    for participant_id in request.data.get("participants").get(
+                        "learners"
+                    ):
+                        participant = Learner.objects.get(id=participant_id)
+
+                        participant_object = {
+                            "name": participant.name,
+                            "email": participant.email,
+                            "phone": participant.phone,
+                        }
+                        serializer = add_multiple_participants(
+                            participant_object, pre_assessment_id, pre_assessment, False
+                        )
+
+                        course = Course.objects.get(id=request.data.get("course_id"))
+
+                        pre_assessment_lesson = None
+                        post_assessment_lesson = None
+
+                        lessons = Lesson.objects.filter(
+                            course=course, lesson_type="assessment"
+                        )
+
+                        for lesson in lessons:
+                            assessment_lesson = AssessmentLesson.objects.filter(
+                                lesson=lesson
+                            ).first()
+                            if assessment_lesson.type == "pre":
+                                assessment_lesson.assessment_modal = pre_assessment
+
+                                assessment_lesson.save()
+
+                            elif assessment_lesson.type == "post":
+                                post_assessment = Assessment.objects.get(
+                                    id=post_assessment_id
+                                )
+
+                                assessment_lesson.assessment_modal = post_assessment
+                                assessment_lesson.save()
+
+                        return Response(
+                            {
+                                "message": "Pre and Post assessment created and batch added successfully.",
+                                "assessment_data": serializer.data,
+                            },
+                            status=status.HTTP_200_OK,
+                        )
+        except Exception as e:
+            print(str(e))
+            # Handle specific exceptions if needed
+            return Response(
+                {"error": "Faliled to create assessments"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

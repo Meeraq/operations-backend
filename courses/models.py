@@ -4,6 +4,7 @@ from schedularApi.models import SchedularBatch, LiveSession, CoachingSession
 import os
 from django.core.exceptions import ValidationError
 import uuid
+from assessmentApi.models import Assessment as AssessmentModal
 
 # Create your models here.
 
@@ -111,7 +112,22 @@ class LaserCoachingSession(models.Model):
 
 
 class Assessment(models.Model):
+    ASSESSMENT_TIMING_CHOICES = [
+        ("pre", "Pre-Assessment"),
+        ("post", "Post-Assessment"),
+        ("none", "None"),
+    ]
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    type = models.CharField(
+        max_length=255, choices=ASSESSMENT_TIMING_CHOICES, default="none"
+    )
+    assessment_modal = models.ForeignKey(
+        AssessmentModal,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        related_name="assessment_modal",
+    )
 
 
 class Video(models.Model):

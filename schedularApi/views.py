@@ -77,7 +77,7 @@ from courses.models import (
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
 from courses.views import create_or_get_learner
-
+from assessmentApi.models import Assessment , ParticipantUniqueId , ParticipantObserverMapping
 from api.serializers import LearnerSerializer
 from api.views import (
     create_notification,
@@ -1947,52 +1947,80 @@ def export_available_slot(request):
 @api_view(["POST"])
 def add_participant_to_batch(request, batch_id):
     # batch_id = request.data.get("batch_id")
-    name = request.data.get("name")
-    email = request.data.get("email", "").strip().lower()
-    phone = request.data.get("phone")
-    try:
-        batch = SchedularBatch.objects.get(id=batch_id)
-    except SchedularBatch.DoesNotExist:
-        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    try:
-        learner = Learner.objects.get(email=email)
-        # Check if participant is already in the batch
-        if learner in batch.learners.all():
-            return Response(
-                {"error": "Participant already exists in the batch"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-    except Learner.DoesNotExist:
-        # Participant doesn't exist, create a new one
-        learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
-    # Add the participant to the batch
-    if learner:
-        batch.learners.add(learner)
-        batch.save()
-        name = learner.name
-        add_contact_in_wati("learner", name, learner.phone)
+    with transaction.atomic():
+        name = request.data.get("name")
+        email = request.data.get("email", "").strip().lower()
+        phone = request.data.get("phone")
         try:
-            course = Course.objects.get(batch=batch)
-            course_enrollments = CourseEnrollment.objects.filter(
-                learner=learner, course=course
-            )
-            if not course_enrollments.exists():
-                datetime = timezone.now()
-                CourseEnrollment.objects.create(
-                    learner=learner,
-                    course=course,
-                    enrollment_date=datetime,
-                )
-        except Exception:
-            # course doesnt exists
-            pass
+            batch = SchedularBatch.objects.get(id=batch_id)
+        except SchedularBatch.DoesNotExist:
+            return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        return Response(
-            {"message": "Participant added to the batch successfully"},
-            status=status.HTTP_201_CREATED,
-        )
+        assessments = Assessment.objects.filter(assessment_modal__lesson__course__batch=batch) 
+
+        
+        try:
+            learner = Learner.objects.get(email=email)
+            # Check if participant is already in the batch
+            if learner in batch.learners.all():
+                return Response(
+                    {"error": "Participant already exists in the batch"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        except Learner.DoesNotExist:
+            # Participant doesn't exist, create a new one
+            learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
+        # Add the participant to the batch
+        if learner:
+
+            for assessment in assessments:
+                # if assessment.participants_observers.filter(
+                # participant__email=learner.email
+                # ).exists():
+                #     return Response(
+                #         {"error": "Participant already exists in the assessment."},
+                #         status=status.HTTP_400_BAD_REQUEST,
+                #     )
+
+                unique_id = uuid.uuid4()      
+
+                unique_id_instance = ParticipantUniqueId.objects.create(
+                    participant=learner,
+                    assessment=assessment,
+                    unique_id=unique_id,
+                )
+
+                mapping = ParticipantObserverMapping.objects.create(participant=learner)
+
+                mapping.save()
+                assessment.participants_observers.add(mapping)
+                assessment.save()
+                
+            batch.learners.add(learner)
+            batch.save()
+            name = learner.name
+            add_contact_in_wati("learner", name, learner.phone)
+            try:
+                course = Course.objects.get(batch=batch)
+                course_enrollments = CourseEnrollment.objects.filter(
+                    learner=learner, course=course
+                )
+                if not course_enrollments.exists():
+                    datetime = timezone.now()
+                    CourseEnrollment.objects.create(
+                        learner=learner,
+                        course=course,
+                        enrollment_date=datetime,
+                    )
+            except Exception:
+                # course doesnt exists
+                pass
+
+            return Response(
+                {"message": "Participant added to the batch successfully"},
+                status=status.HTTP_201_CREATED,
+            )
     return Response(
         {"error": "Failed to add participants."},
         status=status.HTTP_400_BAD_REQUEST,
