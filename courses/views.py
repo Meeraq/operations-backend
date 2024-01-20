@@ -63,7 +63,11 @@ from schedularApi.models import (
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
 )
-from assessmentApi.models import Assessment as AssessmentModal, ParticipantResponse
+from assessmentApi.models import (
+    Assessment as AssessmentModal,
+    ParticipantResponse,
+    ParticipantUniqueId,
+)
 from rest_framework.decorators import api_view, permission_classes
 from django.db import transaction
 import random
@@ -2505,6 +2509,35 @@ class LessonCompletedWebhook(APIView):
             logger.error(f"An error occurred: {str(e)}")
             return Response(
                 {"error": "Failed to duplicate lesson."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetUniqueIdParticipantFromCourse(APIView):
+    def get(self, request, user_id, assessment_id):
+        try:
+            learner = Learner.objects.get(id=user_id)
+
+            assessment = AssessmentModal.objects.get(id=assessment_id)
+
+            participant_unique_id = ParticipantUniqueId.objects.filter(
+                participant=learner, assessment=assessment
+            ).first()
+
+            participant_response = ParticipantResponse.objects.filter(
+                participant=learner, assessment=assessment
+            ).first()
+
+            return Response(
+                {
+                    "unique_id": participant_unique_id.unique_id,
+                    "responded": bool(participant_response),
+                },
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": "Failed to get unique id."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 

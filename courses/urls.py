@@ -30,6 +30,7 @@ from .views import (
     EditAllowedFeedbackLesson,
     DuplicateLesson,
     LessonCompletedWebhook,
+    GetUniqueIdParticipantFromCourse,
     GetAssessmentsOfBatch,
 )
 import environ
@@ -286,6 +287,10 @@ urlpatterns = [
     path(
         "lesson-completed-webhook/",
         LessonCompletedWebhook.as_view(),
+    ),
+    path(
+        "get/uniqueId/participant-from-course/<int:user_id>/<int:assessment_id>/",
+        GetUniqueIdParticipantFromCourse.as_view(),
     ),
     path(
         "get-assessments-of-batch/<int:batch_id>/",
