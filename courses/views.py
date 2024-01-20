@@ -74,6 +74,8 @@ from django.db.models import Max
 import environ
 import uuid
 import logging
+from rest_framework.permissions import AllowAny, IsAuthenticated
+
 env = environ.Env()
 
 logging.basicConfig(level=logging.ERROR)
@@ -126,7 +128,7 @@ def create_or_get_learner(learner_data):
             if user.profile.roles.all().filter(name="learner").exists():
                 learner = Learner.objects.get(user=user.profile)
                 learner.name = learner_data["name"].strip()
-                learner.phone = learner_data["phone"].strip()
+                learner.phone = learner_data["phone"]
                 learner.save()
                 return learner
             else:
@@ -154,6 +156,7 @@ def create_or_get_learner(learner_data):
 
 
 class CourseListView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
 
@@ -163,6 +166,7 @@ class CourseListView(generics.ListCreateAPIView):
 
 
 class CourseTemplateListView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = CourseTemplate.objects.all()
     serializer_class = CourseTemplateSerializer
 
@@ -184,6 +188,7 @@ class CourseTemplateListView(generics.ListCreateAPIView):
 
 
 class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
 
@@ -194,6 +199,7 @@ class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class CourseTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = CourseTemplate.objects.all()
     serializer_class = CourseTemplateSerializer
 
@@ -213,6 +219,8 @@ class CourseTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class DuplicateCourseAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, course_id, *args, **kwargs):
         try:
             original_course = get_object_or_404(Course, pk=course_id)
@@ -281,6 +289,8 @@ class DuplicateCourseAPIView(APIView):
 
 
 class UpdateLessonOrder(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, *args, **kwargs):
         payload = request.data
 
@@ -301,16 +311,19 @@ class UpdateLessonOrder(APIView):
 
 
 class TextLessonCreateView(generics.CreateAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = TextLesson.objects.all()
     serializer_class = TextLessonCreateSerializer
 
 
 class TextLessonEditView(generics.RetrieveUpdateAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = TextLesson.objects.all()
     serializer_class = TextLessonCreateSerializer
 
 
 class LessonListView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = Lesson.objects.all()
     serializer_class = LessonSerializer
 
@@ -326,6 +339,7 @@ class LessonListView(generics.ListAPIView):
 
 
 class CourseTemplateLessonListView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated]
     queryset = Lesson.objects.all()
     serializer_class = LessonSerializer
 
@@ -340,6 +354,8 @@ class CourseTemplateLessonListView(generics.ListAPIView):
 
 
 class LessonDetailView(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, *args, **kwargs):
         lesson_id = self.kwargs.get("lesson_id", None)
         lesson_type = self.kwargs.get("lesson_type", None)
@@ -392,6 +408,8 @@ class LessonDetailView(generics.RetrieveAPIView):
 
 
 class DeleteLessonAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def delete(self, request, lesson_id):
         try:
             lesson = Lesson.objects.get(pk=lesson_id)
@@ -417,6 +435,7 @@ class DeleteLessonAPIView(APIView):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_quiz_lesson(request):
     # Deserialize the incoming data
     data = request.data
@@ -460,6 +479,7 @@ def create_quiz_lesson(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def edit_quiz_lesson(request, quiz_lesson_id):
     try:
         quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
@@ -530,6 +550,7 @@ def edit_quiz_lesson(request, quiz_lesson_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_feedback_lesson(request):
     # Deserialize the incoming data
     data = request.data
@@ -576,6 +597,7 @@ def create_feedback_lesson(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def edit_feedback_lesson(request, feedback_lesson_id):
     try:
         feedback_lesson = FeedbackLesson.objects.get(id=feedback_lesson_id)
@@ -655,6 +677,7 @@ def edit_feedback_lesson(request, feedback_lesson_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_lesson_with_live_session(request):
     lesson_data = request.data.get("lesson")
     live_session_data = request.data.get("live_session")
@@ -683,6 +706,7 @@ def create_lesson_with_live_session(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_live_sessions_for_lesson(request, lesson_id, course_id):
     try:
         live_sessions = LiveSessionLesson.objects.filter(
@@ -695,6 +719,7 @@ def get_live_sessions_for_lesson(request, lesson_id, course_id):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_live_session(request, course_id, lesson_id):
     try:
         lesson = Lesson.objects.get(pk=lesson_id, course__id=course_id)
@@ -730,6 +755,7 @@ def update_live_session(request, course_id, lesson_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_laser_booking_lesson(request):
     lesson_data = request.data.get("lesson")
     coaching_session_data = request.data.get("laser_coaching_session")
@@ -757,6 +783,7 @@ def create_laser_booking_lesson(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_laser_coaching_sessions(request, lesson_id, course_id):
     try:
         laser_sessions = LaserCoachingSession.objects.filter(
@@ -769,6 +796,7 @@ def get_laser_coaching_sessions(request, lesson_id, course_id):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_laser_coaching_session(request, course_id, lesson_id, session_id):
     try:
         lesson = Lesson.objects.get(course_id=course_id, id=lesson_id)
@@ -808,6 +836,7 @@ def update_laser_coaching_session(request, course_id, lesson_id, session_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_assessment_and_lesson(request):
     lesson_data = request.data.get("lesson")
     lesson_serializer = LessonSerializer(data=lesson_data)
@@ -824,6 +853,7 @@ def create_assessment_and_lesson(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_assessment_lesson(request, lesson_id):
     try:
         assessment = Assessment.objects.filter(lesson__id=lesson_id)
@@ -834,6 +864,7 @@ def get_assessment_lesson(request, lesson_id):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_assessment_lesson(request, lesson_id, session_id):
     try:
         lesson = Lesson.objects.get(id=lesson_id)
@@ -887,6 +918,7 @@ def update_assessment_lesson(request, lesson_id, session_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_course_enrollment(request, course_id, learner_id):
     try:
         course_enrollment = CourseEnrollment.objects.get(
@@ -911,6 +943,7 @@ def get_course_enrollment(request, course_id, learner_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_course_enrollment_for_pmo_preview(request, course_id):
     try:
         course = Course.objects.get(id=course_id)
@@ -932,6 +965,7 @@ def get_course_enrollment_for_pmo_preview(request, course_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_course_enrollment_for_pmo_preview_for_course_template(
     request, course_template_id
 ):
@@ -957,6 +991,7 @@ def get_course_enrollment_for_pmo_preview_for_course_template(
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_course_enrollments_of_learner(request, learner_id):
     try:
         course_enrollments = CourseEnrollment.objects.filter(
@@ -982,6 +1017,7 @@ def get_course_enrollments_of_learner(request, learner_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def submit_quiz_answers(request, quiz_lesson_id, learner_id):
     try:
         quiz_lesson = get_object_or_404(QuizLesson, id=quiz_lesson_id)
@@ -1050,6 +1086,7 @@ def calculate_quiz_result(quiz_lesson, quiz_lesson_response):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_quiz_result(request, quiz_lesson_id, learner_id):
     quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
     quiz_lesson_response = QuizLessonResponse.objects.get(
@@ -1065,18 +1102,13 @@ def get_quiz_result(request, quiz_lesson_id, learner_id):
 
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def submit_feedback_answers(request, feedback_lesson_id, learner_id):
     try:
         feedback_lesson = get_object_or_404(FeedbackLesson, id=feedback_lesson_id)
-        course_enrollment = get_object_or_404(
-            CourseEnrollment,
-            course=feedback_lesson.lesson.course,
-            learner__id=learner_id,
-        )
         learner = get_object_or_404(Learner, id=learner_id)
     except (
         FeedbackLesson.DoesNotExist,
-        CourseEnrollment.DoesNotExist,
         Learner.DoesNotExist,
     ) as e:
         return Response(
@@ -1088,14 +1120,11 @@ def submit_feedback_answers(request, feedback_lesson_id, learner_id):
 
     if serializer.is_valid():
         answers = serializer.save()
-
         feedback_lesson_response = FeedbackLessonResponse.objects.create(
             feedback_lesson=feedback_lesson, learner=learner
         )
         feedback_lesson_response.answers.set(answers)
         feedback_lesson_response.save()
-        course_enrollment.completed_lessons.append(feedback_lesson.lesson.id)
-        course_enrollment.save()
         return Response(
             {"detail": "Feedback submitted successfully"}, status=status.HTTP_200_OK
         )
@@ -1104,6 +1133,8 @@ def submit_feedback_answers(request, feedback_lesson_id, learner_id):
 
 
 class CertificateListAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, format=None):
         certificates = Certificate.objects.all()
         serializer = CertificateSerializerDepthOne(certificates, many=True)
@@ -1167,6 +1198,8 @@ class CertificateListAPIView(APIView):
 
 
 class GetFilteredCoursesForCertificate(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         certificates = Certificate.objects.all()
         all_courses = Course.objects.all()
@@ -1184,6 +1217,8 @@ class GetFilteredCoursesForCertificate(APIView):
 
 
 class AssignCoursesToCertificate(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         try:
             courses = request.data.get("courses", [])
@@ -1213,6 +1248,8 @@ class AssignCoursesToCertificate(APIView):
 
 
 class DeleteCourseFromCertificate(APIView):
+    permission_classes = [IsAuthenticated]
+
     def delete(self, request):
         try:
             course_id = request.data.get("course_id")
@@ -1243,6 +1280,8 @@ class DeleteCourseFromCertificate(APIView):
 
 
 class LessonMarkAsCompleteAndNotComplete(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         try:
             lesson_id = request.data.get("lesson_id")
@@ -1274,6 +1313,8 @@ class LessonMarkAsCompleteAndNotComplete(APIView):
 
 
 class DownloadLessonCertificate(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, lesson_id, learner_id):
         try:
             lesson = Lesson.objects.get(id=lesson_id)
@@ -1315,6 +1356,8 @@ class DownloadLessonCertificate(APIView):
 
 
 class GetCertificateForCourse(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, course_id):
         try:
             course = get_object_or_404(Course, id=course_id)
@@ -1339,6 +1382,7 @@ from .serializers import VideoSerializer  # Import your Video model serializer
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_videos(request):
     name = request.data.get("name")  # Extract 'name' from request data
     video_file = request.data.get("video")  # Extract 'video' file from request data
@@ -1365,6 +1409,7 @@ from .serializers import VideoSerializer
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_videos(request):
     videos = Video.objects.all()  # Retrieve all videos from the database
 
@@ -1383,6 +1428,7 @@ from .serializers import LessonSerializer, VideoLessonSerializer
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_video_lesson(request):
     if request.method == "POST":
         lesson_data = request.data.get("lesson")
@@ -1431,6 +1477,7 @@ from .serializers import VideoSerializer
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_videos(request):
     if request.method == "GET":
         videos = Video.objects.all()
@@ -1446,6 +1493,7 @@ from .serializers import VideoLessonSerializer, LessonSerializer
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_video_lesson(request, lesson_id):
     try:
         lesson = Lesson.objects.get(pk=lesson_id)
@@ -1491,6 +1539,7 @@ from .serializers import VideoSerializer
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_video(request, pk):
     try:
         video = Video.objects.get(pk=pk)
@@ -1505,6 +1554,8 @@ def update_video(request, pk):
 
 
 class GetLaserCoachingTime(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, laser_coaching_id, participant_email):
         try:
             laser_coaching = LaserCoachingSession.objects.get(id=laser_coaching_id)
@@ -1528,6 +1579,7 @@ class GetLaserCoachingTime(APIView):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_courses_progress(request):
     res = []
     courses = Course.objects.filter(status="public")
@@ -1565,6 +1617,7 @@ def get_all_courses_progress(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_course_progress(request, course_id):
     course_enrollments = CourseEnrollment.objects.filter(course__id=course_id)
     course_enrollments_serializer = CourseEnrollmentDepthOneSerializer(
@@ -1578,6 +1631,7 @@ def get_course_progress(request, course_id):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def course_report_download(request, course_id):
     course_enrollments = CourseEnrollment.objects.filter(course__id=course_id)
     course_enrollments_serializer = CourseEnrollmentDepthOneSerializer(
@@ -1633,6 +1687,7 @@ def course_report_download(request, course_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_quizes_report(request):
     res = []
     quizes = QuizLesson.objects.filter(
@@ -1678,6 +1733,7 @@ def get_quiz_report_data(quiz_lesson):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_quiz_report(request, quiz_id):
     quiz_lesson = QuizLesson.objects.get(id=quiz_id)
     data = get_quiz_report_data(quiz_lesson)
@@ -1685,6 +1741,7 @@ def get_quiz_report(request, quiz_id):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def quiz_report_download(request, quiz_id):
     quiz_lesson = QuizLesson.objects.get(id=quiz_id)
     quiz_data = get_quiz_report_data(quiz_lesson)
@@ -1725,6 +1782,7 @@ def quiz_report_download(request, quiz_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_feedbacks_report(request):
     res = []
     feedbacks = FeedbackLesson.objects.filter(
@@ -1763,6 +1821,7 @@ def get_all_feedbacks_report(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_feedback_report(request, feedback_id):
     try:
         feedback_lesson = FeedbackLesson.objects.get(id=feedback_id)
@@ -1812,6 +1871,8 @@ def get_feedback_report(request, feedback_id):
 
 
 class AssignCourseTemplateToBatch(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, course_template_id, batch_id):
         try:
             with transaction.atomic():
@@ -1957,6 +2018,7 @@ class AssignCourseTemplateToBatch(APIView):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_resources(request):
     resources = Resources.objects.all()
     serializer = ResourcesSerializer(resources, many=True)
@@ -1964,6 +2026,7 @@ def get_resources(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_resource(request):
     pdf_name = request.data.get("pdfName")  # Extracting pdfName from request data
     pdf_file = request.data.get("pdfFile")  # Extracting pdfFile from request data
@@ -1988,6 +2051,7 @@ def create_resource(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_pdf_lesson(request):
     try:
         lesson_data = request.data.get("lesson")
@@ -2050,6 +2114,7 @@ def create_pdf_lesson(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_pdf_lesson(request, pk):
     try:
         pdf_lesson = PdfLesson.objects.get(id=pk)
@@ -2094,6 +2159,7 @@ def update_pdf_lesson(request, pk):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_course_template_status(request):
     course_template_id = request.data.get("course_template_id")
     selected_status = request.data.get("status")
@@ -2116,6 +2182,7 @@ def update_course_template_status(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_course_status(request):
     try:
         course_id = request.data.get("course_id")
@@ -2136,6 +2203,7 @@ def update_course_status(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def lesson_update_status(request):
     if request.method == "PUT":
         serializer = LessonUpdateSerializer(data=request.data)
@@ -2165,9 +2233,12 @@ def lesson_update_status(request):
 class FileListAPIView(generics.ListAPIView):
     queryset = File.objects.all()
     serializer_class = FileSerializer
+    permission_classes = [IsAuthenticated]
 
 
 class FileUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, *args, **kwargs):
         serializer = FileSerializer(data=request.data)
         if serializer.is_valid():
@@ -2177,6 +2248,7 @@ class FileUploadView(APIView):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_file(request, file_id):
     try:
         file = File.objects.get(id=file_id)
@@ -2214,6 +2286,8 @@ def get_file_extension(url):
 
 
 class FileDownloadView(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, file_id):
         file_obj = get_object_or_404(File, id=file_id)
 
@@ -2243,54 +2317,58 @@ class FileDownloadView(APIView):
 class DownloadableLessonCreateView(generics.CreateAPIView):
     queryset = DownloadableLesson.objects.all()
     serializer_class = DownloadableLessonSerializer
+    permission_classes = [IsAuthenticated]
 
 
 class DownloadableLessonUpdateView(generics.UpdateAPIView):
     queryset = DownloadableLesson.objects.all()
     serializer_class = DownloadableLessonSerializer
+    permission_classes = [IsAuthenticated]
 
 
 class FeedbackEmailValidation(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         try:
             unique_id = request.data.get("unique_id")
-            email = request.data.get("email")
+            email = request.data.get("email").strip().lower()
 
             feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
             lesson = feedback_lesson.lesson
 
-            participants = lesson.course.batch.learners.all()
+            learner =  Learner.objects.filter(email=email).first()
+           
+            if learner:
+                
+                feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+                    feedback_lesson=feedback_lesson, learner__id=learner.id
+                ).first()
+                if not feedback_lesson_response:
+                    lesson_serializer = LessonSerializer(lesson)
+                    feedback_lesson_serializer = FeedbackLessonDepthOneSerializer(
+                        feedback_lesson
+                    )
 
-            for participant in participants:
-                if participant.email.strip().lower() == email.strip().lower():
-                    feedback_lesson_response = FeedbackLessonResponse.objects.filter(
-                        feedback_lesson=feedback_lesson, learner__id=participant.id
-                    ).first()
-                    if not feedback_lesson_response:
-                        lesson_serializer = LessonSerializer(lesson)
-                        feedback_lesson_serializer = FeedbackLessonDepthOneSerializer(
-                            feedback_lesson
-                        )
-
-                        return Response(
-                            {
-                                "message": "Validation Successful",
-                                "participant_exists": True,
-                                "lesson_details": lesson_serializer.data,
-                                "feedback_lesson_details": feedback_lesson_serializer.data,
-                                "participant_id": participant.id,
-                            },
-                            status=status.HTTP_200_OK,
-                        )
-                    else:
-                        return Response(
-                            {"error": "Already Responded."},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        )
+                    return Response(
+                        {
+                            "message": "Validation Successful",
+                            "participant_exists": True,
+                            "lesson_details": lesson_serializer.data,
+                            "feedback_lesson_details": feedback_lesson_serializer.data,
+                            "participant_id": learner.id,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                else:
+                    return Response(
+                        {"error": "Already Responded."},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
 
             return Response(
-                {"error": "Email not found in participants."},
-                status=status.HTTP_404_NOT_FOUND,
+                {"error": "User does not exist."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         except FeedbackLesson.DoesNotExist:
@@ -2307,6 +2385,8 @@ class FeedbackEmailValidation(APIView):
 
 
 class GetFeedbackForm(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, unique_id):
         try:
             feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)

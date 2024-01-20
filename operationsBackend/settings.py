@@ -273,3 +273,15 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=2, minute=30, day_of_week="*"),
     }
 }
+
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.TokenAuthentication",  # Optional
+        # Other authentication classes if needed
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
