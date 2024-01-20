@@ -1106,15 +1106,9 @@ def get_quiz_result(request, quiz_lesson_id, learner_id):
 def submit_feedback_answers(request, feedback_lesson_id, learner_id):
     try:
         feedback_lesson = get_object_or_404(FeedbackLesson, id=feedback_lesson_id)
-        course_enrollment = get_object_or_404(
-            CourseEnrollment,
-            course=feedback_lesson.lesson.course,
-            learner__id=learner_id,
-        )
         learner = get_object_or_404(Learner, id=learner_id)
     except (
         FeedbackLesson.DoesNotExist,
-        CourseEnrollment.DoesNotExist,
         Learner.DoesNotExist,
     ) as e:
         return Response(
@@ -1126,14 +1120,11 @@ def submit_feedback_answers(request, feedback_lesson_id, learner_id):
 
     if serializer.is_valid():
         answers = serializer.save()
-
         feedback_lesson_response = FeedbackLessonResponse.objects.create(
             feedback_lesson=feedback_lesson, learner=learner
         )
         feedback_lesson_response.answers.set(answers)
         feedback_lesson_response.save()
-        course_enrollment.completed_lessons.append(feedback_lesson.lesson.id)
-        course_enrollment.save()
         return Response(
             {"detail": "Feedback submitted successfully"}, status=status.HTTP_200_OK
         )
