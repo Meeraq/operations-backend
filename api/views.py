@@ -714,112 +714,25 @@ def add_contact_in_wati(user_type, name, phone):
         return response.json()
     except Exception as e:
         pass
-    
-def send_session_whatsapp_message(name,time,phone):
+
+def send_whatsapp_message_template(phone, payload):
     try:
+        if not phone:
+            return {"error": "Phone not available"}, 500
         wati_api_endpoint = env("WATI_API_ENDPOINT")
         wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url=f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
+        wati_api_url = (
+            f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
+        )
         headers = {
             "content-type": "text/json",
-            "Authorization":  wati_authorization,
-                }
-        payload = {
-            "broadcast_name": "Testing 19th postman",
-            "parameters": [
-                {
-                    "name": "name",
-                    "value": name,
-                },
-                {
-                    "name": "time",
-                    "value": time,   
-                },
-            ],
-            "template_name": "training_reminders"
+            "Authorization": wati_authorization,
         }
-
         response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()     
+        response.raise_for_status()
         return response.json(), response.status_code
-
-    except requests.exceptions.HTTPError as errh:
-        return {"error": f"HTTP Error: {errh}"}, 500
-    except requests.exceptions.RequestException as err:
-        return {"error": f"Request Error: {err}"}, 500
-    except Exception as e:
-        pass
-
-def send_whatsapp_message_reminder_after_3mins_to_coach(name,time,phone):
-    try:
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url=f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
-        headers = {
-            "content-type": "text/json",
-            "Authorization":  wati_authorization,
-                }
-        payload = {
-            "broadcast_name": "Testing 19th postman",
-            "parameters": [
-                {
-                    "name": "name",
-                    "value": name,
-                },
-                {
-                    "name": "time",
-                    "value": time,   
-                },
-            ],
-            "template_name": "did_you_start_session_msg_to_coach"
-        }
-
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()     
-        return response.json(), response.status_code
-
-    except requests.exceptions.HTTPError as errh:
-        return {"error": f"HTTP Error: {errh}"}, 500
-    except requests.exceptions.RequestException as err:
-        return {"error": f"Request Error: {err}"}, 500
     except Exception as e:
         print(str(e))
-        pass
-
-def send_whatsapp_message_reminder_before_5mins_to_joinees(name,time,phone):
-    try:
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url=f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
-        headers = {
-            "content-type": "text/json",
-            "Authorization":  wati_authorization,
-                }
-        payload = {
-            "broadcast_name": "Testing 19th postman",
-            "parameters": [
-                {
-                    "name": "name",
-                    "value": name,
-                },
-                {
-                    "name": "time",
-                    "value": time,   
-                },
-            ],
-            "template_name": "session_reminder_5_mins_before"
-        }
-
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()     
-        return response.json(), response.status_code
-
-    except requests.exceptions.HTTPError as errh:
-        return {"error": f"HTTP Error: {errh}"}, 500
-    except requests.exceptions.RequestException as err:
-        return {"error": f"Request Error: {err}"}, 500
-    except Exception as e:
-        pass
 
 
 @api_view(["POST"])

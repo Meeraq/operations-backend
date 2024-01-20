@@ -216,13 +216,21 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_participant_morning_reminder_one_day_before_email",
         "schedule": crontab(hour=3, minute=0, day_of_week="*"),
     },
-    "send_coach_morning_reminder_whatsapp_message_at_8AM":{
-        "task": "schedularApi.tasks.send_coach_morning_reminder_whatsapp_message_at_8AM",
-        "schedule": crontab(hour=2, minute=30, day_of_week="*"), 
+    "send_coach_morning_reminder_whatsapp_message_at_8AM_seeq": {
+        "task": "schedularApi.tasks.send_coach_morning_reminder_whatsapp_message_at_8AM_seeq",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
     },
-    "send_participant_morning_reminder_whatsapp_message_at_8AM":{
-        "task": "schedularApi.tasks.send_participant_morning_reminder_whatsapp_message_at_8AM",
-        "schedule": crontab(hour=2, minute=30, day_of_week="*"), 
+    "send_coach_morning_reminder_whatsapp_message_at_8AM_caas": {
+        "task": "schedularApi.tasks.send_coach_morning_reminder_whatsapp_message_at_8AM_caas",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
+    "send_participant_morning_reminder_whatsapp_message_at_8AM_seeq": {
+        "task": "schedularApi.tasks.send_participant_morning_reminder_whatsapp_message_at_8AM_seeq",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
+    "send_participant_morning_reminder_whatsapp_message_at_8AM_caas": {
+        "task": "schedularApi.tasks.send_participant_morning_reminder_whatsapp_message_at_8AM_caas",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
     },
     "send_reminder_email_to_participants_for_assessment_at_2PM": {
         "task": "schedularApi.tasks.send_reminder_email_to_participants_for_assessment_at_2PM",

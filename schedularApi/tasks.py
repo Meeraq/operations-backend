@@ -8,16 +8,15 @@ from django.conf import settings
 from api.models import Coach, User, UserToken, SessionRequestCaas
 from django.utils import timezone
 from datetime import datetime
-from api.views import send_mail_templates, refresh_microsoft_access_token
+from api.views import (
+    send_mail_templates,
+    refresh_microsoft_access_token,
+    send_whatsapp_message_template,
+)
 from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
 from django.db.models import Q
-from api.views import (
-    send_session_whatsapp_message,
-    send_whatsapp_message_reminder_before_5mins_to_joinees,
-    send_whatsapp_message_reminder_after_3mins_to_coach,
-)
 from assessmentApi.models import Assessment, ParticipantResponse
 import environ
 from time import sleep
@@ -488,7 +487,7 @@ def update_assessment_status():
 
 
 @shared_task
-def send_coach_morning_reminder_whatsapp_message_at_8AM():
+def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
     start_timestamp, end_timestamp = get_current_date_timestamps()
     # schedular sessions scheduled today
     today_sessions = SchedularSessions.objects.filter(
@@ -515,8 +514,28 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM():
                 + " "
                 + session.availibility.coach.last_name
             )
-            send_session_whatsapp_message(coach_name, start_time_for_mail, phone)
 
+            send_whatsapp_message_template(
+                phone,
+                {
+                    "broadcast_name": "send_coach_morning_reminder_whatsapp_message_at_8AM_seeq",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value": coach_name,
+                        },
+                        {
+                            "name": "time",
+                            "value": start_time_for_mail,
+                        },
+                    ],
+                    "template_name": "training_reminders",
+                },
+            )
+
+@shared_task
+def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
+    start_timestamp, end_timestamp = get_current_date_timestamps()
     # caas_Sessions scheduled today
     session_requests = SessionRequestCaas.objects.filter(
         Q(is_booked=True),
@@ -533,11 +552,27 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM():
             final_time = datetime.fromtimestamp((int(time) / 1000) + 19800).strftime(
                 "%I:%M %p"
             )
-            send_session_whatsapp_message(coach_name, final_time, phone)
+            send_whatsapp_message_template(
+                phone,
+                {
+                    "broadcast_name": "send_coach_morning_reminder_whatsapp_message_at_8AM_caas",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value": coach_name,
+                        },
+                        {
+                            "name": "time",
+                            "value": final_time,
+                        },
+                    ],
+                    "template_name": "training_reminders",
+                },
+            )
 
 
 @shared_task
-def send_participant_morning_reminder_whatsapp_message_at_8AM():
+def send_participant_morning_reminder_whatsapp_message_at_8AM_seeq():
     start_timestamp, end_timestamp = get_current_date_timestamps()
     # schedular sessions scheduled today
     today_sessions = SchedularSessions.objects.filter(
@@ -550,8 +585,28 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM():
         time = datetime.fromtimestamp(
             (int(session.availibility.start_time) / 1000) + 19800
         ).strftime("%I:%M %p")
-        send_session_whatsapp_message(name, time, phone)
 
+        send_whatsapp_message_template(
+            phone,
+            {
+                "broadcast_name": "send_participant_morning_reminder_whatsapp_message_at_8AM_seeq",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "value": name,
+                    },
+                    {
+                        "name": "time",
+                        "value": time,
+                    },
+                ],
+                "template_name": "training_reminders",
+            },
+        )
+
+@shared_task
+def send_participant_morning_reminder_whatsapp_message_at_8AM_caas():
+    start_timestamp, end_timestamp = get_current_date_timestamps()
     # caas_Sessions scheduled today
     session_requests = SessionRequestCaas.objects.filter(
         Q(is_booked=True),
@@ -567,78 +622,201 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM():
         final_time = datetime.fromtimestamp((int(time) / 1000) + 19800).strftime(
             "%I:%M %p"
         )
-        send_session_whatsapp_message(learner_name, final_time, phone)
+        send_whatsapp_message_template(
+            phone,
+            {
+                "broadcast_name": "send_participant_morning_reminder_whatsapp_message_at_8AM_caas",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "value": learner_name,
+                    },
+                    {
+                        "name": "time",
+                        "value": final_time,
+                    },
+                ],
+                "template_name": "training_reminders",
+            },
+        )
 
 
 @shared_task
 def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
-    #for caas sessions
-    caas_session=SessionRequestCaas.objects.get(id=session_id)
+    # for caas sessions
+    caas_session = SessionRequestCaas.objects.get(id=session_id)
     if caas_session.coach:
         coach = caas_session.coach
         caas_coach_name = coach.first_name + " " + coach.last_name
         caas_coach_phone = coach.phone_country_code + coach.phone
         time = caas_session.confirmed_availability.start_time
-        caas_coach_final_time = datetime.fromtimestamp((int(time) / 1000) + 19800).strftime(
-            "%I:%M %p"
-        )
-    send_whatsapp_message_reminder_before_5mins_to_joinees(caas_coach_name, caas_coach_final_time, caas_coach_phone)
+        caas_coach_final_time = datetime.fromtimestamp(
+            (int(time) / 1000) + 19800
+        ).strftime("%I:%M %p")
+
+    send_whatsapp_message_template(
+        caas_coach_phone,
+        {
+            "broadcast_name": "send_whatsapp_reminder_to_users_before_5mins_in_caas_to_coach",
+            "parameters": [
+                {
+                    "name": "name",
+                    "value": caas_coach_name,
+                },
+                {
+                    "name": "time",
+                    "value": caas_coach_final_time,
+                },
+            ],
+            "template_name": "session_reminder_5_mins_before",
+        },
+    )
     learner = caas_session.learner
     caas_learner_name = learner.name
     caas_learner_phone = learner.phone
     time = caas_session.confirmed_availability.start_time
-    caas_learner_final_time = datetime.fromtimestamp((int(time) / 1000) + 19800).strftime(
-        "%I:%M %p"
+    caas_learner_final_time = datetime.fromtimestamp(
+        (int(time) / 1000) + 19800
+    ).strftime("%I:%M %p")
+    send_whatsapp_message_template(
+        caas_learner_phone,
+        {
+            "broadcast_name": "send_whatsapp_reminder_to_users_before_5mins_in_caas_to_learner",
+            "parameters": [
+                {
+                    "name": "name",
+                    "value": caas_learner_name,
+                },
+                {
+                    "name": "time",
+                    "value": caas_learner_final_time,
+                },
+            ],
+            "template_name": "session_reminder_5_mins_before",
+        },
     )
-    send_whatsapp_message_reminder_before_5mins_to_joinees(caas_learner_name, caas_learner_final_time, caas_learner_phone)
+
 
 @shared_task
 def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
-    #for seeq sessions
+    # for seeq sessions
     session = SchedularSessions.objects.get(id=session_id)
     seeq_coach_start_time_for_mail = datetime.fromtimestamp(
         (int(session.availibility.start_time) / 1000) + 19800
     ).strftime("%I:%M %p")
-    seeq_coach_phone = session.availibility.coach.phone_country_code + session.availibility.coach.phone
+    seeq_coach_phone = (
+        session.availibility.coach.phone_country_code + session.availibility.coach.phone
+    )
     coach_name = (
         session.availibility.coach.first_name
         + " "
         + session.availibility.coach.last_name
     )
-    send_whatsapp_message_reminder_before_5mins_to_joinees(coach_name, seeq_coach_start_time_for_mail, seeq_coach_phone)
+
+    send_whatsapp_message_template(
+        seeq_coach_phone,
+        {
+            "broadcast_name": "send_whatsapp_message_reminder_before_5mins_to_joinees_in_seeq_to_Coach",
+            "parameters": [
+                {
+                    "name": "name",
+                    "value": coach_name,
+                },
+                {
+                    "name": "time",
+                    "value": seeq_coach_start_time_for_mail,
+                },
+            ],
+            "template_name": "session_reminder_5_mins_before",
+        },
+    )
     seeq_participant_name = session.learner.name
     seeq_participant_phone = session.learner.phone
     seeq_participant_time = datetime.fromtimestamp(
         (int(session.availibility.start_time) / 1000) + 19800
     ).strftime("%I:%M %p")
-    send_whatsapp_message_reminder_before_5mins_to_joinees(seeq_participant_name, seeq_participant_time, seeq_participant_phone)
+
+    send_whatsapp_message_template(
+        seeq_participant_phone,
+        {
+            "broadcast_name": "send_whatsapp_message_reminder_before_5mins_to_joinees_in_seeq_to_participant",
+            "parameters": [
+                {
+                    "name": "name",
+                    "value": seeq_participant_name,
+                },
+                {
+                    "name": "time",
+                    "value": seeq_participant_time,
+                },
+            ],
+            "template_name": "session_reminder_5_mins_before",
+        },
+    )
+
 
 @shared_task
 def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
-    #for seeq sessions
+    # for seeq sessions
     session = SchedularSessions.objects.get(id=session_id)
     seeq_coach_start_time_for_mail = datetime.fromtimestamp(
         (int(session.availibility.start_time) / 1000) + 19800
     ).strftime("%I:%M %p")
-    seeq_coach_phone = session.availibility.coach.phone_country_code + session.availibility.coach.phone
+    seeq_coach_phone = (
+        session.availibility.coach.phone_country_code + session.availibility.coach.phone
+    )
     coach_name = (
         session.availibility.coach.first_name
         + " "
         + session.availibility.coach.last_name
     )
-    send_whatsapp_message_reminder_after_3mins_to_coach(coach_name, seeq_coach_start_time_for_mail, seeq_coach_phone)
+
+    send_whatsapp_message_template(
+        seeq_coach_phone,
+        {
+            "broadcast_name": "send_whatsapp_reminder_to_users_after_3mins_in_seeq",
+            "parameters": [
+                {
+                    "name": "name",
+                    "value": coach_name,
+                },
+                {
+                    "name": "time",
+                    "value": seeq_coach_start_time_for_mail,
+                },
+            ],
+            "template_name": "did_you_start_session_msg_to_coach",
+        },
+    )
 
 
 @shared_task
 def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
-    #for caas sessions
-    caas_session=SessionRequestCaas.objects.get(id=session_id)
+    # for caas sessions
+    caas_session = SessionRequestCaas.objects.get(id=session_id)
     if caas_session.coach:
         coach = caas_session.coach
         caas_coach_name = coach.first_name + " " + coach.last_name
         caas_coach_phone = coach.phone_country_code + coach.phone
         time = caas_session.confirmed_availability.start_time
-        caas_coach_final_time = datetime.fromtimestamp((int(time) / 1000) + 19800).strftime(
-            "%I:%M %p"
+        caas_coach_final_time = datetime.fromtimestamp(
+            (int(time) / 1000) + 19800
+        ).strftime("%I:%M %p")
+
+        send_whatsapp_message_template(
+            caas_coach_phone,
+            {
+                "broadcast_name": "whatsapp reminder after 3 mins",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "value": caas_coach_name,
+                    },
+                    {
+                        "name": "time",
+                        "value": caas_coach_final_time,
+                    },
+                ],
+                "template_name": "did_you_start_session_msg_to_coach",
+            },
         )
-    send_whatsapp_message_reminder_after_3mins_to_coach(caas_coach_name, caas_coach_final_time, caas_coach_phone)
