@@ -852,7 +852,7 @@ def create_assessment_and_lesson(request):
     if lesson_serializer.is_valid():
         lesson = lesson_serializer.save()
         assessment = Assessment.objects.create(
-            lesson=lesson,
+            lesson=lesson, type = request.data.get("lesson").get("type")
         )
         return Response(
             "Assessment lesson created successfully", status=status.HTTP_201_CREATED
@@ -885,7 +885,8 @@ def update_assessment_lesson(request, lesson_id, session_id):
         )
 
     lesson_data = request.data.get("lesson")
-
+    assessment.type =  request.data.get("lesson").get("type")
+    assessment.save()
     # Check if 'lesson' data is provided in the request and update the lesson name
     if lesson_data and "name" in lesson_data:
         lesson.name = lesson_data["name"]
@@ -2221,7 +2222,7 @@ def update_course_status(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def lesson_update_status(request):
     if request.method == "PUT":
         serializer = LessonUpdateSerializer(data=request.data)
@@ -2233,6 +2234,18 @@ def lesson_update_status(request):
                 lesson = Lesson.objects.get(id=lesson_id)
                 lesson.status = status_value
                 lesson.save()
+
+                assessment = Assessment.objects.filter(lesson = lesson).first()
+
+                assessment_modal = AssessmentModal.objects.get(id = assessment.assessment_modal.id )
+
+                if lesson.status  == "draft":
+                    assessment_modal.status = "draft"
+
+                if lesson.status  == "public":
+                    assessment_modal.status = "ongoing"
+                assessment_modal.save()
+                
                 return Response(
                     {"message": f"Lesson status updated."}, status=status.HTTP_200_OK
                 )

@@ -685,7 +685,6 @@ class AssessmentView(APIView):
         )
 
 
-
 class AssessmentStatusChange(APIView):
     @transaction.atomic()
     def put(self, request):
@@ -1345,6 +1344,7 @@ def delete_participant_from_assessments(assessment, participant_id, assessment_i
 
 class DeleteParticipantFromAssessment(APIView):
     permission_classes = [IsAuthenticated]
+
     @transaction.atomic
     def delete(self, request):
         try:
@@ -3077,7 +3077,7 @@ def generate_graph_for_participant(participant, assessment_id, assessment):
                 .first()
                 .correct_answer
             )
-
+            
             if participant_response_value == int(correct_answer):
                 competency_object[question.competency.name] = (
                     competency_object[question.competency.name] + 1
@@ -3793,6 +3793,7 @@ class DownloadParticipantResponseStatusData(APIView):
 
 class GetParticipantReleasedResults(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request, assessment_id):
         try:
             participant_released_results = ParticipantReleasedResults.objects.filter(
@@ -3815,6 +3816,7 @@ class GetParticipantReleasedResults(APIView):
 
 class GetAllAssessments(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request):
         assessments = Assessment.objects.all()
         assessment_list = []
@@ -3844,6 +3846,7 @@ class GetAllAssessments(APIView):
 
 class GetOneAssessment(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request, assessment_id):
         assessment = get_object_or_404(Assessment, id=assessment_id)
         try:
@@ -3858,6 +3861,7 @@ class GetOneAssessment(APIView):
 
 class GetAssessmentsOfHr(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request, hr_id):
         assessments = Assessment.objects.filter(
             Q(hr__id=hr_id), Q(status="ongoing") | Q(status="completed")
@@ -3887,6 +3891,7 @@ class GetAssessmentsOfHr(APIView):
 
 class GetAssessmentsDataForMoveParticipant(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request):
         assessments = Assessment.objects.all()
         assessment_data = []
@@ -3905,6 +3910,7 @@ class GetAssessmentsDataForMoveParticipant(APIView):
 
 class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
         try:
             with transaction.atomic():
@@ -3949,6 +3955,13 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
 
                                 assessment_lesson.save()
 
+                                if lesson.status == "draft":
+                                    pre_assessment.status = "draft"
+
+                                if lesson.status == "public":
+                                    pre_assessment.status = "ongoing"
+                                pre_assessment.save()
+
                             elif assessment_lesson.type == "post":
                                 post_assessment = Assessment.objects.get(
                                     id=post_assessment_id
@@ -3956,6 +3969,13 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
 
                                 assessment_lesson.assessment_modal = post_assessment
                                 assessment_lesson.save()
+
+                                if lesson.status == "draft":
+                                    post_assessment.status = "draft"
+
+                                if lesson.status == "public":
+                                    post_assessment.status = "ongoing"
+                                post_assessment.save()
 
                         return Response(
                             {
