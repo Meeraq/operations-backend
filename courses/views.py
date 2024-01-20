@@ -128,7 +128,7 @@ def create_or_get_learner(learner_data):
             if user.profile.roles.all().filter(name="learner").exists():
                 learner = Learner.objects.get(user=user.profile)
                 learner.name = learner_data["name"].strip()
-                learner.phone = learner_data["phone"].strip()
+                learner.phone = learner_data["phone"]
                 learner.save()
                 return learner
             else:
