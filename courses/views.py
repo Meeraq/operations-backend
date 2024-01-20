@@ -60,6 +60,10 @@ from schedularApi.models import (
     SchedularBatch,
     LiveSession as LiveSessionSchedular,
 )
+from assessmentApi.serializers import (
+    AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
+)
+from assessmentApi.models import Assessment as AssessmentModal, ParticipantResponse
 from rest_framework.decorators import api_view, permission_classes
 from django.db import transaction
 import random
@@ -74,6 +78,7 @@ from django.db.models import Max
 import environ
 import uuid
 import logging
+
 env = environ.Env()
 
 logging.basicConfig(level=logging.ERROR)
@@ -2474,7 +2479,7 @@ class LessonCompletedWebhook(APIView):
     def post(self, request):
         try:
             payload = request.data.get("payload", {})
-            
+
             lesson_name = payload.get("lesson", {}).get("name", "")
             user = payload.get("user", {})
             student_name = f"{user.get('first_name', '')} {user.get('last_name', '')}"
@@ -2501,4 +2506,39 @@ class LessonCompletedWebhook(APIView):
             return Response(
                 {"error": "Failed to duplicate lesson."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetAssessmentsOfBatch(APIView):
+    def get(self, request, batch_id):
+        try:
+            batch = SchedularBatch.objects.get(id=batch_id)
+            assessments = AssessmentModal.objects.filter(
+                assessment_modal__lesson__course__batch=batch
+            )
+            assessment_list = []
+            for assessment in assessments:
+                total_responses_count = ParticipantResponse.objects.filter(
+                    assessment=assessment
+                ).count()
+                assessment_data = {
+                    "id": assessment.id,
+                    "name": assessment.name,
+                    "participant_view_name": assessment.participant_view_name,
+                    "assessment_type": assessment.assessment_type,
+                    "assessment_timing": assessment.assessment_timing,
+                    "assessment_start_date": assessment.assessment_start_date,
+                    "assessment_end_date": assessment.assessment_end_date,
+                    "status": assessment.status,
+                    "total_learners_count": assessment.participants_observers.count(),
+                    "total_responses_count": total_responses_count,
+                    "created_at": assessment.created_at,
+                }
+                assessment_list.append(assessment_data)
+
+            return Response(assessment_list)
+
+        except Exception as e:
+            return Response(
+                {"error": "Failed to ger data"}, status.HTTP_500_INTERNAL_SERVER_ERROR
             )

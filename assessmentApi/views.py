@@ -1232,29 +1232,25 @@ class ParticipantObserverTypeList(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class DeleteParticipantFromAssessment(APIView):
-    @transaction.atomic
-    def delete(self, request):
-        try:
-            assessment_id = request.data.get("assessment_id")
-            participant_observers = request.data.get("participant_observers")
-            assessment = Assessment.objects.get(id=assessment_id)
+def delete_participant_from_assessments(assessment, participant_id, assessment_id):
+    try:
+        with transaction.atomic():
             if assessment.assessment_timing == "pre":
                 post_assessment = Assessment.objects.filter(
                     pre_assessment=assessment
                 ).first()
                 post_assessment.participants_observers.filter(
-                    participant__id=participant_observers["participant"]["id"]
+                    participant__id=participant_id
                 ).delete()
                 participant_unique_id = ParticipantUniqueId.objects.filter(
-                    participant__id=participant_observers["participant"]["id"],
+                    participant__id=participant_id,
                     assessment=post_assessment,
                 )
                 if participant_unique_id:
                     participant_unique_id.delete()
                 post_assessment_participant_response = (
                     ParticipantResponse.objects.filter(
-                        participant__id=participant_observers["participant"]["id"],
+                        participant__id=participant_id,
                         assessment=post_assessment,
                     )
                 )
@@ -1263,17 +1259,17 @@ class DeleteParticipantFromAssessment(APIView):
             elif assessment.assessment_timing == "post":
                 pre_assessment = assessment.pre_assessment
                 pre_assessment.participants_observers.filter(
-                    participant__id=participant_observers["participant"]["id"]
+                    participant__id=participant_id
                 ).delete()
                 participant_unique_id = ParticipantUniqueId.objects.filter(
-                    participant__id=participant_observers["participant"]["id"],
+                    participant__id=participant_id,
                     assessment=pre_assessment,
                 )
                 if participant_unique_id:
                     participant_unique_id.delete()
                 pre_assessment_participant_response = (
                     ParticipantResponse.objects.filter(
-                        participant__id=participant_observers["participant"]["id"],
+                        participant__id=participant_id,
                         assessment=pre_assessment,
                     )
                 )
@@ -1281,27 +1277,50 @@ class DeleteParticipantFromAssessment(APIView):
                     pre_assessment_participant_response.delete()
 
             assessment.participants_observers.filter(
-                participant__id=participant_observers["participant"]["id"]
+                participant__id=participant_id
             ).delete()
             assessment_participant_unique_id = ParticipantUniqueId.objects.filter(
-                participant__id=participant_observers["participant"]["id"],
+                participant__id=participant_id,
                 assessment=assessment,
             )
             if assessment_participant_unique_id:
                 assessment_participant_unique_id.delete()
             assessment_participant_response = ParticipantResponse.objects.filter(
-                participant__id=participant_observers["participant"]["id"],
+                participant__id=participant_id,
                 assessment=assessment,
             )
             if assessment_participant_response:
                 assessment_participant_response.delete()
-            serializer = AssessmentSerializerDepthFour(assessment)
+
+            return True
+        return False
+    except Exception as e:
+        print(str(e))
+        return False
+
+
+class DeleteParticipantFromAssessment(APIView):
+    @transaction.atomic
+    def delete(self, request):
+        try:
+            assessment_id = request.data.get("assessment_id")
+            participant_observers = request.data.get("participant_observers")
+            assessment = Assessment.objects.get(id=assessment_id)
+            deleted = delete_participant_from_assessments(
+                assessment, participant_observers["participant"]["id"], assessment_id
+            )
+            if deleted:
+                serializer = AssessmentSerializerDepthFour(assessment)
+                return Response(
+                    {
+                        "message": "Successfully removed participant from assessments.",
+                        "assessment_data": serializer.data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
             return Response(
-                {
-                    "message": "Successfully removed participant from assessment.",
-                    "assessment_data": serializer.data,
-                },
-                status=status.HTTP_200_OK,
+                {"error": "Failed to Remove Participant"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
         except Assessment.DoesNotExist:
             return Response(

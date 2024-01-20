@@ -77,7 +77,11 @@ from courses.models import (
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
 from courses.views import create_or_get_learner
-from assessmentApi.models import Assessment , ParticipantUniqueId , ParticipantObserverMapping
+from assessmentApi.models import (
+    Assessment,
+    ParticipantUniqueId,
+    ParticipantObserverMapping,
+)
 from api.serializers import LearnerSerializer
 from api.views import (
     create_notification,
@@ -88,13 +92,13 @@ from api.views import (
 import io
 from time import sleep
 
+from assessmentApi.views import delete_participant_from_assessments
 
 # Create your views here.
 
 import environ
 
 env = environ.Env()
-
 
 
 def send_whatsapp_message_template(phone, payload):
@@ -1465,13 +1469,19 @@ def schedule_session_fixed(request):
                     [],
                 )
 
-                #WHATSAPP MESSAGE CHECK
-                
-                #before 5 mins whatsapp msg
-                start_datetime_obj = datetime.fromtimestamp(int(coach_availability.start_time)/1000) 
+                # WHATSAPP MESSAGE CHECK
+
+                # before 5 mins whatsapp msg
+                start_datetime_obj = datetime.fromtimestamp(
+                    int(coach_availability.start_time) / 1000
+                )
                 # Decrease 5 minutes
-                five_minutes_prior_start_datetime = start_datetime_obj - timedelta(minutes=5)
-                clocked = ClockedSchedule.objects.create(clocked_time=five_minutes_prior_start_datetime)
+                five_minutes_prior_start_datetime = start_datetime_obj - timedelta(
+                    minutes=5
+                )
+                clocked = ClockedSchedule.objects.create(
+                    clocked_time=five_minutes_prior_start_datetime
+                )
                 periodic_task = PeriodicTask.objects.create(
                     name=uuid.uuid1(),
                     task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_seeq",
@@ -1481,9 +1491,13 @@ def schedule_session_fixed(request):
                 )
                 periodic_task.save()
 
-                #after 3 mins whatsapp msg
-                three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(minutes=3)
-                clocked = ClockedSchedule.objects.create(clocked_time=three_minutes_ahead_start_datetime)
+                # after 3 mins whatsapp msg
+                three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(
+                    minutes=3
+                )
+                clocked = ClockedSchedule.objects.create(
+                    clocked_time=three_minutes_ahead_start_datetime
+                )
                 periodic_task = PeriodicTask.objects.create(
                     name=uuid.uuid1(),
                     task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_seeq",
@@ -1493,7 +1507,7 @@ def schedule_session_fixed(request):
                 )
                 periodic_task.save()
 
-                #WHATSAPP MESSAGE CHECK
+                # WHATSAPP MESSAGE CHECK
 
                 send_mail_templates(
                     "coach_templates/coaching_email_template.html",
@@ -1954,11 +1968,14 @@ def add_participant_to_batch(request, batch_id):
         try:
             batch = SchedularBatch.objects.get(id=batch_id)
         except SchedularBatch.DoesNotExist:
-            return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND
+            )
 
-        assessments = Assessment.objects.filter(assessment_modal__lesson__course__batch=batch) 
+        assessments = Assessment.objects.filter(
+            assessment_modal__lesson__course__batch=batch
+        )
 
-        
         try:
             learner = Learner.objects.get(email=email)
             # Check if participant is already in the batch
@@ -1970,10 +1987,11 @@ def add_participant_to_batch(request, batch_id):
 
         except Learner.DoesNotExist:
             # Participant doesn't exist, create a new one
-            learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
+            learner = create_or_get_learner(
+                {"name": name, "email": email, "phone": phone}
+            )
         # Add the participant to the batch
         if learner:
-
             for assessment in assessments:
                 # if assessment.participants_observers.filter(
                 # participant__email=learner.email
@@ -1983,7 +2001,7 @@ def add_participant_to_batch(request, batch_id):
                 #         status=status.HTTP_400_BAD_REQUEST,
                 #     )
 
-                unique_id = uuid.uuid4()      
+                unique_id = uuid.uuid4()
 
                 unique_id_instance = ParticipantUniqueId.objects.create(
                     participant=learner,
@@ -1996,7 +2014,7 @@ def add_participant_to_batch(request, batch_id):
                 mapping.save()
                 assessment.participants_observers.add(mapping)
                 assessment.save()
-                
+
             batch.learners.add(learner)
             batch.save()
             name = learner.name
@@ -2062,8 +2080,6 @@ def send_live_session_link(request):
         )
         sleep(4)
     return Response({"message": "Emails sent successfully"})
-
-
 
 
 @api_view(["POST"])
@@ -2420,6 +2436,20 @@ def delete_learner_from_course(request):
             )
             schedular_sessions.delete()
 
+            assessment = Assessment.objects.filter(
+                assessment_modal__lesson__course__batch=batch
+            ).first()
+
+            if assessment:
+                deleted = delete_participant_from_assessments(
+                    assessment, learner.id, assessment.id
+                )
+                if deleted:
+                    return Response(
+                        {
+                            "message": f"Coachee removed from batch and assessments successfully."
+                        }
+                    )
             return Response({"message": f"Coachee removed from batch successfully."})
         else:
             return Response({"message": f"Coachee is not part of batch."}, status=400)
@@ -2511,10 +2541,10 @@ def get_live_sessions_by_status(request):
         queryset = LiveSession.objects.filter(date_time__isnull=True).order_by(
             "created_at"
         )
-    
+
     else:
         queryset = LiveSession.objects.all()
-    hr_id =  request.query_params.get("hr", None)
+    hr_id = request.query_params.get("hr", None)
     if hr_id:
         queryset = queryset.filter(batch__project__hr__id=hr_id)
     res = []
