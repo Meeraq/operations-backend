@@ -2426,6 +2426,8 @@ class GetFeedbackForm(APIView):
 
 
 class EditAllowedFeedbackLesson(APIView):
+    permission_classes = [AllowAny]
+    
     def get(self, request, feedback_lesson_id):
         try:
             feedback_lesson = FeedbackLesson.objects.get(id=feedback_lesson_id)
@@ -2456,6 +2458,8 @@ class EditAllowedFeedbackLesson(APIView):
 
 
 class DuplicateLesson(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         try:
             with transaction.atomic():
@@ -2569,6 +2573,8 @@ class DuplicateLesson(APIView):
 
 
 class LessonCompletedWebhook(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         try:
             payload = request.data.get("payload", {})
@@ -2603,6 +2609,8 @@ class LessonCompletedWebhook(APIView):
 
 
 class GetUniqueIdParticipantFromCourse(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, user_id, assessment_id):
         try:
             learner = Learner.objects.get(id=user_id)
@@ -2632,6 +2640,8 @@ class GetUniqueIdParticipantFromCourse(APIView):
 
 
 class GetAssessmentsOfBatch(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, batch_id):
         try:
             batch = SchedularBatch.objects.get(id=batch_id)

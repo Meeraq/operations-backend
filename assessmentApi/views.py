@@ -2070,7 +2070,7 @@ def add_multiple_participants(participant, assessment_id, assessment, name_seper
 
 class AddMultipleParticipants(APIView):
     permission_classes = [IsAuthenticated]
-    
+
     @transaction.atomic
     def post(self, request):
         try:
@@ -3904,6 +3904,7 @@ class GetAssessmentsDataForMoveParticipant(APIView):
 
 
 class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         try:
             with transaction.atomic():
