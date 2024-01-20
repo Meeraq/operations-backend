@@ -4,6 +4,7 @@ from django.shortcuts import render
 import boto3
 import requests
 from rest_framework import generics, serializers, status
+from datetime import timedelta, time, datetime
 from .models import (
     Course,
     TextLesson,
@@ -25,6 +26,7 @@ from .models import (
     File,
     DownloadableLesson,
     ThinkificLessonCompleted,
+    Nudge,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -53,7 +55,10 @@ from .serializers import (
     LessonUpdateSerializer,
     FileSerializer,
     DownloadableLessonSerializer,
+    NudgeSerializer,
 )
+from django_celery_beat.models import PeriodicTask, ClockedSchedule
+
 from rest_framework.views import APIView
 from api.models import User, Learner, Profile, Role
 from schedularApi.models import (
@@ -74,6 +79,7 @@ from django.db.models import Max
 import environ
 import uuid
 import logging
+
 env = environ.Env()
 
 logging.basicConfig(level=logging.ERROR)
@@ -300,6 +306,24 @@ class UpdateLessonOrder(APIView):
         )
 
 
+class UpdateNudgesOrder(APIView):
+    def post(self, request, *args, **kwargs):
+        payload = request.data
+        for nudge_id, order in payload.items():
+            try:
+                nudge = Nudge.objects.get(pk=nudge_id)
+                nudge.order = order
+                nudge.save()
+            except Nudge.DoesNotExist:
+                return Response(
+                    {"error": f"Nudge with id {nudge_id} not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        return Response(
+            {"message": "Nudges orders updated successfully"}, status=status.HTTP_200_OK
+        )
+
+
 class TextLessonCreateView(generics.CreateAPIView):
     queryset = TextLesson.objects.all()
     serializer_class = TextLessonCreateSerializer
@@ -323,6 +347,68 @@ class LessonListView(generics.ListAPIView):
             queryset = queryset.filter(status=status)
 
         return queryset
+
+
+@api_view(["GET"])
+def get_nudges_and_course(request, course_id):
+    try:
+        course = Course.objects.get(id=course_id)
+        course_serializer = CourseSerializer(course)
+        nudges = Nudge.objects.filter(course=course)
+        serializer = NudgeSerializer(nudges, many=True)
+        return Response({"nudges": serializer.data, "course": course_serializer.data})
+    except Course.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(["POST"])
+def create_new_nudge(request):
+    serializer = NudgeSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+def add_nudges_date_frequency_to_course(request, course_id):
+    try:
+        course = Course.objects.get(id=course_id)
+        nudge_start_date = request.data.get("nudge_start_date")
+        nudge_frequency = request.data.get("nudge_frequency")
+        existing_nudge_start_date = course.nudge_start_date
+        course.nudge_start_date = nudge_start_date
+        course.nudge_frequency = nudge_frequency
+        course.save()
+        print(
+            existing_nudge_start_date == course.nudge_start_date,
+            course.nudge_start_date,
+            existing_nudge_start_date,
+        )
+        if (
+            existing_nudge_start_date
+            and not existing_nudge_start_date == course.nudge_start_date
+            and course.nudge_periodic_task
+        ):
+            course.nudge_periodic_task.delete()
+        else:
+            desired_time = time(18, 31)
+            datetime_comined = datetime.combine(
+                datetime.strptime(course.nudge_start_date, "%Y-%m-%d"), desired_time
+            )
+            scheduled_for = datetime_comined - timedelta(days=1)
+            clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="schedularApi.tasks.schedule_nudges",
+                args=[course.id],
+                clocked=clocked,
+                one_off=True,
+            )
+            # create a new periodic task
+        return Response({"message": "Updated successfully"}, status=201)
+    except Course.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
 
 
 class CourseTemplateLessonListView(generics.ListAPIView):
@@ -2474,7 +2560,7 @@ class LessonCompletedWebhook(APIView):
     def post(self, request):
         try:
             payload = request.data.get("payload", {})
-            
+
             lesson_name = payload.get("lesson", {}).get("name", "")
             user = payload.get("user", {})
             student_name = f"{user.get('first_name', '')} {user.get('last_name', '')}"
