@@ -78,7 +78,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import permission_classes
 
 from courses.models import Course, Lesson, Assessment as AssessmentLesson
-
+from schedularApi.models import SchedularBatch
 matplotlib.use("Agg")
 env = environ.Env()
 
@@ -3077,7 +3077,7 @@ def generate_graph_for_participant(participant, assessment_id, assessment):
                 .first()
                 .correct_answer
             )
-            
+
             if participant_response_value == int(correct_answer):
                 competency_object[question.competency.name] = (
                     competency_object[question.competency.name] + 1
@@ -3923,11 +3923,11 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                 pre_assessment = Assessment.objects.get(id=pre_assessment_id)
 
                 if created:
-                    for participant_id in request.data.get("participants").get(
-                        "learners"
-                    ):
-                        participant = Learner.objects.get(id=participant_id)
-
+                    batch = SchedularBatch.objects.get(id = request.data.get("batch_id")) 
+                    
+                    for participant in batch.learners.all():
+                        
+                        
                         participant_object = {
                             "name": participant.name,
                             "email": participant.email,
@@ -3945,11 +3945,12 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                         lessons = Lesson.objects.filter(
                             course=course, lesson_type="assessment"
                         )
-
+                        
                         for lesson in lessons:
                             assessment_lesson = AssessmentLesson.objects.filter(
                                 lesson=lesson
                             ).first()
+                           
                             if assessment_lesson.type == "pre":
                                 assessment_lesson.assessment_modal = pre_assessment
 
@@ -3977,7 +3978,7 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                                     post_assessment.status = "ongoing"
                                 post_assessment.save()
 
-                        return Response(
+                    return Response(
                             {
                                 "message": "Pre and Post assessment created and batch added successfully.",
                                 "assessment_data": serializer.data,

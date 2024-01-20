@@ -137,7 +137,7 @@ def create_or_get_learner(learner_data):
             if user.profile.roles.all().filter(name="learner").exists():
                 learner = Learner.objects.get(user=user.profile)
                 learner.name = learner_data["name"].strip()
-                learner.phone = learner_data["phone"].strip()
+                learner.phone = learner_data["phone"]
                 learner.save()
                 return learner
             else:
@@ -852,7 +852,7 @@ def create_assessment_and_lesson(request):
     if lesson_serializer.is_valid():
         lesson = lesson_serializer.save()
         assessment = Assessment.objects.create(
-            lesson=lesson, type = request.data.get("lesson").get("type")
+            lesson=lesson, type=request.data.get("lesson").get("type")
         )
         return Response(
             "Assessment lesson created successfully", status=status.HTTP_201_CREATED
@@ -885,7 +885,7 @@ def update_assessment_lesson(request, lesson_id, session_id):
         )
 
     lesson_data = request.data.get("lesson")
-    assessment.type =  request.data.get("lesson").get("type")
+    assessment.type = request.data.get("lesson").get("type")
     assessment.save()
     # Check if 'lesson' data is provided in the request and update the lesson name
     if lesson_data and "name" in lesson_data:
@@ -1948,7 +1948,10 @@ class AssignCourseTemplateToBatch(APIView):
                                 description=original_lesson.downloadablelesson.description,
                             )
                         elif original_lesson.lesson_type == "assessment":
-                            Assessment.objects.create(lesson=new_lesson)
+                            assessment = Assessment.objects.filter(lesson = original_lesson).first()
+                            Assessment.objects.create(
+                                lesson=new_lesson, type=assessment.type
+                            )
                         elif original_lesson.lesson_type == "quiz":
                             new_quiz_lesson = QuizLesson.objects.create(
                                 lesson=new_lesson
@@ -2235,17 +2238,19 @@ def lesson_update_status(request):
                 lesson.status = status_value
                 lesson.save()
 
-                assessment = Assessment.objects.filter(lesson = lesson).first()
+                assessment = Assessment.objects.filter(lesson=lesson).first()
 
-                assessment_modal = AssessmentModal.objects.get(id = assessment.assessment_modal.id )
+                assessment_modal = AssessmentModal.objects.get(
+                    id=assessment.assessment_modal.id
+                )
 
-                if lesson.status  == "draft":
+                if lesson.status == "draft":
                     assessment_modal.status = "draft"
 
-                if lesson.status  == "public":
+                if lesson.status == "public":
                     assessment_modal.status = "ongoing"
                 assessment_modal.save()
-                
+
                 return Response(
                     {"message": f"Lesson status updated."}, status=status.HTTP_200_OK
                 )
@@ -2440,7 +2445,7 @@ class GetFeedbackForm(APIView):
 
 class EditAllowedFeedbackLesson(APIView):
     permission_classes = [AllowAny]
-    
+
     def get(self, request, feedback_lesson_id):
         try:
             feedback_lesson = FeedbackLesson.objects.get(id=feedback_lesson_id)
