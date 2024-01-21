@@ -1116,15 +1116,9 @@ def get_quiz_result(request, quiz_lesson_id, learner_id):
 def submit_feedback_answers(request, feedback_lesson_id, learner_id):
     try:
         feedback_lesson = get_object_or_404(FeedbackLesson, id=feedback_lesson_id)
-        course_enrollment = get_object_or_404(
-            CourseEnrollment,
-            course=feedback_lesson.lesson.course,
-            learner__id=learner_id,
-        )
         learner = get_object_or_404(Learner, id=learner_id)
     except (
         FeedbackLesson.DoesNotExist,
-        CourseEnrollment.DoesNotExist,
         Learner.DoesNotExist,
     ) as e:
         return Response(
@@ -1136,14 +1130,11 @@ def submit_feedback_answers(request, feedback_lesson_id, learner_id):
 
     if serializer.is_valid():
         answers = serializer.save()
-
         feedback_lesson_response = FeedbackLessonResponse.objects.create(
             feedback_lesson=feedback_lesson, learner=learner
         )
         feedback_lesson_response.answers.set(answers)
         feedback_lesson_response.save()
-        course_enrollment.completed_lessons.append(feedback_lesson.lesson.id)
-        course_enrollment.save()
         return Response(
             {"detail": "Feedback submitted successfully"}, status=status.HTTP_200_OK
         )
@@ -2368,43 +2359,43 @@ class FeedbackEmailValidation(APIView):
     def post(self, request):
         try:
             unique_id = request.data.get("unique_id")
-            email = request.data.get("email")
+            email = request.data.get("email").strip().lower()
 
             feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
             lesson = feedback_lesson.lesson
 
-            participants = lesson.course.batch.learners.all()
+            learner =  Learner.objects.filter(email=email).first()
+           
+            if learner:
+                
+                feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+                    feedback_lesson=feedback_lesson, learner__id=learner.id
+                ).first()
+                if not feedback_lesson_response:
+                    lesson_serializer = LessonSerializer(lesson)
+                    feedback_lesson_serializer = FeedbackLessonDepthOneSerializer(
+                        feedback_lesson
+                    )
 
-            for participant in participants:
-                if participant.email.strip().lower() == email.strip().lower():
-                    feedback_lesson_response = FeedbackLessonResponse.objects.filter(
-                        feedback_lesson=feedback_lesson, learner__id=participant.id
-                    ).first()
-                    if not feedback_lesson_response:
-                        lesson_serializer = LessonSerializer(lesson)
-                        feedback_lesson_serializer = FeedbackLessonDepthOneSerializer(
-                            feedback_lesson
-                        )
-
-                        return Response(
-                            {
-                                "message": "Validation Successful",
-                                "participant_exists": True,
-                                "lesson_details": lesson_serializer.data,
-                                "feedback_lesson_details": feedback_lesson_serializer.data,
-                                "participant_id": participant.id,
-                            },
-                            status=status.HTTP_200_OK,
-                        )
-                    else:
-                        return Response(
-                            {"error": "Already Responded."},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        )
+                    return Response(
+                        {
+                            "message": "Validation Successful",
+                            "participant_exists": True,
+                            "lesson_details": lesson_serializer.data,
+                            "feedback_lesson_details": feedback_lesson_serializer.data,
+                            "participant_id": learner.id,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                else:
+                    return Response(
+                        {"error": "Already Responded."},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
 
             return Response(
-                {"error": "Email not found in participants."},
-                status=status.HTTP_404_NOT_FOUND,
+                {"error": "User does not exist."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         except FeedbackLesson.DoesNotExist:
