@@ -125,6 +125,11 @@ urlpatterns = [
         name="project_report_download",
     ),
     path(
+        "project-report-download-session-wise/<int:project_id>/<str:batch_id>/",
+        views.project_report_download_session_wise,
+        name="project_report_download_session_wise",
+    ),
+    path(
         "add-facilitator/",
         views.addFacilitator,
     ),

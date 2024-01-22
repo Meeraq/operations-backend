@@ -76,8 +76,9 @@ from courses.models import (
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
+from django.core.serializers import serialize
 from courses.views import create_or_get_learner
-
+from io import BytesIO
 from api.serializers import LearnerSerializer
 from api.views import (
     create_notification,
@@ -980,9 +981,9 @@ def add_batch(request, project_id):
 
         # Check if participant with the same email exists
         learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
-
-        name = learner.name
-        add_contact_in_wati("learner", name, learner.phone)
+        if learner:
+            name = learner.name
+            add_contact_in_wati("learner", name, learner.phone)
 
         # Add participant to the batch if not already added
         if learner and learner not in batch.learners.all():
@@ -2151,6 +2152,130 @@ def project_report_download(request, project_id):
             df.to_excel(writer, sheet_name=batch_name, index=False)
 
     return response
+
+
+@api_view(["GET"])
+def project_report_download_session_wise(request, project_id,batch_id):
+    if batch_id:
+        batch = get_object_or_404(SchedularBatch, pk=batch_id)
+        project = batch.project
+    live_sessions = LiveSession.objects.filter(batch__project=project)
+    # coaching_sessions = CoachingSession.objects.filter(batch__project=project)
+    # sessions = list(live_sessions) + list(coaching_sessions)
+    # sessions = list(live_sessions) + list(coaching_sessions)
+    # sorted_sessions = sorted(sessions, key=lambda x: x.order)
+    # print("sorted_sessions",sorted_sessions)
+    dfs = []
+    for session in live_sessions:
+        print("sess", session)
+        data = {
+            "Participant name": [],
+            "Attended or Not": [],
+        }
+        for learner in session.batch.learners.all():
+            # attended = learner.id in session.attendees
+            participant_name=learner.name
+            if learner.id in session.attendees:
+                attendance="YES"
+            else:
+                attendance="NO"
+        data["Participant name"].append(participant_name)
+        data["Attended or Not"].append(attendance)
+        session_name = f"Coaching Session {session.order}"
+        df = pd.DataFrame(data)
+        dfs.append((session_name, df))
+
+    response = HttpResponse(content_type="application/ms-excel")
+    response[
+        "Content-Disposition"
+    ] = f'attachment; filename="{project.name}_batches.xlsx"'
+
+    with pd.ExcelWriter(response, engine="openpyxl") as writer:
+        for project.name, df in dfs:
+            df.to_excel(writer, sheet_name=project.name, index=False)
+
+    return response
+    #         data = {
+    #             "Participant name": learner.name,
+    #             "Attended or Not": "Attended" if attended else "Not Attended",
+    #         }
+    #         session_data.append(data)
+
+    # #     # Convert the list of dictionaries for the current session to a DataFrame
+    #     df_session = pd.DataFrame(session_data)
+
+    # #     # Append the DataFrame to the list of DataFrames
+    #     dfs.append((session.live_session_number, df_session))
+    #     print("dfs",dfs)
+    # response = HttpResponse(content_type="application/ms-excel")
+    # response[
+    #     "Content-Disposition"
+    # ] = f'attachment; filename="{project.name}.xlsx"'
+
+    # with pd.ExcelWriter(response, engine="openpyxl") as writer:
+    #     for session_number, df in dfs:
+    #         df.to_excel(writer, sheet_name=f"Session_{session_number}", index=False)
+
+    # return response
+
+    # excel_buffer = BytesIO()
+    # excel_writer = pd.ExcelWriter(excel_buffer, engine='openpyxl')
+
+    # # Write each DataFrame to a separate sheet in the Excel file
+    # for sheet_name, df_session in dfs:
+    #     df_session.to_excel(excel_writer, index=False, sheet_name=f'Session_{sheet_name}')
+
+    # # Save the Excel file to the BytesIO buffer
+    # excel_writer.save()
+    # excel_buffer.seek(0)
+
+    # # Prepare the response
+    # response = HttpResponse(excel_buffer.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    # response['Content-Disposition'] = 'attachment; filename="attendance_report.xlsx"'
+
+    # return response
+        # if isinstance(session, LiveSession):
+            # session_name = f"Live Session {session.live_session_number}"
+            # learners=session.batch.learners.all()
+            # for learner in learners:
+            #     if 
+            # partcipant_name=session.batch.learners.name
+            # print("participant in live session",partcipant_name)
+            # attendance = len(session.attendees)
+        # elif isinstance(session, CoachingSession):
+        #     session_name = f"Coaching Session {session.coaching_session_number}"
+        #     schedular_sessions = SchedularSessions.objects.filter(
+        #             coaching_session=session.coaching_session
+        #         )
+        #     not_booked = []
+        #     learners=session.batch.learners.all()
+        #     for learner in learners:
+        #         try:
+        #             schedular_session_exists = SchedularSessions.objects.get(
+        #             learner=learner,
+        #             coaching_session=session)
+
+        #         except SchedularSessions.DoesNotExist:
+        #             not_booked.append(learner)
+        #         print("not_booked",not_booked)
+
+        # else:
+        #     partcipant_name = ""
+        #     attendance = ""
+        # data["Participant name"].append(participant_name)
+        # data["Attended or Not"].append(attendance)
+    #     df = pd.DataFrame(data)
+    #     dfs.append((session_name, df))
+    # response = HttpResponse(content_type="application/ms-excel")
+    # response[
+    #     "Content-Disposition"
+    # ] = f'attachment; filename="{project.name}_session.xlsx"'
+
+    # with pd.ExcelWriter(response, engine="openpyxl") as writer:
+    #     for session_name, df in dfs:
+    #         df.to_excel(writer, sheet_name=session_name, index=False)
+    # return response
+
 
 
 @api_view(["POST"])
