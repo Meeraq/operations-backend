@@ -10,6 +10,7 @@ from .models import (
     RequestAvailibilty,
     SchedularSessions,
     Facilitator,
+    SchedularUpdate,
 )
 from api.models import Coach
 
@@ -145,6 +146,18 @@ class FacilitatorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilitator
         fields = "__all__"
+
+class UpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularUpdate
+        fields = "__all__"
+
+
+class SchedularUpdateDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularUpdate
+        fields = "__all__"
+        depth = 1
 
 
 class FacilitatorDepthOneSerializer(serializers.ModelSerializer):

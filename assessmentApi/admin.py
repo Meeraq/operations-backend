@@ -11,7 +11,9 @@ from .models import (
     ParticipantObserverType,
     ObserverUniqueId,
     Behavior,
-    AssessmentNotification
+    AssessmentNotification,
+    ParticipantUniqueId,
+    ParticipantReleasedResults,
 )
 
 # Register your models here.
@@ -29,4 +31,5 @@ admin.site.register(ParticipantObserverType)
 admin.site.register(ObserverUniqueId)
 admin.site.register(Behavior)
 admin.site.register(AssessmentNotification)
-
+admin.site.register(ParticipantUniqueId)
+admin.site.register(ParticipantReleasedResults)

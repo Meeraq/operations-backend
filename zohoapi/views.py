@@ -10,7 +10,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from api.models import Coach, OTP, UserLoginActivity
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
@@ -406,6 +406,7 @@ def login_view(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_purchase_orders(request, vendor_id):
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_data:
@@ -429,6 +430,7 @@ def get_purchase_orders(request, vendor_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_invoices_with_status(request, vendor_id, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -467,6 +469,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_purchase_order_data(request, purchaseorder_id):
     access_token_purchase_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_order:
@@ -499,6 +502,7 @@ def get_purchase_order_data(request, purchaseorder_id):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def get_purchase_order_data_pdf(request, purchaseorder_id):
     access_token_purchase_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_order:
@@ -538,6 +542,7 @@ def get_line_items_for_template(line_items):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_invoice_data(request):
     invoices = InvoiceData.objects.filter(
         vendor_id=request.data["vendor_id"],
@@ -574,7 +579,7 @@ def add_invoice_data(request):
             "due_date": due_date,
             "line_items": line_items,
         }
-        
+
         send_mail_templates_with_attachment(
             "invoice_pdf.html",
             [env("FINANCE_EMAIL")],
@@ -588,6 +593,7 @@ def add_invoice_data(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def edit_invoice(request, invoice_id):
     invoice = get_object_or_404(InvoiceData, id=invoice_id)
     if (
@@ -599,7 +605,7 @@ def edit_invoice(request, invoice_id):
     ):
         return Response({"error": "Invoice already exists with the invoice number"})
     serializer = InvoiceDataEditSerializer(data=request.data, instance=invoice)
-   
+
     if serializer.is_valid():
         serializer.save()
         line_items = serializer.data["line_items"]
@@ -638,6 +644,7 @@ def edit_invoice(request, invoice_id):
 
 
 @api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
 def delete_invoice(request, invoice_id):
     try:
         invoice = get_object_or_404(InvoiceData, id=invoice_id)
@@ -650,6 +657,7 @@ def delete_invoice(request, invoice_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_purchase_order_and_invoices(request, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -677,6 +685,7 @@ def get_purchase_order_and_invoices(request, purchase_order_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_bank_account_data(
     request,
     vendor_id,
@@ -723,6 +732,7 @@ def get_bank_account_data(
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def get_vendor_exists_and_not_existing_emails(request):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -755,6 +765,7 @@ def get_vendor_exists_and_not_existing_emails(request):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def import_invoices_from_zoho(request):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -843,6 +854,7 @@ def import_invoices_from_zoho(request):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def export_invoice_data(request):
     # Retrieve all InvoiceData objects
     queryset = InvoiceData.objects.all()
@@ -922,6 +934,8 @@ def export_invoice_data(request):
 
 
 class DownloadInvoice(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, record_id):
         try:
             invoice = get_object_or_404(InvoiceData, id=record_id)
@@ -939,21 +953,24 @@ class DownloadInvoice(APIView):
                 "due_date": due_date,
                 "line_items": line_items,
             }
-            image_base64=None
+            image_base64 = None
             try:
                 image_url = f"{invoice_data['signature']}"
-            
+
                 # Attempt to send the email
                 image_response = requests.get(image_url)
-            
+
                 image_response.raise_for_status()
-                
+
                 # Convert the downloaded image to base64
                 image_base64 = base64.b64encode(image_response.content).decode("utf-8")
             except Exception as e:
                 pass
-            
-            email_message = render_to_string("invoice_pdf.html", {"invoice":invoice_data,"image_base64":image_base64})
+
+            email_message = render_to_string(
+                "invoice_pdf.html",
+                {"invoice": invoice_data, "image_base64": image_base64},
+            )
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
             response = HttpResponse(pdf, content_type="application/pdf")
             response[

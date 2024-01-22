@@ -47,6 +47,8 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
 def password_reset_token_created(
     sender, instance, reset_password_token, *args, **kwargs
 ):
+    app_name = instance.request.data.get("app_name", "")
+    print("app", app_name)
     user = reset_password_token.user
     email_plaintext_message = "{}?token={}".format(
         reverse("password_reset:reset-password-request"), reset_password_token.key
@@ -57,7 +59,13 @@ def password_reset_token_created(
         and user.profile.roles.all().first().name == "coach"
         and user.profile.coach.is_approved == False
     ):
-        link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
+        # link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
+        if app_name == "assessment":
+            link = f"{env('ASSESSMENT_APP_URL')}/create-password/{reset_password_token.key}"
+            print("working")
+        else:
+            link = f"{env('APP_URL')}/create-password/{reset_password_token.key}"
+            print("not working")
         name = user.profile.coach.first_name
         send_mail_templates(
             "coach_templates/create_new_password.html",
@@ -84,7 +92,13 @@ def password_reset_token_created(
             if projects.exists():
                 return None
         name = "User"
-        link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
+        # link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
+        if app_name == "assessment":
+            link = f"{env('ASSESSMENT_APP_URL')}/create-password/{reset_password_token.key}"
+            print("working")
+        else:
+            link = f"{env('APP_URL')}/create-password/{reset_password_token.key}"
+            print("not working")
         send_mail_templates(
             "hr_emails/forgot_password.html",
             [reset_password_token.user.email],
@@ -282,6 +296,7 @@ class Project(models.Model):
     )
     coach_consent_mandatory = models.BooleanField(default=True)
     enable_emails_to_hr_and_coachee = models.BooleanField(default=True)
+    masked_coach_profile = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_at"]

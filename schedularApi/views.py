@@ -24,10 +24,12 @@ from openpyxl import Workbook
 from django.http import HttpResponse
 import pandas as pd
 from django.db.models import Q
+from time import sleep
 import json
-from api.views import get_date, get_time
+from django.core.exceptions import ObjectDoesNotExist
+from api.views import get_date, get_time, add_contact_in_wati
 from django.shortcuts import render
-from api.models import Organisation, HR, Coach, User, Profile, Learner, Role, UserToken
+from api.models import Organisation, HR, Coach, User, Profile, Learner, Pmo, Role, UserToken
 from .serializers import (
     SchedularProjectSerializer,
     SchedularBatchSerializer,
@@ -49,6 +51,8 @@ from .serializers import (
     RequestAvailibiltySerializerDepthOne,
     RequestAvailibiltySerializer,
     FacilitatorSerializer,
+    UpdateSerializer,
+    SchedularUpdateDepthOneSerializer,
     FacilitatorBasicDetailsSerializer,
     SchedularBatchDepthSerializer,
 )
@@ -63,14 +67,30 @@ from .models import (
     RequestAvailibilty,
     SchedularSessions,
     Facilitator,
+    SchedularBatch,
+    SchedularUpdate,
+    CalendarInvites,
+)
+
+from courses.models import (
+    FeedbackLessonResponse,
+    QuizLessonResponse,
+    FeedbackLesson,
+    QuizLesson,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
 from courses.views import create_or_get_learner
 
 from api.serializers import LearnerSerializer
-from api.views import create_notification, send_mail_templates
+from api.views import (
+    create_notification,
+    send_mail_templates,
+    create_outlook_calendar_invite,
+    delete_outlook_calendar_invite,
+)
 import io
+from time import sleep
 from django.utils.module_loading import import_string
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.views.decorators.debug import sensitive_variables
@@ -81,6 +101,26 @@ from django.views.decorators.debug import sensitive_variables
 import environ
 
 env = environ.Env()
+
+
+def send_whatsapp_message_template(phone, payload):
+    try:
+        if not phone:
+            return {"error": "Phone not available"}, 500
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = (
+            f"{wati_api_endpoint}/api/v1/sendTemplateMessage?whatsappNumber={phone}"
+        )
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json(), response.status_code
+    except Exception as e:
+        print(str(e))
 
 
 def load_backend(path):
@@ -175,6 +215,7 @@ def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_project_schedular(request):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_name"]
@@ -223,7 +264,7 @@ def create_project_schedular(request):
     #     print(f"Error occurred while creating notification: {str(e)}")
     # return Response({"message": "Project created succesfully"}, status=200)
     try:
-        path = f"/projects/caas/progress/{schedularProject.id}"
+        path = ""
         message = f"A new project - {schedularProject.name} has been created for the organisation - {schedularProject.organisation.name}"
         for hr_member in schedularProject.hr.all():
             create_notification(hr_member.user.user, path, message)
@@ -236,9 +277,17 @@ def create_project_schedular(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_Schedular_Projects(request):
     projects = SchedularProject.objects.all()
     serializer = SchedularProjectSerializer(projects, many=True)
+    for project_data in serializer.data:
+        latest_update = (
+            SchedularUpdate.objects.filter(project__id=project_data["id"])
+            .order_by("-created_at")
+            .first()
+        )
+        project_data["latest_update"] = latest_update.message if latest_update else None
     return Response(serializer.data, status=200)
 
 
@@ -327,6 +376,7 @@ def get_all_Schedular_Projects(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_project_structure(request, project_id):
     try:
         project = get_object_or_404(SchedularProject, id=project_id)
@@ -351,6 +401,7 @@ def create_project_structure(request, project_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_schedular_batches(request):
     try:
         project_id = request.GET.get("project_id")
@@ -365,6 +416,7 @@ def get_schedular_batches(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_schedular_project(request, project_id):
     try:
         project = get_object_or_404(SchedularProject, id=project_id)
@@ -452,6 +504,7 @@ def generate_slots(start, end, duration):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_batch_calendar(request, batch_id):
     try:
         live_sessions = LiveSession.objects.filter(batch__id=batch_id)
@@ -529,6 +582,7 @@ def get_batch_calendar(request, batch_id):
                 "participants": participants_serializer.data,
                 "coaches": coaches_serializer.data,
                 "course": course_serailizer.data if course else None,
+                "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
             }
         )
@@ -539,6 +593,7 @@ def get_batch_calendar(request, batch_id):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_live_session(request, live_session_id):
     try:
         live_session = LiveSession.objects.get(id=live_session_id)
@@ -546,15 +601,104 @@ def update_live_session(request, live_session_id):
         return Response(
             {"error": "LiveSession not found"}, status=status.HTTP_404_NOT_FOUND
         )
-
+    existing_date_time = live_session.date_time
     serializer = LiveSessionSerializer(live_session, data=request.data, partial=True)
     if serializer.is_valid():
-        serializer.save()
+        update_live_session = serializer.save()
+        current_time = timezone.now()
+        if update_live_session.date_time > current_time:
+            try:
+                scheduled_for = update_live_session.date_time - timedelta(minutes=30)
+                clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
+                # time is utc one here
+                periodic_task = PeriodicTask.objects.create(
+                    name=f"send_whatsapp_reminder_30_min_before_live_session_{uuid.uuid1()}",
+                    task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
+                    args=[update_live_session.id],
+                    clocked=clocked,
+                    one_off=True,
+                )
+                periodic_task.save()
+                if update_live_session.pt_30_min_before:
+                    update_live_session.delete()
+                live_session.pt_30_min_before = periodic_task
+                live_session.save()
+            except Exception as e:
+                # Handle any exceptions that may occur during task creation
+                print(str(e))
+                pass
+        # skipping the calendar invites, dont remove the below calendar invite, can be used in the future.
+        return Response(serializer.data)
+        # Calendar invites
+        try:
+            learners = live_session.batch.learners.all()
+            attendees = list(
+                map(
+                    lambda learner: {
+                        "emailAddress": {
+                            "name": learner.name,
+                            "address": learner.email,
+                        },
+                        "type": "required",
+                    },
+                    learners,
+                )
+            )
+
+            start_time_stamp = update_live_session.date_time.timestamp() * 1000
+            end_time_stamp = (
+                start_time_stamp + int(update_live_session.duration) * 60000
+            )
+            start_datetime_obj = datetime.fromtimestamp(
+                int(start_time_stamp) / 1000
+            ) + timedelta(hours=5, minutes=30)
+            start_datetime_str = start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
+            description = (
+                f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
+                + update_live_session.description
+            )
+            if not existing_date_time:
+                create_outlook_calendar_invite(
+                    "Meeraq - Live Session",
+                    description,
+                    start_time_stamp,
+                    end_time_stamp,
+                    attendees,
+                    env("CALENDAR_INVITATION_ORGANIZER"),
+                    None,
+                    None,
+                    update_live_session,
+                )
+            elif not existing_date_time.strftime(
+                "%d-%m-%Y %H:%M"
+            ) == update_live_session.date_time.strftime("%d-%m-%Y %H:%M"):
+                existing_calendar_invite = CalendarInvites.objects.filter(
+                    live_session=live_session
+                ).first()
+                # delete the current one
+                if existing_calendar_invite:
+                    delete_outlook_calendar_invite(existing_calendar_invite)
+                # create the new one
+                create_outlook_calendar_invite(
+                    "Meeraq - Live Session",
+                    description,
+                    start_time_stamp,
+                    end_time_stamp,
+                    attendees,
+                    env("CALENDAR_INVITATION_ORGANIZER"),
+                    None,
+                    None,
+                    update_live_session,
+                )
+        except Exception as e:
+            print(str(e))
+            pass
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_coaching_session(request, coaching_session_id):
     try:
         coaching_session = CoachingSession.objects.get(id=coaching_session_id)
@@ -682,6 +826,7 @@ def send_test_mails(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def participants_list(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
@@ -701,6 +846,7 @@ def getSavedTemplates(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_batches(request):
     batches = SchedularBatch.objects.all()
     serializer = BatchSerializer(batches, many=True)
@@ -786,6 +932,7 @@ def deleteEmailTemplate(request, template_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_schedular_availabilities(request):
     coach_id = request.GET.get("coach_id")
     if coach_id:
@@ -797,6 +944,7 @@ def get_all_schedular_availabilities(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_coach_schedular_availibilty(request):
     if request.method == "POST":
         serializer = RequestAvailibiltySerializer(data=request.data)
@@ -840,6 +988,7 @@ def create_coach_schedular_availibilty(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_batch(request, project_id):
     participants_data = request.data.get("participants", [])
     project = SchedularProject.objects.get(id=project_id)
@@ -881,7 +1030,7 @@ def add_batch(request, project_id):
                         ).count()
                         + 1
                     )
-                    booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                    booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                     coaching_session = CoachingSession.objects.create(
                         batch=batch,
                         coaching_session_number=coaching_session_number,
@@ -902,7 +1051,7 @@ def add_batch(request, project_id):
                             batch=batch, session_type=session_type
                         )
                     )
-                    booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                    booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                     coaching_session = CoachingSession.objects.create(
                         batch=batch,
                         coaching_session_number=coaching_session_number,
@@ -914,6 +1063,9 @@ def add_batch(request, project_id):
 
         # Check if participant with the same email exists
         learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
+
+        name = learner.name
+        add_contact_in_wati("learner", name, learner.phone)
 
         # Add participant to the batch if not already added
         if learner and learner not in batch.learners.all():
@@ -939,6 +1091,7 @@ def add_batch(request, project_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_coaches(request):
     coaches = Coach.objects.filter(is_approved=True)
     serializer = CoachBasicDetailsSerializer(coaches, many=True)
@@ -946,6 +1099,7 @@ def get_coaches(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_batch(request, batch_id):
     print(request.data)
     print(batch_id)
@@ -962,11 +1116,12 @@ def update_batch(request, batch_id):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def get_coach_availabilities_booking_link(request):
     booking_link_id = request.GET.get("booking_link_id")
 
     if booking_link_id:
-        booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+        booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{booking_link_id}"
         try:
             coaching_session = CoachingSession.objects.get(booking_link=booking_link)
             current_date = datetime.now().date()
@@ -1012,10 +1167,11 @@ def get_coach_availabilities_booking_link(request):
 
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def schedule_session(request):
     try:
         booking_link_id = request.data.get("booking_link_id", "")
-        booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+        booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{booking_link_id}"
         participant_email = request.data.get("participant_email", "")
         # coach_availability_id = request.data.get("availability_id", "")
         timestamp = request.data.get("timestamp", "")
@@ -1157,7 +1313,7 @@ def schedule_session(request):
                     is_confirmed=False,
                 )
                 print(slot_created)
-
+            booking_id = coach_availability.coach.room_id
             print(json.dumps(unblock_slots))
             send_mail_templates(
                 "schedule_session.html",
@@ -1167,6 +1323,7 @@ def schedule_session(request):
                     "name": coach_name,
                     "date": date_for_mail,
                     "time": session_time,
+                    "booking_id": booking_id,
                 },
                 [],
             )
@@ -1181,7 +1338,7 @@ def schedule_session(request):
                     "name": learner.name,
                     "date": date_for_mail,
                     "time": session_time,
-                    "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                    "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
                     "session_type": "Mentoring"
                     if session_type == "mentoring_session"
                     else "Laser Coaching",
@@ -1208,11 +1365,12 @@ TIME_INTERVAL = 900000
 
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def schedule_session_fixed(request):
     try:
         with transaction.atomic():
             booking_link_id = request.data.get("booking_link_id", "")
-            booking_link = f"{env('SCHEUDLAR_APP_URL')}/coaching/book/{booking_link_id}"
+            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{booking_link_id}"
             participant_email = request.data.get("participant_email", "")
             timestamp = request.data.get("timestamp", "")
             end_time = request.data.get("end_time", "")
@@ -1307,7 +1465,7 @@ def schedule_session_fixed(request):
 
             serializer = SchedularSessionsSerializer(data=session_data)
             if serializer.is_valid():
-                serializer.save()
+                scheduled_session = serializer.save()
                 coach_availability.is_confirmed = True
                 coach_availability.save()
                 coach_name = f"{coach_availability.coach.first_name} {coach_availability.coach.last_name}"
@@ -1354,8 +1512,38 @@ def schedule_session_fixed(request):
                         end_time=unblock_slot["end_time"],
                         is_confirmed=False,
                     )
-                    print("created", created_availability.id)
-
+                session_type_value = (
+                    "coaching"
+                    if session_type == "laser_coaching_session"
+                    else "mentoring"
+                )
+                create_outlook_calendar_invite(
+                    f"Meeraq - {session_type_value.capitalize()} Session",
+                    f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
+                    coach_availability.start_time,
+                    coach_availability.end_time,
+                    [
+                        {
+                            "emailAddress": {
+                                "name": coach_name,
+                                "address": coach_availability.coach.email,
+                            },
+                            "type": "required",
+                        },
+                        {
+                            "emailAddress": {
+                                "name": learner.name,
+                                "address": participant_email,
+                            },
+                            "type": "required",
+                        },
+                    ],
+                    env("CALENDAR_INVITATION_ORGANIZER"),
+                    None,
+                    scheduled_session,
+                    None,
+                )
+                booking_id = coach_availability.coach.room_id
                 send_mail_templates(
                     "schedule_session.html",
                     [coach_availability.coach.email],
@@ -1364,9 +1552,50 @@ def schedule_session_fixed(request):
                         "name": coach_name,
                         "date": date_for_mail,
                         "time": session_time,
+                        "booking_id": booking_id,
                     },
                     [],
                 )
+
+                # WHATSAPP MESSAGE CHECK
+
+                # before 5 mins whatsapp msg
+                start_datetime_obj = datetime.fromtimestamp(
+                    int(coach_availability.start_time) / 1000
+                )
+                # Decrease 5 minutes
+                five_minutes_prior_start_datetime = start_datetime_obj - timedelta(
+                    minutes=5
+                )
+                clocked = ClockedSchedule.objects.create(
+                    clocked_time=five_minutes_prior_start_datetime
+                )
+                periodic_task = PeriodicTask.objects.create(
+                    name=uuid.uuid1(),
+                    task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_seeq",
+                    args=[scheduled_session.id],
+                    clocked=clocked,
+                    one_off=True,
+                )
+                periodic_task.save()
+
+                # after 3 mins whatsapp msg
+                three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(
+                    minutes=3
+                )
+                clocked = ClockedSchedule.objects.create(
+                    clocked_time=three_minutes_ahead_start_datetime
+                )
+                periodic_task = PeriodicTask.objects.create(
+                    name=uuid.uuid1(),
+                    task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_seeq",
+                    args=[scheduled_session.id],
+                    clocked=clocked,
+                    one_off=True,
+                )
+                periodic_task.save()
+
+                # WHATSAPP MESSAGE CHECK
 
                 send_mail_templates(
                     "coach_templates/coaching_email_template.html",
@@ -1378,7 +1607,7 @@ def schedule_session_fixed(request):
                         "name": learner.name,
                         "date": date_for_mail,
                         "time": session_time,
-                        "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{coach_availability.coach.room_id}",
+                        "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
                         "session_type": "Mentoring"
                         if session_type == "mentoring_session"
                         else "Laser Coaching",
@@ -1401,6 +1630,7 @@ def schedule_session_fixed(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_coach_availabilities(request):
     try:
         slots_data = request.data.get("slots", [])
@@ -1456,6 +1686,7 @@ def create_coach_availabilities(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_coach_availabilities(request):
     coach_id = request.GET.get("coach_id")
     if coach_id:
@@ -1471,6 +1702,7 @@ def get_coach_availabilities(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_sessions(request):
     coach_id = request.query_params.get("coach_id")
     if coach_id:
@@ -1489,7 +1721,7 @@ def get_sessions(request):
             "participant_name": session.learner.name,
             "coaching_session_number": session.coaching_session.coaching_session_number,
             "participant_email": session.learner.email,
-            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "room_id": f"{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
         }
@@ -1498,6 +1730,7 @@ def get_sessions(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_sessions_by_type(request, sessions_type):
     coach_id = request.query_params.get("coach_id")
     current_time = timezone.now()
@@ -1540,7 +1773,7 @@ def get_sessions_by_type(request, sessions_type):
             "coaching_session_number": session.coaching_session.coaching_session_number
             if coach_id is None
             else None,
-            "meeting_link": f"{env('SCHEUDLAR_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
@@ -1551,7 +1784,40 @@ def get_sessions_by_type(request, sessions_type):
     return Response(session_details, status=status.HTTP_200_OK)
 
 
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_session_status(request, session_id):
+    try:
+        session = SchedularSessions.objects.get(id=session_id)
+    except SchedularSessions.DoesNotExist:
+        return Response({"error": "Session not found."}, status=404)
+    new_status = request.data.get("status")
+    if not new_status:
+        return Response({"error": "Status is required."}, status=400)
+    session.status = new_status
+    session.save()
+    return Response({"message": "Session status updated successfully."}, status=200)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_session_date_time(request, session_id):
+    try:
+        session = SchedularSessions.objects.get(id=session_id)
+    except SchedularSessions.DoesNotExist:
+        return Response({"error": "Session not found."}, status=404)
+    start_time = request.data.get("start_time")
+    end_time = request.data.get("end_time")
+    if not start_time or not end_time:
+        return Response({"error": "Start or end time is not provided."}, status=400)
+    session.availibility.start_time = start_time
+    session.availibility.end_time = end_time
+    session.availibility.save()
+    return Response({"message": "Session time updated successfully."}, status=200)
+
+
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_current_session(request, user_type, room_id, user_id):
     five_minutes_in_milliseconds = 300000
     current_time = int(timezone.now().timestamp() * 1000)
@@ -1568,6 +1834,7 @@ def get_current_session(request, user_type, room_id, user_id):
 
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def get_current_session_of_learner(request, room_id):
     five_minutes_in_milliseconds = 300000
     current_time = int(timezone.now().timestamp() * 1000)
@@ -1598,6 +1865,7 @@ def get_current_session_of_learner(request, room_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_requests_of_coach(request, coach_id):
     try:
         coach = get_object_or_404(Coach, id=coach_id)
@@ -1629,6 +1897,7 @@ def get_requests_of_coach(request, coach_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_slots_of_request(request, request_id):
     coach_id = request.GET.get("coach_id")
     if coach_id:
@@ -1644,6 +1913,7 @@ def get_slots_of_request(request, request_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_upcoming_slots_of_coach(request, coach_id):
     current_time = timezone.now()
     timestamp_milliseconds = str(int(current_time.timestamp() * 1000))
@@ -1655,6 +1925,7 @@ def get_upcoming_slots_of_coach(request, coach_id):
 
 
 @api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
 def delete_slots(request):
     slot_ids = request.data.get("slot_ids", [])
     # Assuming slot_ids is a list of integers
@@ -1667,6 +1938,7 @@ def delete_slots(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def send_unbooked_coaching_session_mail(request):
     batch_name = request.data.get("batchName", "")
     participants = request.data.get("participants", [])
@@ -1704,6 +1976,7 @@ def send_unbooked_coaching_session_mail(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
     try:
         request_availability = RequestAvailibilty.objects.get(id=request_id)
@@ -1743,6 +2016,7 @@ def get_existing_slots_of_coach_on_request_dates(request, request_id, coach_id):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def export_available_slot(request):
     current_datetime = timezone.now()
     current_timestamp = int(
@@ -1766,8 +2040,10 @@ def export_available_slot(request):
 
     # Write data to the worksheet
     for row_num, availabilities in enumerate(queryset, 2):
-        start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
-        end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
+        start_time = datetime.fromtimestamp(
+            (int(availabilities.start_time) / 1000) + 19800
+        )
+        end_time = datetime.fromtimestamp((int(availabilities.end_time) / 1000) + 19800)
 
         ws.append(
             [
@@ -1788,6 +2064,7 @@ def export_available_slot(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_participant_to_batch(request, batch_id):
     # batch_id = request.data.get("batch_id")
     name = request.data.get("name")
@@ -1814,6 +2091,8 @@ def add_participant_to_batch(request, batch_id):
     if learner:
         batch.learners.add(learner)
         batch.save()
+        name = learner.name
+        add_contact_in_wati("learner", name, learner.phone)
         try:
             course = Course.objects.get(batch=batch)
             course_enrollments = CourseEnrollment.objects.filter(
@@ -1829,6 +2108,7 @@ def add_participant_to_batch(request, batch_id):
         except Exception:
             # course doesnt exists
             pass
+
         return Response(
             {"message": "Participant added to the batch successfully"},
             status=status.HTTP_201_CREATED,
@@ -1840,6 +2120,7 @@ def add_participant_to_batch(request, batch_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def finalize_project_structure(request, project_id):
     try:
         project = get_object_or_404(SchedularProject, id=project_id)
@@ -1857,25 +2138,62 @@ def finalize_project_structure(request, project_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def send_live_session_link(request):
-    data = request.data
-    participants = data["participant"]
-    for participant in participants:
-        content = {
-            "description": data["description"],
-            "participant_name": participant["name"],
-        }
+    live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
+    for learner in live_session.batch.learners.all():
         send_mail_templates(
             "send_live_session_link.html",
-            [participant["email"]],
+            [learner.email],
             "Meeraq - Live Session",
-            content,
+            {
+                "participant_name": learner.name,
+                "live_session_name": f"Live Session {live_session.order}",
+                "project_name": live_session.batch.project.name,
+                "description": live_session.description,
+            },
             [],
         )
+        sleep(4)
     return Response({"message": "Emails sent successfully"})
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_live_session_link_whatsapp(request):
+    live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
+    for learner in live_session.batch.learners.all():
+        send_whatsapp_message_template(
+            learner.phone,
+            {
+                "broadcast_name": "Instant_live_session_whatsapp_reminder",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "value": learner.name,
+                    },
+                    {
+                        "name": "live_session_name",
+                        "value": f"Live Session {live_session.order}",
+                    },
+                    {
+                        "name": "project_name",
+                        "value": live_session.batch.project.name,
+                    },
+                    {
+                        "name": "description",
+                        "value": live_session.description,
+                    },
+                ],
+                "template_name": "instant_whatsapp_live_session",
+            },
+        )
+
+    return Response({"message": "Message sent successfully"})
+
+
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_session_status(request, session_id):
     status = request.data.get("status")
     if not session_id or not status:
@@ -1895,6 +2213,7 @@ def update_session_status(request, session_id):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def project_report_download(request, project_id):
     project = get_object_or_404(SchedularProject, pk=project_id)
     batches = SchedularBatch.objects.filter(project=project)
@@ -2003,6 +2322,7 @@ def project_report_download(request, project_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_facilitator(request):
     first_name = request.data.get("firstName", "")
     print(first_name)
@@ -2163,6 +2483,7 @@ def add_facilitator(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_facilitators(request):
     facilitators = Facilitator.objects.all()
     serializer = FacilitatorSerializer(facilitators, many=True)
@@ -2220,6 +2541,7 @@ def get_facilitators(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_multiple_facilitator(request):
     data = request.data.get("coaches", [])
     print(data)
@@ -2311,6 +2633,7 @@ def add_multiple_facilitator(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_facilitator_profile(request, id):
     try:
         facilitator = Facilitator.objects.get(pk=id)
@@ -2328,6 +2651,7 @@ def update_facilitator_profile(request, id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def delete_facilitator(request):
     data = request.data
     facilitator_id = data.get("facilitator_id")
@@ -2353,6 +2677,7 @@ def delete_facilitator(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_facilitator_field_values(request):
     job_roles = set()
     languages = set()
@@ -2412,6 +2737,181 @@ def get_facilitator_field_values(request):
         },
         status=200,
     )
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_learner_from_course(request):
+    learner_id = request.data.get("learnerId")
+    batch_id = request.data.get("batchId")
+
+    try:
+        learner = Learner.objects.get(id=learner_id)
+        batch = SchedularBatch.objects.get(id=batch_id)
+
+        if learner in batch.learners.all():
+            batch.learners.remove(learner)
+            # Remove the learner from FeedbackLessonResponse if present
+            feedback_responses = FeedbackLessonResponse.objects.filter(
+                learner=learner, feedback_lesson__lesson__course__batch=batch
+            )
+            feedback_responses.delete()
+            # Remove the learner from QuizLessonResponse if present
+            quiz_responses = QuizLessonResponse.objects.filter(
+                learner=learner, quiz_lesson__lesson__course__batch=batch
+            )
+            quiz_responses.delete()
+
+            # Remove the learner from CourseEnrollment if enrolled
+            enrollments = CourseEnrollment.objects.filter(
+                learner=learner, course__batch=batch
+            )
+            enrollments.delete()
+
+            # Remove the learner from SchedularSessions if present
+            schedular_sessions = SchedularSessions.objects.filter(
+                learner=learner, coaching_session__batch=batch
+            )
+            schedular_sessions.delete()
+
+            return Response({"message": f"Coachee removed from batch successfully."})
+        else:
+            return Response({"message": f"Coachee is not part of batch."}, status=400)
+
+    except ObjectDoesNotExist:
+        return Response({"message": "Object not found."}, status=404)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_schedular_project(request, project_id):
+    try:
+        project = SchedularProject.objects.get(pk=project_id)
+    except SchedularProject.DoesNotExist:
+        return Response(
+            {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    # Assuming 'request.data' contains the updated project information
+    project_name = request.data.get("project_name")
+    organisation_id = request.data.get("organisation_id")
+    hr_ids = request.data.get("hr", [])
+    if project_name:
+        project.name = project_name
+    if organisation_id:
+        try:
+            organisation = Organisation.objects.get(pk=organisation_id)
+            project.organisation = organisation
+        except Organisation.DoesNotExist:
+            return Response(
+                {"error": "Organisation not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+    # Clear existing HR associations and add the provided ones
+    project.hr.clear()
+    for hr_id in hr_ids:
+        try:
+            hr = HR.objects.get(pk=hr_id)
+            project.hr.add(hr)
+        except HR.DoesNotExist:
+            return Response(
+                {"error": f"HR with ID {hr_id} not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+    project.save()
+    return Response(
+        {"message": "Project updated successfully"}, status=status.HTTP_200_OK
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_schedular_project_update(request, project_id):
+    try:
+        project = SchedularProject.objects.get(id=project_id)
+    except SchedularProject.DoesNotExist:
+        return Response({"error": "Project not found"}, status=404)
+    # Assuming your request data has a "message" field for the update message
+    update_data = {
+        "pmo": request.data.get(
+            "pmo", ""
+        ),  # Assuming the PMO is associated with the user
+        "project": project.id,
+        "message": request.data.get("message", ""),
+    }
+    serializer = UpdateSerializer(data=update_data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            {"message": "Update added to project successfully!"}, status=201
+        )
+    return Response(serializer.errors, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_schedular_project_updates(request, project_id):
+    updates = SchedularUpdate.objects.filter(project__id=project_id).order_by(
+        "-created_at"
+    )
+    serializer = SchedularUpdateDepthOneSerializer(updates, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_live_sessions_by_status(request):
+    status = request.query_params.get("status", None)
+    now = timezone.now()
+    if status == "upcoming":
+        queryset = LiveSession.objects.filter(date_time__gt=now).order_by("date_time")
+    elif status == "past":
+        queryset = LiveSession.objects.filter(date_time__lt=now).order_by("-date_time")
+    elif status == "unscheduled":
+        queryset = LiveSession.objects.filter(date_time__isnull=True).order_by(
+            "created_at"
+        )
+
+    else:
+        queryset = LiveSession.objects.all()
+    hr_id = request.query_params.get("hr", None)
+    if hr_id:
+        queryset = queryset.filter(batch__project__hr__id=hr_id)
+    res = []
+    for live_session in queryset:
+        res.append(
+            {
+                "id": live_session.id,
+                "name": f"Live Session {live_session.live_session_number}",
+                "organization": live_session.batch.project.organisation.name,
+                "batch_name": live_session.batch.name,
+                "batch_id": live_session.batch.id,
+                "project_name": live_session.batch.project.name,
+                "project_id": live_session.batch.project.id,
+                "date_time": live_session.date_time,
+                "description": live_session.description,
+                "attendees": len(live_session.attendees),
+                "total_learners": live_session.batch.learners.count(),
+            }
+        )
+    return Response(res)
+
+
+@api_view(["GET"])
+def live_session_detail_view(request, pk):
+    try:
+        live_session = LiveSession.objects.get(pk=pk)
+    except LiveSession.DoesNotExist:
+        return Response({"error": "LiveSession not found"}, status=404)
+
+    participants = Learner.objects.filter(schedularbatch__id=live_session.batch.id)
+    participants_serializer = LearnerSerializer(participants, many=True)
+    live_session_serializer = LiveSessionSerializerDepthOne(live_session)
+
+    response_data = {
+        "live_session": live_session_serializer.data,
+        "participants": participants_serializer.data,
+    }
+
+    return Response(response_data)
 
 
 @api_view(["GET"])

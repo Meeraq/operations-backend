@@ -15,10 +15,21 @@ from .views import (
     AssignCoursesToCertificate,
     DeleteCourseFromCertificate,
     LessonMarkAsCompleteAndNotComplete,
-    DownlaodLessonCertificate,
+    DownloadLessonCertificate,
     GetCertificateForCourse,
     GetLaserCoachingTime,
     AssignCourseTemplateToBatch,
+    FileListAPIView,
+    FileUploadView,
+    FileDownloadView,
+    update_file,
+    DownloadableLessonUpdateView,
+    DownloadableLessonCreateView,
+    FeedbackEmailValidation,
+    GetFeedbackForm,
+    EditAllowedFeedbackLesson,
+    DuplicateLesson,
+    LessonCompletedWebhook,
 )
 import environ
 
@@ -62,6 +73,11 @@ urlpatterns = [
     path(
         "text-lessons/<int:pk>/", TextLessonEditView.as_view(), name="text-lesson-edit"
     ),
+    # path(
+    #     "downloadable-file-lessons/",
+    #     DownloadableFileLessonCreateView.as_view(),
+    #     name="downloadable-file-lesson-create",
+    # ),
     path(
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
     ),
@@ -165,7 +181,7 @@ urlpatterns = [
     path("lesson-mark-as-complete/", LessonMarkAsCompleteAndNotComplete.as_view()),
     path(
         "download-lesson-certificate/<int:lesson_id>/<int:learner_id>/",
-        DownlaodLessonCertificate.as_view(),
+        DownloadLessonCertificate.as_view(),
     ),
     path(
         "get-certificate-for-course/<int:course_id>/", GetCertificateForCourse.as_view()
@@ -196,6 +212,8 @@ urlpatterns = [
     path("quizes/report/all/", views.get_all_quizes_report),
     path("quizes/<int:quiz_id>/report/", views.get_quiz_report),
     path("quizes/<int:quiz_id>/report/download/", views.quiz_report_download),
+    path("feedbacks/report/all/", views.get_all_feedbacks_report),
+    path("feedbacks/<int:feedback_id>/report/", views.get_feedback_report),
     path(
         "get-laser-coaching-time/<int:laser_coaching_id>/<str:participant_email>/",
         GetLaserCoachingTime.as_view(),
@@ -225,4 +243,47 @@ urlpatterns = [
     ),
     path("update-course_status/", views.update_course_status),
     path("update-lesson-status/", views.lesson_update_status),
+    path("files/", FileListAPIView.as_view(), name="file-list"),
+    path("files/upload/", FileUploadView.as_view(), name="file-upload"),
+    path(
+        "files/<int:file_id>/download/",
+        FileDownloadView.as_view(),
+        name="file-download",
+    ),
+    path(
+        "files/<int:file_id>/",
+        update_file,
+        name="update-file",
+    ),
+    path(
+        "downloadable-lessons/create/",
+        DownloadableLessonCreateView.as_view(),
+        name="create-downloadable-lesson",
+    ),
+    path(
+        "downloadable-lessons/update/<int:pk>/",
+        DownloadableLessonUpdateView.as_view(),
+        name="update-downloadable-lesson",
+    ),
+    path(
+        "feedback-email-validation/",
+        FeedbackEmailValidation.as_view(),
+        name="update-downloadable-lesson",
+    ),
+    path(
+        "get-feedback-form/<str:unique_id>/",
+        GetFeedbackForm.as_view(),
+    ),
+    path(
+        "feedback-lesson-edit-allowed/<str:feedback_lesson_id>/",
+        EditAllowedFeedbackLesson.as_view(),
+    ),
+    path(
+        "duplicate-lesson/",
+        DuplicateLesson.as_view(),
+    ),
+    path(
+        "lesson-completed-webhook/",
+        LessonCompletedWebhook.as_view(),
+    ),
 ]

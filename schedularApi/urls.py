@@ -76,6 +76,8 @@ urlpatterns = [
     ),
     path("sessions/", views.get_sessions),
     path("sessions/<str:sessions_type>/", views.get_sessions_by_type),
+    path("sessions/status/update/<int:session_id>/", views.edit_session_status),
+    path("sessions/time/update/<int:session_id>/", views.update_session_date_time),
     path(
         "current-session/<str:user_type>/<str:room_id>/<int:user_id>/",
         views.get_current_session,
@@ -111,6 +113,7 @@ urlpatterns = [
         name="finalize_project_structure",
     ),
     path("send_live_session_link/", views.send_live_session_link),
+    path("send-live-session-link-whatsapp/", views.send_live_session_link_whatsapp),
     path(
         "update-session-status/<int:session_id>/",
         views.update_session_status,
@@ -136,6 +139,24 @@ urlpatterns = [
     path("facilitator/profile/<int:id>/", views.update_facilitator_profile),
     path("facilitator/delete/", views.delete_facilitator),
     path("facilitator-field-values/", views.get_facilitator_field_values),
+    path(
+        "delete-learner_from_course/",
+        views.delete_learner_from_course,
+    ),
+    path("edit-project-schedular/<int:project_id>/", views.edit_schedular_project),
+    path(
+        "schedular-projects/<int:project_id>/updates/create/",
+        views.add_schedular_project_update,
+    ),
+    path(
+        "schedular-projects/<int:project_id>/updates/",
+        views.get_schedular_project_updates,
+    ),
+    path("live-sessions/", views.get_live_sessions_by_status),
+    path(
+        "live-session/<int:pk>/",
+        views.live_session_detail_view,
+    ),
     path(
         "facilitators/<int:facilitator_id>/batches_and_projects/",
         views.facilitator_projects,
