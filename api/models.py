@@ -730,3 +730,10 @@ class FinalizeCoachActivity(models.Model):
 
     def __str__(self):
         return f"{self.user_who_finalized.username} finalized the coach."
+
+
+class APILog(models.Model):
+    path = models.CharField(max_length=255)
+    method = models.CharField(max_length=10)
+    user = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)

@@ -67,6 +67,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "api.middlewares.APILoggingMiddleware",
 ]
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
@@ -264,14 +265,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_feedback_lesson_reminders",
         "schedule": crontab(hour=13, minute=0),  # 8 AM
     },
-    "send_reminder_to_book_slots_to_coachee":{
+    "send_reminder_to_book_slots_to_coachee": {
         "task": "schedularApi.tasks.send_reminder_to_book_slots_to_coachee",
         "schedule": crontab(hour=2, minute=30, day_of_week="*"),
     },
-    "coach_has_to_give_slots_availability_reminder":{
-        "task":"schedularApi.tasks.coach_has_to_give_slots_availability_reminder",
+    "coach_has_to_give_slots_availability_reminder": {
+        "task": "schedularApi.tasks.coach_has_to_give_slots_availability_reminder",
         "schedule": crontab(hour=2, minute=30, day_of_week="*"),
-    }
+    },
 }
 
 

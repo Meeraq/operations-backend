@@ -37,6 +37,7 @@ from .models import (
     ShareCoachProfileActivity,
     CreateProjectActivity,
     Role,
+    APILog,
 )
 
 # Register your models here.
@@ -81,3 +82,4 @@ admin.site.register(ShareCoachProfileActivity)
 admin.site.register(CreateProjectActivity)
 admin.site.register(FinalizeCoachActivity)
 admin.site.register(Role)
+admin.site.register(APILog)
