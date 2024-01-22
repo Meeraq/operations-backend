@@ -2612,7 +2612,7 @@ def update_certificate_status(request):
             course_for_that_participant.save()
             return JsonResponse({'message': 'Certificate status updated successfully'}, status=200)
         else:
-            return JsonResponse({'error': 'Course enrollment not found'}, status=404)
+            return JsonResponse({'error': 'No Course Enrolled in this Batch'}, status=404)
 
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
