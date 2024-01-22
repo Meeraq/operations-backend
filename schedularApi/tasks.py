@@ -370,14 +370,13 @@ def send_upcoming_session_pmo_at_10am():
                 }
                 sessions_list.append(session_details)
                 pmo_user = User.objects.filter(profile__roles__name="pmo").first()
-        send_mail_templates(
+                send_mail_templates(
                     "pmo_emails/daily_session.html",
                     [pmo_user.email],
                     subject,
                     {"sessions": sessions_list},
                     [],
                 )
-            
 
 
 @shared_task
@@ -1310,20 +1309,22 @@ def coach_has_to_give_slots_availability_reminder():
 def schedule_nudges(course_id):
     course = Course.objects.get(id=course_id)
     nudges = Nudge.objects.filter(course__id=course_id).order_by("order")
+
     desired_time = time(8, 30)
     nudge_scheduled_for = datetime.combine(course.nudge_start_date, desired_time)
     for nudge in nudges:
-        clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
-        periodic_task = PeriodicTask.objects.create(
-            name=uuid.uuid1(),
-            task="schedularApi.tasks.send_nudge",
-            args=[nudge.id],
-            clocked=clocked,
-            one_off=True,
-        )
-        nudge_scheduled_for = nudge_scheduled_for + timedelta(
-            int(course.nudge_frequency)
-        )
+        if nudge.course.batch.project.automated_reminder:
+            clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="schedularApi.tasks.send_nudge",
+                args=[nudge.id],
+                clocked=clocked,
+                one_off=True,
+            )
+            nudge_scheduled_for = nudge_scheduled_for + timedelta(
+                int(course.nudge_frequency)
+            )
 
 
 def get_file_content(file_url):
@@ -1334,24 +1335,25 @@ def get_file_content(file_url):
 @shared_task
 def send_nudge(nudge_id):
     nudge = Nudge.objects.get(id=nudge_id)
-    subject = f"New Nudge: {nudge.name}"
-    if nudge.is_sent:
-        return
-    message = nudge.content
-    if nudge.file:
-        attachment_path = nudge.file.url
-        file_content = get_file_content(nudge.file.url)
-
-    for learner in nudge.course.batch.learners.all():
-        email = EmailMessage(
-            subject, message, settings.DEFAULT_FROM_EMAIL, [learner.email]
-        )
+    if nudge.course.batch.project.automated_reminder:
+        subject = f"New Nudge: {nudge.name}"
+        if nudge.is_sent:
+            return
+        message = nudge.content
         if nudge.file:
-            extension = get_file_extension(nudge.file.url)
-            file_name = f"Attatchment.{extension}"
-            email.attach(file_name, file_content, f"application/{extension}")
-        email.content_subtype = "html"
-        email.send()
-        sleep(5)
-    nudge.is_sent = True
-    nudge.save()
+            attachment_path = nudge.file.url
+            file_content = get_file_content(nudge.file.url)
+
+        for learner in nudge.course.batch.learners.all():
+            email = EmailMessage(
+                subject, message, settings.DEFAULT_FROM_EMAIL, [learner.email]
+            )
+            if nudge.file:
+                extension = get_file_extension(nudge.file.url)
+                file_name = f"Attatchment.{extension}"
+                email.attach(file_name, file_content, f"application/{extension}")
+            email.content_subtype = "html"
+            email.send()
+            sleep(5)
+        nudge.is_sent = True
+        nudge.save()
