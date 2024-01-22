@@ -362,6 +362,8 @@ class UpdateLessonOrder(APIView):
 
 
 class UpdateNudgesOrder(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, *args, **kwargs):
         payload = request.data
         for nudge_id, order in payload.items():
@@ -408,6 +410,7 @@ class LessonListView(generics.ListAPIView):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_nudges_and_course(request, course_id):
     try:
         course = Course.objects.get(id=course_id)
@@ -420,6 +423,7 @@ def get_nudges_and_course(request, course_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_new_nudge(request):
     serializer = NudgeSerializer(data=request.data)
     if serializer.is_valid():
@@ -429,6 +433,7 @@ def create_new_nudge(request):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def download_nudge_file(request, nudge_id):
     nudge_obj = get_object_or_404(Nudge, id=nudge_id)
     serializer = NudgeSerializer(nudge_obj)
@@ -436,6 +441,7 @@ def download_nudge_file(request, nudge_id):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def add_nudges_date_frequency_to_course(request, course_id):
     try:
         course = Course.objects.get(id=course_id)
