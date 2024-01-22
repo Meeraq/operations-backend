@@ -1,6 +1,9 @@
 import string
 from celery import shared_task
 from .models import SentEmail, SchedularSessions, LiveSession
+from django_celery_beat.models import PeriodicTask, ClockedSchedule
+import uuid
+from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
@@ -8,18 +11,18 @@ from django.conf import settings
 from api.models import Coach, User, UserToken, SessionRequestCaas, Learner
 from schedularApi.models import CoachingSession, SchedularSessions, RequestAvailibilty
 from django.utils import timezone
-from datetime import datetime
 from api.views import (
     send_mail_templates,
     refresh_microsoft_access_token,
 )
-from datetime import timedelta
+from datetime import timedelta, time, datetime
 import pytz
 
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
-from courses.models import Course, Lesson, FeedbackLesson, FeedbackLessonResponse
+from courses.models import Course, Lesson, FeedbackLesson, FeedbackLessonResponse, Nudge
+from courses.views import get_file_extension
 from django.db.models import Q
 from assessmentApi.models import Assessment, ParticipantResponse
 import environ
@@ -1300,3 +1303,54 @@ def coach_has_to_give_slots_availability_reminder():
                 )
     except Exception as e:
         print(str(e))
+
+
+@shared_task
+def schedule_nudges(course_id):
+    course = Course.objects.get(id=course_id)
+    nudges = Nudge.objects.filter(course__id=course_id).order_by("order")
+    desired_time = time(8, 30)
+    nudge_scheduled_for = datetime.combine(course.nudge_start_date, desired_time)
+    for nudge in nudges:
+        clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
+        periodic_task = PeriodicTask.objects.create(
+            name=uuid.uuid1(),
+            task="schedularApi.tasks.send_nudge",
+            args=[nudge.id],
+            clocked=clocked,
+            one_off=True,
+        )
+        nudge_scheduled_for = nudge_scheduled_for + timedelta(
+            int(course.nudge_frequency)
+        )
+
+
+def get_file_content(file_url):
+    response = requests.get(file_url)
+    return response.content
+
+
+@shared_task
+def send_nudge(nudge_id):
+    nudge = Nudge.objects.get(id=nudge_id)
+    subject = f"New Nudge: {nudge.name}"
+    if nudge.is_sent:
+        return
+    message = nudge.content
+    if nudge.file:
+        attachment_path = nudge.file.url
+        file_content = get_file_content(nudge.file.url)
+
+    for learner in nudge.course.batch.learners.all():
+        email = EmailMessage(
+            subject, message, settings.DEFAULT_FROM_EMAIL, [learner.email]
+        )
+        if nudge.file:
+            extension = get_file_extension(nudge.file.url)
+            file_name = f"Attatchment.{extension}"
+            email.attach(file_name, file_content, f"application/{extension}")
+        email.content_subtype = "html"
+        email.send()
+        sleep(5)
+    nudge.is_sent = True
+    nudge.save()

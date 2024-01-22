@@ -1139,7 +1139,7 @@ def create_learners(learners_data):
 
                     if learner:
                         learner.name = learner_data.get("name").strip()
-                        learner.phone = learner_data.get("phone").strip()
+                        learner.phone = learner_data.get("phone")
                         learner.save()
                         learners.append(learner)
                         continue

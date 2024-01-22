@@ -96,7 +96,6 @@ import environ
 env = environ.Env()
 
 
-
 def send_whatsapp_message_template(phone, payload):
     try:
         if not phone:
@@ -1969,8 +1968,10 @@ def export_available_slot(request):
 
     # Write data to the worksheet
     for row_num, availabilities in enumerate(queryset, 2):
-        start_time = datetime.fromtimestamp(int(availabilities.start_time) / 1000)
-        end_time = datetime.fromtimestamp(int(availabilities.end_time) / 1000)
+        start_time = datetime.fromtimestamp(
+            (int(availabilities.start_time) / 1000) + 19800
+        )
+        end_time = datetime.fromtimestamp((int(availabilities.end_time) / 1000) + 19800)
 
         ws.append(
             [

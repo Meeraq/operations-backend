@@ -4,6 +4,7 @@ from django.shortcuts import render
 import boto3
 import requests
 from rest_framework import generics, serializers, status
+from datetime import timedelta, time, datetime
 from .models import (
     Course,
     TextLesson,
@@ -25,6 +26,7 @@ from .models import (
     File,
     DownloadableLesson,
     ThinkificLessonCompleted,
+    Nudge,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -53,7 +55,10 @@ from .serializers import (
     LessonUpdateSerializer,
     FileSerializer,
     DownloadableLessonSerializer,
+    NudgeSerializer,
 )
+from django_celery_beat.models import PeriodicTask, ClockedSchedule
+
 from rest_framework.views import APIView
 from api.models import User, Learner, Profile, Role
 from schedularApi.models import (
@@ -128,7 +133,7 @@ def create_or_get_learner(learner_data):
             if user.profile.roles.all().filter(name="learner").exists():
                 learner = Learner.objects.get(user=user.profile)
                 learner.name = learner_data["name"].strip()
-                learner.phone = learner_data["phone"].strip()
+                learner.phone = learner_data["phone"]
                 learner.save()
                 return learner
             else:
@@ -153,6 +158,52 @@ def create_or_get_learner(learner_data):
     except Exception as e:
         # Handle specific exceptions or log the error
         print(f"Error processing participant: {str(e)}")
+
+
+def get_file_name_from_url(url):
+    # Split the URL by '/' to get an array of parts
+    url_parts = url.split("/")
+
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+
+    # Extract the file name without the query parameters
+    file_name = full_file_name.split("?")[0]
+
+    return file_name
+
+
+def get_file_extension(url):
+    # Split the URL by '.' to get an array of parts
+    url_parts = url.split(".")
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+    # Extract the file extension
+    file_extension = full_file_name.split("?")[0]
+    return file_extension
+
+
+def download_file_response(file_url):
+    try:
+        response = requests.get(file_url)
+        if response.status_code == 200:
+            file_content = response.content
+            extension = get_file_extension(file_url)
+            content_type = response.headers.get(
+                "Content-Type", f"application/{extension}"
+            )
+            file_name = get_file_name_from_url(file_url)
+            file_response = HttpResponse(file_content, content_type=content_type)
+            file_response["Content-Disposition"] = 'attachment; filename="{}"'.format(
+                file_name
+            )
+            return file_response
+        else:
+            return HttpResponse(
+                "Failed to download the file", status=response.status_code
+            )
+    except Exception as e:
+        return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
 
 
 class CourseListView(generics.ListCreateAPIView):
@@ -310,6 +361,26 @@ class UpdateLessonOrder(APIView):
         )
 
 
+class UpdateNudgesOrder(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        payload = request.data
+        for nudge_id, order in payload.items():
+            try:
+                nudge = Nudge.objects.get(pk=nudge_id)
+                nudge.order = order
+                nudge.save()
+            except Nudge.DoesNotExist:
+                return Response(
+                    {"error": f"Nudge with id {nudge_id} not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        return Response(
+            {"message": "Nudges orders updated successfully"}, status=status.HTTP_200_OK
+        )
+
+
 class TextLessonCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     queryset = TextLesson.objects.all()
@@ -336,6 +407,79 @@ class LessonListView(generics.ListAPIView):
             queryset = queryset.filter(status=status)
 
         return queryset
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_nudges_and_course(request, course_id):
+    try:
+        course = Course.objects.get(id=course_id)
+        course_serializer = CourseSerializer(course)
+        nudges = Nudge.objects.filter(course=course)
+        serializer = NudgeSerializer(nudges, many=True)
+        return Response({"nudges": serializer.data, "course": course_serializer.data})
+    except Course.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_new_nudge(request):
+    serializer = NudgeSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def download_nudge_file(request, nudge_id):
+    nudge_obj = get_object_or_404(Nudge, id=nudge_id)
+    serializer = NudgeSerializer(nudge_obj)
+    return download_file_response(serializer.data["file"])
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def add_nudges_date_frequency_to_course(request, course_id):
+    try:
+        course = Course.objects.get(id=course_id)
+        nudge_start_date = request.data.get("nudge_start_date")
+        nudge_frequency = request.data.get("nudge_frequency")
+        existing_nudge_start_date = course.nudge_start_date
+        course.nudge_start_date = nudge_start_date
+        course.nudge_frequency = nudge_frequency
+        course.save()
+        print(
+            existing_nudge_start_date == course.nudge_start_date,
+            course.nudge_start_date,
+            existing_nudge_start_date,
+        )
+        if (
+            existing_nudge_start_date
+            and not existing_nudge_start_date == course.nudge_start_date
+            and course.nudge_periodic_task
+        ):
+            course.nudge_periodic_task.delete()
+        else:
+            desired_time = time(18, 31)
+            datetime_comined = datetime.combine(
+                datetime.strptime(course.nudge_start_date, "%Y-%m-%d"), desired_time
+            )
+            scheduled_for = datetime_comined - timedelta(days=1)
+            clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="schedularApi.tasks.schedule_nudges",
+                args=[course.id],
+                clocked=clocked,
+                one_off=True,
+            )
+            # create a new periodic task
+        return Response({"message": "Updated successfully"}, status=201)
+    except Course.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
 
 
 class CourseTemplateLessonListView(generics.ListAPIView):
@@ -1106,15 +1250,9 @@ def get_quiz_result(request, quiz_lesson_id, learner_id):
 def submit_feedback_answers(request, feedback_lesson_id, learner_id):
     try:
         feedback_lesson = get_object_or_404(FeedbackLesson, id=feedback_lesson_id)
-        course_enrollment = get_object_or_404(
-            CourseEnrollment,
-            course=feedback_lesson.lesson.course,
-            learner__id=learner_id,
-        )
         learner = get_object_or_404(Learner, id=learner_id)
     except (
         FeedbackLesson.DoesNotExist,
-        CourseEnrollment.DoesNotExist,
         Learner.DoesNotExist,
     ) as e:
         return Response(
@@ -1126,14 +1264,11 @@ def submit_feedback_answers(request, feedback_lesson_id, learner_id):
 
     if serializer.is_valid():
         answers = serializer.save()
-
         feedback_lesson_response = FeedbackLessonResponse.objects.create(
             feedback_lesson=feedback_lesson, learner=learner
         )
         feedback_lesson_response.answers.set(answers)
         feedback_lesson_response.save()
-        course_enrollment.completed_lessons.append(feedback_lesson.lesson.id)
-        course_enrollment.save()
         return Response(
             {"detail": "Feedback submitted successfully"}, status=status.HTTP_200_OK
         )
@@ -2271,56 +2406,13 @@ def update_file(request, file_id):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-def get_file_name_from_url(url):
-    # Split the URL by '/' to get an array of parts
-    url_parts = url.split("/")
-
-    # Get the last part of the array, which should be the full file name with extension
-    full_file_name = url_parts[-1]
-
-    # Extract the file name without the query parameters
-    file_name = full_file_name.split("?")[0]
-
-    return file_name
-
-
-def get_file_extension(url):
-    # Split the URL by '.' to get an array of parts
-    url_parts = url.split(".")
-    # Get the last part of the array, which should be the full file name with extension
-    full_file_name = url_parts[-1]
-    # Extract the file extension
-    file_extension = full_file_name.split("?")[0]
-    return file_extension
-
-
 class FileDownloadView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, file_id):
         file_obj = get_object_or_404(File, id=file_id)
-
-        try:
-            serializer = FileSerializer(file_obj)
-            response = requests.get(serializer.data["file"])
-            if response.status_code == 200:
-                file_content = response.content
-                extension = get_file_extension(serializer.data["file"])
-                content_type = response.headers.get(
-                    "Content-Type", f"application/{extension}"
-                )
-                file_name = get_file_name_from_url(serializer.data["file"])
-                file_response = HttpResponse(file_content, content_type=content_type)
-                file_response[
-                    "Content-Disposition"
-                ] = 'attachment; filename="{}"'.format(file_name)
-                return file_response
-            else:
-                return HttpResponse(
-                    "Failed to download the file", status=response.status_code
-                )
-        except Exception as e:
-            return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
+        serializer = FileSerializer(file_obj)
+        return download_file_response(serializer.data["file"])
 
 
 class DownloadableLessonCreateView(generics.CreateAPIView):
@@ -2341,43 +2433,42 @@ class FeedbackEmailValidation(APIView):
     def post(self, request):
         try:
             unique_id = request.data.get("unique_id")
-            email = request.data.get("email")
+            email = request.data.get("email").strip().lower()
 
             feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
             lesson = feedback_lesson.lesson
 
-            participants = lesson.course.batch.learners.all()
+            learner = Learner.objects.filter(email=email).first()
 
-            for participant in participants:
-                if participant.email.strip().lower() == email.strip().lower():
-                    feedback_lesson_response = FeedbackLessonResponse.objects.filter(
-                        feedback_lesson=feedback_lesson, learner__id=participant.id
-                    ).first()
-                    if not feedback_lesson_response:
-                        lesson_serializer = LessonSerializer(lesson)
-                        feedback_lesson_serializer = FeedbackLessonDepthOneSerializer(
-                            feedback_lesson
-                        )
+            if learner:
+                feedback_lesson_response = FeedbackLessonResponse.objects.filter(
+                    feedback_lesson=feedback_lesson, learner__id=learner.id
+                ).first()
+                if not feedback_lesson_response:
+                    lesson_serializer = LessonSerializer(lesson)
+                    feedback_lesson_serializer = FeedbackLessonDepthOneSerializer(
+                        feedback_lesson
+                    )
 
-                        return Response(
-                            {
-                                "message": "Validation Successful",
-                                "participant_exists": True,
-                                "lesson_details": lesson_serializer.data,
-                                "feedback_lesson_details": feedback_lesson_serializer.data,
-                                "participant_id": participant.id,
-                            },
-                            status=status.HTTP_200_OK,
-                        )
-                    else:
-                        return Response(
-                            {"error": "Already Responded."},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        )
+                    return Response(
+                        {
+                            "message": "Validation Successful",
+                            "participant_exists": True,
+                            "lesson_details": lesson_serializer.data,
+                            "feedback_lesson_details": feedback_lesson_serializer.data,
+                            "participant_id": learner.id,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                else:
+                    return Response(
+                        {"error": "Already Responded."},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
 
             return Response(
-                {"error": "Email not found in participants."},
-                status=status.HTTP_404_NOT_FOUND,
+                {"error": "User does not exist."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         except FeedbackLesson.DoesNotExist:
@@ -2563,7 +2654,7 @@ class LessonCompletedWebhook(APIView):
     def post(self, request):
         try:
             payload = request.data.get("payload", {})
-            
+
             lesson_name = payload.get("lesson", {}).get("name", "")
             user = payload.get("user", {})
             student_name = f"{user.get('first_name', '')} {user.get('last_name', '')}"
