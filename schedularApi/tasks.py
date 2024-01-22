@@ -370,13 +370,14 @@ def send_upcoming_session_pmo_at_10am():
                 }
                 sessions_list.append(session_details)
                 pmo_user = User.objects.filter(profile__roles__name="pmo").first()
-                send_mail_templates(
+        send_mail_templates(
                     "pmo_emails/daily_session.html",
                     [pmo_user.email],
                     subject,
                     {"sessions": sessions_list},
                     [],
                 )
+            
 
 
 @shared_task
