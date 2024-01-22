@@ -63,6 +63,7 @@ from .views import (
     GetAssessmentsDataForMoveParticipant,
     CreateAssessmentAndAddMultipleParticipantsFromBatch,
     AssessmentInAssessmentLesson,
+    AllAssessmentInAssessmentLesson,
 )
 
 
@@ -267,4 +268,5 @@ urlpatterns = [
     path("get-assessments-for-move-participant/", GetAssessmentsDataForMoveParticipant.as_view()),
     path("create-assessment-and-add-multiple-participants-from-batch/", CreateAssessmentAndAddMultipleParticipantsFromBatch.as_view()),
     path("assessment-in-assessment-lesson/<int:assessment_id>/", AssessmentInAssessmentLesson.as_view()),
+     path("all-assessment-in-assessment-lesson/", AllAssessmentInAssessmentLesson.as_view()),
 ]

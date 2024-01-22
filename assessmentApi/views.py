@@ -4079,3 +4079,34 @@ class AssessmentInAssessmentLesson(APIView):
                 {"error": "Faliled to get data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+
+class AllAssessmentInAssessmentLesson(APIView):
+    def get(self, request):
+        try:
+            assessments = Assessment.objects.all()
+
+            assessment_present_in_assessment_lesson_ids = []
+            for assessment in assessments:
+                assessment_lesson = AssessmentLesson.objects.filter(
+                    assessment_modal=assessment
+                ).first()
+                
+                if assessment_lesson:
+                    assessment_present_in_assessment_lesson_ids.append(assessment.id)
+                
+
+            return Response(
+                {
+                    "assessment_present_in_assessment_lesson_ids": assessment_present_in_assessment_lesson_ids,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Faliled to get data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
