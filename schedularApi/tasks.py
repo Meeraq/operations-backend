@@ -14,7 +14,6 @@ from django.utils import timezone
 from api.views import (
     send_mail_templates,
     refresh_microsoft_access_token,
-    send_whatsapp_message_template,
 )
 from datetime import timedelta, time, datetime
 import pytz
@@ -817,13 +816,16 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
                 start_time_for_mail = datetime.fromtimestamp(
                     (int(session.availibility.start_time) / 1000) + 19800
                 ).strftime("%I:%M %p")
-                phone = session.availibility.coach.phone
+                phone = (
+                    session.availibility.coach.phone_country_code
+                    + session.availibility.coach.phone
+                )
                 coach_name = (
                     session.availibility.coach.first_name
                     + " "
                     + session.availibility.coach.last_name
                 )
-
+                booking_id = session.availibility.coach.room_id
                 send_whatsapp_message_template(
                     phone,
                     {
@@ -837,8 +839,12 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
                                 "name": "time",
                                 "value": start_time_for_mail,
                             },
+                            {
+                                "name": "booking_id",
+                                "value": booking_id,
+                            },
                         ],
-                        "template_name": "training_reminders",
+                        "template_name": "training_reminders_final",
                     },
                 )
     except Exception as e:
@@ -860,7 +866,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
             if caas_session.coach:
                 coach = caas_session.coach
                 coach_name = coach.first_name + " " + coach.last_name
-                phone = coach.phone
+                phone = coach.phone_country_code + coach.phone
                 time = caas_session.confirmed_availability.start_time
                 final_time = datetime.fromtimestamp(
                     (int(time) / 1000) + 19800
@@ -878,8 +884,12 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
                                 "name": "time",
                                 "value": final_time,
                             },
+                            {
+                                "name": "booking_id",
+                                "value": booking_id,
+                            },
                         ],
-                        "template_name": "training_reminders",
+                        "template_name": "training_reminders_final",
                     },
                 )
     except Exception as e:
@@ -898,6 +908,7 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_seeq():
         for session in today_sessions:
             name = session.learner.name
             phone = session.learner.phone
+            booking_id = session.availibility.coach.room_id
             time = datetime.fromtimestamp(
                 (int(session.availibility.start_time) / 1000) + 19800
             ).strftime("%I:%M %p")
@@ -915,8 +926,12 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_seeq():
                             "name": "time",
                             "value": time,
                         },
+                        {
+                            "name": "booking_id",
+                            "value": booking_id,
+                        },
                     ],
-                    "template_name": "training_reminders",
+                    "template_name": "training_reminders_final",
                 },
             )
     except Exception as e:
@@ -942,6 +957,7 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_caas():
             final_time = datetime.fromtimestamp((int(time) / 1000) + 19800).strftime(
                 "%I:%M %p"
             )
+            booking_id = caas_session.coach.room_id
             send_whatsapp_message_template(
                 phone,
                 {
@@ -955,8 +971,12 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_caas():
                             "name": "time",
                             "value": final_time,
                         },
+                        {
+                            "name": "booking_id",
+                            "value": booking_id,
+                        },
                     ],
-                    "template_name": "training_reminders",
+                    "template_name": "training_reminders_final",
                 },
             )
     except Exception as e:
@@ -976,7 +996,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
             caas_coach_final_time = datetime.fromtimestamp(
                 (int(time) / 1000) + 19800
             ).strftime("%I:%M %p")
-
+            booking_id = caas_session.coach.room_id
             send_whatsapp_message_template(
                 caas_coach_phone,
                 {
@@ -990,8 +1010,12 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
                             "name": "time",
                             "value": caas_coach_final_time,
                         },
+                        {
+                            "name": "booking_id",
+                            "value": booking_id,
+                        },
                     ],
-                    "template_name": "session_reminder_5_mins_before",
+                    "template_name": "session_reminder_5_mins_before_final",
                 },
             )
         learner = caas_session.learner
@@ -1014,8 +1038,12 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
                         "name": "time",
                         "value": caas_learner_final_time,
                     },
+                    {
+                        "name": "booking_id",
+                        "value": booking_id,
+                    },
                 ],
-                "template_name": "session_reminder_5_mins_before",
+                "template_name": "session_reminder_5_mins_before_final",
             },
         )
     except Exception as e:
@@ -1039,7 +1067,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
             + " "
             + session.availibility.coach.last_name
         )
-
+        booking_id = session.availibility.coach.room_id
         send_whatsapp_message_template(
             seeq_coach_phone,
             {
@@ -1053,8 +1081,12 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
                         "name": "time",
                         "value": seeq_coach_start_time_for_mail,
                     },
+                    {
+                        "name": "booking_id",
+                        "value": booking_id,
+                    },
                 ],
-                "template_name": "session_reminder_5_mins_before",
+                "template_name": "session_reminder_5_mins_before_final",
             },
         )
         seeq_participant_name = session.learner.name
@@ -1076,8 +1108,12 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
                         "name": "time",
                         "value": seeq_participant_time,
                     },
+                    {
+                        "name": "booking_id",
+                        "value": booking_id,
+                    },
                 ],
-                "template_name": "session_reminder_5_mins_before",
+                "template_name": "session_reminder_5_mins_before_final",
             },
         )
     except Exception as e:
@@ -1101,7 +1137,6 @@ def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
             + " "
             + session.availibility.coach.last_name
         )
-
         send_whatsapp_message_template(
             seeq_coach_phone,
             {
