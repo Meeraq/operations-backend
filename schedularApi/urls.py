@@ -157,4 +157,8 @@ urlpatterns = [
         "live-session/<int:pk>/",
         views.live_session_detail_view,
     ),
+    path(
+        "update-certificate-status/",
+        views.update_certificate_status,
+    ),
 ]

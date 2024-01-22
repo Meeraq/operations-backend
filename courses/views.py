@@ -936,12 +936,15 @@ def get_course_enrollment(request, course_id, learner_id):
             {
                 "course_enrollment": course_enrollment_serializer.data,
                 "lessons": lessons_serializer.data,
+                "is_certificate_allowed": course_enrollment.is_certificate_allowed,
             }
         )
     except CourseEnrollment.DoesNotExist:
         return Response(status=404)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_course_enrollment_for_pmo_preview(request, course_id):
@@ -1313,7 +1316,7 @@ class LessonMarkAsCompleteAndNotComplete(APIView):
 
 
 class DownloadLessonCertificate(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request, lesson_id, learner_id):
         try:
@@ -2337,10 +2340,9 @@ class FeedbackEmailValidation(APIView):
             feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
             lesson = feedback_lesson.lesson
 
-            learner =  Learner.objects.filter(email=email).first()
-           
+            learner = Learner.objects.filter(email=email).first()
+
             if learner:
-                
                 feedback_lesson_response = FeedbackLessonResponse.objects.filter(
                     feedback_lesson=feedback_lesson, learner__id=learner.id
                 ).first()

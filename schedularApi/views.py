@@ -27,6 +27,7 @@ import json
 from django.core.exceptions import ObjectDoesNotExist
 from api.views import get_date, get_time, add_contact_in_wati
 from django.shortcuts import render
+from django.http import JsonResponse
 from api.models import Organisation, HR, Coach, User, Learner, Pmo
 from .serializers import (
     SchedularProjectSerializer,
@@ -504,7 +505,11 @@ def get_batch_calendar(request, batch_id):
         try:
             course = Course.objects.get(batch__id=batch_id)
             course_serailizer = CourseSerializer(course)
+            for participant in participants_serializer.data:
+                course_enrollment = CourseEnrollment.objects.get(learner__id=participant['id'], course=course)
+                participant['is_certificate_allowed'] = course_enrollment.is_certificate_allowed
         except Exception as e:
+            print(str(e))
             course = None
         return Response(
             {
@@ -2587,3 +2592,27 @@ def live_session_detail_view(request, pk):
     }
 
     return Response(response_data)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_certificate_status(request):
+    try:
+        participant_id = request.data.get('participantId')
+        is_certificate_allowed = request.data.get('is_certificate_allowed')
+        course_id=request.data.get('courseId')
+
+        # Use filter instead of get to handle multiple instances
+        course_enrollments = CourseEnrollment.objects.filter(learner__id=participant_id,course__id=course_id)
+
+        # If there are multiple instances, you need to decide which one to update
+        # For example, you might want to update the first one:
+        if course_enrollments.exists():
+            course_for_that_participant = course_enrollments.first()
+            course_for_that_participant.is_certificate_allowed = is_certificate_allowed
+            course_for_that_participant.save()
+            return JsonResponse({'message': 'Certificate status updated successfully'}, status=200)
+        else:
+            return JsonResponse({'error': 'Course enrollment not found'}, status=404)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
