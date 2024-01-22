@@ -23,6 +23,7 @@ import pytz
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
 from courses.models import Course, Lesson, FeedbackLesson, FeedbackLessonResponse, Nudge
+from courses.views import get_file_extension
 from django.db.models import Q
 from assessmentApi.models import Assessment, ParticipantResponse
 import environ
@@ -1285,8 +1286,9 @@ def send_nudge(nudge_id):
             subject, message, settings.DEFAULT_FROM_EMAIL, [learner.email]
         )
         if nudge.file:
-            file_name = "Attatchment.pdf"
-            email.attach(file_name, file_content, "application/pdf")
+            extension = get_file_extension(nudge.file.url)
+            file_name = f"Attatchment.{extension}"
+            email.attach(file_name, file_content, f"application/{extension}")
         email.content_subtype = "html"
         email.send()
         sleep(5)

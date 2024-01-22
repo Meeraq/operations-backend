@@ -159,6 +159,48 @@ def create_or_get_learner(learner_data):
         print(f"Error processing participant: {str(e)}")
 
 
+def get_file_name_from_url(url):
+    # Split the URL by '/' to get an array of parts
+    url_parts = url.split("/")
+
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+
+    # Extract the file name without the query parameters
+    file_name = full_file_name.split("?")[0]
+
+    return file_name
+
+
+def get_file_extension(url):
+    # Split the URL by '.' to get an array of parts
+    url_parts = url.split(".")
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+    # Extract the file extension
+    file_extension = full_file_name.split("?")[0]
+    return file_extension
+
+
+def download_file_response(file_url):
+    try:
+        response = requests.get(file_url)
+        if response.status_code == 200:
+            file_content = response.content
+            extension = get_file_extension(file_url)
+            content_type = response.headers.get("Content-Type", f"application/{extension}")
+            file_name = get_file_name_from_url(file_url)
+            file_response = HttpResponse(file_content, content_type=content_type)
+            file_response["Content-Disposition"] = 'attachment; filename="{}"'.format(file_name)
+            return file_response
+        else:
+            return HttpResponse("Failed to download the file", status=response.status_code)
+    except Exception as e:
+        return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
+
+
+
+
 class CourseListView(generics.ListCreateAPIView):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
@@ -368,6 +410,13 @@ def create_new_nudge(request):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+def download_nudge_file(request, nudge_id):
+    nudge_obj = get_object_or_404(Nudge, id=nudge_id)
+    serializer = NudgeSerializer(nudge_obj)
+    return download_file_response(serializer.data['file'])
 
 
 @api_view(["PUT"])
@@ -2276,54 +2325,12 @@ def update_file(request, file_id):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-def get_file_name_from_url(url):
-    # Split the URL by '/' to get an array of parts
-    url_parts = url.split("/")
-
-    # Get the last part of the array, which should be the full file name with extension
-    full_file_name = url_parts[-1]
-
-    # Extract the file name without the query parameters
-    file_name = full_file_name.split("?")[0]
-
-    return file_name
-
-
-def get_file_extension(url):
-    # Split the URL by '.' to get an array of parts
-    url_parts = url.split(".")
-    # Get the last part of the array, which should be the full file name with extension
-    full_file_name = url_parts[-1]
-    # Extract the file extension
-    file_extension = full_file_name.split("?")[0]
-    return file_extension
-
 
 class FileDownloadView(APIView):
     def get(self, request, file_id):
         file_obj = get_object_or_404(File, id=file_id)
-
-        try:
-            serializer = FileSerializer(file_obj)
-            response = requests.get(serializer.data["file"])
-            if response.status_code == 200:
-                file_content = response.content
-                extension = get_file_extension(serializer.data["file"])
-                content_type = response.headers.get(
-                    "Content-Type", f"application/{extension}"
-                )
-                file_name = get_file_name_from_url(serializer.data["file"])
-                file_response = HttpResponse(file_content, content_type=content_type)
-                file_response[
-                    "Content-Disposition"
-                ] = 'attachment; filename="{}"'.format(file_name)
-                return file_response
-            else:
-                return HttpResponse(
-                    "Failed to download the file", status=response.status_code
-                )
-        except Exception as e:
-            return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
+        serializer = FileSerializer(file_obj)
+        return download_file_response(serializer.data['file'])
 
 
 class DownloadableLessonCreateView(generics.CreateAPIView):
