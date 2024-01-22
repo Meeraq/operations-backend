@@ -77,8 +77,17 @@ from django.shortcuts import render, get_object_or_404
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import permission_classes
 
-from courses.models import Course, Lesson, Assessment as AssessmentLesson
-from schedularApi.models import SchedularBatch
+from courses.models import (
+    Course,
+    Lesson,
+    Assessment as AssessmentLesson,
+    FeedbackLessonResponse,
+    QuizLessonResponse,
+    CourseEnrollment,
+)
+from schedularApi.models import SchedularBatch, SchedularSessions
+
+
 matplotlib.use("Agg")
 env = environ.Env()
 
@@ -696,6 +705,20 @@ class AssessmentStatusChange(APIView):
             assessment.status = request.data.get("status")
             # assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+
+            if assessment_lesson:
+                lesson = Lesson.objects.filter(id=assessment_lesson.lesson.id).first()
+
+                if assessment.status == "ongoing":
+                    lesson.status = "public"
+                    lesson.save()
+                if assessment.status == "draft":
+                    lesson.status = "draft"
+                    lesson.save()
+
             if (
                 prev_status == "draft"
                 and assessment.status == "ongoing"
@@ -1348,25 +1371,67 @@ class DeleteParticipantFromAssessment(APIView):
     @transaction.atomic
     def delete(self, request):
         try:
-            assessment_id = request.data.get("assessment_id")
-            participant_observers = request.data.get("participant_observers")
-            assessment = Assessment.objects.get(id=assessment_id)
-            deleted = delete_participant_from_assessments(
-                assessment, participant_observers["participant"]["id"], assessment_id
-            )
-            if deleted:
-                serializer = AssessmentSerializerDepthFour(assessment)
-                return Response(
-                    {
-                        "message": "Successfully removed participant from assessments.",
-                        "assessment_data": serializer.data,
-                    },
-                    status=status.HTTP_200_OK,
+            with transaction.atomic():
+                assessment_id = request.data.get("assessment_id")
+                participant_observers = request.data.get("participant_observers")
+                assessment = Assessment.objects.get(id=assessment_id)
+
+                assessment_lesson = AssessmentLesson.objects.filter(
+                    assessment_modal=assessment
+                ).first()
+                if assessment_lesson:
+                    learner = Learner.objects.get(
+                        id=participant_observers["participant"]["id"]
+                    )
+
+                    batch = assessment_lesson.lesson.course.batch
+                    if learner in batch.learners.all():
+                        batch.learners.remove(learner)
+                        # Remove the learner from FeedbackLessonResponse if present
+                        feedback_responses = FeedbackLessonResponse.objects.filter(
+                            learner=learner, feedback_lesson__lesson__course__batch=batch
+                        )
+                        feedback_responses.delete()
+                        # Remove the learner from QuizLessonResponse if present
+                        quiz_responses = QuizLessonResponse.objects.filter(
+                            learner=learner, quiz_lesson__lesson__course__batch=batch
+                        )
+                        quiz_responses.delete()
+
+                        # Remove the learner from CourseEnrollment if enrolled
+                        enrollments = CourseEnrollment.objects.filter(
+                            learner=learner, course__batch=batch
+                        )
+                        enrollments.delete()
+
+                        # Remove the learner from SchedularSessions if present
+                        schedular_sessions = SchedularSessions.objects.filter(
+                            learner=learner, coaching_session__batch=batch
+                        )
+                        schedular_sessions.delete()
+
+                        assessment = Assessment.objects.filter(
+                            assessment_modal__lesson__course__batch=batch
+                        ).first()
+
+                deleted = delete_participant_from_assessments(
+                    assessment,
+                    participant_observers["participant"]["id"],
+                    assessment_id,
                 )
-            return Response(
-                {"error": "Failed to Remove Participant"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+                if deleted:
+                    serializer = AssessmentSerializerDepthFour(assessment)
+                    return Response(
+                        {
+                            "message": "Successfully removed participant from assessments.",
+                            "assessment_data": serializer.data,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                return Response(
+                    {"error": "Failed to Remove Participant"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
         except Assessment.DoesNotExist:
             return Response(
                 {"error": "Assessment not found."},
@@ -3923,11 +3988,9 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                 pre_assessment = Assessment.objects.get(id=pre_assessment_id)
 
                 if created:
-                    batch = SchedularBatch.objects.get(id = request.data.get("batch_id")) 
-                    
+                    batch = SchedularBatch.objects.get(id=request.data.get("batch_id"))
+
                     for participant in batch.learners.all():
-                        
-                        
                         participant_object = {
                             "name": participant.name,
                             "email": participant.email,
@@ -3945,12 +4008,12 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                         lessons = Lesson.objects.filter(
                             course=course, lesson_type="assessment"
                         )
-                        
+
                         for lesson in lessons:
                             assessment_lesson = AssessmentLesson.objects.filter(
                                 lesson=lesson
                             ).first()
-                           
+
                             if assessment_lesson.type == "pre":
                                 assessment_lesson.assessment_modal = pre_assessment
 
@@ -3979,16 +4042,40 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                                 post_assessment.save()
 
                     return Response(
-                            {
-                                "message": "Pre and Post assessment created and batch added successfully.",
-                                "assessment_data": serializer.data,
-                            },
-                            status=status.HTTP_200_OK,
-                        )
+                        {
+                            "message": "Pre and Post assessment created and batch added successfully.",
+                            "assessment_data": serializer.data,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
         except Exception as e:
             print(str(e))
             # Handle specific exceptions if needed
             return Response(
                 {"error": "Faliled to create assessments"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class AssessmentInAssessmentLesson(APIView):
+    def get(self, request, assessment_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+
+            return Response(
+                {
+                    "assessment_lesson_added": True if assessment_lesson else False,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Faliled to get data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

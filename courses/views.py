@@ -847,18 +847,31 @@ def update_laser_coaching_session(request, course_id, lesson_id, session_id):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_assessment_and_lesson(request):
-    lesson_data = request.data.get("lesson")
-    lesson_serializer = LessonSerializer(data=lesson_data)
-    if lesson_serializer.is_valid():
-        lesson = lesson_serializer.save()
-        assessment = Assessment.objects.create(
-            lesson=lesson, type=request.data.get("lesson").get("type")
-        )
-        return Response(
-            "Assessment lesson created successfully", status=status.HTTP_201_CREATED
-        )
-    else:
-        return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    with transaction.atomic():
+        lesson_data = request.data.get("lesson")
+        lesson_serializer1 = LessonSerializer(data=lesson_data)
+        lesson_serializer2 = LessonSerializer(data=lesson_data)
+        if lesson_serializer1.is_valid() and lesson_serializer2.is_valid():
+            lesson1 = lesson_serializer1.save()
+            lesson2 = lesson_serializer2.save()
+
+            lesson1.name = f"Pre {lesson1.name}"
+            lesson2.name = f"Post {lesson2.name}"
+
+            lesson1.save()
+            lesson2.save()
+
+            assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+
+            assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
+            return Response(
+                "Assessment lesson created successfully", status=status.HTTP_201_CREATED
+            )
+        else:
+            return Response(
+                {lesson_serializer1.errors, lesson_serializer2.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 @api_view(["GET"])
@@ -885,7 +898,6 @@ def update_assessment_lesson(request, lesson_id, session_id):
         )
 
     lesson_data = request.data.get("lesson")
-    assessment.type = request.data.get("lesson").get("type")
     assessment.save()
     # Check if 'lesson' data is provided in the request and update the lesson name
     if lesson_data and "name" in lesson_data:
@@ -1939,7 +1951,9 @@ class AssignCourseTemplateToBatch(APIView):
                                 description=original_lesson.downloadablelesson.description,
                             )
                         elif original_lesson.lesson_type == "assessment":
-                            assessment = Assessment.objects.filter(lesson = original_lesson).first()
+                            assessment = Assessment.objects.filter(
+                                lesson=original_lesson
+                            ).first()
                             Assessment.objects.create(
                                 lesson=new_lesson, type=assessment.type
                             )
@@ -2229,18 +2243,19 @@ def lesson_update_status(request):
                 lesson.status = status_value
                 lesson.save()
 
-                assessment = Assessment.objects.filter(lesson=lesson).first()
+                if lesson.lesson_type == "assessment":
+                    assessment = Assessment.objects.filter(lesson=lesson).first()
 
-                assessment_modal = AssessmentModal.objects.get(
-                    id=assessment.assessment_modal.id
-                )
+                    assessment_modal = AssessmentModal.objects.get(
+                        id=assessment.assessment_modal.id
+                    )
 
-                if lesson.status == "draft":
-                    assessment_modal.status = "draft"
+                    if lesson.status == "draft":
+                        assessment_modal.status = "draft"
 
-                if lesson.status == "public":
-                    assessment_modal.status = "ongoing"
-                assessment_modal.save()
+                    if lesson.status == "public":
+                        assessment_modal.status = "ongoing"
+                    assessment_modal.save()
 
                 return Response(
                     {"message": f"Lesson status updated."}, status=status.HTTP_200_OK
@@ -2364,10 +2379,9 @@ class FeedbackEmailValidation(APIView):
             feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
             lesson = feedback_lesson.lesson
 
-            learner =  Learner.objects.filter(email=email).first()
-           
+            learner = Learner.objects.filter(email=email).first()
+
             if learner:
-                
                 feedback_lesson_response = FeedbackLessonResponse.objects.filter(
                     feedback_lesson=feedback_lesson, learner__id=learner.id
                 ).first()

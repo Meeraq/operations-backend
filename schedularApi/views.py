@@ -937,11 +937,15 @@ def add_batch(request, project_id):
                 # Assuming 'project_id' is in your request data
 
                 # Check if batch with the same name exists
-                batch = SchedularBatch.objects.filter(name=batch_name, project=project).first()
+                batch = SchedularBatch.objects.filter(
+                    name=batch_name, project=project
+                ).first()
 
                 if not batch:
                     # If batch does not exist, create a new batch
-                    batch = SchedularBatch.objects.create(name=batch_name, project=project)
+                    batch = SchedularBatch.objects.create(
+                        name=batch_name, project=project
+                    )
 
                     # Create Live Sessions and Coaching Sessions based on project structure
                     for session_data in project.project_structure:
@@ -996,10 +1000,12 @@ def add_batch(request, project_id):
                                 booking_link=booking_link,
                                 session_type=session_type,
                             )
-                
+
                 # Check if participant with the same email exists
-                learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
-                
+                learner = create_or_get_learner(
+                    {"name": name, "email": email, "phone": phone}
+                )
+
                 name = learner.name
                 add_contact_in_wati("learner", name, learner.phone)
 
@@ -1022,7 +1028,8 @@ def add_batch(request, project_id):
                         pass
 
             return Response(
-                {"message": "Batch created successfully."}, status=status.HTTP_201_CREATED
+                {"message": "Batch created successfully."},
+                status=status.HTTP_201_CREATED,
             )
     except Exception as e:
         print(str(e))
