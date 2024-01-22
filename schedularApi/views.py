@@ -169,6 +169,7 @@ def create_project_schedular(request):
         schedularProject = SchedularProject(
             name=request.data["project_name"],
             organisation=organisation,
+            automated_reminder=request.data["automated_reminder"],
         )
         schedularProject.save()
     except IntegrityError:
@@ -1241,7 +1242,7 @@ def schedule_session(request):
                     is_confirmed=False,
                 )
                 print(slot_created)
-            booking_id=coach_availability.coach.room_id
+            booking_id = coach_availability.coach.room_id
             print(json.dumps(unblock_slots))
             send_mail_templates(
                 "schedule_session.html",
@@ -1251,7 +1252,7 @@ def schedule_session(request):
                     "name": coach_name,
                     "date": date_for_mail,
                     "time": session_time,
-                    "booking_id":booking_id,
+                    "booking_id": booking_id,
                 },
                 [],
             )
@@ -1471,7 +1472,7 @@ def schedule_session_fixed(request):
                     scheduled_session,
                     None,
                 )
-                booking_id=coach_availability.coach.room_id
+                booking_id = coach_availability.coach.room_id
                 send_mail_templates(
                     "schedule_session.html",
                     [coach_availability.coach.email],
@@ -1480,18 +1481,24 @@ def schedule_session_fixed(request):
                         "name": coach_name,
                         "date": date_for_mail,
                         "time": session_time,
-                        "booking_id":booking_id,
+                        "booking_id": booking_id,
                     },
                     [],
                 )
 
-                #WHATSAPP MESSAGE CHECK
-                
-                #before 5 mins whatsapp msg
-                start_datetime_obj = datetime.fromtimestamp(int(coach_availability.start_time)/1000) 
+                # WHATSAPP MESSAGE CHECK
+
+                # before 5 mins whatsapp msg
+                start_datetime_obj = datetime.fromtimestamp(
+                    int(coach_availability.start_time) / 1000
+                )
                 # Decrease 5 minutes
-                five_minutes_prior_start_datetime = start_datetime_obj - timedelta(minutes=5)
-                clocked = ClockedSchedule.objects.create(clocked_time=five_minutes_prior_start_datetime)
+                five_minutes_prior_start_datetime = start_datetime_obj - timedelta(
+                    minutes=5
+                )
+                clocked = ClockedSchedule.objects.create(
+                    clocked_time=five_minutes_prior_start_datetime
+                )
                 periodic_task = PeriodicTask.objects.create(
                     name=uuid.uuid1(),
                     task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_seeq",
@@ -1501,9 +1508,13 @@ def schedule_session_fixed(request):
                 )
                 periodic_task.save()
 
-                #after 3 mins whatsapp msg
-                three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(minutes=3)
-                clocked = ClockedSchedule.objects.create(clocked_time=three_minutes_ahead_start_datetime)
+                # after 3 mins whatsapp msg
+                three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(
+                    minutes=3
+                )
+                clocked = ClockedSchedule.objects.create(
+                    clocked_time=three_minutes_ahead_start_datetime
+                )
                 periodic_task = PeriodicTask.objects.create(
                     name=uuid.uuid1(),
                     task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_seeq",
@@ -1513,7 +1524,7 @@ def schedule_session_fixed(request):
                 )
                 periodic_task.save()
 
-                #WHATSAPP MESSAGE CHECK
+                # WHATSAPP MESSAGE CHECK
 
                 send_mail_templates(
                     "coach_templates/coaching_email_template.html",
@@ -2074,8 +2085,6 @@ def send_live_session_link(request):
     return Response({"message": "Emails sent successfully"})
 
 
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def send_live_session_link_whatsapp(request):
@@ -2467,6 +2476,7 @@ def edit_schedular_project(request, project_id):
         try:
             organisation = Organisation.objects.get(pk=organisation_id)
             project.organisation = organisation
+
         except Organisation.DoesNotExist:
             return Response(
                 {"error": "Organisation not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2482,6 +2492,7 @@ def edit_schedular_project(request, project_id):
                 {"error": f"HR with ID {hr_id} not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
+    project.automated_reminder = request.data.get("automated_reminder")
     project.save()
     return Response(
         {"message": "Project updated successfully"}, status=status.HTTP_200_OK
@@ -2535,10 +2546,10 @@ def get_live_sessions_by_status(request):
         queryset = LiveSession.objects.filter(date_time__isnull=True).order_by(
             "created_at"
         )
-    
+
     else:
         queryset = LiveSession.objects.all()
-    hr_id =  request.query_params.get("hr", None)
+    hr_id = request.query_params.get("hr", None)
     if hr_id:
         queryset = queryset.filter(batch__project__hr__id=hr_id)
     res = []
