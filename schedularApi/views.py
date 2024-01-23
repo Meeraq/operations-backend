@@ -933,7 +933,7 @@ def add_batch(request, project_id):
             for participant_data in participants_data:
                 name = participant_data.get("name")
                 email = participant_data.get("email", "").strip().lower()
-                phone = participant_data.get("phone")
+                phone = participant_data.get("phone", None) 
                 batch_name = participant_data.get("batch").strip().upper()
                 # Assuming 'project_id' is in your request data
 
@@ -987,11 +987,7 @@ def add_batch(request, project_id):
                                 ).count()
                                 + 1
                             )
-                            print(
-                                CoachingSession.objects.filter(
-                                    batch=batch, session_type=session_type
-                                )
-                            )
+                            
                             booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                             coaching_session = CoachingSession.objects.create(
                                 batch=batch,
@@ -1003,12 +999,14 @@ def add_batch(request, project_id):
                             )
 
                 # Check if participant with the same email exists
+                
                 learner = create_or_get_learner(
                     {"name": name, "email": email, "phone": phone}
                 )
 
                 name = learner.name
-                add_contact_in_wati("learner", name, learner.phone)
+                if learner.phone:
+                    add_contact_in_wati("learner", name, learner.phone)
 
                 # Add participant to the batch if not already added
                 if learner and learner not in batch.learners.all():

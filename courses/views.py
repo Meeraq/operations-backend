@@ -102,7 +102,7 @@ wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltop
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
 
-def create_learner(learner_name, learner_email, learner_phone):
+def create_learner(learner_name, learner_email, learner_phone=None):
     try:
         with transaction.atomic():
             learner_email = learner_email.strip().lower()
@@ -122,12 +122,23 @@ def create_learner(learner_name, learner_email, learner_phone):
             profile = Profile.objects.create(user=user)
             profile.roles.add(learner_role)
             profile.save()
-            learner = Learner.objects.create(
-                user=profile,
-                name=learner_name,
-                email=learner_email,
-                phone=learner_phone,
-            )
+
+            phone = learner_phone if learner_phone else None
+            learner = None
+            if phone:
+                learner = Learner.objects.create(
+                    user=profile,
+                    name=learner_name,
+                    email=learner_email,
+                    phone=phone,
+                )
+            else:
+                learner = Learner.objects.create(
+                    user=profile,
+                    name=learner_name,
+                    email=learner_email,
+                )
+
             return learner
 
     except Exception as e:
@@ -137,12 +148,16 @@ def create_learner(learner_name, learner_email, learner_phone):
 def create_or_get_learner(learner_data):
     try:
         # check if the same email user exists or not
+        phone = learner_data.get("phone", None)
         user = User.objects.filter(username=learner_data["email"]).first()
         if user:
             if user.profile.roles.all().filter(name="learner").exists():
                 learner = Learner.objects.get(user=user.profile)
                 learner.name = learner_data["name"].strip()
-                learner.phone = learner_data["phone"]
+
+                if learner_data["phone"]:
+                    learner.phone = learner_data["phone"]
+
                 learner.save()
                 return learner
             else:
@@ -150,19 +165,18 @@ def create_or_get_learner(learner_data):
                 learner_profile = user.profile
                 learner_profile.roles.add(learner_role)
                 learner_role.save()
+
                 learner, created = Learner.objects.get_or_create(
                     user=learner_profile,
                     defaults={
                         "name": learner_data["name"],
                         "email": learner_data["email"],
-                        "phone": learner_data["phone"],
+                        "phone": phone,
                     },
                 )
                 return learner
         else:
-            learner = create_learner(
-                learner_data["name"], learner_data["email"], learner_data["phone"]
-            )
+            learner = create_learner(learner_data["name"], learner_data["email"], phone)
             return learner
     except Exception as e:
         # Handle specific exceptions or log the error
@@ -2480,7 +2494,7 @@ class FeedbackEmailValidation(APIView):
             feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
             lesson = feedback_lesson.lesson
 
-            learner = Learner.objects.filter(email=email).first() 
+            learner = Learner.objects.filter(email=email).first()
 
             if learner:
                 feedback_lesson_response = FeedbackLessonResponse.objects.filter(
@@ -2730,7 +2744,6 @@ class LessonCompletedWebhook(APIView):
                 {"error": "Failed to duplicate lesson."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
 
 
 class GetUniqueIdParticipantFromCourse(APIView):
