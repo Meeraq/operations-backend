@@ -2012,7 +2012,7 @@ def add_participant_to_batch(request, batch_id):
     with transaction.atomic():
         name = request.data.get("name")
         email = request.data.get("email", "").strip().lower()
-        phone = request.data.get("phone")
+        phone = request.data.get("phone", None) 
         try:
             batch = SchedularBatch.objects.get(id=batch_id)
         except SchedularBatch.DoesNotExist:
