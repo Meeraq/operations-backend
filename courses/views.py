@@ -2695,24 +2695,39 @@ def get_all_feedbacks_download_report(request, feedback_id):
     try:
         feedback_lesson = FeedbackLesson.objects.get(id=feedback_id)
 
+        # Get all participants associated with the batch of the course related to the feedback lesson
+        participants = Learner.objects.filter(
+            schedularbatch__id=feedback_lesson.lesson.course.batch.id
+        )
+
         # Create a DataFrame to store the data
         data = {"Participant": [], "Question": [], "Answer": []}
 
         # Populate the DataFrame with data from FeedbackLesson and FeedbackLessonResponse
-        for response in FeedbackLessonResponse.objects.filter(
-            feedback_lesson=feedback_lesson
-        ):
-            participant_name = response.learner.name
+        for participant in participants:
+            participant_name = participant.name
 
-            for answer in response.answers.all():
-                question_text = answer.question.text
-                answer_value = (
-                    answer.text_answer if answer.text_answer else answer.rating
-                )
+            # Check if the participant provided feedback
+            response = FeedbackLessonResponse.objects.filter(
+                feedback_lesson=feedback_lesson, learner=participant
+            ).first()
 
-                data["Participant"].append(participant_name)
-                data["Question"].append(question_text)
-                data["Answer"].append(answer_value)
+            if response:
+                for answer in response.answers.all():
+                    question_text = answer.question.text
+                    answer_value = (
+                        answer.text_answer if answer.text_answer else answer.rating
+                    )
+
+                    data["Participant"].append(participant_name)
+                    data["Question"].append(question_text)
+                    data["Answer"].append(answer_value)
+            else:
+                # If participant did not provide feedback, populate with empty values
+                for question in feedback_lesson.questions.all():
+                    data["Participant"].append(participant_name)
+                    data["Question"].append(question.text)
+                    data["Answer"].append("-")
 
         # Create a DataFrame from the data
         df = pd.DataFrame(data)
