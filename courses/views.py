@@ -2001,7 +2001,7 @@ def get_consolidated_feedback_report(request):
     try:
         data = {}
         all_projects = SchedularProject.objects.all()
-        print(all_projects)
+  
         for project in all_projects:
             all_batches = SchedularBatch.objects.filter(project=project)
             total_participant_count=0
@@ -2011,8 +2011,7 @@ def get_consolidated_feedback_report(request):
             for batch in all_batches:
                 # Get live sessions for the current batch
                 live_sessions = LiveSession.objects.filter(batch=batch)
-                print(project)
-                print(live_sessions)
+      
                 for live_session in live_sessions:
                     # Now, you can access the associated Course through the SchedularBatch
                     course = Course.objects.filter(batch=batch).first()
@@ -2023,7 +2022,7 @@ def get_consolidated_feedback_report(request):
                         feedback_lessons = FeedbackLesson.objects.filter(
                             lesson__course=course
                         )
-                        print(project,data)
+                        
                         for feedback_lesson in feedback_lessons:
                             current_lesson_name = feedback_lesson.lesson.name
                             formatted_lesson_name = get_feedback_lesson_name(
@@ -2031,7 +2030,7 @@ def get_consolidated_feedback_report(request):
                             )
                             total_participant = total_participant_count
                             total_responses = 0
-                            print("hoo")
+                          
                             for participant in batch.learners.all():
                                 feedback_response = FeedbackLessonResponse.objects.filter(
                                     feedback_lesson=feedback_lesson, learner=participant
@@ -2043,8 +2042,7 @@ def get_consolidated_feedback_report(request):
                                 if total_participant
                                 else 0
                             )
-                            print("hoeeeeeo")
-                            print("hii",formatted_lesson_name,feedback_lesson_name_should_be)
+                            
                             if formatted_lesson_name == feedback_lesson_name_should_be:
                                 live_session_key = f'{project.name} Live Session {live_session.live_session_number}'
                                 if live_session_key not in data:
@@ -2056,7 +2054,7 @@ def get_consolidated_feedback_report(request):
                                         "total_responses": total_responses,
                                         "percentage_responded": percentage_responded,
                                     }
-                                    print("taaaa")
+                               
                                 else:
                                     # Merge data for the same live session number
                                     # data[live_session_key]["total_participant"] += len(total_participant)
@@ -2064,7 +2062,7 @@ def get_consolidated_feedback_report(request):
                                     data[live_session_key]["percentage_responded"] = round(
                                         (data[live_session_key]["total_responses"] / data[live_session_key]["total_participant"]) * 100, 2
                                     )
-                                    print("maa")
+                                  
 
         return Response(list(data.values()))
     except Exception as e:
