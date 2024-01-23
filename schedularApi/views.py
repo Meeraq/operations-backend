@@ -77,7 +77,11 @@ from courses.models import (
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
 from courses.views import create_or_get_learner
-
+from assessmentApi.models import (
+    Assessment,
+    ParticipantUniqueId,
+    ParticipantObserverMapping,
+)
 from api.serializers import LearnerSerializer
 from api.views import (
     create_notification,
@@ -88,6 +92,7 @@ from api.views import (
 import io
 from time import sleep
 
+from assessmentApi.views import delete_participant_from_assessments
 
 # Create your views here.
 
@@ -920,104 +925,115 @@ def create_coach_schedular_availibilty(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_batch(request, project_id):
-    participants_data = request.data.get("participants", [])
-    project = SchedularProject.objects.get(id=project_id)
+    try:
+        with transaction.atomic():
+            participants_data = request.data.get("participants", [])
+            project = SchedularProject.objects.get(id=project_id)
 
-    for participant_data in participants_data:
-        name = participant_data.get("name")
-        email = participant_data.get("email", "").strip().lower()
-        phone = participant_data.get("phone")
-        batch_name = participant_data.get("batch").strip().upper()
-        # Assuming 'project_id' is in your request data
+            for participant_data in participants_data:
+                name = participant_data.get("name")
+                email = participant_data.get("email", "").strip().lower()
+                phone = participant_data.get("phone")
+                batch_name = participant_data.get("batch").strip().upper()
+                # Assuming 'project_id' is in your request data
 
-        # Check if batch with the same name exists
-        batch = SchedularBatch.objects.filter(name=batch_name, project=project).first()
+                # Check if batch with the same name exists
+                batch = SchedularBatch.objects.filter(
+                    name=batch_name, project=project
+                ).first()
 
-        if not batch:
-            # If batch does not exist, create a new batch
-            batch = SchedularBatch.objects.create(name=batch_name, project=project)
-
-            # Create Live Sessions and Coaching Sessions based on project structure
-            for session_data in project.project_structure:
-                order = session_data.get("order")
-                duration = session_data.get("duration")
-                session_type = session_data.get("session_type")
-
-                if session_type == "live_session":
-                    live_session_number = (
-                        LiveSession.objects.filter(batch=batch).count() + 1
-                    )
-                    live_session = LiveSession.objects.create(
-                        batch=batch,
-                        live_session_number=live_session_number,
-                        order=order,
-                        duration=duration,
-                    )
-                elif session_type == "laser_coaching_session":
-                    coaching_session_number = (
-                        CoachingSession.objects.filter(
-                            batch=batch, session_type=session_type
-                        ).count()
-                        + 1
-                    )
-                    booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
-                    coaching_session = CoachingSession.objects.create(
-                        batch=batch,
-                        coaching_session_number=coaching_session_number,
-                        order=order,
-                        duration=duration,
-                        booking_link=booking_link,
-                        session_type=session_type,
-                    )
-                elif session_type == "mentoring_session":
-                    coaching_session_number = (
-                        CoachingSession.objects.filter(
-                            batch=batch, session_type=session_type
-                        ).count()
-                        + 1
-                    )
-                    print(
-                        CoachingSession.objects.filter(
-                            batch=batch, session_type=session_type
-                        )
-                    )
-                    booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
-                    coaching_session = CoachingSession.objects.create(
-                        batch=batch,
-                        coaching_session_number=coaching_session_number,
-                        order=order,
-                        duration=duration,
-                        booking_link=booking_link,
-                        session_type=session_type,
+                if not batch:
+                    # If batch does not exist, create a new batch
+                    batch = SchedularBatch.objects.create(
+                        name=batch_name, project=project
                     )
 
-        # Check if participant with the same email exists
-        learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
+                    # Create Live Sessions and Coaching Sessions based on project structure
+                    for session_data in project.project_structure:
+                        order = session_data.get("order")
+                        duration = session_data.get("duration")
+                        session_type = session_data.get("session_type")
 
-        name = learner.name
-        add_contact_in_wati("learner", name, learner.phone)
+                        if session_type == "live_session":
+                            live_session_number = (
+                                LiveSession.objects.filter(batch=batch).count() + 1
+                            )
+                            live_session = LiveSession.objects.create(
+                                batch=batch,
+                                live_session_number=live_session_number,
+                                order=order,
+                                duration=duration,
+                            )
+                        elif session_type == "laser_coaching_session":
+                            coaching_session_number = (
+                                CoachingSession.objects.filter(
+                                    batch=batch, session_type=session_type
+                                ).count()
+                                + 1
+                            )
+                            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                            coaching_session = CoachingSession.objects.create(
+                                batch=batch,
+                                coaching_session_number=coaching_session_number,
+                                order=order,
+                                duration=duration,
+                                booking_link=booking_link,
+                                session_type=session_type,
+                            )
+                        elif session_type == "mentoring_session":
+                            coaching_session_number = (
+                                CoachingSession.objects.filter(
+                                    batch=batch, session_type=session_type
+                                ).count()
+                                + 1
+                            )
+                            print(
+                                CoachingSession.objects.filter(
+                                    batch=batch, session_type=session_type
+                                )
+                            )
+                            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                            coaching_session = CoachingSession.objects.create(
+                                batch=batch,
+                                coaching_session_number=coaching_session_number,
+                                order=order,
+                                duration=duration,
+                                booking_link=booking_link,
+                                session_type=session_type,
+                            )
 
-        # Add participant to the batch if not already added
-        if learner and learner not in batch.learners.all():
-            batch.learners.add(learner)
-            try:
-                course = Course.objects.get(batch=batch)
-                course_enrollments = CourseEnrollment.objects.filter(
-                    learner=learner, course=course
+                # Check if participant with the same email exists
+                learner = create_or_get_learner(
+                    {"name": name, "email": email, "phone": phone}
                 )
-                if not course_enrollments.exists():
-                    datetime = timezone.now()
-                    CourseEnrollment.objects.create(
-                        learner=learner,
-                        course=course,
-                        enrollment_date=datetime,
-                    )
-            except Exception:
-                pass
 
-    return Response(
-        {"message": "Batch created successfully."}, status=status.HTTP_201_CREATED
-    )
+                name = learner.name
+                add_contact_in_wati("learner", name, learner.phone)
+
+                # Add participant to the batch if not already added
+                if learner and learner not in batch.learners.all():
+                    batch.learners.add(learner)
+                    try:
+                        course = Course.objects.get(batch=batch)
+                        course_enrollments = CourseEnrollment.objects.filter(
+                            learner=learner, course=course
+                        )
+                        if not course_enrollments.exists():
+                            datetime = timezone.now()
+                            CourseEnrollment.objects.create(
+                                learner=learner,
+                                course=course,
+                                enrollment_date=datetime,
+                            )
+                    except Exception:
+                        pass
+
+            return Response(
+                {"message": "Batch created successfully."},
+                status=status.HTTP_201_CREATED,
+            )
+    except Exception as e:
+        print(str(e))
 
 
 @api_view(["GET"])
@@ -1995,52 +2011,85 @@ def export_available_slot(request):
 @permission_classes([IsAuthenticated])
 def add_participant_to_batch(request, batch_id):
     # batch_id = request.data.get("batch_id")
-    name = request.data.get("name")
-    email = request.data.get("email", "").strip().lower()
-    phone = request.data.get("phone")
-    try:
-        batch = SchedularBatch.objects.get(id=batch_id)
-    except SchedularBatch.DoesNotExist:
-        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
-
-    try:
-        learner = Learner.objects.get(email=email)
-        # Check if participant is already in the batch
-        if learner in batch.learners.all():
-            return Response(
-                {"error": "Participant already exists in the batch"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-    except Learner.DoesNotExist:
-        # Participant doesn't exist, create a new one
-        learner = create_or_get_learner({"name": name, "email": email, "phone": phone})
-    # Add the participant to the batch
-    if learner:
-        batch.learners.add(learner)
-        batch.save()
-        name = learner.name
-        add_contact_in_wati("learner", name, learner.phone)
+    with transaction.atomic():
+        name = request.data.get("name")
+        email = request.data.get("email", "").strip().lower()
+        phone = request.data.get("phone")
         try:
-            course = Course.objects.get(batch=batch)
-            course_enrollments = CourseEnrollment.objects.filter(
-                learner=learner, course=course
+            batch = SchedularBatch.objects.get(id=batch_id)
+        except SchedularBatch.DoesNotExist:
+            return Response(
+                {"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND
             )
-            if not course_enrollments.exists():
-                datetime = timezone.now()
-                CourseEnrollment.objects.create(
-                    learner=learner,
-                    course=course,
-                    enrollment_date=datetime,
-                )
-        except Exception:
-            # course doesnt exists
-            pass
 
-        return Response(
-            {"message": "Participant added to the batch successfully"},
-            status=status.HTTP_201_CREATED,
+        assessments = Assessment.objects.filter(
+            assessment_modal__lesson__course__batch=batch
         )
+
+        try:
+            learner = Learner.objects.get(email=email)
+            # Check if participant is already in the batch
+            if learner in batch.learners.all():
+                return Response(
+                    {"error": "Participant already exists in the batch"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        except Learner.DoesNotExist:
+            # Participant doesn't exist, create a new one
+            learner = create_or_get_learner(
+                {"name": name, "email": email, "phone": phone}
+            )
+        # Add the participant to the batch
+        if learner:
+            if assessments:
+                for assessment in assessments:
+                    if assessment.participants_observers.filter(
+                        participant__email=learner.email
+                    ).exists():
+                        continue
+
+                    unique_id = uuid.uuid4()
+
+                    unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=learner,
+                        assessment=assessment,
+                        unique_id=unique_id,
+                    )
+
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=learner
+                    )
+
+                    mapping.save()
+                    assessment.participants_observers.add(mapping)
+                    assessment.save()
+
+            batch.learners.add(learner)
+            batch.save()
+            name = learner.name
+            if learner.phone:
+                add_contact_in_wati("learner", name, learner.phone)
+            try:
+                course = Course.objects.get(batch=batch)
+                course_enrollments = CourseEnrollment.objects.filter(
+                    learner=learner, course=course
+                )
+                if not course_enrollments.exists():
+                    datetime = timezone.now()
+                    CourseEnrollment.objects.create(
+                        learner=learner,
+                        course=course,
+                        enrollment_date=datetime,
+                    )
+            except Exception:
+                # course doesnt exists
+                pass
+
+            return Response(
+                {"message": "Participant added to the batch successfully"},
+                status=status.HTTP_201_CREATED,
+            )
     return Response(
         {"error": "Failed to add participants."},
         status=status.HTTP_400_BAD_REQUEST,
@@ -2450,6 +2499,20 @@ def delete_learner_from_course(request):
             )
             schedular_sessions.delete()
 
+            assessment = Assessment.objects.filter(
+                assessment_modal__lesson__course__batch=batch
+            ).first()
+
+            if assessment:
+                deleted = delete_participant_from_assessments(
+                    assessment, learner.id, assessment.id
+                )
+                if deleted:
+                    return Response(
+                        {
+                            "message": f"Coachee removed from batch and assessments successfully."
+                        }
+                    )
             return Response({"message": f"Coachee removed from batch successfully."})
         else:
             return Response({"message": f"Coachee is not part of batch."}, status=400)

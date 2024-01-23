@@ -65,6 +65,14 @@ from schedularApi.models import (
     SchedularBatch,
     LiveSession as LiveSessionSchedular,
 )
+from assessmentApi.serializers import (
+    AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
+)
+from assessmentApi.models import (
+    Assessment as AssessmentModal,
+    ParticipantResponse,
+    ParticipantUniqueId,
+)
 from rest_framework.decorators import api_view, permission_classes
 from django.db import transaction
 import random
@@ -80,6 +88,7 @@ import environ
 import uuid
 import logging
 from rest_framework.permissions import AllowAny, IsAuthenticated
+
 
 env = environ.Env()
 
@@ -982,18 +991,31 @@ def update_laser_coaching_session(request, course_id, lesson_id, session_id):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_assessment_and_lesson(request):
-    lesson_data = request.data.get("lesson")
-    lesson_serializer = LessonSerializer(data=lesson_data)
-    if lesson_serializer.is_valid():
-        lesson = lesson_serializer.save()
-        assessment = Assessment.objects.create(
-            lesson=lesson,
-        )
-        return Response(
-            "Assessment lesson created successfully", status=status.HTTP_201_CREATED
-        )
-    else:
-        return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    with transaction.atomic():
+        lesson_data = request.data.get("lesson")
+        lesson_serializer1 = LessonSerializer(data=lesson_data)
+        lesson_serializer2 = LessonSerializer(data=lesson_data)
+        if lesson_serializer1.is_valid() and lesson_serializer2.is_valid():
+            lesson1 = lesson_serializer1.save()
+            lesson2 = lesson_serializer2.save()
+
+            lesson1.name = f"Pre {lesson1.name}"
+            lesson2.name = f"Post {lesson2.name}"
+
+            lesson1.save()
+            lesson2.save()
+
+            assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+
+            assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
+            return Response(
+                "Assessment lesson created successfully", status=status.HTTP_201_CREATED
+            )
+        else:
+            return Response(
+                {lesson_serializer1.errors, lesson_serializer2.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 @api_view(["GET"])
@@ -1020,7 +1042,7 @@ def update_assessment_lesson(request, lesson_id, session_id):
         )
 
     lesson_data = request.data.get("lesson")
-
+    assessment.save()
     # Check if 'lesson' data is provided in the request and update the lesson name
     if lesson_data and "name" in lesson_data:
         lesson.name = lesson_data["name"]
@@ -2073,7 +2095,12 @@ class AssignCourseTemplateToBatch(APIView):
                                 description=original_lesson.downloadablelesson.description,
                             )
                         elif original_lesson.lesson_type == "assessment":
-                            Assessment.objects.create(lesson=new_lesson)
+                            assessment = Assessment.objects.filter(
+                                lesson=original_lesson
+                            ).first()
+                            Assessment.objects.create(
+                                lesson=new_lesson, type=assessment.type
+                            )
                         elif original_lesson.lesson_type == "quiz":
                             new_quiz_lesson = QuizLesson.objects.create(
                                 lesson=new_lesson
@@ -2347,7 +2374,7 @@ def update_course_status(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def lesson_update_status(request):
     if request.method == "PUT":
         serializer = LessonUpdateSerializer(data=request.data)
@@ -2359,6 +2386,21 @@ def lesson_update_status(request):
                 lesson = Lesson.objects.get(id=lesson_id)
                 lesson.status = status_value
                 lesson.save()
+
+                if lesson.lesson_type == "assessment":
+                    assessment = Assessment.objects.filter(lesson=lesson).first()
+
+                    assessment_modal = AssessmentModal.objects.get(
+                        id=assessment.assessment_modal.id
+                    )
+
+                    if lesson.status == "draft":
+                        assessment_modal.status = "draft"
+
+                    if lesson.status == "public":
+                        assessment_modal.status = "ongoing"
+                    assessment_modal.save()
+
                 return Response(
                     {"message": f"Lesson status updated."}, status=status.HTTP_200_OK
                 )
@@ -2438,7 +2480,7 @@ class FeedbackEmailValidation(APIView):
             feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
             lesson = feedback_lesson.lesson
 
-            learner = Learner.objects.filter(email=email).first()
+            learner = Learner.objects.filter(email=email).first() 
 
             if learner:
                 feedback_lesson_response = FeedbackLessonResponse.objects.filter(
@@ -2508,6 +2550,8 @@ class GetFeedbackForm(APIView):
 
 
 class EditAllowedFeedbackLesson(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, feedback_lesson_id):
         try:
             feedback_lesson = FeedbackLesson.objects.get(id=feedback_lesson_id)
@@ -2538,6 +2582,8 @@ class EditAllowedFeedbackLesson(APIView):
 
 
 class DuplicateLesson(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         try:
             with transaction.atomic():
@@ -2651,6 +2697,8 @@ class DuplicateLesson(APIView):
 
 
 class LessonCompletedWebhook(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         try:
             payload = request.data.get("payload", {})
@@ -2681,4 +2729,73 @@ class LessonCompletedWebhook(APIView):
             return Response(
                 {"error": "Failed to duplicate lesson."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+
+class GetUniqueIdParticipantFromCourse(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_id, assessment_id):
+        try:
+            learner = Learner.objects.get(id=user_id)
+
+            assessment = AssessmentModal.objects.get(id=assessment_id)
+
+            participant_unique_id = ParticipantUniqueId.objects.filter(
+                participant=learner, assessment=assessment
+            ).first()
+
+            participant_response = ParticipantResponse.objects.filter(
+                participant=learner, assessment=assessment
+            ).first()
+
+            return Response(
+                {
+                    "unique_id": participant_unique_id.unique_id,
+                    "responded": bool(participant_response),
+                },
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": "Failed to get unique id."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetAssessmentsOfBatch(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, batch_id):
+        try:
+            batch = SchedularBatch.objects.get(id=batch_id)
+            assessments = AssessmentModal.objects.filter(
+                assessment_modal__lesson__course__batch=batch
+            )
+            assessment_list = []
+            for assessment in assessments:
+                total_responses_count = ParticipantResponse.objects.filter(
+                    assessment=assessment
+                ).count()
+                assessment_data = {
+                    "id": assessment.id,
+                    "name": assessment.name,
+                    "participant_view_name": assessment.participant_view_name,
+                    "assessment_type": assessment.assessment_type,
+                    "assessment_timing": assessment.assessment_timing,
+                    "assessment_start_date": assessment.assessment_start_date,
+                    "assessment_end_date": assessment.assessment_end_date,
+                    "status": assessment.status,
+                    "total_learners_count": assessment.participants_observers.count(),
+                    "total_responses_count": total_responses_count,
+                    "created_at": assessment.created_at,
+                }
+                assessment_list.append(assessment_data)
+
+            return Response(assessment_list)
+
+        except Exception as e:
+            return Response(
+                {"error": "Failed to ger data"}, status.HTTP_500_INTERNAL_SERVER_ERROR
             )
