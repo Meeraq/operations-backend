@@ -5,6 +5,7 @@ import os
 from django.core.exceptions import ValidationError
 from django_celery_beat.models import PeriodicTask
 import uuid
+from assessmentApi.models import Assessment as AssessmentModal
 
 # Create your models here.
 
@@ -117,7 +118,22 @@ class LaserCoachingSession(models.Model):
 
 
 class Assessment(models.Model):
+    ASSESSMENT_TIMING_CHOICES = [
+        ("pre", "Pre-Assessment"),
+        ("post", "Post-Assessment"),
+        ("none", "None"),
+    ]
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    type = models.CharField(
+        max_length=255, choices=ASSESSMENT_TIMING_CHOICES, default="none"
+    )
+    assessment_modal = models.ForeignKey(
+        AssessmentModal,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        related_name="assessment_modal",
+    )
 
 
 class Video(models.Model):
@@ -153,6 +169,7 @@ class CourseEnrollment(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE)
     enrollment_date = models.DateTimeField(auto_now_add=True)
     completed_lessons = models.JSONField(default=list, blank=True)
+    is_certificate_allowed = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return f"{self.learner.name} enrolled in {self.course.name}"
