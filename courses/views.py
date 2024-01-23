@@ -80,6 +80,12 @@ import environ
 import uuid
 import logging
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+import pandas as pd
+from io import BytesIO
+
 
 env = environ.Env()
 
@@ -2682,3 +2688,57 @@ class LessonCompletedWebhook(APIView):
                 {"error": "Failed to duplicate lesson."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["GET"])
+def get_all_feedbacks_download_report(request, feedback_id):
+    try:
+        feedback_lesson = FeedbackLesson.objects.get(id=feedback_id)
+
+        # Create a DataFrame to store the data
+        data = {"Participant": [], "Question": [], "Answer": []}
+
+        # Populate the DataFrame with data from FeedbackLesson and FeedbackLessonResponse
+        for response in FeedbackLessonResponse.objects.filter(
+            feedback_lesson=feedback_lesson
+        ):
+            participant_name = response.learner.name
+
+            for answer in response.answers.all():
+                question_text = answer.question.text
+                answer_value = (
+                    answer.text_answer if answer.text_answer else answer.rating
+                )
+
+                data["Participant"].append(participant_name)
+                data["Question"].append(question_text)
+                data["Answer"].append(answer_value)
+
+        # Create a DataFrame from the data
+        df = pd.DataFrame(data)
+
+        # Pivot the DataFrame to have Question columns
+        df_pivot = df.pivot(
+            index="Participant", columns="Question", values="Answer"
+        ).reset_index()
+
+        # Save the DataFrame to an Excel file in-memory
+        excel_data = BytesIO()
+        df_pivot.to_excel(excel_data, index=False)
+        excel_data.seek(0)
+
+        # Create the response with the Excel file
+        response = HttpResponse(
+            excel_data.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f"attachment; filename=Feedback Report.xlsx"
+
+        return response
+
+    except FeedbackLesson.DoesNotExist:
+        return Response(
+            {"error": "Feedback lesson not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

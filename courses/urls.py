@@ -302,4 +302,8 @@ urlpatterns = [
         "lesson-completed-webhook/",
         LessonCompletedWebhook.as_view(),
     ),
+    path(
+        "feedback-report-download/<str:feedback_id>/",
+        views.get_all_feedbacks_download_report,
+    ),
 ]
