@@ -29,6 +29,9 @@ from .views import (
     GetFeedbackForm,
     EditAllowedFeedbackLesson,
     DuplicateLesson,
+    LessonCompletedWebhook,
+    GetUniqueIdParticipantFromCourse,
+    GetAssessmentsOfBatch,
 )
 import environ
 
@@ -68,6 +71,11 @@ urlpatterns = [
         views.UpdateLessonOrder.as_view(),
         name="update_lesson_order",
     ),
+    path(
+        "nudges/update_nudges_order/",
+        views.UpdateNudgesOrder.as_view(),
+        name="update_lesson_order",
+    ),
     path("text-lessons/", TextLessonCreateView.as_view(), name="text-lesson-create"),
     path(
         "text-lessons/<int:pk>/", TextLessonEditView.as_view(), name="text-lesson-edit"
@@ -79,6 +87,17 @@ urlpatterns = [
     # ),
     path(
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
+    ),
+    path(
+        "courses/<int:course_id>/nudges/",
+        views.get_nudges_and_course,
+        name="lesson-list",
+    ),
+    path("nudges/create", views.create_new_nudge),
+    path("nudges/<int:nudge_id>/file/download/", views.download_nudge_file),
+    path(
+        "courses/<int:course_id>/update-nudge-date-frequency/",
+        views.add_nudges_date_frequency_to_course,
     ),
     path(
         "course-templates/<int:course_template_id>/lessons/",
@@ -280,5 +299,17 @@ urlpatterns = [
     path(
         "duplicate-lesson/",
         DuplicateLesson.as_view(),
+    ),
+    path(
+        "lesson-completed-webhook/",
+        LessonCompletedWebhook.as_view(),
+    ),
+    path(
+        "get/uniqueId/participant-from-course/<int:user_id>/<int:assessment_id>/",
+        GetUniqueIdParticipantFromCourse.as_view(),
+    ),
+    path(
+        "get-assessments-of-batch/<int:batch_id>/",
+        GetAssessmentsOfBatch.as_view(),
     ),
 ]
