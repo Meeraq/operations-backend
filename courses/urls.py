@@ -312,4 +312,8 @@ urlpatterns = [
         "get-assessments-of-batch/<int:batch_id>/",
         GetAssessmentsOfBatch.as_view(),
     ),
+    path(
+        "feedback-report-download/<str:feedback_id>/",
+        views.get_all_feedbacks_download_report,
+    ),
 ]
