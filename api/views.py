@@ -1061,6 +1061,7 @@ def create_project_cass(request):
             ),
             status="presales",
             masked_coach_profile = request.data["masked_coach_profile"],
+            automated_reminder = request.data["automated_reminder"],
         )
 
         project.save()
@@ -1138,7 +1139,7 @@ def create_learners(learners_data):
 
                     if learner:
                         learner.name = learner_data.get("name").strip()
-                        learner.phone = learner_data.get("phone").strip()
+                        learner.phone = learner_data.get("phone")
                         learner.save()
                         learners.append(learner)
                         continue
@@ -6445,12 +6446,19 @@ def edit_project_caas(request, project_id):
         project.masked_coach_profile = request.data.get(
             "masked_coach_profile", project.masked_coach_profile
         )
+
+        project.automated_reminder = request.data.get(
+            "automated_reminder", project.automated_reminder
+        )
+        
         project.hr.clear()
         for hr in request.data["hr"]:
             single_hr = HR.objects.get(id=hr)
             project.hr.add(single_hr)
 
         # Save the updated project
+            
+        
         project.save()
 
         # You can return a success response with the updated project details
