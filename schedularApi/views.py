@@ -173,6 +173,7 @@ def create_project_schedular(request):
         schedularProject = SchedularProject(
             name=request.data["project_name"],
             organisation=organisation,
+            automated_reminder=request.data["automated_reminder"],
         )
         schedularProject.save()
     except IntegrityError:
@@ -2539,6 +2540,7 @@ def edit_schedular_project(request, project_id):
         try:
             organisation = Organisation.objects.get(pk=organisation_id)
             project.organisation = organisation
+
         except Organisation.DoesNotExist:
             return Response(
                 {"error": "Organisation not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2554,6 +2556,7 @@ def edit_schedular_project(request, project_id):
                 {"error": f"HR with ID {hr_id} not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
+    project.automated_reminder = request.data.get("automated_reminder")
     project.save()
     return Response(
         {"message": "Project updated successfully"}, status=status.HTTP_200_OK
