@@ -74,6 +74,19 @@ import io
 from api.views import add_contact_in_wati
 from schedularApi.tasks import send_assessment_invitation_mail, send_whatsapp_message
 from django.shortcuts import render, get_object_or_404
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.decorators import permission_classes
+
+from courses.models import (
+    Course,
+    Lesson,
+    Assessment as AssessmentLesson,
+    FeedbackLessonResponse,
+    QuizLessonResponse,
+    CourseEnrollment,
+)
+from schedularApi.models import SchedularBatch, SchedularSessions
+
 
 matplotlib.use("Agg")
 env = environ.Env()
@@ -150,11 +163,9 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
         print(f"Error occurred while sending emails: {str(e)}")
 
 
-# def whatsapp_message_for_participant():
-#     ongoing_assessments = Assessment.objects.filter(status="ongoing")
-
-#     for assessment in ongoing_assessments:
-#         participants_observers = assessment.participants_observers.all()
+# def create_notification(user, path, message):
+#     notification = Notification.objects.create(user=user, path=path, message=message)
+#     return notification
 
 #         for participant_observer_mapping in participants_observers:
 #             participant = participant_observer_mapping.participant
@@ -255,6 +266,8 @@ def create_learner(learner_name, learner_email):
 
 
 class CompetencyView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         competencies = Competency.objects.all()
         serializer = CompetencySerializerDepthOne(competencies, many=True)
@@ -349,6 +362,8 @@ class CompetencyView(APIView):
 
 
 class OneCompetencyDetail(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         competency_id = request.data.get("id")
         try:
@@ -363,6 +378,8 @@ class OneCompetencyDetail(APIView):
 
 
 class QuestionView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         questions = Question.objects.all()
         serializer = QuestionSerializerDepthTwo(questions, many=True)
@@ -430,6 +447,8 @@ class QuestionView(APIView):
 
 
 class OneQuestionDetail(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         question_id = request.data.get("id")
         try:
@@ -444,6 +463,8 @@ class OneQuestionDetail(APIView):
 
 
 class QuestionnaireView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         questionnaires = Questionnaire.objects.all()
         serializer = QuestionnaireSerializerDepthThree(questionnaires, many=True)
@@ -508,6 +529,8 @@ class QuestionnaireView(APIView):
 
 
 class OneQuestionnaireDetail(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         questionnaire_id = request.data.get("id")
         try:
@@ -521,7 +544,32 @@ class OneQuestionnaireDetail(APIView):
         return Response(serializer.data)
 
 
+def create_pre_post_assessments(request):
+    try:
+        pre_assessment_serializer = AssessmentSerializer(
+            data=request.data["pre_assessment_data"]
+        )
+        post_assessment_serializer = AssessmentSerializer(
+            data=request.data["post_assessment_data"]
+        )
+        if (
+            pre_assessment_serializer.is_valid()
+            and post_assessment_serializer.is_valid()
+        ):
+            pre_assessment = pre_assessment_serializer.save()
+            post_assessment = post_assessment_serializer.save()
+            post_assessment.pre_assessment = pre_assessment
+            post_assessment.save()
+            print("done")
+            return True, pre_assessment.id, post_assessment.id
+        return False, None, None
+    except Exception as e:
+        return False, None, None
+
+
 class AssessmentView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         assessments = Assessment.objects.all()
         serializer = AssessmentSerializerDepthFour(assessments, many=True)
@@ -541,20 +589,12 @@ class AssessmentView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         elif request.data["assessment_creation_type"] == "pre_post":
-            pre_assessment_serializer = AssessmentSerializer(
-                data=request.data["pre_assessment_data"]
-            )
-            post_assessment_serializer = AssessmentSerializer(
-                data=request.data["post_assessment_data"]
-            )
-            if (
-                pre_assessment_serializer.is_valid()
-                and post_assessment_serializer.is_valid()
-            ):
-                pre_assessment = pre_assessment_serializer.save()
-                post_assessment = post_assessment_serializer.save()
-                post_assessment.pre_assessment = pre_assessment
-                post_assessment.save()
+            (
+                created,
+                pre_assessment_id,
+                post_assessment_id,
+            ) = create_pre_post_assessments(request)
+            if created:
                 return Response(
                     {"message": "Assessment created successfully."},
                     status=status.HTTP_201_CREATED,
@@ -665,6 +705,20 @@ class AssessmentStatusChange(APIView):
             assessment.status = request.data.get("status")
             # assessment.assessment_end_date = request.data.get("assessment_end_date")
             assessment.save()
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+
+            if assessment_lesson:
+                lesson = Lesson.objects.filter(id=assessment_lesson.lesson.id).first()
+
+                if assessment.status == "ongoing":
+                    lesson.status = "public"
+                    lesson.save()
+                if assessment.status == "draft":
+                    lesson.status = "draft"
+                    lesson.save()
+
             if (
                 prev_status == "draft"
                 and assessment.status == "ongoing"
@@ -743,6 +797,8 @@ class AssessmentStatusChange(APIView):
 
 
 class AssessmentEndDataChange(APIView):
+    permission_classes = [IsAuthenticated]
+
     def put(self, request):
         assessment_id = request.data.get("id")
 
@@ -768,6 +824,8 @@ class AssessmentEndDataChange(APIView):
 
 
 class AddParticipantObserverToAssessment(APIView):
+    permission_classes = [IsAuthenticated]
+
     @transaction.atomic
     def put(self, request):
         assessment_id = request.data.get("assessment_id")
@@ -900,6 +958,8 @@ class AddParticipantObserverToAssessment(APIView):
 
 
 class AssessmentsOfParticipant(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, participant_email):
         try:
             participant = Learner.objects.get(email=participant_email)
@@ -933,6 +993,8 @@ class AssessmentsOfParticipant(APIView):
 
 
 class QuestionsForAssessment(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -968,6 +1030,8 @@ class QuestionsForAssessment(APIView):
 
 
 class QuestionsForObserverAssessment(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -1003,6 +1067,8 @@ class QuestionsForObserverAssessment(APIView):
 
 
 class ObserverView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         try:
             request_email = request.data.get("email")
@@ -1028,6 +1094,8 @@ class ObserverView(APIView):
 
 
 class ObserverAssessment(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, email):
         try:
             assessments = Assessment.objects.filter(
@@ -1044,6 +1112,8 @@ class ObserverAssessment(APIView):
 
 
 class CreateParticipantResponseView(APIView):
+    permission_classes = [AllowAny]
+
     @transaction.atomic
     def post(self, request):
         try:
@@ -1083,6 +1153,8 @@ class CreateParticipantResponseView(APIView):
 
 
 class CreateObserverResponseView(APIView):
+    permission_classes = [AllowAny]
+
     @transaction.atomic
     def post(self, request):
         try:
@@ -1128,6 +1200,8 @@ class CreateObserverResponseView(APIView):
 
 
 class GetParticipantResponseForParticipant(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, participant_email):
         try:
             participant = Learner.objects.get(email=participant_email)
@@ -1148,6 +1222,8 @@ class GetParticipantResponseForParticipant(APIView):
 
 
 class GetParticipantResponseFormAssessment(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -1168,6 +1244,8 @@ class GetParticipantResponseFormAssessment(APIView):
 
 
 class GetObserverResponseForObserver(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, observer_email):
         try:
             observer = Observer.objects.get(email=observer_email)
@@ -1188,6 +1266,8 @@ class GetObserverResponseForObserver(APIView):
 
 
 class GetObserverResponseFormAssessment(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -1208,6 +1288,8 @@ class GetObserverResponseFormAssessment(APIView):
 
 
 class ParticipantObserverTypeList(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         participant_observer_types = ParticipantObserverType.objects.all()
         serializer = ParticipantObserverTypeSerializerDepthTwo(
@@ -1216,29 +1298,25 @@ class ParticipantObserverTypeList(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class DeleteParticipantFromAssessment(APIView):
-    @transaction.atomic
-    def delete(self, request):
-        try:
-            assessment_id = request.data.get("assessment_id")
-            participant_observers = request.data.get("participant_observers")
-            assessment = Assessment.objects.get(id=assessment_id)
+def delete_participant_from_assessments(assessment, participant_id, assessment_id):
+    try:
+        with transaction.atomic():
             if assessment.assessment_timing == "pre":
                 post_assessment = Assessment.objects.filter(
                     pre_assessment=assessment
                 ).first()
                 post_assessment.participants_observers.filter(
-                    participant__id=participant_observers["participant"]["id"]
+                    participant__id=participant_id
                 ).delete()
                 participant_unique_id = ParticipantUniqueId.objects.filter(
-                    participant__id=participant_observers["participant"]["id"],
+                    participant__id=participant_id,
                     assessment=post_assessment,
                 )
                 if participant_unique_id:
                     participant_unique_id.delete()
                 post_assessment_participant_response = (
                     ParticipantResponse.objects.filter(
-                        participant__id=participant_observers["participant"]["id"],
+                        participant__id=participant_id,
                         assessment=post_assessment,
                     )
                 )
@@ -1247,17 +1325,17 @@ class DeleteParticipantFromAssessment(APIView):
             elif assessment.assessment_timing == "post":
                 pre_assessment = assessment.pre_assessment
                 pre_assessment.participants_observers.filter(
-                    participant__id=participant_observers["participant"]["id"]
+                    participant__id=participant_id
                 ).delete()
                 participant_unique_id = ParticipantUniqueId.objects.filter(
-                    participant__id=participant_observers["participant"]["id"],
+                    participant__id=participant_id,
                     assessment=pre_assessment,
                 )
                 if participant_unique_id:
                     participant_unique_id.delete()
                 pre_assessment_participant_response = (
                     ParticipantResponse.objects.filter(
-                        participant__id=participant_observers["participant"]["id"],
+                        participant__id=participant_id,
                         assessment=pre_assessment,
                     )
                 )
@@ -1265,28 +1343,95 @@ class DeleteParticipantFromAssessment(APIView):
                     pre_assessment_participant_response.delete()
 
             assessment.participants_observers.filter(
-                participant__id=participant_observers["participant"]["id"]
+                participant__id=participant_id
             ).delete()
             assessment_participant_unique_id = ParticipantUniqueId.objects.filter(
-                participant__id=participant_observers["participant"]["id"],
+                participant__id=participant_id,
                 assessment=assessment,
             )
             if assessment_participant_unique_id:
                 assessment_participant_unique_id.delete()
             assessment_participant_response = ParticipantResponse.objects.filter(
-                participant__id=participant_observers["participant"]["id"],
+                participant__id=participant_id,
                 assessment=assessment,
             )
             if assessment_participant_response:
                 assessment_participant_response.delete()
-            serializer = AssessmentSerializerDepthFour(assessment)
-            return Response(
-                {
-                    "message": "Successfully removed participant from assessment.",
-                    "assessment_data": serializer.data,
-                },
-                status=status.HTTP_200_OK,
-            )
+
+            return True
+        return False
+    except Exception as e:
+        print(str(e))
+        return False
+
+
+class DeleteParticipantFromAssessment(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def delete(self, request):
+        try:
+            with transaction.atomic():
+                assessment_id = request.data.get("assessment_id")
+                participant_observers = request.data.get("participant_observers")
+                assessment = Assessment.objects.get(id=assessment_id)
+
+                assessment_lesson = AssessmentLesson.objects.filter(
+                    assessment_modal=assessment
+                ).first()
+                if assessment_lesson:
+                    learner = Learner.objects.get(
+                        id=participant_observers["participant"]["id"]
+                    )
+
+                    batch = assessment_lesson.lesson.course.batch
+                    if learner in batch.learners.all():
+                        batch.learners.remove(learner)
+                        # Remove the learner from FeedbackLessonResponse if present
+                        feedback_responses = FeedbackLessonResponse.objects.filter(
+                            learner=learner, feedback_lesson__lesson__course__batch=batch
+                        )
+                        feedback_responses.delete()
+                        # Remove the learner from QuizLessonResponse if present
+                        quiz_responses = QuizLessonResponse.objects.filter(
+                            learner=learner, quiz_lesson__lesson__course__batch=batch
+                        )
+                        quiz_responses.delete()
+
+                        # Remove the learner from CourseEnrollment if enrolled
+                        enrollments = CourseEnrollment.objects.filter(
+                            learner=learner, course__batch=batch
+                        )
+                        enrollments.delete()
+
+                        # Remove the learner from SchedularSessions if present
+                        schedular_sessions = SchedularSessions.objects.filter(
+                            learner=learner, coaching_session__batch=batch
+                        )
+                        schedular_sessions.delete()
+
+                        assessment = Assessment.objects.filter(
+                            assessment_modal__lesson__course__batch=batch
+                        ).first()
+
+                deleted = delete_participant_from_assessments(
+                    assessment,
+                    participant_observers["participant"]["id"],
+                    assessment_id,
+                )
+                if deleted:
+                    serializer = AssessmentSerializerDepthFour(assessment)
+                    return Response(
+                        {
+                            "message": "Successfully removed participant from assessments.",
+                            "assessment_data": serializer.data,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                return Response(
+                    {"error": "Failed to Remove Participant"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
         except Assessment.DoesNotExist:
             return Response(
                 {"error": "Assessment not found."},
@@ -1301,6 +1446,8 @@ class DeleteParticipantFromAssessment(APIView):
 
 
 class DeleteObserverFromAssessment(APIView):
+    permission_classes = [IsAuthenticated]
+
     @transaction.atomic
     def delete(self, request):
         try:
@@ -1334,6 +1481,8 @@ class DeleteObserverFromAssessment(APIView):
 
 
 class AddObserverToParticipant(APIView):
+    permission_classes = [IsAuthenticated]
+
     @transaction.atomic
     def put(self, request):
         try:
@@ -1420,6 +1569,8 @@ class AddObserverToParticipant(APIView):
 
 
 class CompetencyIdsInOngoingAndCompletedAssessments(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         try:
             assessments = Assessment.objects.filter(status__in=["completed", "ongoing"])
@@ -1441,6 +1592,8 @@ class CompetencyIdsInOngoingAndCompletedAssessments(APIView):
 
 
 class QuestionIdsInOngoingAndCompletedAssessments(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         try:
             assessments = Assessment.objects.filter(status__in=["completed", "ongoing"])
@@ -1462,6 +1615,8 @@ class QuestionIdsInOngoingAndCompletedAssessments(APIView):
 
 
 class QuestionnaireIdsInOngoingAndCompletedAssessments(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         try:
             assessments = Assessment.objects.filter(status__in=["completed", "ongoing"])
@@ -1481,6 +1636,8 @@ class QuestionnaireIdsInOngoingAndCompletedAssessments(APIView):
 
 
 class ParticipantAddsObserverToAssessment(APIView):
+    permission_classes = [IsAuthenticated]
+
     @transaction.atomic
     def post(self, request):
         try:
@@ -1570,6 +1727,8 @@ class ParticipantAddsObserverToAssessment(APIView):
 
 
 class StartAssessmentDataForObserver(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, unique_id):
         try:
             observer_unique_id = ObserverUniqueId.objects.get(unique_id=unique_id)
@@ -1593,6 +1752,8 @@ class StartAssessmentDataForObserver(APIView):
 
 
 class GetObserversUniqueIds(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, assessment_id):
         try:
             observers_unique_id = ObserverUniqueId.objects.filter(
@@ -1614,6 +1775,8 @@ class GetObserversUniqueIds(APIView):
 
 
 class GetParticipantObserversUniqueIds(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, participant_email):
         try:
             observers_unique_id = ObserverUniqueId.objects.filter(
@@ -1635,6 +1798,8 @@ class GetParticipantObserversUniqueIds(APIView):
 
 
 class StartAssessmentDisabled(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, unique_id):
         try:
             observers_unique_id = ObserverUniqueId.objects.filter(
@@ -1659,6 +1824,8 @@ class StartAssessmentDisabled(APIView):
 
 
 class StartAssessmentParticipantDisabled(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, unique_id):
         try:
             participant_unique_id = ParticipantUniqueId.objects.filter(
@@ -1682,6 +1849,8 @@ class StartAssessmentParticipantDisabled(APIView):
 
 
 class AssessmentsOfHr(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, hr_email):
         try:
             hr = HR.objects.get(email=hr_email)
@@ -1701,6 +1870,8 @@ class AssessmentsOfHr(APIView):
 
 
 class GetParticipantResponseForAllAssessment(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, hr_email):
         try:
             participant_responses = ParticipantResponse.objects.filter(
@@ -1719,6 +1890,8 @@ class GetParticipantResponseForAllAssessment(APIView):
 
 
 class GetObserverResponseForAllAssessment(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, hr_email):
         try:
             observer_responses = ObserverResponse.objects.filter(
@@ -1737,6 +1910,8 @@ class GetObserverResponseForAllAssessment(APIView):
 
 
 class ReminderMailForObserverByPmoAndParticipant(APIView):
+    permission_classes = [IsAuthenticated]
+
     def put(self, request):
         try:
             assessment_id = request.data.get("assessment_id")
@@ -1787,6 +1962,8 @@ class ReminderMailForObserverByPmoAndParticipant(APIView):
 
 
 class GetParticipantResponseForAllAssessments(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         try:
             participant_responses = ParticipantResponse.objects.all()
@@ -1803,6 +1980,8 @@ class GetParticipantResponseForAllAssessments(APIView):
 
 
 class GetObserverResponseForAllAssessments(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         try:
             observer_responses = ObserverResponse.objects.all()
@@ -1818,6 +1997,8 @@ class GetObserverResponseForAllAssessments(APIView):
 
 
 class AddMultipleQuestions(APIView):
+    permission_classes = [IsAuthenticated]
+
     @transaction.atomic
     def post(self, request):
         try:
@@ -1886,7 +2067,75 @@ class AddMultipleQuestions(APIView):
             )
 
 
+def add_multiple_participants(participant, assessment_id, assessment, name_seperated):
+    if assessment.participants_observers.filter(
+        participant__email=participant["email"]
+    ).exists():
+        return Response(
+            {
+                "error": f"Participant with email {participant['email']} already exists in the assessment."
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    name = None
+    if name_seperated:
+        name = (
+            participant["first_name"].capitalize()
+            + " "
+            + participant.get("last_name", "").capitalize()
+        )
+    else:
+        name = participant["name"]
+    new_participant = create_learner(name, participant["email"])
+    if participant["phone"]:
+        new_participant.phone = participant["phone"]
+    new_participant.save()
+    mapping = ParticipantObserverMapping.objects.create(participant=new_participant)
+    if participant["phone"]:
+        add_contact_in_wati("learner", new_participant.name, new_participant.phone)
+    unique_id = uuid.uuid4()  # Generate a UUID4
+    # Creating a ParticipantUniqueId instance with a UUID as unique_id
+    unique_id_instance = ParticipantUniqueId.objects.create(
+        participant=new_participant,
+        assessment=assessment,
+        unique_id=unique_id,
+    )
+    mapping.save()
+    assessment.participants_observers.add(mapping)
+    assessment.save()
+    particpant_data = [{"name": name, "email": participant["email"]}]
+    # send_reset_password_link(particpant_data)
+    if assessment.assessment_timing == "pre":
+        post_assessment = Assessment.objects.filter(pre_assessment=assessment).first()
+        mapping = ParticipantObserverMapping.objects.create(participant=new_participant)
+        mapping.save()
+        post_assessment.participants_observers.add(mapping)
+        post_assessment.save()
+        post_unique_id = uuid.uuid4()
+        post_unique_id_instance = ParticipantUniqueId.objects.create(
+            participant=new_participant,
+            assessment=post_assessment,
+            unique_id=post_unique_id,
+        )
+    elif assessment.assessment_timing == "post":
+        pre_assessment = Assessment.objects.get(id=assessment.pre_assessment.id)
+        mapping = ParticipantObserverMapping.objects.create(participant=new_participant)
+        mapping.save()
+        pre_assessment.participants_observers.add(mapping)
+        pre_assessment.save()
+        pre_unique_id = uuid.uuid4()
+        pre_unique_id_instance = ParticipantUniqueId.objects.create(
+            participant=new_participant,
+            assessment=pre_assessment,
+            unique_id=pre_unique_id,
+        )
+    serializer = AssessmentSerializerDepthFour(assessment)
+    return serializer
+
+
 class AddMultipleParticipants(APIView):
+    permission_classes = [IsAuthenticated]
+
     @transaction.atomic
     def post(self, request):
         try:
@@ -1894,76 +2143,9 @@ class AddMultipleParticipants(APIView):
             assessment_id = request.data.get("assessment_id")
             assessment = Assessment.objects.get(id=assessment_id)
             for participant in participants:
-                if assessment.participants_observers.filter(
-                    participant__email=participant["email"]
-                ).exists():
-                    return Response(
-                        {
-                            "error": f"Participant with email {participant['email']} already exists in the assessment."
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                name = (
-                    participant["first_name"].capitalize()
-                    + " "
-                    + participant.get("last_name", "").capitalize()
+                serializer = add_multiple_participants(
+                    participant, assessment_id, assessment, True
                 )
-                new_participant = create_learner(name, participant["email"])
-                if participant["phone"]:
-                    new_participant.phone = participant["phone"]
-                new_participant.save()
-                mapping = ParticipantObserverMapping.objects.create(
-                    participant=new_participant
-                )
-                if participant["phone"]:
-                    add_contact_in_wati(
-                        "learner", new_participant.name, new_participant.phone
-                    )
-                unique_id = uuid.uuid4()  # Generate a UUID4
-                # Creating a ParticipantUniqueId instance with a UUID as unique_id
-                unique_id_instance = ParticipantUniqueId.objects.create(
-                    participant=new_participant,
-                    assessment=assessment,
-                    unique_id=unique_id,
-                )
-                mapping.save()
-                assessment.participants_observers.add(mapping)
-                assessment.save()
-                particpant_data = [{"name": name, "email": participant["email"]}]
-                # send_reset_password_link(particpant_data)
-                if assessment.assessment_timing == "pre":
-                    post_assessment = Assessment.objects.filter(
-                        pre_assessment=assessment
-                    ).first()
-                    mapping = ParticipantObserverMapping.objects.create(
-                        participant=new_participant
-                    )
-                    mapping.save()
-                    post_assessment.participants_observers.add(mapping)
-                    post_assessment.save()
-                    post_unique_id = uuid.uuid4()
-                    post_unique_id_instance = ParticipantUniqueId.objects.create(
-                        participant=new_participant,
-                        assessment=post_assessment,
-                        unique_id=post_unique_id,
-                    )
-                elif assessment.assessment_timing == "post":
-                    pre_assessment = Assessment.objects.get(
-                        id=assessment.pre_assessment.id
-                    )
-                    mapping = ParticipantObserverMapping.objects.create(
-                        participant=new_participant
-                    )
-                    mapping.save()
-                    pre_assessment.participants_observers.add(mapping)
-                    pre_assessment.save()
-                    pre_unique_id = uuid.uuid4()
-                    pre_unique_id_instance = ParticipantUniqueId.objects.create(
-                        participant=new_participant,
-                        assessment=pre_assessment,
-                        unique_id=pre_unique_id,
-                    )
-            serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
                 {
                     "message": "Participants added successfully.",
@@ -1981,6 +2163,8 @@ class AddMultipleParticipants(APIView):
 
 
 class CreateObserverType(APIView):
+    permission_classes = [IsAuthenticated]
+
     @transaction.atomic
     def post(
         self,
@@ -2006,6 +2190,8 @@ class CreateObserverType(APIView):
 
 
 class GetObserverTypes(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         try:
             observer_types = ObserverTypes.objects.all()
@@ -2370,6 +2556,8 @@ def get_frequency_analysis_data(
 
 
 class DownloadParticipantResultReport(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         try:
             assessment_id = request.data.get("assessment_id")
@@ -2644,6 +2832,8 @@ class DownloadParticipantResultReport(APIView):
 
 
 class GetAssessmentNotification(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, user_id):
         notifications = AssessmentNotification.objects.filter(
             user__id=user_id
@@ -2654,6 +2844,8 @@ class GetAssessmentNotification(APIView):
 
 
 class MarkAllNotificationAsRead(APIView):
+    permission_classes = [IsAuthenticated]
+
     def put(self, request):
         notifications = AssessmentNotification.objects.filter(
             read_status=False, user__id=request.data["user_id"]
@@ -2663,6 +2855,8 @@ class MarkAllNotificationAsRead(APIView):
 
 
 class MarkNotificationAsRead(APIView):
+    permission_classes = [IsAuthenticated]
+
     def put(self, request):
         user_id = request.data.get("user_id")
         notification_ids = request.data.get("notification_ids")
@@ -2681,6 +2875,8 @@ class MarkNotificationAsRead(APIView):
 
 
 class GetUnreadNotificationCount(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, user_id):
         count = AssessmentNotification.objects.filter(
             user__id=user_id, read_status=False
@@ -2689,6 +2885,8 @@ class GetUnreadNotificationCount(APIView):
 
 
 class DownloadWordReport(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, assessment_id, participant_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -2848,6 +3046,8 @@ class DownloadWordReport(APIView):
 
 
 class GetLearnersUniqueId(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, assessment_id):
         try:
             # Assuming assessment_id is a valid Assessment ID
@@ -2875,6 +3075,8 @@ class GetLearnersUniqueId(APIView):
 
 
 class StartAssessmentDataForParticipant(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, unique_id):
         try:
             participant_unique_id = ParticipantUniqueId.objects.get(unique_id=unique_id)
@@ -3160,6 +3362,8 @@ def generate_graph_for_participant_for_post_assessent(
 
 
 class PreReportDownloadForParticipant(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, assessment_id, participant_id):
         try:
             try:
@@ -3218,6 +3422,8 @@ class PreReportDownloadForParticipant(APIView):
 
 
 class PreReportDownloadForAllParticipant(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, assessment_id):
         try:
             try:
@@ -3284,6 +3490,8 @@ class PreReportDownloadForAllParticipant(APIView):
 
 
 class ReleaseResults(APIView):
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -3382,6 +3590,8 @@ class ReleaseResults(APIView):
 
 
 class MoveParticipant(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         try:
             from_assessment = Assessment.objects.get(
@@ -3546,6 +3756,8 @@ class MoveParticipant(APIView):
 
 
 class GetAllLearnersUniqueId(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         try:
             # Assuming assessment_id is a valid Assessment ID
@@ -3574,6 +3786,8 @@ class GetAllLearnersUniqueId(APIView):
 
 
 class DownloadParticipantResponseStatusData(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -3643,6 +3857,8 @@ class DownloadParticipantResponseStatusData(APIView):
 
 
 class GetParticipantReleasedResults(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, assessment_id):
         try:
             participant_released_results = ParticipantReleasedResults.objects.filter(
@@ -3664,6 +3880,8 @@ class GetParticipantReleasedResults(APIView):
 
 
 class GetAllAssessments(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         assessments = Assessment.objects.all()
         assessment_list = []
@@ -3692,6 +3910,8 @@ class GetAllAssessments(APIView):
 
 
 class GetOneAssessment(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, assessment_id):
         assessment = get_object_or_404(Assessment, id=assessment_id)
         try:
@@ -3705,6 +3925,8 @@ class GetOneAssessment(APIView):
 
 
 class GetAssessmentsOfHr(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, hr_id):
         assessments = Assessment.objects.filter(
             Q(hr__id=hr_id), Q(status="ongoing") | Q(status="completed")
@@ -3733,6 +3955,8 @@ class GetAssessmentsOfHr(APIView):
 
 
 class GetAssessmentsDataForMoveParticipant(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         assessments = Assessment.objects.all()
         assessment_data = []
@@ -3747,3 +3971,142 @@ class GetAssessmentsDataForMoveParticipant(APIView):
             }
             assessment_data.append(temp_assessmeent)
         return Response(assessment_data)
+
+
+class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            with transaction.atomic():
+                (
+                    created,
+                    pre_assessment_id,
+                    post_assessment_id,
+                ) = create_pre_post_assessments(request)
+
+                pre_assessment = Assessment.objects.get(id=pre_assessment_id)
+
+                if created:
+                    batch = SchedularBatch.objects.get(id=request.data.get("batch_id"))
+
+                    for participant in batch.learners.all():
+                        participant_object = {
+                            "name": participant.name,
+                            "email": participant.email,
+                            "phone": participant.phone,
+                        }
+                        serializer = add_multiple_participants(
+                            participant_object, pre_assessment_id, pre_assessment, False
+                        )
+
+                        course = Course.objects.get(id=request.data.get("course_id"))
+
+                        pre_assessment_lesson = None
+                        post_assessment_lesson = None
+
+                        lessons = Lesson.objects.filter(
+                            course=course, lesson_type="assessment"
+                        )
+
+                        for lesson in lessons:
+                            assessment_lesson = AssessmentLesson.objects.filter(
+                                lesson=lesson
+                            ).first()
+
+                            if assessment_lesson.type == "pre":
+                                assessment_lesson.assessment_modal = pre_assessment
+
+                                assessment_lesson.save()
+
+                                if lesson.status == "draft":
+                                    pre_assessment.status = "draft"
+
+                                if lesson.status == "public":
+                                    pre_assessment.status = "ongoing"
+                                pre_assessment.save()
+
+                            elif assessment_lesson.type == "post":
+                                post_assessment = Assessment.objects.get(
+                                    id=post_assessment_id
+                                )
+
+                                assessment_lesson.assessment_modal = post_assessment
+                                assessment_lesson.save()
+
+                                if lesson.status == "draft":
+                                    post_assessment.status = "draft"
+
+                                if lesson.status == "public":
+                                    post_assessment.status = "ongoing"
+                                post_assessment.save()
+
+                    return Response(
+                        {
+                            "message": "Pre and Post assessment created and batch added successfully.",
+                            "assessment_data": serializer.data,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+        except Exception as e:
+            print(str(e))
+            # Handle specific exceptions if needed
+            return Response(
+                {"error": "Faliled to create assessments"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class AssessmentInAssessmentLesson(APIView):
+    def get(self, request, assessment_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+
+            return Response(
+                {
+                    "assessment_lesson_added": True if assessment_lesson else False,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Faliled to get data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+
+class AllAssessmentInAssessmentLesson(APIView):
+    def get(self, request):
+        try:
+            assessments = Assessment.objects.all()
+
+            assessment_present_in_assessment_lesson_ids = []
+            for assessment in assessments:
+                assessment_lesson = AssessmentLesson.objects.filter(
+                    assessment_modal=assessment
+                ).first()
+                
+                if assessment_lesson:
+                    assessment_present_in_assessment_lesson_ids.append(assessment.id)
+                
+
+            return Response(
+                {
+                    "assessment_present_in_assessment_lesson_ids": assessment_present_in_assessment_lesson_ids,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Faliled to get data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
