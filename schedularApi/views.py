@@ -27,6 +27,7 @@ import json
 from django.core.exceptions import ObjectDoesNotExist
 from api.views import get_date, get_time, add_contact_in_wati
 from django.shortcuts import render
+from django.http import JsonResponse
 from api.models import Organisation, HR, Coach, User, Learner, Pmo
 from .serializers import (
     SchedularProjectSerializer,
@@ -76,12 +77,14 @@ from courses.models import (
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
+from django.core.serializers import serialize
 from courses.views import create_or_get_learner
 from assessmentApi.models import (
     Assessment,
     ParticipantUniqueId,
     ParticipantObserverMapping,
 )
+from io import BytesIO
 from api.serializers import LearnerSerializer
 from api.views import (
     create_notification,
@@ -510,7 +513,11 @@ def get_batch_calendar(request, batch_id):
         try:
             course = Course.objects.get(batch__id=batch_id)
             course_serailizer = CourseSerializer(course)
+            for participant in participants_serializer.data:
+                course_enrollment = CourseEnrollment.objects.get(learner__id=participant['id'], course=course)
+                participant['is_certificate_allowed'] = course_enrollment.is_certificate_allowed
         except Exception as e:
+            print(str(e))
             course = None
         return Response(
             {
@@ -1003,10 +1010,10 @@ def add_batch(request, project_id):
                 learner = create_or_get_learner(
                     {"name": name, "email": email, "phone": phone}
                 )
-
-                name = learner.name
-                if learner.phone:
-                    add_contact_in_wati("learner", name, learner.phone)
+                if learner:
+                    name = learner.name
+                    if learner.phone:
+                        add_contact_in_wati("learner", name, learner.phone)
 
                 # Add participant to the batch if not already added
                 if learner and learner not in batch.learners.all():
@@ -2251,6 +2258,49 @@ def project_report_download(request, project_id):
     return response
 
 
+@api_view(["GET"])
+def project_report_download_session_wise(request, project_id, batch_id):
+    try:
+        batch = get_object_or_404(SchedularBatch, pk=batch_id)
+        live_sessions = LiveSession.objects.filter(batch=batch)
+        dfs = []
+
+        for session in live_sessions:
+            data = {
+                "Participant name": [],
+                "Attended or Not": [],
+            }
+
+            for learner in session.batch.learners.all():
+                participant_name = learner.name
+
+                if learner.id in session.attendees:
+                    attendance = "YES"
+                else:
+                    attendance = "NO"
+
+                # Append data inside the learner loop
+                data["Participant name"].append(participant_name)
+                data["Attended or Not"].append(attendance)
+
+            # Move these lines inside the session loop
+            session_name = f"Live Session {session.order}"
+            df = pd.DataFrame(data)
+            dfs.append((session_name, df))
+
+        response = HttpResponse(content_type="application/ms-excel")
+        response["Content-Disposition"] = f'attachment; filename="{batch.name}_batches.xlsx"'
+
+        with pd.ExcelWriter(response, engine="openpyxl") as writer:
+            for session_name, df in dfs:
+                df.to_excel(writer, sheet_name=session_name, index=False)
+
+        return response
+    except Exception as e:
+        print(str(e))
+
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def addFacilitator(request):
@@ -2651,3 +2701,27 @@ def live_session_detail_view(request, pk):
     }
 
     return Response(response_data)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_certificate_status(request):
+    try:
+        participant_id = request.data.get('participantId')
+        is_certificate_allowed = request.data.get('is_certificate_allowed')
+        course_id=request.data.get('courseId')
+
+        # Use filter instead of get to handle multiple instances
+        course_enrollments = CourseEnrollment.objects.filter(learner__id=participant_id,course__id=course_id)
+
+        # If there are multiple instances, you need to decide which one to update
+        # For example, you might want to update the first one:
+        if course_enrollments.exists():
+            course_for_that_participant = course_enrollments.first()
+            course_for_that_participant.is_certificate_allowed = is_certificate_allowed
+            course_for_that_participant.save()
+            return JsonResponse({'message': 'Certificate status updated successfully'}, status=200)
+        else:
+            return JsonResponse({'error': 'No Course Enrolled in this Batch'}, status=404)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

@@ -89,6 +89,12 @@ import uuid
 import logging
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+import pandas as pd
+from io import BytesIO
+
 
 env = environ.Env()
 
@@ -1116,12 +1122,15 @@ def get_course_enrollment(request, course_id, learner_id):
             {
                 "course_enrollment": course_enrollment_serializer.data,
                 "lessons": lessons_serializer.data,
+                "is_certificate_allowed": course_enrollment.is_certificate_allowed,
             }
         )
     except CourseEnrollment.DoesNotExist:
         return Response(status=404)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_course_enrollment_for_pmo_preview(request, course_id):
@@ -1493,7 +1502,7 @@ class LessonMarkAsCompleteAndNotComplete(APIView):
 
 
 class DownloadLessonCertificate(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request, lesson_id, learner_id):
         try:
@@ -2812,3 +2821,72 @@ class GetAssessmentsOfBatch(APIView):
             return Response(
                 {"error": "Failed to ger data"}, status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+@api_view(["GET"])
+def get_all_feedbacks_download_report(request, feedback_id):
+    try:
+        feedback_lesson = FeedbackLesson.objects.get(id=feedback_id)
+
+        # Get all participants associated with the batch of the course related to the feedback lesson
+        participants = Learner.objects.filter(
+            schedularbatch__id=feedback_lesson.lesson.course.batch.id
+        )
+
+        # Create a DataFrame to store the data
+        data = {"Participant": [], "Question": [], "Answer": []}
+
+        # Populate the DataFrame with data from FeedbackLesson and FeedbackLessonResponse
+        for participant in participants:
+            participant_name = participant.name
+
+            # Check if the participant provided feedback
+            response = FeedbackLessonResponse.objects.filter(
+                feedback_lesson=feedback_lesson, learner=participant
+            ).first()
+
+            if response:
+                for answer in response.answers.all():
+                    question_text = answer.question.text
+                    answer_value = (
+                        answer.text_answer if answer.text_answer else answer.rating
+                    )
+
+                    data["Participant"].append(participant_name)
+                    data["Question"].append(question_text)
+                    data["Answer"].append(answer_value)
+            else:
+                # If participant did not provide feedback, populate with empty values
+                for question in feedback_lesson.questions.all():
+                    data["Participant"].append(participant_name)
+                    data["Question"].append(question.text)
+                    data["Answer"].append("-")
+
+        # Create a DataFrame from the data
+        df = pd.DataFrame(data)
+
+        # Pivot the DataFrame to have Question columns
+        df_pivot = df.pivot(
+            index="Participant", columns="Question", values="Answer"
+        ).reset_index()
+
+        # Save the DataFrame to an Excel file in-memory
+        excel_data = BytesIO()
+        df_pivot.to_excel(excel_data, index=False)
+        excel_data.seek(0)
+
+        # Create the response with the Excel file
+        response = HttpResponse(
+            excel_data.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f"attachment; filename=Feedback Report.xlsx"
+
+        return response
+
+    except FeedbackLesson.DoesNotExist:
+        return Response(
+            {"error": "Feedback lesson not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
