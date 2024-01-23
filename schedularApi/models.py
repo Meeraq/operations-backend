@@ -12,6 +12,7 @@ class SchedularProject(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
     is_project_structure_finalized = models.BooleanField(default=False)
+    automated_reminder = models.BooleanField(blank=True, default=True)
 
     class Meta:
         ordering = ["-created_at"]
