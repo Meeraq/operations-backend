@@ -231,7 +231,12 @@ urlpatterns = [
     path("quizes/<int:quiz_id>/report/", views.get_quiz_report),
     path("quizes/<int:quiz_id>/report/download/", views.quiz_report_download),
     path("feedbacks/report/all/", views.get_all_feedbacks_report),
+    path("consolidated-feedback-report/", views.get_consolidated_feedback_report),
     path("feedbacks/<int:feedback_id>/report/", views.get_feedback_report),
+    path(
+        "get-consolidated-feedback-report-response/<int:lesson_id>/report/",
+        views.get_consolidated_feedback_report_response,
+    ),
     path(
         "get-laser-coaching-time/<int:laser_coaching_id>/<str:participant_email>/",
         GetLaserCoachingTime.as_view(),
@@ -311,5 +316,9 @@ urlpatterns = [
     path(
         "get-assessments-of-batch/<int:batch_id>/",
         GetAssessmentsOfBatch.as_view(),
+    ),
+    path(
+        "feedback-report-download/<str:feedback_id>/",
+        views.get_all_feedbacks_download_report,
     ),
 ]
