@@ -74,6 +74,7 @@ from courses.models import (
     QuizLessonResponse,
     FeedbackLesson,
     QuizLesson,
+    Lesson,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
@@ -2575,7 +2576,7 @@ def delete_learner_from_course(request):
 @permission_classes([IsAuthenticated])
 def edit_schedular_project(request, project_id):
     try:
-        project = SchedularProject.objects.get(pk=project_id)
+        project = SchedularProject.objects.get(pk=project_id)          
     except SchedularProject.DoesNotExist:
         return Response(
             {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2610,6 +2611,17 @@ def edit_schedular_project(request, project_id):
     project.nudges=request.data.get("nudges")
     project.pre_post_assessment=request.data.get("pre_post_assessment")
     project.save()
+    if not project.pre_post_assessment:
+        batches=SchedularBatch.objects.filter(project=project)
+        if batches:
+            for batch in batches:
+                course=Course.objects.filter(batch=batch).first()
+                if course:
+                    lessons=Lesson.objects.filter(course=course)
+                    for lesson in lessons:
+                        if lesson.lesson_type=="assessment":
+                            lesson.status="draft"  
+                            lesson.save()
     return Response(
         {"message": "Project updated successfully"}, status=status.HTTP_200_OK
     )
