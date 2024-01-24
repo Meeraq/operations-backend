@@ -125,6 +125,11 @@ urlpatterns = [
         name="project_report_download",
     ),
     path(
+        "project-report-download-session-wise/<int:project_id>/<int:batch_id>/",
+        views.project_report_download_session_wise,
+        name="project_report_download_session_wise",
+    ),
+    path(
         "add-facilitator/",
         views.add_facilitator,
     ),
@@ -165,5 +170,9 @@ urlpatterns = [
     path(
         "facilitators/<int:facilitator_id>/sessions/",
         views.get_facilitator_sessions,
+    ),
+    path(
+        "update-certificate-status/",
+        views.update_certificate_status,
     ),
 ]
