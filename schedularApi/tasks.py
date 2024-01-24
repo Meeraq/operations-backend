@@ -1231,12 +1231,19 @@ def coachee_booking_reminder_whatsapp_at_8am():
                     try:
                         SchedularSessions.objects.get(
                             learner=learner, coaching_session=coaching_session
-                        ).exists()
+                        )
                         print(f"Don't send WhatsApp message to {learner.name}")
                     except ObjectDoesNotExist:
                         name = learner.name
                         phone = learner.phone
-                        session_name = coaching_session.session_type
+                        session_name = (
+                            coaching_session.session_type.replace("_", " ").capitalize()
+                            if not coaching_session.session_type
+                            == "laser_coaching_session"
+                            else "Coaching Session"
+                            + " "
+                            + str(coaching_session.coaching_session_number)
+                        )
                         project_name = coaching_session.batch.project.name
                         path_parts = coaching_session.booking_link.split("/")
                         booking_id = path_parts[-1]
@@ -1265,6 +1272,8 @@ def coachee_booking_reminder_whatsapp_at_8am():
                                 "template_name": "reminder_coachee_coaching_session",
                             },
                         )
+                    except Exception as e:
+                        print(str(e))
     except Exception as e:
         print(str(e))
 
