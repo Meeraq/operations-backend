@@ -91,6 +91,12 @@ class SchedularSessions(models.Model):
 
 
 class LiveSession(models.Model):
+    SESSION_CHOICES = [
+        ("live_session", "Live Session"),
+        ("check_in_session", "Check In Session"),
+        ("in_person_session","In Person Session")
+    ]
+
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
     live_session_number = models.IntegerField(blank=True, default=None, null=True)
     order = models.IntegerField(blank=True, default=None, null=True)
@@ -104,6 +110,10 @@ class LiveSession(models.Model):
     pt_30_min_before = models.ForeignKey(
         PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
     )
+    session_type = models.CharField(
+        max_length=50, choices=SESSION_CHOICES, default="live_session"
+    )
+
    
 
 
