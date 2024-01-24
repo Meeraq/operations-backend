@@ -74,6 +74,8 @@ from courses.models import (
     QuizLessonResponse,
     FeedbackLesson,
     QuizLesson,
+    Lesson,
+    LaserCoachingSession,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
@@ -92,6 +94,7 @@ from api.views import (
     create_outlook_calendar_invite,
     delete_outlook_calendar_invite,
 )
+from django.db.models import Max
 import io
 from time import sleep
 
@@ -328,6 +331,7 @@ def create_project_structure(request, project_id):
             is_editing = len(project.project_structure) > 0
             project.project_structure = serializer.data
             project.save()
+
             return Response(
                 {
                     "message": "Project structure edited successfully."
@@ -514,8 +518,12 @@ def get_batch_calendar(request, batch_id):
             course = Course.objects.get(batch__id=batch_id)
             course_serailizer = CourseSerializer(course)
             for participant in participants_serializer.data:
-                course_enrollment = CourseEnrollment.objects.get(learner__id=participant['id'], course=course)
-                participant['is_certificate_allowed'] = course_enrollment.is_certificate_allowed
+                course_enrollment = CourseEnrollment.objects.get(
+                    learner__id=participant["id"], course=course
+                )
+                participant[
+                    "is_certificate_allowed"
+                ] = course_enrollment.is_certificate_allowed
         except Exception as e:
             print(str(e))
             course = None
@@ -940,7 +948,7 @@ def add_batch(request, project_id):
             for participant_data in participants_data:
                 name = participant_data.get("name")
                 email = participant_data.get("email", "").strip().lower()
-                phone = participant_data.get("phone", None) 
+                phone = participant_data.get("phone", None)
                 batch_name = participant_data.get("batch").strip().upper()
                 # Assuming 'project_id' is in your request data
 
@@ -963,13 +971,17 @@ def add_batch(request, project_id):
 
                         if session_type == "live_session":
                             live_session_number = (
-                                LiveSession.objects.filter(batch=batch).count() + 1
+                                LiveSession.objects.filter(
+                                    batch=batch, session_type="live_session"
+                                ).count()
+                                + 1
                             )
                             live_session = LiveSession.objects.create(
                                 batch=batch,
                                 live_session_number=live_session_number,
                                 order=order,
                                 duration=duration,
+                                session_type="live_session",
                             )
                         elif session_type == "laser_coaching_session":
                             coaching_session_number = (
@@ -994,7 +1006,7 @@ def add_batch(request, project_id):
                                 ).count()
                                 + 1
                             )
-                            
+
                             booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                             coaching_session = CoachingSession.objects.create(
                                 batch=batch,
@@ -1006,7 +1018,7 @@ def add_batch(request, project_id):
                             )
 
                 # Check if participant with the same email exists
-                
+
                 learner = create_or_get_learner(
                     {"name": name, "email": email, "phone": phone}
                 )
@@ -2019,7 +2031,7 @@ def add_participant_to_batch(request, batch_id):
     with transaction.atomic():
         name = request.data.get("name")
         email = request.data.get("email", "").strip().lower()
-        phone = request.data.get("phone", None) 
+        phone = request.data.get("phone", None)
         try:
             batch = SchedularBatch.objects.get(id=batch_id)
         except SchedularBatch.DoesNotExist:
@@ -2289,7 +2301,9 @@ def project_report_download_session_wise(request, project_id, batch_id):
             dfs.append((session_name, df))
 
         response = HttpResponse(content_type="application/ms-excel")
-        response["Content-Disposition"] = f'attachment; filename="{batch.name}_batches.xlsx"'
+        response[
+            "Content-Disposition"
+        ] = f'attachment; filename="{batch.name}_batches.xlsx"'
 
         with pd.ExcelWriter(response, engine="openpyxl") as writer:
             for session_name, df in dfs:
@@ -2298,7 +2312,6 @@ def project_report_download_session_wise(request, project_id, batch_id):
         return response
     except Exception as e:
         print(str(e))
-
 
 
 @api_view(["POST"])
@@ -2702,16 +2715,19 @@ def live_session_detail_view(request, pk):
 
     return Response(response_data)
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_certificate_status(request):
     try:
-        participant_id = request.data.get('participantId')
-        is_certificate_allowed = request.data.get('is_certificate_allowed')
-        course_id=request.data.get('courseId')
+        participant_id = request.data.get("participantId")
+        is_certificate_allowed = request.data.get("is_certificate_allowed")
+        course_id = request.data.get("courseId")
 
         # Use filter instead of get to handle multiple instances
-        course_enrollments = CourseEnrollment.objects.filter(learner__id=participant_id,course__id=course_id)
+        course_enrollments = CourseEnrollment.objects.filter(
+            learner__id=participant_id, course__id=course_id
+        )
 
         # If there are multiple instances, you need to decide which one to update
         # For example, you might want to update the first one:
@@ -2719,9 +2735,126 @@ def update_certificate_status(request):
             course_for_that_participant = course_enrollments.first()
             course_for_that_participant.is_certificate_allowed = is_certificate_allowed
             course_for_that_participant.save()
-            return JsonResponse({'message': 'Certificate status updated successfully'}, status=200)
+            return JsonResponse(
+                {"message": "Certificate status updated successfully"}, status=200
+            )
         else:
-            return JsonResponse({'error': 'No Course Enrolled in this Batch'}, status=404)
+            return JsonResponse(
+                {"error": "No Course Enrolled in this Batch"}, status=404
+            )
 
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_new_session_in_project_structure(request):
+    try:
+        project_id = request.data.get("project_id")
+        session_type = request.data.get("session_type")
+        duration = request.data.get("duration")
+
+        # Get the project and batches
+        project = get_object_or_404(SchedularProject, id=project_id)
+        batches = SchedularBatch.objects.filter(project=project)
+
+        # Get the previous structure
+        prev_structure = project.project_structure
+
+        # Create a new session object
+        new_session = {
+            "order": len(prev_structure) + 1,
+            "duration": duration,
+            "session_type": session_type,
+        }
+
+        # Update the project structure
+        prev_structure.append(new_session)
+        project.project_structure = prev_structure
+        project.save()
+
+        # Update the sessions for each batch
+        for batch in batches:
+            course = Course.objects.filter(batch=batch).first()
+            if session_type in [
+                "live_session",
+                "check_in_session",
+                "in_person_session",
+            ]:
+                session_number = (
+                    LiveSession.objects.filter(
+                        batch=batch, session_type=session_type
+                    ).count()
+                    + 1
+                )
+                live_session = LiveSession.objects.create(
+                    batch=batch,
+                    live_session_number=session_number,
+                    order=new_session["order"],
+                    duration=new_session["duration"],
+                    session_type=session_type,
+                )
+                if session_type == "live_session" and course:
+                    max_order = (
+                        Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                            "order__max"
+                        ]
+                        or 0
+                    )
+                    new_lesson = Lesson.objects.create(
+                        course=course,
+                        name=f"Live session {live_session.live_session_number}",
+                        status="draft",
+                        lesson_type="live_session",
+                        order=max_order,
+                    )
+                    LiveSession.objects.create(
+                        lesson=new_lesson, live_session=live_session
+                    )
+            elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                coaching_session_number = (
+                    CoachingSession.objects.filter(
+                        batch=batch, session_type=session_type
+                    ).count()
+                    + 1
+                )
+
+                booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                coaching_session = CoachingSession.objects.create(
+                    batch=batch,
+                    coaching_session_number=coaching_session_number,
+                    order=new_session["order"],
+                    duration=new_session["duration"],
+                    booking_link=booking_link,
+                    session_type=session_type,
+                )
+                if course:
+                    max_order = (
+                        Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                            "order__max"
+                        ]
+                        or 0
+                    )
+                    max_order = max_order + 1
+                    session_name = None
+                    if coaching_session.session_type == "laser_coaching_session":
+                        session_name = "Laser coaching"
+                    elif coaching_session.session_type == "mentoring_session":
+                        session_name = "Mentoring session"
+                    new_lesson = Lesson.objects.create(
+                        course=course,
+                        name=f"{session_name} {coaching_session.coaching_session_number}",
+                        status="draft",
+                        lesson_type="laser_coaching",
+                        order=max_order,
+                    )
+                    LaserCoachingSession.objects.create(
+                        lesson=new_lesson, coaching_session=coaching_session
+                    )
+
+        return Response({"message": "Session added successfully."}, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to add session"}, status=500)
