@@ -190,6 +190,7 @@ def create_or_get_learner(learner_data):
         # Handle specific exceptions or log the error
         print(f"Error processing participant: {str(e)}")
 
+
 def get_feedback_lesson_name(lesson_name):
     # Trim leading and trailing whitespaces
     trimmed_string = lesson_name.strip()
@@ -2019,33 +2020,32 @@ def get_all_feedbacks_report(request):
 
     return Response(res)
 
+
 @api_view(["GET"])
 def get_consolidated_feedback_report(request):
     try:
         data = {}
         all_projects = SchedularProject.objects.all()
-  
+
         for project in all_projects:
             all_batches = SchedularBatch.objects.filter(project=project)
-            total_participant_count=0
+            total_participant_count = 0
             for batch in all_batches:
                 total_participant_count += batch.learners.count()
-            
+
             for batch in all_batches:
                 # Get live sessions for the current batch
                 live_sessions = LiveSession.objects.filter(batch=batch)
-      
+
                 for live_session in live_sessions:
                     # Now, you can access the associated Course through the SchedularBatch
                     course = Course.objects.filter(batch=batch).first()
                     if course:
-                        feedback_lesson_name_should_be = (
-                            f"feedback_for_live_session_{live_session.live_session_number}"
-                        )
+                        feedback_lesson_name_should_be = f"feedback_for_live_session_{live_session.live_session_number}"
                         feedback_lessons = FeedbackLesson.objects.filter(
                             lesson__course=course
                         )
-                        
+
                         for feedback_lesson in feedback_lessons:
                             current_lesson_name = feedback_lesson.lesson.name
                             formatted_lesson_name = get_feedback_lesson_name(
@@ -2053,11 +2053,14 @@ def get_consolidated_feedback_report(request):
                             )
                             total_participant = total_participant_count
                             total_responses = 0
-                          
+
                             for participant in batch.learners.all():
-                                feedback_response = FeedbackLessonResponse.objects.filter(
-                                    feedback_lesson=feedback_lesson, learner=participant
-                                ).first()
+                                feedback_response = (
+                                    FeedbackLessonResponse.objects.filter(
+                                        feedback_lesson=feedback_lesson,
+                                        learner=participant,
+                                    ).first()
+                                )
                                 if feedback_response:
                                     total_responses += 1
                             percentage_responded = (
@@ -2065,32 +2068,43 @@ def get_consolidated_feedback_report(request):
                                 if total_participant
                                 else 0
                             )
-                            
+
                             if formatted_lesson_name == feedback_lesson_name_should_be:
-                                live_session_key = f'{project.name} Live Session {live_session.live_session_number}'
+                                live_session_key = f"{project.name} Live Session {live_session.live_session_number}"
                                 if live_session_key not in data:
                                     data[live_session_key] = {
                                         "live_session_id": live_session.id,
                                         "project_name": project.name,
-                                        "session_name": f'Live Session {live_session.live_session_number}',
+                                        "session_name": f"Live Session {live_session.live_session_number}",
                                         "total_participant": total_participant,
                                         "total_responses": total_responses,
                                         "percentage_responded": percentage_responded,
                                     }
-                               
+
                                 else:
                                     # Merge data for the same live session number
                                     # data[live_session_key]["total_participant"] += len(total_participant)
-                                    data[live_session_key]["total_responses"] += total_responses
-                                    data[live_session_key]["percentage_responded"] = round(
-                                        (data[live_session_key]["total_responses"] / data[live_session_key]["total_participant"]) * 100, 2
+                                    data[live_session_key][
+                                        "total_responses"
+                                    ] += total_responses
+                                    data[live_session_key][
+                                        "percentage_responded"
+                                    ] = round(
+                                        (
+                                            data[live_session_key]["total_responses"]
+                                            / data[live_session_key][
+                                                "total_participant"
+                                            ]
+                                        )
+                                        * 100,
+                                        2,
                                     )
-                                  
 
         return Response(list(data.values()))
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -2140,7 +2154,6 @@ def get_feedback_report(request, feedback_id):
         )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
 
 
 @api_view(["GET"])
@@ -2152,7 +2165,7 @@ def get_consolidated_feedback_report_response(request, lesson_id):
 
         # Dictionary to store aggregated feedback data for each question
         question_data = {}
-        
+
         for batch in batches:
             print(batch)
             feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
@@ -2176,7 +2189,9 @@ def get_consolidated_feedback_report_response(request, lesson_id):
                     if answer.question.type.startswith("rating"):
                         question_data[question_text]["ratings"].append(answer.rating)
                     elif answer.question.type == "descriptive_answer":
-                        question_data[question_text]["descriptive_answers"].append(answer.text_answer)
+                        question_data[question_text]["descriptive_answers"].append(
+                            answer.text_answer
+                        )
 
         for question_text, data in question_data.items():
             # Calculate average rating for each question
@@ -2204,6 +2219,7 @@ def get_consolidated_feedback_report_response(request, lesson_id):
         )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class AssignCourseTemplateToBatch(APIView):
     permission_classes = [IsAuthenticated]
@@ -2970,6 +2986,7 @@ class GetAssessmentsOfBatch(APIView):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def get_all_feedbacks_download_report(request, feedback_id):
     try:
         feedback_lesson = FeedbackLesson.objects.get(id=feedback_id)
