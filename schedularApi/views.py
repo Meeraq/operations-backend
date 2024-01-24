@@ -177,6 +177,8 @@ def create_project_schedular(request):
             name=request.data["project_name"],
             organisation=organisation,
             automated_reminder=request.data["automated_reminder"],
+            nudges=request.data["nudges"],
+            pre_post_assessment=request.data["pre_post_assessment"],
         )
         schedularProject.save()
     except IntegrityError:
@@ -2605,6 +2607,8 @@ def edit_schedular_project(request, project_id):
                 status=status.HTTP_404_NOT_FOUND,
             )
     project.automated_reminder = request.data.get("automated_reminder")
+    project.nudges=request.data.get("nudges")
+    project.pre_post_assessment=request.data.get("pre_post_assessment")
     project.save()
     return Response(
         {"message": "Project updated successfully"}, status=status.HTTP_200_OK
