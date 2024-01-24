@@ -1143,8 +1143,6 @@ def get_course_enrollment(request, course_id, learner_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
 def get_course_enrollment_for_pmo_preview(request, course_id):
     try:
         course = Course.objects.get(id=course_id)
@@ -1161,7 +1159,7 @@ def get_course_enrollment_for_pmo_preview(request, course_id):
                 "lessons": lessons_serializer.data,
             }
         )
-    except Course.DoesNotExist:
+    except Exception as e:
         return Response(status=404)
 
 
