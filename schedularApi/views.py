@@ -76,6 +76,7 @@ from courses.models import (
     QuizLesson,
     Lesson,
     LaserCoachingSession,
+    LiveSessionLesson,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
@@ -2809,7 +2810,7 @@ def add_new_session_in_project_structure(request):
                         lesson_type="live_session",
                         order=max_order,
                     )
-                    LiveSession.objects.create(
+                    LiveSessionLesson.objects.create(
                         lesson=new_lesson, live_session=live_session
                     )
             elif session_type in ["laser_coaching_session", "mentoring_session"]:
