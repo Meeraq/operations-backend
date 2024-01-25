@@ -121,6 +121,7 @@ class Profile(models.Model):
         ("coach", "coach"),
         ("learner", "learner"),
         ("hr", "hr"),
+        ("superadmin", "superadmin"),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)
@@ -128,6 +129,13 @@ class Profile(models.Model):
     def __str__(self):
         return self.user.username
 
+class SuperAdmin(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+
+    def __str__(self):
+        return self.name
 
 class Pmo(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
@@ -297,6 +305,7 @@ class Project(models.Model):
     enable_emails_to_hr_and_coachee = models.BooleanField(default=True)
     masked_coach_profile = models.BooleanField(default=False)
     automated_reminder = models.BooleanField(blank=True, default=True)
+
     class Meta:
         ordering = ["-created_at"]
 
