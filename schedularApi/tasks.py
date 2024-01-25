@@ -1314,7 +1314,7 @@ def schedule_nudges(course_id):
     desired_time = time(8, 30)
     nudge_scheduled_for = datetime.combine(course.nudge_start_date, desired_time)
     for nudge in nudges:
-        if nudge.course.batch.project.automated_reminder:
+        if nudge.course.batch.project.automated_reminder and nudge.course.batch.project.nudges:
             clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
             periodic_task = PeriodicTask.objects.create(
                 name=uuid.uuid1(),
@@ -1336,7 +1336,7 @@ def get_file_content(file_url):
 @shared_task
 def send_nudge(nudge_id):
     nudge = Nudge.objects.get(id=nudge_id)
-    if nudge.course.batch.project.automated_reminder:
+    if nudge.course.batch.project.automated_reminder and nudge.course.batch.project.nudges:
         subject = f"New Nudge: {nudge.name}"
         if nudge.is_sent:
             return
