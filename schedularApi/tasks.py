@@ -95,6 +95,7 @@ def send_whatsapp_message_template(phone, payload):
         }
         response = requests.post(wati_api_url, headers=headers, json=payload)
         response.raise_for_status()
+        print(response.json())
         return response.json(), response.status_code
     except Exception as e:
         print(str(e))
@@ -1224,16 +1225,25 @@ def coachee_booking_reminder_whatsapp_at_8am():
         coaching_sessions_exist = CoachingSession.objects.filter(
             expiry_date__isnull=False, expiry_date__gt=current_date
         )
+        print(current_date)
+        print(coaching_sessions_exist)
+
         for coaching_session in coaching_sessions_exist:
+            print(coaching_session)
             if coaching_session.batch.project.automated_reminder:
+                print("coaching_session",coaching_session)
                 learners_in_coaching_session = coaching_session.batch.learners.all()
+                print("learners_in_coaching_session",learners_in_coaching_session)
                 for learner in learners_in_coaching_session:
+                    print(learner)
                     try:
+                        print(learner)
                         SchedularSessions.objects.get(
                             learner=learner, coaching_session=coaching_session
                         )
                         print(f"Don't send WhatsApp message to {learner.name}")
                     except ObjectDoesNotExist:
+                        print(learner)
                         name = learner.name
                         phone = learner.phone
                         session_name = (
@@ -1269,7 +1279,7 @@ def coachee_booking_reminder_whatsapp_at_8am():
                                         "value": booking_id,
                                     },
                                 ],
-                                "template_name": "reminder_coachee_coaching_session",
+                                "template_name": "reminder_coachee_book_slot_daily",
                             },
                         )
                     except Exception as e:
