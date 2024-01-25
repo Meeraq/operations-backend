@@ -4651,6 +4651,28 @@ def get_coachee_of_user(request, user_type, user_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def get_learner_of_user_optimized(request, user_type, user_id):
+    try:
+        learners=None
+        if user_type == "pmo":
+            learners = Learner.objects.all()
+        elif user_type == "coach":
+            learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+        elif user_type == "hr":
+            learners = Learner.objects.filter(
+                Q(engagement__project__hr__id=user_id)
+                | Q(schedularbatch__project__hr__id=user_id)
+            ).distinct()
+
+        serializer = LearnerSerializer(learners , many =True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_learner_data(request, learner_id):
     learner = Learner.objects.get(id=learner_id)
     serializer = LearnerSerializer(learner)
