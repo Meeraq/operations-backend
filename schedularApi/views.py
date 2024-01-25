@@ -971,19 +971,23 @@ def add_batch(request, project_id):
                         duration = session_data.get("duration")
                         session_type = session_data.get("session_type")
 
-                        if session_type == "live_session":
-                            live_session_number = (
+                        if session_type in [
+                            "live_session",
+                            "check_in_session",
+                            "in_person_session",
+                        ]:
+                            session_number = (
                                 LiveSession.objects.filter(
-                                    batch=batch, session_type="live_session"
+                                    batch=batch, session_type=session_type
                                 ).count()
                                 + 1
                             )
                             live_session = LiveSession.objects.create(
                                 batch=batch,
-                                live_session_number=live_session_number,
+                                live_session_number=session_number,
                                 order=order,
                                 duration=duration,
-                                session_type="live_session",
+                                session_type=session_type,
                             )
                         elif session_type == "laser_coaching_session":
                             coaching_session_number = (
