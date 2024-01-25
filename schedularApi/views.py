@@ -2813,6 +2813,23 @@ def add_new_session_in_project_structure(request):
                     LiveSessionLesson.objects.create(
                         lesson=new_lesson, live_session=live_session
                     )
+                    max_order_feedback = (
+                        Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                            "order__max"
+                        ]
+                        or 0
+                    )
+                    new_feedback_lesson = Lesson.objects.create(
+                        course=course,
+                        name=f"feedback_for_live_session_{live_session.live_session_number}",
+                        status="draft",
+                        lesson_type="feedback",
+                        order=max_order_feedback,
+                    )
+                    unique_id = uuid.uuid4()
+                    feedback_lesson = FeedbackLesson.objects.create(
+                                lesson=new_feedback_lesson, unique_id=unique_id
+                    )
             elif session_type in ["laser_coaching_session", "mentoring_session"]:
                 coaching_session_number = (
                     CoachingSession.objects.filter(

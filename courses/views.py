@@ -2341,6 +2341,23 @@ class AssignCourseTemplateToBatch(APIView):
                     LiveSessionLesson.objects.create(
                         lesson=new_lesson, live_session=live_session
                     )
+                    max_order_feedback = (
+                        Lesson.objects.filter(course=new_course).aggregate(
+                            Max("order")
+                        )["order__max"]
+                        or 0
+                    )
+                    new_feedback_lesson = Lesson.objects.create(
+                        course=new_course,
+                        name=f"feedback_for_live_session_{live_session.live_session_number}",
+                        status="draft",
+                        lesson_type="feedback",
+                        order=max_order_feedback,
+                    )
+                    unique_id = uuid.uuid4()
+                    feedback_lesson = FeedbackLesson.objects.create(
+                        lesson=new_feedback_lesson, unique_id=unique_id
+                    )
                 for coaching_session in coaching_sessions:
                     max_order = max_order + 1
                     session_name = None
