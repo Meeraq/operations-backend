@@ -9,12 +9,13 @@ from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
 from django.conf import settings
 from api.models import Coach, User, UserToken, SessionRequestCaas, Learner
-from schedularApi.models import CoachingSession, SchedularSessions, RequestAvailibilty
+from schedularApi.models import CoachingSession, SchedularSessions, RequestAvailibilty,CoachSchedularAvailibilty
 from django.utils import timezone
 from api.views import (
     send_mail_templates,
     refresh_microsoft_access_token,
 )
+from schedularApi.serializers import AvailabilitySerializer
 from datetime import timedelta, time, datetime
 import pytz
 
@@ -31,6 +32,110 @@ import requests
 
 env = environ.Env()
 environ.Env.read_env()
+
+def timestamp_to_datetime(timestamp):
+    return datetime.utcfromtimestamp(int(timestamp) / 1000.0)
+
+
+def generate_slots(start, end, duration):
+    slots = []
+    current_time = timestamp_to_datetime(start)
+
+    while current_time + timedelta(minutes=duration) <= timestamp_to_datetime(end):
+        new_end_time = current_time + timedelta(minutes=duration)
+        slots.append(
+            {
+                "start_time": int(current_time.timestamp() * 1000),
+                "end_time": int(new_end_time.timestamp() * 1000),
+            }
+        )
+        current_time += timedelta(minutes=15)
+    return slots
+
+
+def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
+    coaching_session = CoachingSession.objects.get(id=coaching_session_id)
+    if (
+        not coaching_session.start_date
+        or not coaching_session.end_date
+        or not coaching_session.end_date
+    ):
+        return None
+    coaches_in_batch = coaching_session.batch.coaches.all()
+    start_date = datetime.combine(coaching_session.start_date, datetime.min.time())
+    end_date = (
+        datetime.combine(coaching_session.end_date, datetime.min.time())
+        + timedelta(days=1)
+        - timedelta(milliseconds=1)
+    )
+    start_timestamp = str(int(start_date.timestamp() * 1000))
+    end_timestamp = str(int(end_date.timestamp() * 1000))
+    coach_availabilities = CoachSchedularAvailibilty.objects.filter(
+        coach__in=coaches_in_batch,
+        start_time__gte=start_timestamp,
+        end_time__lte=end_timestamp,
+        is_confirmed=False,
+    )
+    current_time = timezone.now()
+    timestamp_milliseconds = str(int(current_time.timestamp() * 1000))
+    upcoming_availabilities = coach_availabilities.filter(
+        start_time__gt=timestamp_milliseconds
+    )
+    serializer = AvailabilitySerializer(upcoming_availabilities, many=True)
+    return serializer.data
+
+def merge_time_slots(slots, slots_by_coach):
+    res = []
+    for key in slots_by_coach:
+        sorted_slots = sorted(slots_by_coach[key], key=lambda x: x["start_time"])
+        merged_slots = []
+        for i in range(len(sorted_slots)):
+            if (
+                len(merged_slots) == 0
+                or sorted_slots[i]["start_time"] > merged_slots[-1]["end_time"]
+            ):
+                merged_slots.append(sorted_slots[i])
+            else:
+                merged_slots[-1]["end_time"] = max(
+                    merged_slots[-1]["end_time"], sorted_slots[i]["end_time"]
+                )
+        res.extend(merged_slots)
+
+    return res
+
+
+def available_slots_count_for_participant(id):
+    try:
+        coaching_session = CoachingSession.objects.filter(id=id)
+        session_duration = coaching_session[0].duration
+        availabilities = get_upcoming_availabilities_of_coaching_session(
+            coaching_session[0].id
+        )
+        result = []
+
+        if availabilities is not None and len(availabilities):
+            slots = []
+            slots_by_coach = {}
+            for availability in availabilities:
+                slots_by_coach[availability["coach"]] = (
+                    [*slots_by_coach[availability["coach"]], availability]
+                    if availability["coach"] in slots_by_coach
+                    else [availability]
+                )
+                slots.append(availability)
+
+            final_merge_slots = merge_time_slots(slots, slots_by_coach)
+            for slot in final_merge_slots:
+                startT = slot["start_time"]
+                endT = slot["end_time"]
+                small_session_duration = int(session_duration)
+                result += generate_slots(startT, endT, small_session_duration)
+        return result 
+
+    except Exception as inner_exception:
+        print(f"Inner Exception: {str(inner_exception)}")
+        return 0 
+
 
 
 def send_whatsapp_message(user_type, participant, assessment, unique_id):
@@ -110,7 +215,6 @@ def get_current_date_timestamps():
         int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
     )
     return start_timestamp, end_timestamp
-
 
 @shared_task
 def send_email_to_recipients(id):
@@ -1226,46 +1330,57 @@ def coachee_booking_reminder_whatsapp_at_8am():
             expiry_date__isnull=False, expiry_date__gt=current_date
         )
         for coaching_session in coaching_sessions_exist:
+            result = available_slots_count_for_participant(coaching_session.id)
             if coaching_session.batch.project.automated_reminder:
                 learners_in_coaching_session = coaching_session.batch.learners.all()
                 for learner in learners_in_coaching_session:
                     try:
                         SchedularSessions.objects.get(
                             learner=learner, coaching_session=coaching_session
-                        ).exists()
+                        )
                         print(f"Don't send WhatsApp message to {learner.name}")
                     except ObjectDoesNotExist:
                         name = learner.name
                         phone = learner.phone
-                        session_name = coaching_session.session_type
-                        project_name = coaching_session.batch.project.name
-                        path_parts = coaching_session.booking_link.split("/")
-                        booking_id = path_parts[-1]
-                        send_whatsapp_message_template(
-                            phone,
-                            {
-                                "broadcast_name": "coachee_booking_reminder_whatsapp_at_8am",
-                                "parameters": [
-                                    {
-                                        "name": "name",
-                                        "value": name,
-                                    },
-                                    {
-                                        "name": "session_name",
-                                        "value": session_name,
-                                    },
-                                    {
-                                        "name": "project_name",
-                                        "value": project_name,
-                                    },
-                                    {
-                                        "name": "1",
-                                        "value": booking_id,
-                                    },
-                                ],
-                                "template_name": "reminder_coachee_coaching_session",
-                            },
-                        )
+                        if len(result) != 0:
+                            session_name = (
+                                coaching_session.session_type.replace("_", " ").capitalize()
+                                if not coaching_session.session_type
+                                == "laser_coaching_session"
+                                else "Coaching Session"
+                                + " "
+                                + str(coaching_session.coaching_session_number)
+                            )
+                            project_name = coaching_session.batch.project.name
+                            path_parts = coaching_session.booking_link.split("/")
+                            booking_id = path_parts[-1]
+                            send_whatsapp_message_template(
+                                phone,
+                                {
+                                    "broadcast_name": "coachee_booking_reminder_whatsapp_at_8am",
+                                    "parameters": [
+                                        {
+                                            "name": "name",
+                                            "value": name,
+                                        },
+                                        {
+                                            "name": "session_name",
+                                            "value": session_name,
+                                        },
+                                        {
+                                            "name": "project_name",
+                                            "value": project_name,
+                                        },
+                                        {
+                                            "name": "1",
+                                            "value": booking_id,
+                                        },
+                                    ],
+                                    "template_name": "reminder_coachee_book_slot_daily",
+                                },
+                            )
+                    except Exception as e:
+                        print(str(e))
     except Exception as e:
         print(str(e))
 
