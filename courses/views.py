@@ -2039,7 +2039,7 @@ def get_consolidated_feedback_report(request):
                     # Now, you can access the associated Course through the SchedularBatch
                     course = Course.objects.filter(batch=batch).first()
                     if course:
-                        feedback_lesson_name_should_be = f"feedback_for_live_session_{live_session.live_session_number}"
+                        feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
                         feedback_lessons = FeedbackLesson.objects.filter(
                             lesson__course=course
                         )
@@ -2329,9 +2329,17 @@ class AssignCourseTemplateToBatch(APIView):
                 )
                 for live_session in live_sessions:
                     max_order = max_order + 1
+                    session_name = None
+                    if live_session.session_type == "live_session":
+                        session_name = "Live Session"
+                    elif live_session.session_type == "check_in_session":
+                        session_name = "Check In Session"
+                    elif live_session.session_type == "in_person_session":
+                        session_name = "In Person Session"
+
                     new_lesson = Lesson.objects.create(
                         course=new_course,
-                        name=f"Live session {live_session.live_session_number}",
+                        name=f"{session_name} {live_session.live_session_number}",
                         status="draft",
                         lesson_type="live_session",
                         order=max_order,
@@ -2347,7 +2355,7 @@ class AssignCourseTemplateToBatch(APIView):
                     )
                     new_feedback_lesson = Lesson.objects.create(
                         course=new_course,
-                        name=f"feedback_for_live_session_{live_session.live_session_number}",
+                        name=f"Feedback for {session_name} {live_session.live_session_number}",
                         status="draft",
                         lesson_type="feedback",
                         order=max_order_feedback,

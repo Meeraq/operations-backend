@@ -2845,16 +2845,24 @@ def add_new_session_in_project_structure(request):
                         duration=new_session["duration"],
                         session_type=session_type,
                     )
-                    if session_type == "live_session" and course:
+                    if course:
                         max_order = (
                             Lesson.objects.filter(course=course).aggregate(
                                 Max("order")
                             )["order__max"]
                             or 0
                         )
+                        session_name = None
+                        if live_session.session_type == "live_session":
+                            session_name = "Live Session"
+                        elif live_session.session_type == "check_in_session":
+                            session_name = "Check In Session"
+                        elif live_session.session_type == "in_person_session":
+                            session_name = "In Person Session"
+
                         new_lesson = Lesson.objects.create(
                             course=course,
-                            name=f"Live session {live_session.live_session_number}",
+                            name=f"{session_name} {live_session.live_session_number}",
                             status="draft",
                             lesson_type="live_session",
                             order=max_order,
@@ -2868,9 +2876,10 @@ def add_new_session_in_project_structure(request):
                             )["order__max"]
                             or 0
                         )
+
                         new_feedback_lesson = Lesson.objects.create(
                             course=course,
-                            name=f"feedback_for_live_session_{live_session.live_session_number}",
+                            name=f"Feedback for {session_name} {live_session.live_session_number}",
                             status="draft",
                             lesson_type="feedback",
                             order=max_order_feedback,

@@ -738,7 +738,7 @@ def send_feedback_lesson_reminders():
                     # Now, you can access the associated Course through the SchedularBatch
                     course = Course.objects.filter(batch=schedular_batch).first()
                     if course:
-                        feedback_lesson_name_should_be = f"feedback_for_live_session_{live_session.live_session_number}"
+                        feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
                         feedback_lessons = FeedbackLesson.objects.filter(
                             lesson__course=course
                         )

@@ -4641,7 +4641,7 @@ def request_chemistry_session(request, project_id, learner_id):
         session_type="chemistry",
         status="pending",
     )
-    print(session)
+   
     if len(session) == 0:
         return Response({"error": "Max sessions exceeded."}, status=400)
     else:
