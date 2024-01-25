@@ -318,16 +318,159 @@ def get_all_Schedular_Projects(request):
 #         )
 
 
+def update_calendars_for_batches(batches, project_structure):
+    try:
+        # Delete all existing sessions for each batch
+        for batch in batches:
+            LiveSession.objects.filter(batch=batch).delete()
+            CoachingSession.objects.filter(batch=batch).delete()
+
+        # Create new sessions based on the updated project structure
+        for batch in batches:
+            for session_data in project_structure:
+                order = session_data.get("order")
+                duration = session_data.get("duration")
+                session_type = session_data.get("session_type")
+
+                if session_type == "live_session":
+                    live_session_number = (
+                        LiveSession.objects.filter(batch=batch).count() + 1
+                    )
+                    live_session = LiveSession.objects.create(
+                        batch=batch,
+                        live_session_number=live_session_number,
+                        order=order,
+                        duration=duration,
+                    )
+                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                    coaching_session_number = (
+                        CoachingSession.objects.filter(
+                            batch=batch, session_type=session_type
+                        ).count()
+                        + 1
+                    )
+
+                    booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                    coaching_session = CoachingSession.objects.create(
+                        batch=batch,
+                        coaching_session_number=coaching_session_number,
+                        order=order,
+                        duration=duration,
+                        booking_link=booking_link,
+                        session_type=session_type,
+                    )
+
+    except Exception as e:
+        print(str(e))
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_project_structure(request, project_id):
     try:
         project = get_object_or_404(SchedularProject, id=project_id)
         serializer = SessionItemSerializer(data=request.data, many=True)
+
         if serializer.is_valid():
+            project_structure_before_update = project.project_structure
             is_editing = len(project.project_structure) > 0
             project.project_structure = serializer.data
             project.save()
+
+            
+
+            if is_editing:
+                project_structure_prev_data = [
+                    session.get("prevData") for session in request.data
+                ]
+
+                # Find sessions to delete
+                sessions_to_delete = [
+                    session
+                    for session in project_structure_before_update
+                    if session not in project_structure_prev_data
+                ]
+                batches = SchedularBatch.objects.filter(project=project)
+                if batches:
+                    for batch in batches:
+                        # Delete sessions marked for deletion
+                        for session in sessions_to_delete:
+                            if session["session_type"] == "live_session":
+                                LiveSession.objects.filter(
+                                    batch=batch, order=session["order"]
+                                ).delete()
+                            elif session["session_type"] in [
+                                "laser_coaching_session",
+                                "mentoring_session",
+                            ]:
+                                CoachingSession.objects.filter(
+                                    batch=batch,
+                                    session_type=session["session_type"],
+                                    order=session["order"],
+                                ).delete()
+
+                        # Create or update sessions
+                        for session in request.data:
+                            if session["session_type"] == "live_session":
+                                if session["prevData"] == "none":
+                                    live_session_number = (
+                                        LiveSession.objects.filter(batch=batch).count() + 1
+                                    )
+                                    live_session = LiveSession.objects.create(
+                                        batch=batch,
+                                        live_session_number=live_session_number,
+                                        order=session["order"],
+                                        duration=session["duration"],
+                                    )
+                                elif session["prevData"] == session["afterData"]:
+                                    if (
+                                        not session["prevData"]["order"]
+                                        == session["afterData"]["order"]
+                                    ):
+                                        live_sessions = LiveSession.objects.filter(
+                                            batch=batch,
+                                            order=session["prevData"]["order"],
+                                        ).first()
+                                        live_sessions.order = session["afterData"]["order"]
+                                        live_sessions.save()
+
+                            elif session["session_type"] in [
+                                "laser_coaching_session",
+                                "mentoring_session",
+                            ]:
+                                if session["prevData"] == "none":
+                                    coaching_session_number = (
+                                        CoachingSession.objects.filter(
+                                            batch=batch,
+                                            session_type=session["session_type"],
+                                        ).count()
+                                        + 1
+                                    )
+
+                                    booking_link = f"{settings.CAAS_APP_URL}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                                    coaching_session = CoachingSession.objects.create(
+                                        batch=batch,
+                                        coaching_session_number=coaching_session_number,
+                                        order=session["order"],
+                                        duration=session["duration"],
+                                        booking_link=booking_link,
+                                        session_type=session["session_type"],
+                                    )
+                                elif session["prevData"] == session["afterData"]:
+                                    if (
+                                        not session["prevData"]["order"]
+                                        == session["afterData"]["order"]
+                                    ):
+                                        coaching_sessions = CoachingSession.objects.filter(
+                                            batch=batch,
+                                            session_type=session["session_type"],
+                                            order=session["prevData"]["order"],
+                                        ).first()
+                                        coaching_sessions.order = session["afterData"][
+                                            "order"
+                                        ]
+                                        coaching_sessions.save()
+
             return Response(
                 {
                     "message": "Project structure edited successfully."
@@ -336,6 +479,7 @@ def create_project_structure(request, project_id):
                 },
                 status=200,
             )
+        print(serializer.errors)
         return Response({"error": "Invalid sessions found."}, status=400)
     except SchedularProject.DoesNotExist:
         return Response(
@@ -514,8 +658,12 @@ def get_batch_calendar(request, batch_id):
             course = Course.objects.get(batch__id=batch_id)
             course_serailizer = CourseSerializer(course)
             for participant in participants_serializer.data:
-                course_enrollment = CourseEnrollment.objects.get(learner__id=participant['id'], course=course)
-                participant['is_certificate_allowed'] = course_enrollment.is_certificate_allowed
+                course_enrollment = CourseEnrollment.objects.get(
+                    learner__id=participant["id"], course=course
+                )
+                participant[
+                    "is_certificate_allowed"
+                ] = course_enrollment.is_certificate_allowed
         except Exception as e:
             print(str(e))
             course = None
@@ -940,7 +1088,7 @@ def add_batch(request, project_id):
             for participant_data in participants_data:
                 name = participant_data.get("name")
                 email = participant_data.get("email", "").strip().lower()
-                phone = participant_data.get("phone", None) 
+                phone = participant_data.get("phone", None)
                 batch_name = participant_data.get("batch").strip().upper()
                 # Assuming 'project_id' is in your request data
 
@@ -994,7 +1142,7 @@ def add_batch(request, project_id):
                                 ).count()
                                 + 1
                             )
-                            
+
                             booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                             coaching_session = CoachingSession.objects.create(
                                 batch=batch,
@@ -1006,7 +1154,7 @@ def add_batch(request, project_id):
                             )
 
                 # Check if participant with the same email exists
-                
+
                 learner = create_or_get_learner(
                     {"name": name, "email": email, "phone": phone}
                 )
@@ -2019,7 +2167,7 @@ def add_participant_to_batch(request, batch_id):
     with transaction.atomic():
         name = request.data.get("name")
         email = request.data.get("email", "").strip().lower()
-        phone = request.data.get("phone", None) 
+        phone = request.data.get("phone", None)
         try:
             batch = SchedularBatch.objects.get(id=batch_id)
         except SchedularBatch.DoesNotExist:
@@ -2289,7 +2437,9 @@ def project_report_download_session_wise(request, project_id, batch_id):
             dfs.append((session_name, df))
 
         response = HttpResponse(content_type="application/ms-excel")
-        response["Content-Disposition"] = f'attachment; filename="{batch.name}_batches.xlsx"'
+        response[
+            "Content-Disposition"
+        ] = f'attachment; filename="{batch.name}_batches.xlsx"'
 
         with pd.ExcelWriter(response, engine="openpyxl") as writer:
             for session_name, df in dfs:
@@ -2298,7 +2448,6 @@ def project_report_download_session_wise(request, project_id, batch_id):
         return response
     except Exception as e:
         print(str(e))
-
 
 
 @api_view(["POST"])
@@ -2702,16 +2851,19 @@ def live_session_detail_view(request, pk):
 
     return Response(response_data)
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_certificate_status(request):
     try:
-        participant_id = request.data.get('participantId')
-        is_certificate_allowed = request.data.get('is_certificate_allowed')
-        course_id=request.data.get('courseId')
+        participant_id = request.data.get("participantId")
+        is_certificate_allowed = request.data.get("is_certificate_allowed")
+        course_id = request.data.get("courseId")
 
         # Use filter instead of get to handle multiple instances
-        course_enrollments = CourseEnrollment.objects.filter(learner__id=participant_id,course__id=course_id)
+        course_enrollments = CourseEnrollment.objects.filter(
+            learner__id=participant_id, course__id=course_id
+        )
 
         # If there are multiple instances, you need to decide which one to update
         # For example, you might want to update the first one:
@@ -2719,9 +2871,58 @@ def update_certificate_status(request):
             course_for_that_participant = course_enrollments.first()
             course_for_that_participant.is_certificate_allowed = is_certificate_allowed
             course_for_that_participant.save()
-            return JsonResponse({'message': 'Certificate status updated successfully'}, status=200)
+            return JsonResponse(
+                {"message": "Certificate status updated successfully"}, status=200
+            )
         else:
-            return JsonResponse({'error': 'No Course Enrolled in this Batch'}, status=404)
+            return JsonResponse(
+                {"error": "No Course Enrolled in this Batch"}, status=404
+            )
 
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_completed_sessions_for_project(request, project_id):
+    try:
+        # Get all batches in the project
+        batches = SchedularBatch.objects.filter(project__id=project_id)
+
+        # Initialize lists to store completed live and coaching sessions
+        completed_live_sessions_list = []
+        completed_coaching_sessions_list = []
+
+        # Iterate through each batch
+        for batch in batches:
+            # Retrieve completed live sessions for the current batch
+            completed_live_sessions = LiveSession.objects.filter(
+                batch=batch, date_time__lt=timezone.now()
+            ).order_by("-date_time")
+
+            live_session_serializer = LiveSessionSerializer(
+                completed_live_sessions, many=True
+            )
+            completed_live_sessions_list.extend(live_session_serializer.data)
+
+            # Retrieve completed coaching sessions for the current batch
+            completed_coaching_sessions = CoachingSession.objects.filter(
+                batch=batch, end_date__lt=timezone.now()
+            ).order_by("-end_date")
+
+            coaching_session_serializer = CoachingSessionSerializer(
+                completed_coaching_sessions, many=True
+            )
+            completed_coaching_sessions_list.extend(coaching_session_serializer.data)
+
+        # Combine and return the aggregated data
+        completed_sessions_data = {
+            "completed_live_sessions": completed_live_sessions_list,
+            "completed_coaching_sessions": completed_coaching_sessions_list,
+        }
+
+        return Response(completed_sessions_data, status=200)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
