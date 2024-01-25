@@ -7368,6 +7368,8 @@ def change_user_role(request, user_id):
         )
     elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
+    elif user_profile_role == "superadmin":
+        serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
