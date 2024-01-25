@@ -509,6 +509,7 @@ def create_outlook_calendar_invite(
     caas_session,
     schedular_session,
     live_session,
+    meeting_location,
 ):
     event_create_url = "https://graph.microsoft.com/v1.0/me/events"
     try:
@@ -534,6 +535,9 @@ def create_outlook_calendar_invite(
             "start": {"dateTime": start_datetime, "timeZone": "Asia/Kolkata"},
             "end": {"dateTime": end_datetime, "timeZone": "Asia/Kolkata"},
             "attendees": attendees,
+            "location": {
+                "displayName": meeting_location if meeting_location else "",
+            },
         }
         response = requests.post(event_create_url, json=event_payload, headers=headers)
         if response.status_code == 201:
@@ -4668,7 +4672,7 @@ def request_chemistry_session(request, project_id, learner_id):
         session_type="chemistry",
         status="pending",
     )
-    print(session)
+   
     if len(session) == 0:
         return Response({"error": "Max sessions exceeded."}, status=400)
     else:
