@@ -100,9 +100,10 @@ import io
 from time import sleep
 
 from assessmentApi.views import delete_participant_from_assessments
+from django.db.models import F
 
 # Create your views here.
-
+from itertools import chain
 import environ
 
 env = environ.Env()
@@ -2925,3 +2926,125 @@ def add_new_session_in_project_structure(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to add session"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_completed_sessions_for_project(request, project_id):
+    try:
+        current_datetime = timezone.now()
+
+        # Get all LiveSessions where date_time is in the past
+        complete_live_sessions = LiveSession.objects.filter(
+            batch__project__id=project_id, date_time__lt=current_datetime
+        )
+
+        # Get all CoachingSessions where end_date is in the past
+        complete_coaching_sessions = CoachingSession.objects.filter(
+            batch__project__id=project_id, end_date__lt=current_datetime
+        )
+
+        # Convert LiveSession objects to dictionaries
+        live_session_data = [
+            {
+                "id": session.id,
+                "live_session_number": session.live_session_number,
+                "order": session.order,
+                "date_time": session.date_time,
+                "attendees": session.attendees,
+                "description": session.description,
+                "status": session.status,
+                "duration": session.duration,
+                "pt_30_min_before": session.pt_30_min_before_id,
+                "session_type": session.session_type,
+            }
+            for session in complete_live_sessions
+        ]
+
+        # Convert CoachingSession objects to dictionaries
+        coaching_session_data = [
+            {
+                "id": session.id,
+                "booking_link": session.booking_link,
+                "start_date": session.start_date,
+                "end_date": session.end_date,
+                "expiry_date": session.expiry_date,
+                "batch_id": session.batch_id,
+                "coaching_session_number": session.coaching_session_number,
+                "order": session.order,
+                "duration": session.duration,
+                "session_type": session.session_type,
+            }
+            for session in complete_coaching_sessions
+        ]
+
+        # Combine both lists into a single list
+        complete_sessions = live_session_data + coaching_session_data
+
+        return Response(complete_sessions, status=200)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_session_from_project_structure(request):
+    try:
+        with transaction.atomic():
+            project = SchedularProject.objects.get(id=request.data.get("project_id"))
+            session_to_delete = request.data.get("session_to_delete")
+            batches = SchedularBatch.objects.filter(project=project)
+            order = session_to_delete.get("order")
+            session_type = session_to_delete.get("session_type")
+            duration = session_to_delete.get("duration")
+
+            project_structure = project.project_structure
+            if session_to_delete in project_structure:
+                project_structure.remove(session_to_delete)
+                project.project_structure = project_structure
+                project.save()
+
+                for session in project_structure:
+                    if session.get("order") > order:
+                        session["order"] -= 1
+
+                project.project_structure = project_structure
+                project.save()
+
+            for batch in batches:
+                if session_type in [
+                    "live_session",
+                    "check_in_session",
+                    "in_person_session",
+                ]:
+                    print(session_type)
+                    print(LiveSession.objects.filter(
+                        batch=batch, order=order, session_type=session_type
+                    ))
+                    LiveSession.objects.filter(
+                        batch=batch, order=order, session_type=session_type
+                    ).delete()
+
+                    LiveSession.objects.filter(batch=batch, order__gt=order).update(
+                        order=F("order") - 1
+                    )
+                    LiveSession.objects.filter(
+                        batch=batch, session_type=session_type , order__gt=order
+                    ).update(live_session_number=F("live_session_number") - 1)
+                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                    CoachingSession.objects.filter(
+                        batch=batch, order=order, session_type=session_type
+                    ).delete()
+
+                    CoachingSession.objects.filter(batch=batch, order__gt=order).update(
+                        order=F("order") - 1
+                    )
+                    CoachingSession.objects.filter(
+                        batch=batch, session_type=session_type ,  order__gt=order
+                    ).update(coaching_session_number=F("coaching_session_number") - 1)
+
+            return Response({"message": "Session deleted successfully."}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to delete session"}, status=500)
