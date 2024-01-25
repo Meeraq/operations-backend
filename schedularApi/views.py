@@ -525,6 +525,7 @@ def get_batch_calendar(request, batch_id):
                 participant[
                     "is_certificate_allowed"
                 ] = course_enrollment.is_certificate_allowed
+
         except Exception as e:
             print(str(e))
             course = None
@@ -1123,6 +1124,7 @@ def get_coach_availabilities_booking_link(request):
                 }
             )
         except Exception as e:
+            print(str(e))
             return Response({"error": "Unable to get slots"}, status=400)
     else:
         return Response({"error": "Booking link is not available"})
@@ -1326,6 +1328,42 @@ def schedule_session(request):
 TIME_INTERVAL = 900000
 
 
+def check_if_selected_slot_can_be_booked(coach_id, start_time, end_time):
+    slot_date = datetime.fromtimestamp((int(start_time) / 1000)).date()
+    start_timestamp = str(
+        int(datetime.combine(slot_date, datetime.min.time()).timestamp() * 1000)
+    )
+    end_timestamp = str(
+        int(datetime.combine(slot_date, datetime.max.time()).timestamp() * 1000)
+    )
+    selected_date_availabilities = CoachSchedularAvailibilty.objects.filter(
+        start_time__lte=end_timestamp,
+        end_time__gte=start_timestamp,
+        coach__id=coach_id,
+        is_confirmed=False,
+    )
+    availability_serializer = AvailabilitySerializer(
+        selected_date_availabilities, many=True
+    )
+    sorted_slots = sorted(availability_serializer.data, key=lambda x: x["start_time"])
+    merged_slots = []
+    for i in range(len(sorted_slots)):
+        if (
+            len(merged_slots) == 0
+            or sorted_slots[i]["start_time"] > merged_slots[-1]["end_time"]
+        ):
+            merged_slots.append(sorted_slots[i])
+        else:
+            merged_slots[-1]["end_time"] = max(
+                merged_slots[-1]["end_time"], sorted_slots[i]["end_time"]
+            )
+    for slot in merged_slots:
+        if int(start_time) >= int(slot["start_time"]) and int(end_time) <= int(
+            slot["end_time"]
+        ):
+            return True
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def schedule_session_fixed(request):
@@ -1338,9 +1376,15 @@ def schedule_session_fixed(request):
             end_time = request.data.get("end_time", "")
             coach_id = request.data.get("coach_id", "")
             request_id = request.data.get("request_id", "")
-
             request_avail = RequestAvailibilty.objects.get(id=request_id)
             coach = Coach.objects.get(id=coach_id)
+            if not check_if_selected_slot_can_be_booked(coach_id, timestamp, end_time):
+                return Response(
+                    {
+                        "error": "Sorry! This slot has just been booked. Please refresh and try selecting a different time."
+                    },
+                    status=401,
+                )
             coach_availability = CoachSchedularAvailibilty.objects.create(
                 request=request_avail,
                 coach=coach,
@@ -2752,126 +2796,127 @@ def update_certificate_status(request):
 @permission_classes([IsAuthenticated])
 def add_new_session_in_project_structure(request):
     try:
-        project_id = request.data.get("project_id")
-        session_type = request.data.get("session_type")
-        duration = request.data.get("duration")
+        with transaction.atomic():
+            project_id = request.data.get("project_id")
+            session_type = request.data.get("session_type")
+            duration = request.data.get("duration")
 
-        # Get the project and batches
-        project = get_object_or_404(SchedularProject, id=project_id)
-        batches = SchedularBatch.objects.filter(project=project)
+            # Get the project and batches
+            project = get_object_or_404(SchedularProject, id=project_id)
+            batches = SchedularBatch.objects.filter(project=project)
 
-        # Get the previous structure
-        prev_structure = project.project_structure
+            # Get the previous structure
+            prev_structure = project.project_structure
 
-        # Create a new session object
-        new_session = {
-            "order": len(prev_structure) + 1,
-            "duration": duration,
-            "session_type": session_type,
-        }
+            # Create a new session object
+            new_session = {
+                "order": len(prev_structure) + 1,
+                "duration": duration,
+                "session_type": session_type,
+            }
 
-        # Update the project structure
-        prev_structure.append(new_session)
-        project.project_structure = prev_structure
-        project.save()
+            # Update the project structure
+            prev_structure.append(new_session)
+            project.project_structure = prev_structure
+            project.save()
 
-        # Update the sessions for each batch
-        for batch in batches:
-            course = Course.objects.filter(batch=batch).first()
-            if session_type in [
-                "live_session",
-                "check_in_session",
-                "in_person_session",
-            ]:
-                session_number = (
-                    LiveSession.objects.filter(
-                        batch=batch, session_type=session_type
-                    ).count()
-                    + 1
-                )
-                live_session = LiveSession.objects.create(
-                    batch=batch,
-                    live_session_number=session_number,
-                    order=new_session["order"],
-                    duration=new_session["duration"],
-                    session_type=session_type,
-                )
-                if session_type == "live_session" and course:
-                    max_order = (
-                        Lesson.objects.filter(course=course).aggregate(Max("order"))[
-                            "order__max"
-                        ]
-                        or 0
+            # Update the sessions for each batch
+            for batch in batches:
+                course = Course.objects.filter(batch=batch).first()
+                if session_type in [
+                    "live_session",
+                    "check_in_session",
+                    "in_person_session",
+                ]:
+                    session_number = (
+                        LiveSession.objects.filter(
+                            batch=batch, session_type=session_type
+                        ).count()
+                        + 1
                     )
-                    new_lesson = Lesson.objects.create(
-                        course=course,
-                        name=f"Live session {live_session.live_session_number}",
-                        status="draft",
-                        lesson_type="live_session",
-                        order=max_order,
+                    live_session = LiveSession.objects.create(
+                        batch=batch,
+                        live_session_number=session_number,
+                        order=new_session["order"],
+                        duration=new_session["duration"],
+                        session_type=session_type,
                     )
-                    LiveSessionLesson.objects.create(
-                        lesson=new_lesson, live_session=live_session
-                    )
-                    max_order_feedback = (
-                        Lesson.objects.filter(course=course).aggregate(Max("order"))[
-                            "order__max"
-                        ]
-                        or 0
-                    )
-                    new_feedback_lesson = Lesson.objects.create(
-                        course=course,
-                        name=f"feedback_for_live_session_{live_session.live_session_number}",
-                        status="draft",
-                        lesson_type="feedback",
-                        order=max_order_feedback,
-                    )
-                    unique_id = uuid.uuid4()
-                    feedback_lesson = FeedbackLesson.objects.create(
-                                lesson=new_feedback_lesson, unique_id=unique_id
-                    )
-            elif session_type in ["laser_coaching_session", "mentoring_session"]:
-                coaching_session_number = (
-                    CoachingSession.objects.filter(
-                        batch=batch, session_type=session_type
-                    ).count()
-                    + 1
-                )
-
-                booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
-                coaching_session = CoachingSession.objects.create(
-                    batch=batch,
-                    coaching_session_number=coaching_session_number,
-                    order=new_session["order"],
-                    duration=new_session["duration"],
-                    booking_link=booking_link,
-                    session_type=session_type,
-                )
-                if course:
-                    max_order = (
-                        Lesson.objects.filter(course=course).aggregate(Max("order"))[
-                            "order__max"
-                        ]
-                        or 0
-                    )
-                    max_order = max_order + 1
-                    session_name = None
-                    if coaching_session.session_type == "laser_coaching_session":
-                        session_name = "Laser coaching"
-                    elif coaching_session.session_type == "mentoring_session":
-                        session_name = "Mentoring session"
-                    new_lesson = Lesson.objects.create(
-                        course=course,
-                        name=f"{session_name} {coaching_session.coaching_session_number}",
-                        status="draft",
-                        lesson_type="laser_coaching",
-                        order=max_order,
-                    )
-                    LaserCoachingSession.objects.create(
-                        lesson=new_lesson, coaching_session=coaching_session
+                    if session_type == "live_session" and course:
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+                        new_lesson = Lesson.objects.create(
+                            course=course,
+                            name=f"Live session {live_session.live_session_number}",
+                            status="draft",
+                            lesson_type="live_session",
+                            order=max_order,
+                        )
+                        LiveSessionLesson.objects.create(
+                            lesson=new_lesson, live_session=live_session
+                        )
+                        max_order_feedback = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+                        new_feedback_lesson = Lesson.objects.create(
+                            course=course,
+                            name=f"feedback_for_live_session_{live_session.live_session_number}",
+                            status="draft",
+                            lesson_type="feedback",
+                            order=max_order_feedback,
+                        )
+                        unique_id = uuid.uuid4()
+                        feedback_lesson = FeedbackLesson.objects.create(
+                            lesson=new_feedback_lesson, unique_id=unique_id
+                        )
+                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                    coaching_session_number = (
+                        CoachingSession.objects.filter(
+                            batch=batch, session_type=session_type
+                        ).count()
+                        + 1
                     )
 
-        return Response({"message": "Session added successfully."}, status=200)
+                    booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                    coaching_session = CoachingSession.objects.create(
+                        batch=batch,
+                        coaching_session_number=coaching_session_number,
+                        order=new_session["order"],
+                        duration=new_session["duration"],
+                        booking_link=booking_link,
+                        session_type=session_type,
+                    )
+                    if course:
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+                        max_order = max_order + 1
+                        session_name = None
+                        if coaching_session.session_type == "laser_coaching_session":
+                            session_name = "Laser coaching"
+                        elif coaching_session.session_type == "mentoring_session":
+                            session_name = "Mentoring session"
+                        new_lesson = Lesson.objects.create(
+                            course=course,
+                            name=f"{session_name} {coaching_session.coaching_session_number}",
+                            status="draft",
+                            lesson_type="laser_coaching",
+                            order=max_order,
+                        )
+                        LaserCoachingSession.objects.create(
+                            lesson=new_lesson, coaching_session=coaching_session
+                        )
+
+            return Response({"message": "Session added successfully."}, status=200)
 
     except Exception as e:
         print(str(e))
