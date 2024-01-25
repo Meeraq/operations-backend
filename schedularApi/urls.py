@@ -166,4 +166,8 @@ urlpatterns = [
         "update-certificate-status/",
         views.update_certificate_status,
     ),
+     path(
+        "add-new-session-in-project-structure/",
+        views.add_new_session_in_project_structure,
+    ),
 ]
