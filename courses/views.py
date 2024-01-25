@@ -2068,12 +2068,19 @@ def get_consolidated_feedback_report(request):
                             )
 
                             if formatted_lesson_name == feedback_lesson_name_should_be:
-                                live_session_key = f"{project.name} Live Session {live_session.live_session_number}"
+                                session_name = None
+                                if live_session.session_type == "live_session":
+                                    session_name = "Live Session"
+                                elif live_session.session_type == "check_in_session":
+                                    session_name = "Check In Session"
+                                elif live_session.session_type == "in_person_session":
+                                    session_name = "In Person Session"
+                                live_session_key = f"{project.name} {session_name} {live_session.live_session_number}"
                                 if live_session_key not in data:
                                     data[live_session_key] = {
                                         "live_session_id": live_session.id,
                                         "project_name": project.name,
-                                        "session_name": f"Live Session {live_session.live_session_number}",
+                                        "session_name": f"{session_name} {live_session.live_session_number}",
                                         "total_participant": total_participant,
                                         "total_responses": total_responses,
                                         "percentage_responded": percentage_responded,
