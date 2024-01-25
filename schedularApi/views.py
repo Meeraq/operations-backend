@@ -620,6 +620,7 @@ def update_live_session(request, live_session_id):
                     None,
                     None,
                     update_live_session,
+                    None
                 )
             elif not existing_date_time.strftime(
                 "%d-%m-%Y %H:%M"
@@ -641,6 +642,7 @@ def update_live_session(request, live_session_id):
                     None,
                     None,
                     update_live_session,
+                    None
                 )
         except Exception as e:
             print(str(e))
@@ -1527,6 +1529,8 @@ def schedule_session_fixed(request):
                     if session_type == "laser_coaching_session"
                     else "mentoring"
                 )
+                booking_id = coach_availability.coach.room_id
+                meeting_location = f"{env('CAAS_APP_URL')}/call/{booking_id}"
                 create_outlook_calendar_invite(
                     f"Meeraq - {session_type_value.capitalize()} Session",
                     f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
@@ -1552,8 +1556,8 @@ def schedule_session_fixed(request):
                     None,
                     scheduled_session,
                     None,
+                    meeting_location,
                 )
-                booking_id = coach_availability.coach.room_id
                 send_mail_templates(
                     "schedule_session.html",
                     [coach_availability.coach.email],
@@ -1951,20 +1955,18 @@ def delete_slots(request):
 @permission_classes([IsAuthenticated])
 def send_unbooked_coaching_session_mail(request):
     batch_name = request.data.get("batchName", "")
+    project_name = request.data.get("project_name", "")
     participants = request.data.get("participants", [])
     booking_link = request.data.get("bookingLink", "")
     expiry_date = request.data.get("expiry_date", "")
     date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
     formatted_date = date_obj.strftime("%d %B %Y")
     session_type = request.data.get("session_type", "")
-
     for participant in participants:
         try:
             learner_name = Learner.objects.get(email=participant).name
         except:
             continue
-            # Handle the case when "name" is not in participant
-        # Load the HTML template
         send_mail_templates(
             "seteventlink.html",
             [participant],
@@ -1973,6 +1975,7 @@ def send_unbooked_coaching_session_mail(request):
             else "Meeraq - Book Mentoring Session",
             {
                 "name": learner_name,
+                "project_name": project_name,
                 "event_link": booking_link,
                 "expiry_date": formatted_date,
                 "session_type": "mentoring"
@@ -1981,7 +1984,7 @@ def send_unbooked_coaching_session_mail(request):
             },
             [],
         )
-
+        sleep(5)
     return Response("Emails sent to participants.")
 
 
