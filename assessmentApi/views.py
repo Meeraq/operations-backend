@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.template.loader import render_to_string
 from operationsBackend import settings
+from rest_framework.decorators import api_view, permission_classes
 from .models import (
     Competency,
     Question,
@@ -68,6 +69,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib
 import os
+from time import sleep
 from django.http import HttpResponse
 from datetime import datetime
 import io
@@ -76,7 +78,7 @@ from schedularApi.tasks import send_assessment_invitation_mail, send_whatsapp_me
 from django.shortcuts import render, get_object_or_404
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import permission_classes
-
+from django.http import Http404
 from courses.models import (
     Course,
     Lesson,
@@ -1389,7 +1391,8 @@ class DeleteParticipantFromAssessment(APIView):
                         batch.learners.remove(learner)
                         # Remove the learner from FeedbackLessonResponse if present
                         feedback_responses = FeedbackLessonResponse.objects.filter(
-                            learner=learner, feedback_lesson__lesson__course__batch=batch
+                            learner=learner,
+                            feedback_lesson__lesson__course__batch=batch,
                         )
                         feedback_responses.delete()
                         # Remove the learner from QuizLessonResponse if present
@@ -4081,7 +4084,6 @@ class AssessmentInAssessmentLesson(APIView):
             )
 
 
-
 class AllAssessmentInAssessmentLesson(APIView):
     def get(self, request):
         try:
@@ -4092,10 +4094,9 @@ class AllAssessmentInAssessmentLesson(APIView):
                 assessment_lesson = AssessmentLesson.objects.filter(
                     assessment_modal=assessment
                 ).first()
-                
+
                 if assessment_lesson:
                     assessment_present_in_assessment_lesson_ids.append(assessment.id)
-                
 
             return Response(
                 {
@@ -4110,3 +4111,116 @@ class AllAssessmentInAssessmentLesson(APIView):
                 {"error": "Faliled to get data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# def send_mail_to_not_responded_participant(request, assessment_id):
+#     print(request.data, "abcd")
+#     print(assessment_id)
+#     participant_ids = request.data
+#     assessment = Assessment.objects.get(id=assessment_id)
+#     participants_observers = assessment.participants_observers.all().filter(
+#         participant__id__in=participant_ids
+#     )
+#     for participant_observer_mapping in participants_observers:
+#         participant = participant_observer_mapping.participant
+
+#     try:
+#         participant_response = ParticipantResponse.objects.filter(
+#             participant=participant, assessment=assessment
+#         )
+
+#         if not participant_response:
+#             participant_unique_id = ParticipantUniqueId.objects.get(
+#                 participant=participant, assessment=assessment
+#             )
+#             unique_id = participant_unique_id.unique_id
+
+#             assessment_link = (
+#                 f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
+#             )
+
+#             # Send email only if today's date is within the assessment date range
+#             send_mail_templates(
+#                 "assessment/assessment_reminder_mail_to_participant.html",
+#                 [participant.email],
+#                 "Meeraq - Assessment Reminder !",
+#                 {
+#                     "assessment_name": assessment.participant_view_name,
+#                     "participant_name": participant.name.capitalize(),
+#                     "link": assessment_link,
+#                 },
+#                 [],
+#             )
+
+#     except ObjectDoesNotExist:
+#         print(f"No unique ID found for participant {participant.name}")
+#     sleep(5)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_mail_to_not_responded_participant(request, assessment_id):
+    try:
+        print(request.data, "abcd")
+        print(assessment_id)
+
+        participant_ids = request.data
+        assessment = Assessment.objects.get(id=assessment_id)
+
+        participants_observers = assessment.participants_observers.all().filter(
+            participant__id__in=participant_ids
+        )
+
+        for participant_observer_mapping in participants_observers:
+            participant = participant_observer_mapping.participant
+
+            try:
+                participant_response = ParticipantResponse.objects.get(
+                    participant=participant, assessment=assessment
+                )
+            except ObjectDoesNotExist:
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    participant=participant, assessment=assessment
+                )
+                unique_id = participant_unique_id.unique_id
+
+                assessment_link = (
+                    f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
+                )
+
+                # Send email only if today's date is within the assessment date range
+                send_mail_templates(
+                    "assessment/assessment_reminder_mail_to_participant.html",
+                    [participant.email],
+                    "Meeraq - Assessment Reminder !",
+                    {
+                        "assessment_name": assessment.participant_view_name,
+                        "participant_name": participant.name.capitalize(),
+                        "link": assessment_link,
+                    },
+                    [],
+                )
+
+        return Response(
+            {"message": "Emails sent successfully"}, status=status.HTTP_200_OK
+        )
+
+    except Assessment.DoesNotExist:
+        raise Http404("Assessment not found")
+    except ObjectDoesNotExist as e:
+        print(f"No unique ID found for participant {participant.name}: {e}")
+        return Response(
+            {"error": f"No unique ID found for participant {participant.name}"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return Response(
+            {"error": "An unexpected error occurred"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    finally:
+        # Add a sleep if needed
+        sleep(5)
