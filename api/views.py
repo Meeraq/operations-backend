@@ -65,6 +65,8 @@ from .serializers import (
     FinalizeCoachActivitySerializer,
     SessionDataSerializer,
     SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer,
+    SuperAdminDepthOneSerializer,
+    PmoSerializer,
 )
 
 from rest_framework import generics
@@ -177,6 +179,7 @@ env = environ.Env()
 wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
 
 def get_current_date_timestamps():
     now = timezone.now()
@@ -1667,6 +1670,8 @@ def get_user_data(user):
         }
     elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
+    elif user_profile_role == "superadmin":
+        serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
@@ -4667,7 +4672,7 @@ def request_chemistry_session(request, project_id, learner_id):
         session_type="chemistry",
         status="pending",
     )
-    print(session)
+   
     if len(session) == 0:
         return Response({"error": "Max sessions exceeded."}, status=400)
     else:
@@ -7367,6 +7372,8 @@ def change_user_role(request, user_id):
         )
     elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
+    elif user_profile_role == "superadmin":
+        serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
@@ -7773,3 +7780,52 @@ class DownloadCoachContract(APIView):
                 {"error": "Failed to download Contract."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["POST"])
+def add_pmo(request):
+    try:
+        data = request.data.copy()
+        data["user"] = {"user_types": "pmo"}  # Assigning the role 'pmo' to the user
+
+        pmo_serializer = PmoSerializer(data=data)
+
+        if pmo_serializer.is_valid():
+            name = data.get("name")
+            email = data.get("email")
+            phone = data.get("phone")
+
+            if not (name and phone):
+                return Response(
+                    {"error": "Name and phone are mandatory fields."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            user = User.objects.create_user(
+                username=email,
+                email=email,
+                password=User.objects.make_random_password(),
+            )
+
+            profile = Profile.objects.create(user=user)
+            profile.roles.add(
+                Role.objects.get(name="pmo")
+            )  # Assigning 'pmo' role to the profile
+
+            pmo_serializer.save(user=profile)
+            return Response(pmo_serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(pmo_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+def get_pmo(request):
+    try:
+        pmos = Pmo.objects.all()
+        serializer = PmoSerializer(pmos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -2039,7 +2039,7 @@ def get_consolidated_feedback_report(request):
                     # Now, you can access the associated Course through the SchedularBatch
                     course = Course.objects.filter(batch=batch).first()
                     if course:
-                        feedback_lesson_name_should_be = f"feedback_for_live_session_{live_session.live_session_number}"
+                        feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
                         feedback_lessons = FeedbackLesson.objects.filter(
                             lesson__course=course
                         )
@@ -2068,12 +2068,19 @@ def get_consolidated_feedback_report(request):
                             )
 
                             if formatted_lesson_name == feedback_lesson_name_should_be:
-                                live_session_key = f"{project.name} Live Session {live_session.live_session_number}"
+                                session_name = None
+                                if live_session.session_type == "live_session":
+                                    session_name = "Live Session"
+                                elif live_session.session_type == "check_in_session":
+                                    session_name = "Check In Session"
+                                elif live_session.session_type == "in_person_session":
+                                    session_name = "In Person Session"
+                                live_session_key = f"{project.name} {session_name} {live_session.live_session_number}"
                                 if live_session_key not in data:
                                     data[live_session_key] = {
                                         "live_session_id": live_session.id,
                                         "project_name": project.name,
-                                        "session_name": f"Live Session {live_session.live_session_number}",
+                                        "session_name": f"{session_name} {live_session.live_session_number}",
                                         "total_participant": total_participant,
                                         "total_responses": total_responses,
                                         "percentage_responded": percentage_responded,
@@ -2329,15 +2336,40 @@ class AssignCourseTemplateToBatch(APIView):
                 )
                 for live_session in live_sessions:
                     max_order = max_order + 1
+                    session_name = None
+                    if live_session.session_type == "live_session":
+                        session_name = "Live Session"
+                    elif live_session.session_type == "check_in_session":
+                        session_name = "Check In Session"
+                    elif live_session.session_type == "in_person_session":
+                        session_name = "In Person Session"
+
                     new_lesson = Lesson.objects.create(
                         course=new_course,
-                        name=f"Live session {live_session.live_session_number}",
+                        name=f"{session_name} {live_session.live_session_number}",
                         status="draft",
                         lesson_type="live_session",
                         order=max_order,
                     )
                     LiveSessionLesson.objects.create(
                         lesson=new_lesson, live_session=live_session
+                    )
+                    max_order_feedback = (
+                        Lesson.objects.filter(course=new_course).aggregate(
+                            Max("order")
+                        )["order__max"]
+                        or 0
+                    )
+                    new_feedback_lesson = Lesson.objects.create(
+                        course=new_course,
+                        name=f"Feedback for {session_name} {live_session.live_session_number}",
+                        status="draft",
+                        lesson_type="feedback",
+                        order=max_order_feedback,
+                    )
+                    unique_id = uuid.uuid4()
+                    feedback_lesson = FeedbackLesson.objects.create(
+                        lesson=new_feedback_lesson, unique_id=unique_id
                     )
                 for coaching_session in coaching_sessions:
                     max_order = max_order + 1
