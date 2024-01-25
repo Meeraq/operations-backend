@@ -370,13 +370,14 @@ def send_upcoming_session_pmo_at_10am():
                 }
                 sessions_list.append(session_details)
                 pmo_user = User.objects.filter(profile__roles__name="pmo").first()
-                send_mail_templates(
-                    "pmo_emails/daily_session.html",
-                    [pmo_user.email],
-                    subject,
-                    {"sessions": sessions_list},
-                    [],
-                )
+        if sessions_list:
+            send_mail_templates(
+                "pmo_emails/daily_session.html",
+                [pmo_user.email],
+                subject,
+                {"sessions": sessions_list},
+                [],
+            )
 
 
 @shared_task
@@ -737,7 +738,7 @@ def send_feedback_lesson_reminders():
                     # Now, you can access the associated Course through the SchedularBatch
                     course = Course.objects.filter(batch=schedular_batch).first()
                     if course:
-                        feedback_lesson_name_should_be = f"feedback_for_live_session_{live_session.live_session_number}"
+                        feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
                         feedback_lessons = FeedbackLesson.objects.filter(
                             lesson__course=course
                         )
@@ -1322,7 +1323,7 @@ def schedule_nudges(course_id):
     desired_time = time(8, 30)
     nudge_scheduled_for = datetime.combine(course.nudge_start_date, desired_time)
     for nudge in nudges:
-        if nudge.course.batch.project.automated_reminder:
+        if nudge.course.batch.project.automated_reminder and nudge.course.batch.project.nudges:
             clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
             periodic_task = PeriodicTask.objects.create(
                 name=uuid.uuid1(),
@@ -1344,7 +1345,7 @@ def get_file_content(file_url):
 @shared_task
 def send_nudge(nudge_id):
     nudge = Nudge.objects.get(id=nudge_id)
-    if nudge.course.batch.project.automated_reminder:
+    if nudge.course.batch.project.automated_reminder and nudge.course.batch.project.nudges:
         subject = f"New Nudge: {nudge.name}"
         if nudge.is_sent:
             return
