@@ -335,5 +335,16 @@ urlpatterns = [
         "session-data/",
         SessionData.as_view(),
     ),
-    path("get-learner-of-user-optimized/<str:user_type>/<int:user_id>/", views.get_learner_of_user_optimized),
+    path(
+        "get-learner-of-user-optimized/<str:user_type>/<int:user_id>/",
+        views.get_learner_of_user_optimized,
+    ),
+    path(
+        "get-learner-course-enrolled-of-user-optimized/<str:user_type>/<int:user_id>/",
+        views.get_learner_course_enrolled_of_user_optimized,
+    ),
+    path(
+        "get-project-organisation-learner-of-user-optimized/<str:user_type>/<int:user_id>/",
+        views.get_project_organisation_learner_of_user_optimized,
+    ),
 ]

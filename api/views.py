@@ -178,6 +178,7 @@ wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltop
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
+
 def get_current_date_timestamps():
     now = timezone.now()
     current_date = now.date()
@@ -4653,7 +4654,7 @@ def get_coachee_of_user(request, user_type, user_id):
 @permission_classes([IsAuthenticated])
 def get_learner_of_user_optimized(request, user_type, user_id):
     try:
-        learners=None
+        learners = None
         if user_type == "pmo":
             learners = Learner.objects.all()
         elif user_type == "coach":
@@ -4664,8 +4665,120 @@ def get_learner_of_user_optimized(request, user_type, user_id):
                 | Q(schedularbatch__project__hr__id=user_id)
             ).distinct()
 
-        serializer = LearnerSerializer(learners , many =True)
+        serializer = LearnerSerializer(learners, many=True)
         return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_learner_course_enrolled_of_user_optimized(request, user_type, user_id):
+    try:
+        learners = None
+        learner_dict = {}
+
+        if user_type == "pmo":
+            learners = Learner.objects.all()
+        elif user_type == "coach":
+            learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+        elif user_type == "hr":
+            learners = Learner.objects.filter(
+                Q(engagement__project__hr__id=user_id)
+                | Q(schedularbatch__project__hr__id=user_id)
+            ).distinct()
+
+        for learner in learners:
+            if user_type == "pmo" or user_type == "hr":
+                course_enrollments = CourseEnrollment.objects.filter(learner=learner)
+                courses_names = [
+                    course_enrollment.course.name
+                    for course_enrollment in course_enrollments
+                ]
+                learner_dict[learner.id] = courses_names
+
+        return Response(learner_dict)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_project_organisation_learner_of_user_optimized(request, user_type, user_id):
+    try:
+        learners = None
+        learner_dict_project = {}
+        learner_dict_organisation = {}
+
+        if user_type == "pmo":
+            learners = Learner.objects.all()
+        elif user_type == "coach":
+            learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+        elif user_type == "hr":
+            learners = Learner.objects.filter(
+                Q(engagement__project__hr__id=user_id)
+                | Q(schedularbatch__project__hr__id=user_id)
+            ).distinct()
+
+        for learner in learners:
+            projects = None
+            schedular_batches = None
+            if user_type == "pmo":
+                projects = Project.objects.filter(engagement__learner=learner)
+                schedular_batches = SchedularBatch.objects.filter(
+                    learners__email=learner.email
+                )
+            elif user_type == "coach":
+                projects = Project.objects.filter(
+                    Q(engagement__learner=learner) & Q(engagement__coach__id=user_id)
+                )
+            elif user_type == "hr":
+                projects = Project.objects.filter(
+                    Q(engagement__learner=learner) & Q(hr__id=user_id)
+                )
+                schedular_batches = SchedularBatch.objects.filter(
+                    Q(learners__email=learner.email) & Q(project__hr__id=user_id)
+                )
+
+            learner_dict_organisation[learner.id] = set()
+            learner_dict_project[learner.id] = []
+
+            for project in projects:
+                project_dict = {
+                    "project_id": project.id,
+                    "name": project.name,
+                    "type": "CAAS",
+                }
+
+                learner_dict_organisation[learner.id].add(project.organisation.name)
+                learner_dict_project[learner.id].append(project_dict)
+
+            if user_type == "pmo" or user_type == "hr":
+                for batch in schedular_batches:
+                    project_dict = {
+                        "project_id": batch.project.id,
+                        "batch_id": batch.id,
+                        "name": batch.project.name,
+                        "type": "SEEQ",
+                    }
+                    learner_dict_organisation[learner.id].add(
+                        batch.project.organisation.name
+                    )
+                    if project_dict["name"] not in [
+                        proj["name"] for proj in learner_dict_project[learner.id]
+                    ]:
+                        learner_dict_project[learner.id].append(project_dict)
+
+        return Response(
+            {
+                "learner_dict_project": learner_dict_project,
+                "learner_dict_organisation": learner_dict_organisation,
+            }
+        )
+
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
