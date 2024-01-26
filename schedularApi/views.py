@@ -3044,37 +3044,37 @@ def delete_session_from_project_structure(request):
                     "check_in_session",
                     "in_person_session",
                 ]:
-                  
                     LiveSession.objects.filter(
                         batch=batch, order=order, session_type=session_type
                     ).delete()
 
-                    LiveSession.objects.filter(batch=batch, order__gt=order).update(
-                        order=F("order") - 1,
-                        live_session_number=Case(
-                            When(
-                                session_type=session_type,
-                                then=F("live_session_number") - 1,
-                            ),
-                            default=F("live_session_number"),
-                            output_field=IntegerField(),
-                        ),
-                    )
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     CoachingSession.objects.filter(
                         batch=batch, order=order, session_type=session_type
                     ).delete()
-                    CoachingSession.objects.filter(batch=batch, order__gt=order).update(
-                        order=F("order") - 1,
-                        coaching_session_number=Case(
-                            When(
-                                session_type=session_type,
-                                then=F("coaching_session_number") - 1,
-                            ),
-                            default=F("coaching_session_number"),
-                            output_field=IntegerField(),
+
+                LiveSession.objects.filter(batch=batch, order__gt=order).update(
+                    order=F("order") - 1,
+                    live_session_number=Case(
+                        When(
+                            session_type=session_type,
+                            then=F("live_session_number") - 1,
                         ),
-                    )
+                        default=F("live_session_number"),
+                        output_field=IntegerField(),
+                    ),
+                )
+                CoachingSession.objects.filter(batch=batch, order__gt=order).update(
+                    order=F("order") - 1,
+                    coaching_session_number=Case(
+                        When(
+                            session_type=session_type,
+                            then=F("coaching_session_number") - 1,
+                        ),
+                        default=F("coaching_session_number"),
+                        output_field=IntegerField(),
+                    ),
+                )
             return Response({"message": "Session deleted successfully."}, status=200)
     except Exception as e:
         print(str(e))
