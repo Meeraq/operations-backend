@@ -33,6 +33,13 @@ env = environ.Env()
 environ.Env.read_env()
 
 
+def get_time(timestamp):
+    dt = datetime.fromtimestamp(timestamp / 1000) + timedelta(
+        hours=5, minutes=30
+    )  # Convert milliseconds to seconds
+    return dt.strftime("%I:%M %p")
+
+
 def send_whatsapp_message(user_type, participant, assessment, unique_id):
     try:
         assessment_name = assessment.participant_view_name
@@ -829,9 +836,10 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
             slots = []
             for session in sessions:
                 if session.coaching_session.batch.project.automated_reminder:
-                    start_time_for_mail = datetime.fromtimestamp(
-                        (int(session.availibility.start_time) / 1000) + 19800
-                    ).strftime("%I:%M %p")
+                    # start_time_for_mail = datetime.fromtimestamp(
+                    #     (int(session.availibility.start_time) / 1000) + 19800
+                    # ).strftime("%I:%M %p")
+                    start_time_for_mail = get_time(int(session.availibility.start_time))
                     phone = (
                         session.availibility.coach.phone_country_code
                         + session.availibility.coach.phone
@@ -853,7 +861,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
                                 },
                                 {
                                     "name": "time",
-                                    "value": start_time_for_mail,
+                                    "value": f"{start_time_for_mail} IST",
                                 },
                                 {
                                     "name": "booking_id",
@@ -885,9 +893,10 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
                     coach_name = coach.first_name + " " + coach.last_name
                     phone = coach.phone_country_code + coach.phone
                     time = caas_session.confirmed_availability.start_time
-                    final_time = datetime.fromtimestamp(
-                        (int(time) / 1000) + 19800
-                    ).strftime("%I:%M %p")
+                    # final_time = datetime.fromtimestamp(
+                    #     (int(time) / 1000) + 19800
+                    # ).strftime("%I:%M %p")
+                    final_time = get_time(int(time))
                     booking_id = caas_session.coach.room_id
                     print(booking_id)
                     send_whatsapp_message_template(
@@ -901,7 +910,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
                                 },
                                 {
                                     "name": "time",
-                                    "value": final_time,
+                                    "value": f"{final_time} IST",
                                 },
                                 {
                                     "name": "booking_id",
@@ -929,10 +938,10 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_seeq():
                 name = session.learner.name
                 phone = session.learner.phone
                 booking_id = session.availibility.coach.room_id
-                time = datetime.fromtimestamp(
-                    (int(session.availibility.start_time) / 1000) + 19800
-                ).strftime("%I:%M %p")
-
+                # time = datetime.fromtimestamp(
+                #     (int(session.availibility.start_time) / 1000) + 19800
+                # ).strftime("%I:%M %p")
+                time = get_time(int(session.availibility.start_time))
                 send_whatsapp_message_template(
                     phone,
                     {
@@ -944,7 +953,7 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_seeq():
                             },
                             {
                                 "name": "time",
-                                "value": time,
+                                "value": f"{time} IST",
                             },
                             {
                                 "name": "booking_id",
@@ -975,9 +984,10 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_caas():
                 learner_name = learner.name
                 phone = learner.phone
                 time = caas_session.confirmed_availability.start_time
-                final_time = datetime.fromtimestamp(
-                    (int(time) / 1000) + 19800
-                ).strftime("%I:%M %p")
+                # final_time = datetime.fromtimestamp(
+                #     (int(time) / 1000) + 19800
+                # ).strftime("%I:%M %p")
+                final_time = get_time(int(time))
                 booking_id = caas_session.coach.room_id
                 send_whatsapp_message_template(
                     phone,
@@ -990,7 +1000,7 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_caas():
                             },
                             {
                                 "name": "time",
-                                "value": final_time,
+                                "value": f"{final_time} IST",
                             },
                             {
                                 "name": "booking_id",
@@ -1015,9 +1025,10 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
                 caas_coach_name = coach.first_name + " " + coach.last_name
                 caas_coach_phone = coach.phone_country_code + coach.phone
                 time = caas_session.confirmed_availability.start_time
-                caas_coach_final_time = datetime.fromtimestamp(
-                    (int(time) / 1000) + 19800
-                ).strftime("%I:%M %p")
+                # caas_coach_final_time = datetime.fromtimestamp(
+                #     (int(time) / 1000) + 19800
+                # ).strftime("%I:%M %p")
+                caas_coach_final_time = get_time(int(time))
                 booking_id = caas_session.coach.room_id
                 send_whatsapp_message_template(
                     caas_coach_phone,
@@ -1030,7 +1041,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
                             },
                             {
                                 "name": "time",
-                                "value": caas_coach_final_time,
+                                "value": f"{caas_coach_final_time} IST",
                             },
                             {
                                 "name": "booking_id",
@@ -1044,9 +1055,10 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
             caas_learner_name = learner.name
             caas_learner_phone = learner.phone
             time = caas_session.confirmed_availability.start_time
-            caas_learner_final_time = datetime.fromtimestamp(
-                (int(time) / 1000) + 19800
-            ).strftime("%I:%M %p")
+            # caas_learner_final_time = datetime.fromtimestamp(
+            #     (int(time) / 1000) + 19800
+            # ).strftime("%I:%M %p")
+            caas_learner_final_time = get_time(int(time))
             send_whatsapp_message_template(
                 caas_learner_phone,
                 {
@@ -1058,7 +1070,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
                         },
                         {
                             "name": "time",
-                            "value": caas_learner_final_time,
+                            "value": f"{caas_learner_final_time} IST",
                         },
                         {
                             "name": "booking_id",
@@ -1078,9 +1090,12 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
         # for seeq sessions
         session = SchedularSessions.objects.get(id=session_id)
         if session.coaching_session.batch.project.automated_reminder:
-            seeq_coach_start_time_for_mail = datetime.fromtimestamp(
-                (int(session.availibility.start_time) / 1000) + 19800
-            ).strftime("%I:%M %p")
+            # seeq_coach_start_time_for_mail = datetime.fromtimestamp(
+            #     (int(session.availibility.start_time) / 1000) + 19800
+            # ).strftime("%I:%M %p")
+            seeq_coach_start_time_for_mail = get_time(
+                int(session.availibility.start_time)
+            )
             seeq_coach_phone = (
                 session.availibility.coach.phone_country_code
                 + session.availibility.coach.phone
@@ -1102,7 +1117,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
                         },
                         {
                             "name": "time",
-                            "value": seeq_coach_start_time_for_mail,
+                            "value": f"{seeq_coach_start_time_for_mail} IST",
                         },
                         {
                             "name": "booking_id",
@@ -1114,10 +1129,10 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
             )
             seeq_participant_name = session.learner.name
             seeq_participant_phone = session.learner.phone
-            seeq_participant_time = datetime.fromtimestamp(
-                (int(session.availibility.start_time) / 1000) + 19800
-            ).strftime("%I:%M %p")
-
+            # seeq_participant_time = datetime.fromtimestamp(
+            #     (int(session.availibility.start_time) / 1000) + 19800
+            # ).strftime("%I:%M %p")
+            seeq_participant_time = get_time(int(session.availibility.start_time))
             send_whatsapp_message_template(
                 seeq_participant_phone,
                 {
@@ -1129,7 +1144,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
                         },
                         {
                             "name": "time",
-                            "value": seeq_participant_time,
+                            "value": f"{seeq_participant_time} IST",
                         },
                         {
                             "name": "booking_id",
@@ -1149,9 +1164,12 @@ def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
         # for seeq sessions
         session = SchedularSessions.objects.get(id=session_id)
         if session.coaching_session.batch.project.automated_reminder:
-            seeq_coach_start_time_for_mail = datetime.fromtimestamp(
-                (int(session.availibility.start_time) / 1000) + 19800
-            ).strftime("%I:%M %p")
+            # seeq_coach_start_time_for_mail = datetime.fromtimestamp(
+            #     (int(session.availibility.start_time) / 1000) + 19800
+            # ).strftime("%I:%M %p")
+            seeq_coach_start_time_for_mail = get_time(
+                int(session.availibility.start_time)
+            )
             seeq_coach_phone = (
                 session.availibility.coach.phone_country_code
                 + session.availibility.coach.phone
@@ -1172,7 +1190,7 @@ def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
                         },
                         {
                             "name": "time",
-                            "value": seeq_coach_start_time_for_mail,
+                            "value": f"{seeq_coach_start_time_for_mail} IST",
                         },
                     ],
                     "template_name": "did_you_start_session_msg_to_coach",
@@ -1193,10 +1211,10 @@ def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
                 caas_coach_name = coach.first_name + " " + coach.last_name
                 caas_coach_phone = coach.phone_country_code + coach.phone
                 time = caas_session.confirmed_availability.start_time
-                caas_coach_final_time = datetime.fromtimestamp(
-                    (int(time) / 1000) + 19800
-                ).strftime("%I:%M %p")
-
+                # caas_coach_final_time = datetime.fromtimestamp(
+                #     (int(time) / 1000) + 19800
+                # ).strftime("%I:%M %p")
+                caas_coach_final_time = get_time(int(time))
                 send_whatsapp_message_template(
                     caas_coach_phone,
                     {
@@ -1208,7 +1226,7 @@ def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
                             },
                             {
                                 "name": "time",
-                                "value": caas_coach_final_time,
+                                "value": f"{caas_coach_final_time} IST",
                             },
                         ],
                         "template_name": "did_you_start_session_msg_to_coach",
@@ -1314,7 +1332,10 @@ def schedule_nudges(course_id):
     desired_time = time(8, 30)
     nudge_scheduled_for = datetime.combine(course.nudge_start_date, desired_time)
     for nudge in nudges:
-        if nudge.course.batch.project.automated_reminder and nudge.course.batch.project.nudges:
+        if (
+            nudge.course.batch.project.automated_reminder
+            and nudge.course.batch.project.nudges
+        ):
             clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
             periodic_task = PeriodicTask.objects.create(
                 name=uuid.uuid1(),
@@ -1336,7 +1357,10 @@ def get_file_content(file_url):
 @shared_task
 def send_nudge(nudge_id):
     nudge = Nudge.objects.get(id=nudge_id)
-    if nudge.course.batch.project.automated_reminder and nudge.course.batch.project.nudges:
+    if (
+        nudge.course.batch.project.automated_reminder
+        and nudge.course.batch.project.nudges
+    ):
         subject = f"New Nudge: {nudge.name}"
         if nudge.is_sent:
             return
