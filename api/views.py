@@ -3401,7 +3401,9 @@ def edit_learner(request):
             {"error": "User with this email already exists."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-
+    learner.user.user.username = email
+    learner.user.user.email= email
+    learner.user.user.save()
     learner.email = email
     learner.name = request.data["name"]
     learner.phone = request.data.get("phone", "")
