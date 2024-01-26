@@ -74,9 +74,9 @@ from courses.models import (
     QuizLessonResponse,
     FeedbackLesson,
     QuizLesson,
-    Lesson,
     LaserCoachingSession,
     LiveSessionLesson,
+    Lesson,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
@@ -182,6 +182,8 @@ def create_project_schedular(request):
             name=request.data["project_name"],
             organisation=organisation,
             automated_reminder=request.data["automated_reminder"],
+            nudges=request.data["nudges"],
+            pre_post_assessment=request.data["pre_post_assessment"],
         )
         schedularProject.save()
     except IntegrityError:
@@ -621,6 +623,7 @@ def update_live_session(request, live_session_id):
                     None,
                     None,
                     update_live_session,
+                    None
                 )
             elif not existing_date_time.strftime(
                 "%d-%m-%Y %H:%M"
@@ -642,6 +645,7 @@ def update_live_session(request, live_session_id):
                     None,
                     None,
                     update_live_session,
+                    None
                 )
         except Exception as e:
             print(str(e))
@@ -1528,6 +1532,8 @@ def schedule_session_fixed(request):
                     if session_type == "laser_coaching_session"
                     else "mentoring"
                 )
+                booking_id = coach_availability.coach.room_id
+                meeting_location = f"{env('CAAS_APP_URL')}/call/{booking_id}"
                 create_outlook_calendar_invite(
                     f"Meeraq - {session_type_value.capitalize()} Session",
                     f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
@@ -1553,8 +1559,8 @@ def schedule_session_fixed(request):
                     None,
                     scheduled_session,
                     None,
+                    meeting_location,
                 )
-                booking_id = coach_availability.coach.room_id
                 send_mail_templates(
                     "schedule_session.html",
                     [coach_availability.coach.email],
@@ -1952,20 +1958,18 @@ def delete_slots(request):
 @permission_classes([IsAuthenticated])
 def send_unbooked_coaching_session_mail(request):
     batch_name = request.data.get("batchName", "")
+    project_name = request.data.get("project_name", "")
     participants = request.data.get("participants", [])
     booking_link = request.data.get("bookingLink", "")
     expiry_date = request.data.get("expiry_date", "")
     date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
     formatted_date = date_obj.strftime("%d %B %Y")
     session_type = request.data.get("session_type", "")
-
     for participant in participants:
         try:
             learner_name = Learner.objects.get(email=participant).name
         except:
             continue
-            # Handle the case when "name" is not in participant
-        # Load the HTML template
         send_mail_templates(
             "seteventlink.html",
             [participant],
@@ -1974,6 +1978,7 @@ def send_unbooked_coaching_session_mail(request):
             else "Meeraq - Book Mentoring Session",
             {
                 "name": learner_name,
+                "project_name": project_name,
                 "event_link": booking_link,
                 "expiry_date": formatted_date,
                 "session_type": "mentoring"
@@ -1982,7 +1987,7 @@ def send_unbooked_coaching_session_mail(request):
             },
             [],
         )
-
+        sleep(5)
     return Response("Emails sent to participants.")
 
 
@@ -2636,7 +2641,7 @@ def delete_learner_from_course(request):
 @permission_classes([IsAuthenticated])
 def edit_schedular_project(request, project_id):
     try:
-        project = SchedularProject.objects.get(pk=project_id)
+        project = SchedularProject.objects.get(pk=project_id)          
     except SchedularProject.DoesNotExist:
         return Response(
             {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2668,7 +2673,20 @@ def edit_schedular_project(request, project_id):
                 status=status.HTTP_404_NOT_FOUND,
             )
     project.automated_reminder = request.data.get("automated_reminder")
+    project.nudges=request.data.get("nudges")
+    project.pre_post_assessment=request.data.get("pre_post_assessment")
     project.save()
+    if not project.pre_post_assessment:
+        batches=SchedularBatch.objects.filter(project=project)
+        if batches:
+            for batch in batches:
+                course=Course.objects.filter(batch=batch).first()
+                if course:
+                    lessons=Lesson.objects.filter(course=course)
+                    for lesson in lessons:
+                        if lesson.lesson_type=="assessment":
+                            lesson.status="draft"  
+                            lesson.save()
     return Response(
         {"message": "Project updated successfully"}, status=status.HTTP_200_OK
     )
@@ -2846,16 +2864,24 @@ def add_new_session_in_project_structure(request):
                         duration=new_session["duration"],
                         session_type=session_type,
                     )
-                    if session_type == "live_session" and course:
+                    if course:
                         max_order = (
                             Lesson.objects.filter(course=course).aggregate(
                                 Max("order")
                             )["order__max"]
                             or 0
                         )
+                        session_name = None
+                        if live_session.session_type == "live_session":
+                            session_name = "Live Session"
+                        elif live_session.session_type == "check_in_session":
+                            session_name = "Check In Session"
+                        elif live_session.session_type == "in_person_session":
+                            session_name = "In Person Session"
+
                         new_lesson = Lesson.objects.create(
                             course=course,
-                            name=f"Live session {live_session.live_session_number}",
+                            name=f"{session_name} {live_session.live_session_number}",
                             status="draft",
                             lesson_type="live_session",
                             order=max_order,
@@ -2869,9 +2895,10 @@ def add_new_session_in_project_structure(request):
                             )["order__max"]
                             or 0
                         )
+
                         new_feedback_lesson = Lesson.objects.create(
                             course=course,
-                            name=f"feedback_for_live_session_{live_session.live_session_number}",
+                            name=f"Feedback for {session_name} {live_session.live_session_number}",
                             status="draft",
                             lesson_type="feedback",
                             order=max_order_feedback,
