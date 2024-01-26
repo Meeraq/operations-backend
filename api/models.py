@@ -62,10 +62,8 @@ def password_reset_token_created(
         # link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
         if app_name == "assessment":
             link = f"{env('ASSESSMENT_APP_URL')}/create-password/{reset_password_token.key}"
-            print("working")
         else:
             link = f"{env('APP_URL')}/create-password/{reset_password_token.key}"
-            print("not working")
         name = user.profile.coach.first_name
         send_mail_templates(
             "coach_templates/create_new_password.html",
@@ -92,13 +90,15 @@ def password_reset_token_created(
             if projects.exists():
                 return None
         name = "User"
-        # link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
         if app_name == "assessment":
             link = f"{env('ASSESSMENT_APP_URL')}/create-password/{reset_password_token.key}"
-            print("working")
+        elif app_name == "zoho":
+            link = f"{env('ZOHO_APP_URL')}/reset-password/{reset_password_token.key}"
+            # not sending when requested from vendor portal but user is not vendor in our system
+            if not user.profile.roles.all().filter(name="vendor").exists():
+                return None
         else:
             link = f"{env('APP_URL')}/create-password/{reset_password_token.key}"
-            print("not working")
         send_mail_templates(
             "hr_emails/forgot_password.html",
             [reset_password_token.user.email],
@@ -129,6 +129,7 @@ class Profile(models.Model):
     def __str__(self):
         return self.user.username
 
+
 class SuperAdmin(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -136,6 +137,7 @@ class SuperAdmin(models.Model):
 
     def __str__(self):
         return self.name
+
 
 class Pmo(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
