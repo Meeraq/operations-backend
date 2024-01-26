@@ -21,7 +21,7 @@ from django.utils import timezone
 from openpyxl import Workbook
 from django.http import HttpResponse
 import pandas as pd
-from django.db.models import Q
+from django.db.models import Q, F, Case, When, Value, IntegerField
 from time import sleep
 import json
 from django.core.exceptions import ObjectDoesNotExist
@@ -100,7 +100,6 @@ import io
 from time import sleep
 
 from assessmentApi.views import delete_participant_from_assessments
-from django.db.models import F
 
 # Create your views here.
 from itertools import chain
@@ -623,7 +622,7 @@ def update_live_session(request, live_session_id):
                     None,
                     None,
                     update_live_session,
-                    None
+                    None,
                 )
             elif not existing_date_time.strftime(
                 "%d-%m-%Y %H:%M"
@@ -645,7 +644,7 @@ def update_live_session(request, live_session_id):
                     None,
                     None,
                     update_live_session,
-                    None
+                    None,
                 )
         except Exception as e:
             print(str(e))
@@ -2641,7 +2640,7 @@ def delete_learner_from_course(request):
 @permission_classes([IsAuthenticated])
 def edit_schedular_project(request, project_id):
     try:
-        project = SchedularProject.objects.get(pk=project_id)          
+        project = SchedularProject.objects.get(pk=project_id)
     except SchedularProject.DoesNotExist:
         return Response(
             {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
@@ -2673,19 +2672,19 @@ def edit_schedular_project(request, project_id):
                 status=status.HTTP_404_NOT_FOUND,
             )
     project.automated_reminder = request.data.get("automated_reminder")
-    project.nudges=request.data.get("nudges")
-    project.pre_post_assessment=request.data.get("pre_post_assessment")
+    project.nudges = request.data.get("nudges")
+    project.pre_post_assessment = request.data.get("pre_post_assessment")
     project.save()
     if not project.pre_post_assessment:
-        batches=SchedularBatch.objects.filter(project=project)
+        batches = SchedularBatch.objects.filter(project=project)
         if batches:
             for batch in batches:
-                course=Course.objects.filter(batch=batch).first()
+                course = Course.objects.filter(batch=batch).first()
                 if course:
-                    lessons=Lesson.objects.filter(course=course)
+                    lessons = Lesson.objects.filter(course=course)
                     for lesson in lessons:
-                        if lesson.lesson_type=="assessment":
-                            lesson.status="draft"  
+                        if lesson.lesson_type == "assessment":
+                            lesson.status = "draft"
                             lesson.save()
     return Response(
         {"message": "Project updated successfully"}, status=status.HTTP_200_OK
@@ -3045,32 +3044,37 @@ def delete_session_from_project_structure(request):
                     "check_in_session",
                     "in_person_session",
                 ]:
-                    print(session_type)
-                    print(LiveSession.objects.filter(
-                        batch=batch, order=order, session_type=session_type
-                    ))
+                  
                     LiveSession.objects.filter(
                         batch=batch, order=order, session_type=session_type
                     ).delete()
 
                     LiveSession.objects.filter(batch=batch, order__gt=order).update(
-                        order=F("order") - 1
+                        order=F("order") - 1,
+                        live_session_number=Case(
+                            When(
+                                session_type=session_type,
+                                then=F("live_session_number") - 1,
+                            ),
+                            default=F("live_session_number"),
+                            output_field=IntegerField(),
+                        ),
                     )
-                    LiveSession.objects.filter(
-                        batch=batch, session_type=session_type , order__gt=order
-                    ).update(live_session_number=F("live_session_number") - 1)
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     CoachingSession.objects.filter(
                         batch=batch, order=order, session_type=session_type
                     ).delete()
-
                     CoachingSession.objects.filter(batch=batch, order__gt=order).update(
-                        order=F("order") - 1
+                        order=F("order") - 1,
+                        coaching_session_number=Case(
+                            When(
+                                session_type=session_type,
+                                then=F("coaching_session_number") - 1,
+                            ),
+                            default=F("coaching_session_number"),
+                            output_field=IntegerField(),
+                        ),
                     )
-                    CoachingSession.objects.filter(
-                        batch=batch, session_type=session_type ,  order__gt=order
-                    ).update(coaching_session_number=F("coaching_session_number") - 1)
-
             return Response({"message": "Session deleted successfully."}, status=200)
     except Exception as e:
         print(str(e))
