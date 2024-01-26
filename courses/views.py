@@ -3083,3 +3083,92 @@ def get_all_feedbacks_download_report(request, feedback_id):
         )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_consolidated_feedback_download_report(request, live_session_id):
+    try:
+        live_session = LiveSession.objects.get(id=live_session_id)
+        project = live_session.batch.project
+        batches = SchedularBatch.objects.filter(project=project)
+
+        # Create a DataFrame to store the data
+        data = {
+            "Participant": [],
+            "Participant Email": [],
+            "Question": [],
+            "Answer": [],
+        }
+
+        for batch in batches:
+            course = Course.objects.filter(batch=batch).first()
+            feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
+            feedback_lessons = FeedbackLesson.objects.filter(lesson__course=course)
+            current_feedback_lesson = None
+
+            for feedback_lesson in feedback_lessons:
+                current_lesson_name = feedback_lesson.lesson.name
+                formatted_lesson_name = get_feedback_lesson_name(current_lesson_name)
+
+                if formatted_lesson_name == feedback_lesson_name_should_be:
+                    current_feedback_lesson = feedback_lesson
+
+            # Populate the DataFrame with data from FeedbackLesson and FeedbackLessonResponse
+            if current_feedback_lesson:
+                for participant in batch.learners.all():
+                    participant_name = participant.name
+                    participant_email = participant.email  # Participant email retrieval moved here
+
+                    # Check if the participant provided feedback
+                    response = FeedbackLessonResponse.objects.filter(
+                        feedback_lesson=current_feedback_lesson, learner=participant
+                    ).first()
+
+                    if response:
+                        for answer in response.answers.all():
+                            question_text = answer.question.text
+                            answer_value = (
+                                answer.text_answer
+                                if answer.text_answer
+                                else answer.rating
+                            )
+                            data["Participant"].append(participant_name)
+                            data["Participant Email"].append(participant_email)
+                            data["Question"].append(question_text)
+                            data["Answer"].append(answer_value)
+                    else:
+                        # If participant did not provide feedback, populate with empty values
+                        for question in current_feedback_lesson.questions.all():
+                            data["Participant"].append(participant_name)
+                            data["Participant Email"].append(participant_email)
+                            data["Question"].append(question.text)
+                            data["Answer"].append("-")
+
+       
+        df = pd.DataFrame(data)
+
+     
+        df_pivot = df.pivot(
+            index=["Participant", "Participant Email"],
+            columns="Question",
+            values="Answer",
+        ).reset_index()
+
+        
+        excel_data = BytesIO()
+        df_pivot.to_excel(excel_data, index=False)
+        excel_data.seek(0)
+
+      
+        response = HttpResponse(
+            excel_data.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f"attachment; filename=Feedback_Report.xlsx"
+
+        return response
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
