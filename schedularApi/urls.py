@@ -170,4 +170,12 @@ urlpatterns = [
         "add-new-session-in-project-structure/",
         views.add_new_session_in_project_structure,
     ),
+    path(
+        "delete-session-from-project-structure/",
+        views.delete_session_from_project_structure,
+    ),
+     path(
+        "get-completed-sessions-for-project/<int:project_id>/",
+        views.get_completed_sessions_for_project,
+    ),
 ]

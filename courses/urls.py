@@ -321,4 +321,8 @@ urlpatterns = [
         "feedback-report-download/<str:feedback_id>/",
         views.get_all_feedbacks_download_report,
     ),
+    path(
+        "consolidated-feedback-download-report/<str:live_session_id>/",
+        views.get_consolidated_feedback_download_report,
+    ),
 ]
