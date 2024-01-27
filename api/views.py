@@ -65,6 +65,8 @@ from .serializers import (
     FinalizeCoachActivitySerializer,
     SessionDataSerializer,
     SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer,
+    SuperAdminDepthOneSerializer,
+    PmoSerializer,
 )
 
 from rest_framework import generics
@@ -177,6 +179,7 @@ env = environ.Env()
 wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
 
 def get_current_date_timestamps():
     now = timezone.now()
@@ -1667,6 +1670,8 @@ def get_user_data(user):
         }
     elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
+    elif user_profile_role == "superadmin":
+        serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
@@ -3396,7 +3401,9 @@ def edit_learner(request):
             {"error": "User with this email already exists."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-
+    learner.user.user.username = email
+    learner.user.user.email= email
+    learner.user.user.save()
     learner.email = email
     learner.name = request.data["name"]
     learner.phone = request.data.get("phone", "")
@@ -4651,6 +4658,140 @@ def get_coachee_of_user(request, user_type, user_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def get_learner_of_user_optimized(request, user_type, user_id):
+    try:
+        learners = None
+        if user_type == "pmo":
+            learners = Learner.objects.all()
+        elif user_type == "coach":
+            learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+        elif user_type == "hr":
+            learners = Learner.objects.filter(
+                Q(engagement__project__hr__id=user_id)
+                | Q(schedularbatch__project__hr__id=user_id)
+            ).distinct()
+
+        serializer = LearnerSerializer(learners, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_learner_course_enrolled_of_user_optimized(request, user_type, user_id):
+    try:
+        learners = None
+        learner_dict = {}
+
+        if user_type == "pmo":
+            learners = Learner.objects.all()
+        elif user_type == "coach":
+            learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+        elif user_type == "hr":
+            learners = Learner.objects.filter(
+                Q(engagement__project__hr__id=user_id)
+                | Q(schedularbatch__project__hr__id=user_id)
+            ).distinct()
+
+        for learner in learners:
+            if user_type == "pmo" or user_type == "hr":
+                course_enrollments = CourseEnrollment.objects.filter(learner=learner)
+                courses_names = [
+                    course_enrollment.course.name
+                    for course_enrollment in course_enrollments
+                ]
+                learner_dict[learner.id] = courses_names
+
+        return Response(learner_dict)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_project_organisation_learner_of_user_optimized(request, user_type, user_id):
+    try:
+        learners = None
+        learner_dict_project = {}
+        learner_dict_organisation = {}
+
+        if user_type == "pmo":
+            learners = Learner.objects.all()
+        elif user_type == "coach":
+            learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+        elif user_type == "hr":
+            learners = Learner.objects.filter(
+                Q(engagement__project__hr__id=user_id)
+                | Q(schedularbatch__project__hr__id=user_id)
+            ).distinct()
+
+        for learner in learners:
+            projects = None
+            schedular_batches = None
+            if user_type == "pmo":
+                projects = Project.objects.filter(engagement__learner=learner)
+                schedular_batches = SchedularBatch.objects.filter(
+                    learners__email=learner.email
+                )
+            elif user_type == "coach":
+                projects = Project.objects.filter(
+                    Q(engagement__learner=learner) & Q(engagement__coach__id=user_id)
+                )
+            elif user_type == "hr":
+                projects = Project.objects.filter(
+                    Q(engagement__learner=learner) & Q(hr__id=user_id)
+                )
+                schedular_batches = SchedularBatch.objects.filter(
+                    Q(learners__email=learner.email) & Q(project__hr__id=user_id)
+                )
+
+            learner_dict_organisation[learner.id] = set()
+            learner_dict_project[learner.id] = []
+
+            for project in projects:
+                project_dict = {
+                    "project_id": project.id,
+                    "name": project.name,
+                    "type": "CAAS",
+                }
+
+                learner_dict_organisation[learner.id].add(project.organisation.name)
+                learner_dict_project[learner.id].append(project_dict)
+
+            if user_type == "pmo" or user_type == "hr":
+                for batch in schedular_batches:
+                    project_dict = {
+                        "project_id": batch.project.id,
+                        "batch_id": batch.id,
+                        "name": batch.project.name,
+                        "type": "SEEQ",
+                    }
+                    learner_dict_organisation[learner.id].add(
+                        batch.project.organisation.name
+                    )
+                    if project_dict["name"] not in [
+                        proj["name"] for proj in learner_dict_project[learner.id]
+                    ]:
+                        learner_dict_project[learner.id].append(project_dict)
+
+        return Response(
+            {
+                "learner_dict_project": learner_dict_project,
+                "learner_dict_organisation": learner_dict_organisation,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_learner_data(request, learner_id):
     learner = Learner.objects.get(id=learner_id)
     serializer = LearnerSerializer(learner)
@@ -4667,7 +4808,7 @@ def request_chemistry_session(request, project_id, learner_id):
         session_type="chemistry",
         status="pending",
     )
-    print(session)
+   
     if len(session) == 0:
         return Response({"error": "Max sessions exceeded."}, status=400)
     else:
@@ -7367,6 +7508,8 @@ def change_user_role(request, user_id):
         )
     elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
+    elif user_profile_role == "superadmin":
+        serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
@@ -7773,3 +7916,52 @@ class DownloadCoachContract(APIView):
                 {"error": "Failed to download Contract."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["POST"])
+def add_pmo(request):
+    try:
+        data = request.data.copy()
+        data["user"] = {"user_types": "pmo"}  # Assigning the role 'pmo' to the user
+
+        pmo_serializer = PmoSerializer(data=data)
+
+        if pmo_serializer.is_valid():
+            name = data.get("name")
+            email = data.get("email")
+            phone = data.get("phone")
+
+            if not (name and phone):
+                return Response(
+                    {"error": "Name and phone are mandatory fields."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            user = User.objects.create_user(
+                username=email,
+                email=email,
+                password=User.objects.make_random_password(),
+            )
+
+            profile = Profile.objects.create(user=user)
+            profile.roles.add(
+                Role.objects.get(name="pmo")
+            )  # Assigning 'pmo' role to the profile
+
+            pmo_serializer.save(user=profile)
+            return Response(pmo_serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(pmo_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+def get_pmo(request):
+    try:
+        pmos = Pmo.objects.all()
+        serializer = PmoSerializer(pmos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

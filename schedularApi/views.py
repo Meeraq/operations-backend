@@ -21,7 +21,7 @@ from django.utils import timezone
 from openpyxl import Workbook
 from django.http import HttpResponse
 import pandas as pd
-from django.db.models import Q
+from django.db.models import Q, F, Case, When, Value, IntegerField
 from time import sleep
 import json
 from django.core.exceptions import ObjectDoesNotExist
@@ -74,9 +74,9 @@ from courses.models import (
     QuizLessonResponse,
     FeedbackLesson,
     QuizLesson,
-    Lesson,
     LaserCoachingSession,
     LiveSessionLesson,
+    Lesson,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
@@ -102,7 +102,7 @@ from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
 
 # Create your views here.
-
+from itertools import chain
 import environ
 
 env = environ.Env()
@@ -181,6 +181,8 @@ def create_project_schedular(request):
             name=request.data["project_name"],
             organisation=organisation,
             automated_reminder=request.data["automated_reminder"],
+            nudges=request.data["nudges"],
+            pre_post_assessment=request.data["pre_post_assessment"],
         )
         schedularProject.save()
     except IntegrityError:
@@ -620,7 +622,7 @@ def update_live_session(request, live_session_id):
                     None,
                     None,
                     update_live_session,
-                    None
+                    None,
                 )
             elif not existing_date_time.strftime(
                 "%d-%m-%Y %H:%M"
@@ -642,7 +644,7 @@ def update_live_session(request, live_session_id):
                     None,
                     None,
                     update_live_session,
-                    None
+                    None,
                 )
         except Exception as e:
             print(str(e))
@@ -973,19 +975,23 @@ def add_batch(request, project_id):
                         duration = session_data.get("duration")
                         session_type = session_data.get("session_type")
 
-                        if session_type == "live_session":
-                            live_session_number = (
+                        if session_type in [
+                            "live_session",
+                            "check_in_session",
+                            "in_person_session",
+                        ]:
+                            session_number = (
                                 LiveSession.objects.filter(
-                                    batch=batch, session_type="live_session"
+                                    batch=batch, session_type=session_type
                                 ).count()
                                 + 1
                             )
                             live_session = LiveSession.objects.create(
                                 batch=batch,
-                                live_session_number=live_session_number,
+                                live_session_number=session_number,
                                 order=order,
                                 duration=duration,
-                                session_type="live_session",
+                                session_type=session_type,
                             )
                         elif session_type == "laser_coaching_session":
                             coaching_session_number = (
@@ -2666,7 +2672,20 @@ def edit_schedular_project(request, project_id):
                 status=status.HTTP_404_NOT_FOUND,
             )
     project.automated_reminder = request.data.get("automated_reminder")
+    project.nudges = request.data.get("nudges")
+    project.pre_post_assessment = request.data.get("pre_post_assessment")
     project.save()
+    if not project.pre_post_assessment:
+        batches = SchedularBatch.objects.filter(project=project)
+        if batches:
+            for batch in batches:
+                course = Course.objects.filter(batch=batch).first()
+                if course:
+                    lessons = Lesson.objects.filter(course=course)
+                    for lesson in lessons:
+                        if lesson.lesson_type == "assessment":
+                            lesson.status = "draft"
+                            lesson.save()
     return Response(
         {"message": "Project updated successfully"}, status=status.HTTP_200_OK
     )
@@ -2844,22 +2863,48 @@ def add_new_session_in_project_structure(request):
                         duration=new_session["duration"],
                         session_type=session_type,
                     )
-                    if session_type == "live_session" and course:
+                    if course:
                         max_order = (
                             Lesson.objects.filter(course=course).aggregate(
                                 Max("order")
                             )["order__max"]
                             or 0
                         )
+                        session_name = None
+                        if live_session.session_type == "live_session":
+                            session_name = "Live Session"
+                        elif live_session.session_type == "check_in_session":
+                            session_name = "Check In Session"
+                        elif live_session.session_type == "in_person_session":
+                            session_name = "In Person Session"
+
                         new_lesson = Lesson.objects.create(
                             course=course,
-                            name=f"Live session {live_session.live_session_number}",
+                            name=f"{session_name} {live_session.live_session_number}",
                             status="draft",
                             lesson_type="live_session",
                             order=max_order,
                         )
                         LiveSessionLesson.objects.create(
                             lesson=new_lesson, live_session=live_session
+                        )
+                        max_order_feedback = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+
+                        new_feedback_lesson = Lesson.objects.create(
+                            course=course,
+                            name=f"Feedback for {session_name} {live_session.live_session_number}",
+                            status="draft",
+                            lesson_type="feedback",
+                            order=max_order_feedback,
+                        )
+                        unique_id = uuid.uuid4()
+                        feedback_lesson = FeedbackLesson.objects.create(
+                            lesson=new_feedback_lesson, unique_id=unique_id
                         )
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     coaching_session_number = (
@@ -2907,3 +2952,130 @@ def add_new_session_in_project_structure(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to add session"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_completed_sessions_for_project(request, project_id):
+    try:
+        current_datetime = timezone.now()
+
+        # Get all LiveSessions where date_time is in the past
+        complete_live_sessions = LiveSession.objects.filter(
+            batch__project__id=project_id, date_time__lt=current_datetime
+        )
+
+        # Get all CoachingSessions where end_date is in the past
+        complete_coaching_sessions = CoachingSession.objects.filter(
+            batch__project__id=project_id, end_date__lt=current_datetime
+        )
+
+        # Convert LiveSession objects to dictionaries
+        live_session_data = [
+            {
+                "id": session.id,
+                "live_session_number": session.live_session_number,
+                "order": session.order,
+                "date_time": session.date_time,
+                "attendees": session.attendees,
+                "description": session.description,
+                "status": session.status,
+                "duration": session.duration,
+                "pt_30_min_before": session.pt_30_min_before_id,
+                "session_type": session.session_type,
+            }
+            for session in complete_live_sessions
+        ]
+
+        # Convert CoachingSession objects to dictionaries
+        coaching_session_data = [
+            {
+                "id": session.id,
+                "booking_link": session.booking_link,
+                "start_date": session.start_date,
+                "end_date": session.end_date,
+                "expiry_date": session.expiry_date,
+                "batch_id": session.batch_id,
+                "coaching_session_number": session.coaching_session_number,
+                "order": session.order,
+                "duration": session.duration,
+                "session_type": session.session_type,
+            }
+            for session in complete_coaching_sessions
+        ]
+
+        # Combine both lists into a single list
+        complete_sessions = live_session_data + coaching_session_data
+
+        return Response(complete_sessions, status=200)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_session_from_project_structure(request):
+    try:
+        with transaction.atomic():
+            project = SchedularProject.objects.get(id=request.data.get("project_id"))
+            session_to_delete = request.data.get("session_to_delete")
+            batches = SchedularBatch.objects.filter(project=project)
+            order = session_to_delete.get("order")
+            session_type = session_to_delete.get("session_type")
+            duration = session_to_delete.get("duration")
+
+            project_structure = project.project_structure
+            if session_to_delete in project_structure:
+                project_structure.remove(session_to_delete)
+                project.project_structure = project_structure
+                project.save()
+
+                for session in project_structure:
+                    if session.get("order") > order:
+                        session["order"] -= 1
+
+                project.project_structure = project_structure
+                project.save()
+
+            for batch in batches:
+                if session_type in [
+                    "live_session",
+                    "check_in_session",
+                    "in_person_session",
+                ]:
+                    LiveSession.objects.filter(
+                        batch=batch, order=order, session_type=session_type
+                    ).delete()
+
+                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                    CoachingSession.objects.filter(
+                        batch=batch, order=order, session_type=session_type
+                    ).delete()
+
+                LiveSession.objects.filter(batch=batch, order__gt=order).update(
+                    order=F("order") - 1,
+                    live_session_number=Case(
+                        When(
+                            session_type=session_type,
+                            then=F("live_session_number") - 1,
+                        ),
+                        default=F("live_session_number"),
+                        output_field=IntegerField(),
+                    ),
+                )
+                CoachingSession.objects.filter(batch=batch, order__gt=order).update(
+                    order=F("order") - 1,
+                    coaching_session_number=Case(
+                        When(
+                            session_type=session_type,
+                            then=F("coaching_session_number") - 1,
+                        ),
+                        default=F("coaching_session_number"),
+                        output_field=IntegerField(),
+                    ),
+                )
+            return Response({"message": "Session deleted successfully."}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to delete session"}, status=500)
