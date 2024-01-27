@@ -3100,7 +3100,10 @@ def update_certificate_status_for_multiple_participants(request):
                     course_for_that_participant = course_enrollments
                     course_for_that_participant.is_certificate_allowed = True
                     course_for_that_participant.save()
-
+                else:
+                    return JsonResponse(
+                        {"error": "No Course Enrolled in this Batch"}, status=404
+                    )
             return Response({"message": "Certificate released successfully"})
     except Exception as e:
         print(str(e))
