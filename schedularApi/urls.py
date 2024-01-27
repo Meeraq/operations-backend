@@ -178,4 +178,8 @@ urlpatterns = [
         "get-completed-sessions-for-project/<int:project_id>/",
         views.get_completed_sessions_for_project,
     ),
+       path(
+        "update-certificate-status-for-multiple-participants/",
+        views.update_certificate_status_for_multiple_participants,
+    ),
 ]

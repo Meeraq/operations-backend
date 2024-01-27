@@ -3079,3 +3079,29 @@ def delete_session_from_project_structure(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to delete session"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_certificate_status_for_multiple_participants(request):
+    try:
+        with transaction.atomic():
+            participants_ids = request.data.get("participants")
+            course_id = request.data.get("course_id")
+
+            for participant_id in participants_ids:
+                participant = Learner.objects.get(id=participant_id)
+
+                course_enrollments = CourseEnrollment.objects.filter(
+                    learner=participant, course__id=course_id
+                ).first()
+
+                if course_enrollments:
+                    course_for_that_participant = course_enrollments
+                    course_for_that_participant.is_certificate_allowed = True
+                    course_for_that_participant.save()
+
+            return Response({"message": "Certificate released successfully"})
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to release certificate"}, status=500)
