@@ -492,32 +492,24 @@ def add_nudges_date_frequency_to_course(request, course_id):
         course.nudge_start_date = nudge_start_date
         course.nudge_frequency = nudge_frequency
         course.save()
-        print(
-            existing_nudge_start_date == course.nudge_start_date,
-            course.nudge_start_date,
-            existing_nudge_start_date,
+        if course.nudge_periodic_task:
+            course.nudge_periodic_task.enabled = False
+            course.nudge_periodic_task.save()
+        desired_time = time(18, 31)
+        datetime_comined = datetime.combine(
+            datetime.strptime(course.nudge_start_date, "%Y-%m-%d"), desired_time
         )
-        if (
-            existing_nudge_start_date
-            and not existing_nudge_start_date == course.nudge_start_date
-            and course.nudge_periodic_task
-        ):
-            course.nudge_periodic_task.delete()
-        else:
-            desired_time = time(18, 31)
-            datetime_comined = datetime.combine(
-                datetime.strptime(course.nudge_start_date, "%Y-%m-%d"), desired_time
-            )
-            scheduled_for = datetime_comined - timedelta(days=1)
-            clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
-            periodic_task = PeriodicTask.objects.create(
-                name=uuid.uuid1(),
-                task="schedularApi.tasks.schedule_nudges",
-                args=[course.id],
-                clocked=clocked,
-                one_off=True,
-            )
-            # create a new periodic task
+        scheduled_for = datetime_comined - timedelta(days=1)
+        clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
+        periodic_task = PeriodicTask.objects.create(
+            name=uuid.uuid1(),
+            task="schedularApi.tasks.schedule_nudges",
+            args=[course.id],
+            clocked=clocked,
+            one_off=True,
+        )
+        course.nudge_periodic_task = periodic_task
+        course.save()
         return Response({"message": "Updated successfully"}, status=201)
     except Course.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
@@ -3118,7 +3110,9 @@ def get_consolidated_feedback_download_report(request, live_session_id):
             if current_feedback_lesson:
                 for participant in batch.learners.all():
                     participant_name = participant.name
-                    participant_email = participant.email  # Participant email retrieval moved here
+                    participant_email = (
+                        participant.email
+                    )  # Participant email retrieval moved here
 
                     # Check if the participant provided feedback
                     response = FeedbackLessonResponse.objects.filter(
@@ -3145,22 +3139,18 @@ def get_consolidated_feedback_download_report(request, live_session_id):
                             data["Question"].append(question.text)
                             data["Answer"].append("-")
 
-       
         df = pd.DataFrame(data)
 
-     
         df_pivot = df.pivot(
             index=["Participant", "Participant Email"],
             columns="Question",
             values="Answer",
         ).reset_index()
 
-        
         excel_data = BytesIO()
         df_pivot.to_excel(excel_data, index=False)
         excel_data.seek(0)
 
-      
         response = HttpResponse(
             excel_data.read(),
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
