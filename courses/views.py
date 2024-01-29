@@ -271,6 +271,7 @@ class CourseTemplateListView(generics.ListCreateAPIView):
         return queryset
 
     def perform_create(self, serializer):
+        print("abcd" ,serializer.validated_data)
         name = serializer.validated_data.get("name", None)
         if name and CourseTemplate.objects.filter(name=name.strip()).exists():
             raise serializers.ValidationError(
@@ -2235,6 +2236,7 @@ class AssignCourseTemplateToBatch(APIView):
                     status="draft",
                     course_template=course_template,
                     batch=batch,
+                    image_url=course_template.image_url,
                 )
                 # Duplicate lessons
                 original_lessons = Lesson.objects.filter(

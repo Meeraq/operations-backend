@@ -18,6 +18,7 @@ class CourseTemplate(models.Model):
     name = models.TextField()
     description = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    image_url = models.ImageField(upload_to="post_images", blank=True)
 
     def __str__(self):
         return self.name
@@ -38,6 +39,8 @@ class Course(models.Model):
     nudge_periodic_task = models.ForeignKey(
         PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
     )
+    image_url = models.ImageField(upload_to="post_images", blank=True)
+
 
     def __str__(self):
         return self.name
