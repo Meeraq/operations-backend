@@ -4163,8 +4163,7 @@ class AllAssessmentInAssessmentLesson(APIView):
 @permission_classes([IsAuthenticated])
 def send_mail_to_not_responded_participant(request, assessment_id):
     try:
-        print(request.data, "abcd")
-        print(assessment_id)
+        
 
         participant_ids = request.data
         assessment = Assessment.objects.get(id=assessment_id)
@@ -4202,6 +4201,7 @@ def send_mail_to_not_responded_participant(request, assessment_id):
                     },
                     [],
                 )
+                sleep(5)
 
         return Response(
             {"message": "Emails sent successfully"}, status=status.HTTP_200_OK
