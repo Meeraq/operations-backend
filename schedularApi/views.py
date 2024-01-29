@@ -574,81 +574,82 @@ def update_live_session(request, live_session_id):
                 )
                 periodic_task.save()
                 if update_live_session.pt_30_min_before:
-                    update_live_session.delete()
+                    update_live_session.pt_30_min_before.enabled = False
+                    update_live_session.pt_30_min_before.save()
                 live_session.pt_30_min_before = periodic_task
                 live_session.save()
             except Exception as e:
                 # Handle any exceptions that may occur during task creation
                 print(str(e))
                 pass
-        # skipping the calendar invites, dont remove the below calendar invite, can be used in the future.
-        return Response(serializer.data)
-        # Calendar invites
-        try:
-            learners = live_session.batch.learners.all()
-            attendees = list(
-                map(
-                    lambda learner: {
-                        "emailAddress": {
-                            "name": learner.name,
-                            "address": learner.email,
+        AIR_INDIA_PROJECT_ID = 3
+        if not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID:
+            try:
+                learners = live_session.batch.learners.all()
+                attendees = list(
+                    map(
+                        lambda learner: {
+                            "emailAddress": {
+                                "name": learner.name,
+                                "address": learner.email,
+                            },
+                            "type": "required",
                         },
-                        "type": "required",
-                    },
-                    learners,
+                        learners,
+                    )
                 )
-            )
-
-            start_time_stamp = update_live_session.date_time.timestamp() * 1000
-            end_time_stamp = (
-                start_time_stamp + int(update_live_session.duration) * 60000
-            )
-            start_datetime_obj = datetime.fromtimestamp(
-                int(start_time_stamp) / 1000
-            ) + timedelta(hours=5, minutes=30)
-            start_datetime_str = start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
-            description = (
-                f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
-                + update_live_session.description
-            )
-            if not existing_date_time:
-                create_outlook_calendar_invite(
-                    "Meeraq - Live Session",
-                    description,
-                    start_time_stamp,
-                    end_time_stamp,
-                    attendees,
-                    env("CALENDAR_INVITATION_ORGANIZER"),
-                    None,
-                    None,
-                    update_live_session,
-                    None,
+                start_time_stamp = update_live_session.date_time.timestamp() * 1000
+                end_time_stamp = (
+                    start_time_stamp + int(update_live_session.duration) * 60000
                 )
-            elif not existing_date_time.strftime(
-                "%d-%m-%Y %H:%M"
-            ) == update_live_session.date_time.strftime("%d-%m-%Y %H:%M"):
-                existing_calendar_invite = CalendarInvites.objects.filter(
-                    live_session=live_session
-                ).first()
-                # delete the current one
-                if existing_calendar_invite:
-                    delete_outlook_calendar_invite(existing_calendar_invite)
-                # create the new one
-                create_outlook_calendar_invite(
-                    "Meeraq - Live Session",
-                    description,
-                    start_time_stamp,
-                    end_time_stamp,
-                    attendees,
-                    env("CALENDAR_INVITATION_ORGANIZER"),
-                    None,
-                    None,
-                    update_live_session,
-                    None,
+                start_datetime_obj = datetime.fromtimestamp(
+                    int(start_time_stamp) / 1000
+                ) + timedelta(hours=5, minutes=30)
+                start_datetime_str = (
+                    start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
                 )
-        except Exception as e:
-            print(str(e))
-            pass
+                description = (
+                    f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
+                    + update_live_session.description
+                )
+                if not existing_date_time:
+                    create_outlook_calendar_invite(
+                        "Meeraq - Live Session",
+                        description,
+                        start_time_stamp,
+                        end_time_stamp,
+                        attendees,
+                        env("CALENDAR_INVITATION_ORGANIZER"),
+                        None,
+                        None,
+                        update_live_session,
+                        None,
+                    )
+                elif not existing_date_time.strftime(
+                    "%d-%m-%Y %H:%M"
+                ) == update_live_session.date_time.strftime("%d-%m-%Y %H:%M"):
+                    existing_calendar_invite = CalendarInvites.objects.filter(
+                        live_session=live_session
+                    ).first()
+                    # delete the current one
+                    if existing_calendar_invite:
+                        delete_outlook_calendar_invite(existing_calendar_invite)
+                    # create the new one
+                    create_outlook_calendar_invite(
+                        "Meeraq - Live Session",
+                        description,
+                        start_time_stamp,
+                        end_time_stamp,
+                        attendees,
+                        env("CALENDAR_INVITATION_ORGANIZER"),
+                        None,
+                        None,
+                        update_live_session,
+                        None,
+                    )
+            except Exception as e:
+                print(str(e))
+                pass
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2822,6 +2823,7 @@ def add_new_session_in_project_structure(request):
             project_id = request.data.get("project_id")
             session_type = request.data.get("session_type")
             duration = request.data.get("duration")
+            description = request.data.get("description")
 
             # Get the project and batches
             project = get_object_or_404(SchedularProject, id=project_id)
@@ -2835,6 +2837,7 @@ def add_new_session_in_project_structure(request):
                 "order": len(prev_structure) + 1,
                 "duration": duration,
                 "session_type": session_type,
+                "description": description,
             }
 
             # Update the project structure
@@ -3079,3 +3082,32 @@ def delete_session_from_project_structure(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to delete session"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_certificate_status_for_multiple_participants(request):
+    try:
+        with transaction.atomic():
+            participants_ids = request.data.get("participants")
+            course_id = request.data.get("course_id")
+
+            for participant_id in participants_ids:
+                participant = Learner.objects.get(id=participant_id)
+
+                course_enrollments = CourseEnrollment.objects.filter(
+                    learner=participant, course__id=course_id
+                ).first()
+
+                if course_enrollments:
+                    course_for_that_participant = course_enrollments
+                    course_for_that_participant.is_certificate_allowed = True
+                    course_for_that_participant.save()
+                else:
+                    return JsonResponse(
+                        {"error": "No Course Enrolled in this Batch"}, status=404
+                    )
+            return Response({"message": "Certificate released successfully"})
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to release certificate"}, status=500)
