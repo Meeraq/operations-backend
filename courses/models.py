@@ -3,7 +3,9 @@ from api.models import Learner
 from schedularApi.models import SchedularBatch, LiveSession, CoachingSession
 import os
 from django.core.exceptions import ValidationError
+from django_celery_beat.models import PeriodicTask
 import uuid
+from assessmentApi.models import Assessment as AssessmentModal
 
 # Create your models here.
 
@@ -31,6 +33,11 @@ class Course(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     course_template = models.ForeignKey(CourseTemplate, on_delete=models.CASCADE)
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    nudge_start_date = models.DateField(default=None, blank=True, null=True)
+    nudge_frequency = models.CharField(max_length=50, default="", blank=True, null=True)
+    nudge_periodic_task = models.ForeignKey(
+        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
+    )
 
     def __str__(self):
         return self.name
@@ -111,7 +118,22 @@ class LaserCoachingSession(models.Model):
 
 
 class Assessment(models.Model):
+    ASSESSMENT_TIMING_CHOICES = [
+        ("pre", "Pre-Assessment"),
+        ("post", "Post-Assessment"),
+        ("none", "None"),
+    ]
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    type = models.CharField(
+        max_length=255, choices=ASSESSMENT_TIMING_CHOICES, default="none"
+    )
+    assessment_modal = models.ForeignKey(
+        AssessmentModal,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        related_name="assessment_modal",
+    )
 
 
 class Video(models.Model):
@@ -147,6 +169,7 @@ class CourseEnrollment(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE)
     enrollment_date = models.DateTimeField(auto_now_add=True)
     completed_lessons = models.JSONField(default=list, blank=True)
+    is_certificate_allowed = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return f"{self.learner.name} enrolled in {self.course.name}"
@@ -218,3 +241,17 @@ class ThinkificLessonCompleted(models.Model):
 
     def __str__(self):
         return f"{self.student_name} completed {self.lesson_name} in {self.course_name}"
+
+
+class Nudge(models.Model):
+    name = models.CharField(max_length=255)
+    content = models.TextField()
+    file = models.FileField(upload_to="nudge_files/", blank=True, null=True)
+    order = models.IntegerField()
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    is_sent = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name

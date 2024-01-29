@@ -125,6 +125,11 @@ urlpatterns = [
         name="project_report_download",
     ),
     path(
+        "project-report-download-session-wise/<int:project_id>/<int:batch_id>/",
+        views.project_report_download_session_wise,
+        name="project_report_download_session_wise",
+    ),
+    path(
         "add-facilitator/",
         views.addFacilitator,
     ),
@@ -156,5 +161,25 @@ urlpatterns = [
     path(
         "live-session/<int:pk>/",
         views.live_session_detail_view,
+    ),
+    path(
+        "update-certificate-status/",
+        views.update_certificate_status,
+    ),
+     path(
+        "add-new-session-in-project-structure/",
+        views.add_new_session_in_project_structure,
+    ),
+    path(
+        "delete-session-from-project-structure/",
+        views.delete_session_from_project_structure,
+    ),
+     path(
+        "get-completed-sessions-for-project/<int:project_id>/",
+        views.get_completed_sessions_for_project,
+    ),
+       path(
+        "update-certificate-status-for-multiple-participants/",
+        views.update_certificate_status_for_multiple_participants,
     ),
 ]

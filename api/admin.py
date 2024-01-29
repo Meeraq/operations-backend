@@ -38,6 +38,7 @@ from .models import (
     CreateProjectActivity,
     Role,
     APILog,
+    SuperAdmin,
 )
 
 # Register your models here.
@@ -83,3 +84,4 @@ admin.site.register(CreateProjectActivity)
 admin.site.register(FinalizeCoachActivity)
 admin.site.register(Role)
 admin.site.register(APILog)
+admin.site.register(SuperAdmin)

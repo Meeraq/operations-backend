@@ -273,6 +273,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.coach_has_to_give_slots_availability_reminder",
         "schedule": crontab(hour=2, minute=30, day_of_week="*"),
     },
+    "coachee_booking_reminder_whatsapp_at_8am": {
+        "task": "schedularApi.tasks.coachee_booking_reminder_whatsapp_at_8am",
+        "schedule": crontab(hour=2, minute=30, day_of_week="*"),
+    },
 }
 
 

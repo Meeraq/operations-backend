@@ -4,6 +4,7 @@ from django.shortcuts import render
 import boto3
 import requests
 from rest_framework import generics, serializers, status
+from datetime import timedelta, time, datetime
 from .models import (
     Course,
     TextLesson,
@@ -25,6 +26,7 @@ from .models import (
     File,
     DownloadableLesson,
     ThinkificLessonCompleted,
+    Nudge,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -53,12 +55,25 @@ from .serializers import (
     LessonUpdateSerializer,
     FileSerializer,
     DownloadableLessonSerializer,
+    NudgeSerializer,
 )
+from django_celery_beat.models import PeriodicTask, ClockedSchedule
+
 from rest_framework.views import APIView
 from api.models import User, Learner, Profile, Role
 from schedularApi.models import (
+    LiveSession,
     SchedularBatch,
+    SchedularProject,
     LiveSession as LiveSessionSchedular,
+)
+from assessmentApi.serializers import (
+    AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
+)
+from assessmentApi.models import (
+    Assessment as AssessmentModal,
+    ParticipantResponse,
+    ParticipantUniqueId,
 )
 from rest_framework.decorators import api_view, permission_classes
 from django.db import transaction
@@ -76,6 +91,13 @@ import uuid
 import logging
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+import pandas as pd
+from io import BytesIO
+
+
 env = environ.Env()
 
 logging.basicConfig(level=logging.ERROR)
@@ -88,7 +110,7 @@ wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltop
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
 
-def create_learner(learner_name, learner_email, learner_phone):
+def create_learner(learner_name, learner_email, learner_phone=None):
     try:
         with transaction.atomic():
             learner_email = learner_email.strip().lower()
@@ -108,12 +130,23 @@ def create_learner(learner_name, learner_email, learner_phone):
             profile = Profile.objects.create(user=user)
             profile.roles.add(learner_role)
             profile.save()
-            learner = Learner.objects.create(
-                user=profile,
-                name=learner_name,
-                email=learner_email,
-                phone=learner_phone,
-            )
+
+            phone = learner_phone if learner_phone else None
+            learner = None
+            if phone:
+                learner = Learner.objects.create(
+                    user=profile,
+                    name=learner_name,
+                    email=learner_email,
+                    phone=phone,
+                )
+            else:
+                learner = Learner.objects.create(
+                    user=profile,
+                    name=learner_name,
+                    email=learner_email,
+                )
+
             return learner
 
     except Exception as e:
@@ -123,12 +156,16 @@ def create_learner(learner_name, learner_email, learner_phone):
 def create_or_get_learner(learner_data):
     try:
         # check if the same email user exists or not
+        phone = learner_data.get("phone", None)
         user = User.objects.filter(username=learner_data["email"]).first()
         if user:
             if user.profile.roles.all().filter(name="learner").exists():
                 learner = Learner.objects.get(user=user.profile)
                 learner.name = learner_data["name"].strip()
-                learner.phone = learner_data["phone"]
+
+                if learner_data["phone"]:
+                    learner.phone = learner_data["phone"]
+
                 learner.save()
                 return learner
             else:
@@ -136,23 +173,78 @@ def create_or_get_learner(learner_data):
                 learner_profile = user.profile
                 learner_profile.roles.add(learner_role)
                 learner_role.save()
+
                 learner, created = Learner.objects.get_or_create(
                     user=learner_profile,
                     defaults={
                         "name": learner_data["name"],
                         "email": learner_data["email"],
-                        "phone": learner_data["phone"],
+                        "phone": phone,
                     },
                 )
                 return learner
         else:
-            learner = create_learner(
-                learner_data["name"], learner_data["email"], learner_data["phone"]
-            )
+            learner = create_learner(learner_data["name"], learner_data["email"], phone)
             return learner
     except Exception as e:
         # Handle specific exceptions or log the error
         print(f"Error processing participant: {str(e)}")
+
+
+def get_feedback_lesson_name(lesson_name):
+    # Trim leading and trailing whitespaces
+    trimmed_string = lesson_name.strip()
+    # Convert to lowercase
+    lowercased_string = trimmed_string.lower()
+    # Replace spaces between words with underscores
+    underscored_string = "_".join(lowercased_string.split())
+    return underscored_string
+
+
+def get_file_name_from_url(url):
+    # Split the URL by '/' to get an array of parts
+    url_parts = url.split("/")
+
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+
+    # Extract the file name without the query parameters
+    file_name = full_file_name.split("?")[0]
+
+    return file_name
+
+
+def get_file_extension(url):
+    # Split the URL by '.' to get an array of parts
+    url_parts = url.split(".")
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+    # Extract the file extension
+    file_extension = full_file_name.split("?")[0]
+    return file_extension
+
+
+def download_file_response(file_url):
+    try:
+        response = requests.get(file_url)
+        if response.status_code == 200:
+            file_content = response.content
+            extension = get_file_extension(file_url)
+            content_type = response.headers.get(
+                "Content-Type", f"application/{extension}"
+            )
+            file_name = get_file_name_from_url(file_url)
+            file_response = HttpResponse(file_content, content_type=content_type)
+            file_response["Content-Disposition"] = 'attachment; filename="{}"'.format(
+                file_name
+            )
+            return file_response
+        else:
+            return HttpResponse(
+                "Failed to download the file", status=response.status_code
+            )
+    except Exception as e:
+        return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
 
 
 class CourseListView(generics.ListCreateAPIView):
@@ -310,6 +402,26 @@ class UpdateLessonOrder(APIView):
         )
 
 
+class UpdateNudgesOrder(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        payload = request.data
+        for nudge_id, order in payload.items():
+            try:
+                nudge = Nudge.objects.get(pk=nudge_id)
+                nudge.order = order
+                nudge.save()
+            except Nudge.DoesNotExist:
+                return Response(
+                    {"error": f"Nudge with id {nudge_id} not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        return Response(
+            {"message": "Nudges orders updated successfully"}, status=status.HTTP_200_OK
+        )
+
+
 class TextLessonCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     queryset = TextLesson.objects.all()
@@ -336,6 +448,71 @@ class LessonListView(generics.ListAPIView):
             queryset = queryset.filter(status=status)
 
         return queryset
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_nudges_and_course(request, course_id):
+    try:
+        course = Course.objects.get(id=course_id)
+        course_serializer = CourseSerializer(course)
+        nudges = Nudge.objects.filter(course=course)
+        serializer = NudgeSerializer(nudges, many=True)
+        return Response({"nudges": serializer.data, "course": course_serializer.data})
+    except Course.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_new_nudge(request):
+    serializer = NudgeSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def download_nudge_file(request, nudge_id):
+    nudge_obj = get_object_or_404(Nudge, id=nudge_id)
+    serializer = NudgeSerializer(nudge_obj)
+    return download_file_response(serializer.data["file"])
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def add_nudges_date_frequency_to_course(request, course_id):
+    try:
+        course = Course.objects.get(id=course_id)
+        nudge_start_date = request.data.get("nudge_start_date")
+        nudge_frequency = request.data.get("nudge_frequency")
+        existing_nudge_start_date = course.nudge_start_date
+        course.nudge_start_date = nudge_start_date
+        course.nudge_frequency = nudge_frequency
+        course.save()
+        if course.nudge_periodic_task:
+            course.nudge_periodic_task.enabled = False
+            course.nudge_periodic_task.save()
+        desired_time = time(18, 31)
+        datetime_comined = datetime.combine(
+            datetime.strptime(course.nudge_start_date, "%Y-%m-%d"), desired_time
+        )
+        scheduled_for = datetime_comined - timedelta(days=1)
+        clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
+        periodic_task = PeriodicTask.objects.create(
+            name=uuid.uuid1(),
+            task="schedularApi.tasks.schedule_nudges",
+            args=[course.id],
+            clocked=clocked,
+            one_off=True,
+        )
+        course.nudge_periodic_task = periodic_task
+        course.save()
+        return Response({"message": "Updated successfully"}, status=201)
+    except Course.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
 
 
 class CourseTemplateLessonListView(generics.ListAPIView):
@@ -838,18 +1015,31 @@ def update_laser_coaching_session(request, course_id, lesson_id, session_id):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_assessment_and_lesson(request):
-    lesson_data = request.data.get("lesson")
-    lesson_serializer = LessonSerializer(data=lesson_data)
-    if lesson_serializer.is_valid():
-        lesson = lesson_serializer.save()
-        assessment = Assessment.objects.create(
-            lesson=lesson,
-        )
-        return Response(
-            "Assessment lesson created successfully", status=status.HTTP_201_CREATED
-        )
-    else:
-        return Response(lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    with transaction.atomic():
+        lesson_data = request.data.get("lesson")
+        lesson_serializer1 = LessonSerializer(data=lesson_data)
+        lesson_serializer2 = LessonSerializer(data=lesson_data)
+        if lesson_serializer1.is_valid() and lesson_serializer2.is_valid():
+            lesson1 = lesson_serializer1.save()
+            lesson2 = lesson_serializer2.save()
+
+            lesson1.name = f"Pre {lesson1.name}"
+            lesson2.name = f"Post {lesson2.name}"
+
+            lesson1.save()
+            lesson2.save()
+
+            assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+
+            assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
+            return Response(
+                "Assessment lesson created successfully", status=status.HTTP_201_CREATED
+            )
+        else:
+            return Response(
+                {lesson_serializer1.errors, lesson_serializer2.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
 
 @api_view(["GET"])
@@ -876,7 +1066,7 @@ def update_assessment_lesson(request, lesson_id, session_id):
         )
 
     lesson_data = request.data.get("lesson")
-
+    assessment.save()
     # Check if 'lesson' data is provided in the request and update the lesson name
     if lesson_data and "name" in lesson_data:
         lesson.name = lesson_data["name"]
@@ -936,6 +1126,7 @@ def get_course_enrollment(request, course_id, learner_id):
             {
                 "course_enrollment": course_enrollment_serializer.data,
                 "lessons": lessons_serializer.data,
+                "is_certificate_allowed": course_enrollment.is_certificate_allowed,
             }
         )
     except CourseEnrollment.DoesNotExist:
@@ -960,7 +1151,7 @@ def get_course_enrollment_for_pmo_preview(request, course_id):
                 "lessons": lessons_serializer.data,
             }
         )
-    except Course.DoesNotExist:
+    except Exception as e:
         return Response(status=404)
 
 
@@ -1313,7 +1504,7 @@ class LessonMarkAsCompleteAndNotComplete(APIView):
 
 
 class DownloadLessonCertificate(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def get(self, request, lesson_id, learner_id):
         try:
@@ -1821,6 +2012,98 @@ def get_all_feedbacks_report(request):
 
 
 @api_view(["GET"])
+def get_consolidated_feedback_report(request):
+    try:
+        data = {}
+        all_projects = SchedularProject.objects.all()
+
+        for project in all_projects:
+            all_batches = SchedularBatch.objects.filter(project=project)
+            total_participant_count = 0
+            for batch in all_batches:
+                total_participant_count += batch.learners.count()
+
+            for batch in all_batches:
+                # Get live sessions for the current batch
+                live_sessions = LiveSession.objects.filter(batch=batch)
+
+                for live_session in live_sessions:
+                    # Now, you can access the associated Course through the SchedularBatch
+                    course = Course.objects.filter(batch=batch).first()
+                    if course:
+                        feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
+                        feedback_lessons = FeedbackLesson.objects.filter(
+                            lesson__course=course
+                        )
+
+                        for feedback_lesson in feedback_lessons:
+                            current_lesson_name = feedback_lesson.lesson.name
+                            formatted_lesson_name = get_feedback_lesson_name(
+                                current_lesson_name
+                            )
+                            total_participant = total_participant_count
+                            total_responses = 0
+
+                            for participant in batch.learners.all():
+                                feedback_response = (
+                                    FeedbackLessonResponse.objects.filter(
+                                        feedback_lesson=feedback_lesson,
+                                        learner=participant,
+                                    ).first()
+                                )
+                                if feedback_response:
+                                    total_responses += 1
+                            percentage_responded = (
+                                round((total_responses / total_participant) * 100, 2)
+                                if total_participant
+                                else 0
+                            )
+
+                            if formatted_lesson_name == feedback_lesson_name_should_be:
+                                session_name = None
+                                if live_session.session_type == "live_session":
+                                    session_name = "Live Session"
+                                elif live_session.session_type == "check_in_session":
+                                    session_name = "Check In Session"
+                                elif live_session.session_type == "in_person_session":
+                                    session_name = "In Person Session"
+                                live_session_key = f"{project.name} {session_name} {live_session.live_session_number}"
+                                if live_session_key not in data:
+                                    data[live_session_key] = {
+                                        "live_session_id": live_session.id,
+                                        "project_name": project.name,
+                                        "session_name": f"{session_name} {live_session.live_session_number}",
+                                        "total_participant": total_participant,
+                                        "total_responses": total_responses,
+                                        "percentage_responded": percentage_responded,
+                                    }
+
+                                else:
+                                    # Merge data for the same live session number
+                                    # data[live_session_key]["total_participant"] += len(total_participant)
+                                    data[live_session_key][
+                                        "total_responses"
+                                    ] += total_responses
+                                    data[live_session_key][
+                                        "percentage_responded"
+                                    ] = round(
+                                        (
+                                            data[live_session_key]["total_responses"]
+                                            / data[live_session_key][
+                                                "total_participant"
+                                            ]
+                                        )
+                                        * 100,
+                                        2,
+                                    )
+
+        return Response(list(data.values()))
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_feedback_report(request, feedback_id):
     try:
@@ -1865,6 +2148,71 @@ def get_feedback_report(request, feedback_id):
     except FeedbackLesson.DoesNotExist:
         return Response(
             {"error": "Feedback lesson not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+def get_consolidated_feedback_report_response(request, lesson_id):
+    try:
+        live_session = LiveSession.objects.get(id=lesson_id)
+        project = live_session.batch.project
+        batches = SchedularBatch.objects.filter(project=project)
+
+        # Dictionary to store aggregated feedback data for each question
+        question_data = {}
+
+        for batch in batches:
+            print(batch)
+            feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+                feedback_lesson__lesson__course__batch=batch,
+                # feedback_lesson__lesson__order=live_session.order,
+            )
+            print(feedback_lesson_responses)
+            for response in feedback_lesson_responses:
+                for answer in response.answers.all():
+                    question_text = answer.question.text
+
+                    if question_text not in question_data:
+                        question_data[question_text] = {
+                            **QuestionSerializer(answer.question).data,
+                            "descriptive_answers": [],
+                            "ratings": [],
+                            "average_rating": 0,
+                            "nps": 0,
+                        }
+
+                    if answer.question.type.startswith("rating"):
+                        question_data[question_text]["ratings"].append(answer.rating)
+                    elif answer.question.type == "descriptive_answer":
+                        question_data[question_text]["descriptive_answers"].append(
+                            answer.text_answer
+                        )
+
+        for question_text, data in question_data.items():
+            # Calculate average rating for each question
+            ratings = data["ratings"]
+            if ratings:
+                if data["type"] == "rating_0_to_10":
+                    # Calculate NPS
+                    promoters = sum(rating >= 9 for rating in ratings)
+                    detractors = sum(rating <= 6 for rating in ratings)
+                    nps = ((promoters - detractors) / len(ratings)) * 100
+                    data["nps"] = nps
+                else:
+                    # Calculate average rating
+                    data["average_rating"] = sum(ratings) / len(ratings)
+            else:
+                if data["type"] == "rating_0_to_10":
+                    data["nps"] = 0  # Default NPS value if no ratings
+                else:
+                    data["average_rating"] = 0  # Default rating 0 if no ratings
+
+        return Response(list(question_data.values()))
+    except LiveSession.DoesNotExist:
+        return Response(
+            {"error": "Live session not found"}, status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -1929,7 +2277,12 @@ class AssignCourseTemplateToBatch(APIView):
                                 description=original_lesson.downloadablelesson.description,
                             )
                         elif original_lesson.lesson_type == "assessment":
-                            Assessment.objects.create(lesson=new_lesson)
+                            assessment = Assessment.objects.filter(
+                                lesson=original_lesson
+                            ).first()
+                            Assessment.objects.create(
+                                lesson=new_lesson, type=assessment.type
+                            )
                         elif original_lesson.lesson_type == "quiz":
                             new_quiz_lesson = QuizLesson.objects.create(
                                 lesson=new_lesson
@@ -1975,15 +2328,40 @@ class AssignCourseTemplateToBatch(APIView):
                 )
                 for live_session in live_sessions:
                     max_order = max_order + 1
+                    session_name = None
+                    if live_session.session_type == "live_session":
+                        session_name = "Live Session"
+                    elif live_session.session_type == "check_in_session":
+                        session_name = "Check In Session"
+                    elif live_session.session_type == "in_person_session":
+                        session_name = "In Person Session"
+
                     new_lesson = Lesson.objects.create(
                         course=new_course,
-                        name=f"Live session {live_session.live_session_number}",
+                        name=f"{session_name} {live_session.live_session_number}",
                         status="draft",
                         lesson_type="live_session",
                         order=max_order,
                     )
                     LiveSessionLesson.objects.create(
                         lesson=new_lesson, live_session=live_session
+                    )
+                    max_order_feedback = (
+                        Lesson.objects.filter(course=new_course).aggregate(
+                            Max("order")
+                        )["order__max"]
+                        or 0
+                    )
+                    new_feedback_lesson = Lesson.objects.create(
+                        course=new_course,
+                        name=f"Feedback for {session_name} {live_session.live_session_number}",
+                        status="draft",
+                        lesson_type="feedback",
+                        order=max_order_feedback,
+                    )
+                    unique_id = uuid.uuid4()
+                    feedback_lesson = FeedbackLesson.objects.create(
+                        lesson=new_feedback_lesson, unique_id=unique_id
                     )
                 for coaching_session in coaching_sessions:
                     max_order = max_order + 1
@@ -2203,7 +2581,7 @@ def update_course_status(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def lesson_update_status(request):
     if request.method == "PUT":
         serializer = LessonUpdateSerializer(data=request.data)
@@ -2215,6 +2593,21 @@ def lesson_update_status(request):
                 lesson = Lesson.objects.get(id=lesson_id)
                 lesson.status = status_value
                 lesson.save()
+
+                if lesson.lesson_type == "assessment":
+                    assessment = Assessment.objects.filter(lesson=lesson).first()
+
+                    assessment_modal = AssessmentModal.objects.get(
+                        id=assessment.assessment_modal.id
+                    )
+
+                    if lesson.status == "draft":
+                        assessment_modal.status = "draft"
+
+                    if lesson.status == "public":
+                        assessment_modal.status = "ongoing"
+                    assessment_modal.save()
+
                 return Response(
                     {"message": f"Lesson status updated."}, status=status.HTTP_200_OK
                 )
@@ -2262,56 +2655,13 @@ def update_file(request, file_id):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-def get_file_name_from_url(url):
-    # Split the URL by '/' to get an array of parts
-    url_parts = url.split("/")
-
-    # Get the last part of the array, which should be the full file name with extension
-    full_file_name = url_parts[-1]
-
-    # Extract the file name without the query parameters
-    file_name = full_file_name.split("?")[0]
-
-    return file_name
-
-
-def get_file_extension(url):
-    # Split the URL by '.' to get an array of parts
-    url_parts = url.split(".")
-    # Get the last part of the array, which should be the full file name with extension
-    full_file_name = url_parts[-1]
-    # Extract the file extension
-    file_extension = full_file_name.split("?")[0]
-    return file_extension
-
-
 class FileDownloadView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, file_id):
         file_obj = get_object_or_404(File, id=file_id)
-
-        try:
-            serializer = FileSerializer(file_obj)
-            response = requests.get(serializer.data["file"])
-            if response.status_code == 200:
-                file_content = response.content
-                extension = get_file_extension(serializer.data["file"])
-                content_type = response.headers.get(
-                    "Content-Type", f"application/{extension}"
-                )
-                file_name = get_file_name_from_url(serializer.data["file"])
-                file_response = HttpResponse(file_content, content_type=content_type)
-                file_response[
-                    "Content-Disposition"
-                ] = 'attachment; filename="{}"'.format(file_name)
-                return file_response
-            else:
-                return HttpResponse(
-                    "Failed to download the file", status=response.status_code
-                )
-        except Exception as e:
-            return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
+        serializer = FileSerializer(file_obj)
+        return download_file_response(serializer.data["file"])
 
 
 class DownloadableLessonCreateView(generics.CreateAPIView):
@@ -2337,10 +2687,9 @@ class FeedbackEmailValidation(APIView):
             feedback_lesson = FeedbackLesson.objects.get(unique_id=unique_id)
             lesson = feedback_lesson.lesson
 
-            learner =  Learner.objects.filter(email=email).first()
-           
+            learner = Learner.objects.filter(email=email).first()
+
             if learner:
-                
                 feedback_lesson_response = FeedbackLessonResponse.objects.filter(
                     feedback_lesson=feedback_lesson, learner__id=learner.id
                 ).first()
@@ -2408,6 +2757,8 @@ class GetFeedbackForm(APIView):
 
 
 class EditAllowedFeedbackLesson(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request, feedback_lesson_id):
         try:
             feedback_lesson = FeedbackLesson.objects.get(id=feedback_lesson_id)
@@ -2438,6 +2789,8 @@ class EditAllowedFeedbackLesson(APIView):
 
 
 class DuplicateLesson(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         try:
             with transaction.atomic():
@@ -2551,10 +2904,12 @@ class DuplicateLesson(APIView):
 
 
 class LessonCompletedWebhook(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         try:
             payload = request.data.get("payload", {})
-            
+
             lesson_name = payload.get("lesson", {}).get("name", "")
             user = payload.get("user", {})
             student_name = f"{user.get('first_name', '')} {user.get('last_name', '')}"
@@ -2582,3 +2937,228 @@ class LessonCompletedWebhook(APIView):
                 {"error": "Failed to duplicate lesson."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class GetUniqueIdParticipantFromCourse(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, user_id, assessment_id):
+        try:
+            learner = Learner.objects.get(id=user_id)
+
+            assessment = AssessmentModal.objects.get(id=assessment_id)
+
+            participant_unique_id = ParticipantUniqueId.objects.filter(
+                participant=learner, assessment=assessment
+            ).first()
+
+            participant_response = ParticipantResponse.objects.filter(
+                participant=learner, assessment=assessment
+            ).first()
+
+            return Response(
+                {
+                    "unique_id": participant_unique_id.unique_id,
+                    "responded": bool(participant_response),
+                },
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": "Failed to get unique id."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetAssessmentsOfBatch(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, batch_id):
+        try:
+            batch = SchedularBatch.objects.get(id=batch_id)
+            assessments = AssessmentModal.objects.filter(
+                assessment_modal__lesson__course__batch=batch
+            )
+            assessment_list = []
+            for assessment in assessments:
+                total_responses_count = ParticipantResponse.objects.filter(
+                    assessment=assessment
+                ).count()
+                assessment_data = {
+                    "id": assessment.id,
+                    "name": assessment.name,
+                    "participant_view_name": assessment.participant_view_name,
+                    "assessment_type": assessment.assessment_type,
+                    "assessment_timing": assessment.assessment_timing,
+                    "assessment_start_date": assessment.assessment_start_date,
+                    "assessment_end_date": assessment.assessment_end_date,
+                    "status": assessment.status,
+                    "total_learners_count": assessment.participants_observers.count(),
+                    "total_responses_count": total_responses_count,
+                    "created_at": assessment.created_at,
+                }
+                assessment_list.append(assessment_data)
+
+            return Response(assessment_list)
+
+        except Exception as e:
+            return Response(
+                {"error": "Failed to ger data"}, status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_all_feedbacks_download_report(request, feedback_id):
+    try:
+        feedback_lesson = FeedbackLesson.objects.get(id=feedback_id)
+
+        # Get all participants associated with the batch of the course related to the feedback lesson
+        participants = Learner.objects.filter(
+            schedularbatch__id=feedback_lesson.lesson.course.batch.id
+        )
+
+        # Create a DataFrame to store the data
+        data = {"Participant": [], "Question": [], "Answer": []}
+
+        # Populate the DataFrame with data from FeedbackLesson and FeedbackLessonResponse
+        for participant in participants:
+            participant_name = participant.name
+
+            # Check if the participant provided feedback
+            response = FeedbackLessonResponse.objects.filter(
+                feedback_lesson=feedback_lesson, learner=participant
+            ).first()
+
+            if response:
+                for answer in response.answers.all():
+                    question_text = answer.question.text
+                    answer_value = (
+                        answer.text_answer if answer.text_answer else answer.rating
+                    )
+
+                    data["Participant"].append(participant_name)
+                    data["Question"].append(question_text)
+                    data["Answer"].append(answer_value)
+            else:
+                # If participant did not provide feedback, populate with empty values
+                for question in feedback_lesson.questions.all():
+                    data["Participant"].append(participant_name)
+                    data["Question"].append(question.text)
+                    data["Answer"].append("-")
+
+        # Create a DataFrame from the data
+        df = pd.DataFrame(data)
+
+        # Pivot the DataFrame to have Question columns
+        df_pivot = df.pivot(
+            index="Participant", columns="Question", values="Answer"
+        ).reset_index()
+
+        # Save the DataFrame to an Excel file in-memory
+        excel_data = BytesIO()
+        df_pivot.to_excel(excel_data, index=False)
+        excel_data.seek(0)
+
+        # Create the response with the Excel file
+        response = HttpResponse(
+            excel_data.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f"attachment; filename=Feedback Report.xlsx"
+
+        return response
+
+    except FeedbackLesson.DoesNotExist:
+        return Response(
+            {"error": "Feedback lesson not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_consolidated_feedback_download_report(request, live_session_id):
+    try:
+        live_session = LiveSession.objects.get(id=live_session_id)
+        project = live_session.batch.project
+        batches = SchedularBatch.objects.filter(project=project)
+
+        # Create a DataFrame to store the data
+        data = {
+            "Participant": [],
+            "Participant Email": [],
+            "Question": [],
+            "Answer": [],
+        }
+
+        for batch in batches:
+            course = Course.objects.filter(batch=batch).first()
+            feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
+            feedback_lessons = FeedbackLesson.objects.filter(lesson__course=course)
+            current_feedback_lesson = None
+
+            for feedback_lesson in feedback_lessons:
+                current_lesson_name = feedback_lesson.lesson.name
+                formatted_lesson_name = get_feedback_lesson_name(current_lesson_name)
+
+                if formatted_lesson_name == feedback_lesson_name_should_be:
+                    current_feedback_lesson = feedback_lesson
+
+            # Populate the DataFrame with data from FeedbackLesson and FeedbackLessonResponse
+            if current_feedback_lesson:
+                for participant in batch.learners.all():
+                    participant_name = participant.name
+                    participant_email = (
+                        participant.email
+                    )  # Participant email retrieval moved here
+
+                    # Check if the participant provided feedback
+                    response = FeedbackLessonResponse.objects.filter(
+                        feedback_lesson=current_feedback_lesson, learner=participant
+                    ).first()
+
+                    if response:
+                        for answer in response.answers.all():
+                            question_text = answer.question.text
+                            answer_value = (
+                                answer.text_answer
+                                if answer.text_answer
+                                else answer.rating
+                            )
+                            data["Participant"].append(participant_name)
+                            data["Participant Email"].append(participant_email)
+                            data["Question"].append(question_text)
+                            data["Answer"].append(answer_value)
+                    else:
+                        # If participant did not provide feedback, populate with empty values
+                        for question in current_feedback_lesson.questions.all():
+                            data["Participant"].append(participant_name)
+                            data["Participant Email"].append(participant_email)
+                            data["Question"].append(question.text)
+                            data["Answer"].append("-")
+
+        df = pd.DataFrame(data)
+
+        df_pivot = df.pivot(
+            index=["Participant", "Participant Email"],
+            columns="Question",
+            values="Answer",
+        ).reset_index()
+
+        excel_data = BytesIO()
+        df_pivot.to_excel(excel_data, index=False)
+        excel_data.seek(0)
+
+        response = HttpResponse(
+            excel_data.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f"attachment; filename=Feedback_Report.xlsx"
+
+        return response
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

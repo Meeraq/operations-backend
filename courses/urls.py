@@ -30,6 +30,8 @@ from .views import (
     EditAllowedFeedbackLesson,
     DuplicateLesson,
     LessonCompletedWebhook,
+    GetUniqueIdParticipantFromCourse,
+    GetAssessmentsOfBatch,
 )
 import environ
 
@@ -69,6 +71,11 @@ urlpatterns = [
         views.UpdateLessonOrder.as_view(),
         name="update_lesson_order",
     ),
+    path(
+        "nudges/update_nudges_order/",
+        views.UpdateNudgesOrder.as_view(),
+        name="update_lesson_order",
+    ),
     path("text-lessons/", TextLessonCreateView.as_view(), name="text-lesson-create"),
     path(
         "text-lessons/<int:pk>/", TextLessonEditView.as_view(), name="text-lesson-edit"
@@ -80,6 +87,17 @@ urlpatterns = [
     # ),
     path(
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
+    ),
+    path(
+        "courses/<int:course_id>/nudges/",
+        views.get_nudges_and_course,
+        name="lesson-list",
+    ),
+    path("nudges/create", views.create_new_nudge),
+    path("nudges/<int:nudge_id>/file/download/", views.download_nudge_file),
+    path(
+        "courses/<int:course_id>/update-nudge-date-frequency/",
+        views.add_nudges_date_frequency_to_course,
     ),
     path(
         "course-templates/<int:course_template_id>/lessons/",
@@ -213,7 +231,12 @@ urlpatterns = [
     path("quizes/<int:quiz_id>/report/", views.get_quiz_report),
     path("quizes/<int:quiz_id>/report/download/", views.quiz_report_download),
     path("feedbacks/report/all/", views.get_all_feedbacks_report),
+    path("consolidated-feedback-report/", views.get_consolidated_feedback_report),
     path("feedbacks/<int:feedback_id>/report/", views.get_feedback_report),
+    path(
+        "get-consolidated-feedback-report-response/<int:lesson_id>/report/",
+        views.get_consolidated_feedback_report_response,
+    ),
     path(
         "get-laser-coaching-time/<int:laser_coaching_id>/<str:participant_email>/",
         GetLaserCoachingTime.as_view(),
@@ -285,5 +308,21 @@ urlpatterns = [
     path(
         "lesson-completed-webhook/",
         LessonCompletedWebhook.as_view(),
+    ),
+    path(
+        "get/uniqueId/participant-from-course/<int:user_id>/<int:assessment_id>/",
+        GetUniqueIdParticipantFromCourse.as_view(),
+    ),
+    path(
+        "get-assessments-of-batch/<int:batch_id>/",
+        GetAssessmentsOfBatch.as_view(),
+    ),
+    path(
+        "feedback-report-download/<str:feedback_id>/",
+        views.get_all_feedbacks_download_report,
+    ),
+    path(
+        "consolidated-feedback-download-report/<str:live_session_id>/",
+        views.get_consolidated_feedback_download_report,
     ),
 ]
