@@ -26,6 +26,7 @@ class SessionItemSerializer(serializers.Serializer):
     session_type = serializers.CharField()
     duration = serializers.IntegerField()
     order = serializers.IntegerField(required=False, allow_null=True)
+    description = serializers.CharField(required=False)
 
 
 class SchedularBatchSerializer(serializers.ModelSerializer):

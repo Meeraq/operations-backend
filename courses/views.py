@@ -492,32 +492,24 @@ def add_nudges_date_frequency_to_course(request, course_id):
         course.nudge_start_date = nudge_start_date
         course.nudge_frequency = nudge_frequency
         course.save()
-        print(
-            existing_nudge_start_date == course.nudge_start_date,
-            course.nudge_start_date,
-            existing_nudge_start_date,
+        if course.nudge_periodic_task:
+            course.nudge_periodic_task.enabled = False
+            course.nudge_periodic_task.save()
+        desired_time = time(18, 31)
+        datetime_comined = datetime.combine(
+            datetime.strptime(course.nudge_start_date, "%Y-%m-%d"), desired_time
         )
-        if (
-            existing_nudge_start_date
-            and not existing_nudge_start_date == course.nudge_start_date
-            and course.nudge_periodic_task
-        ):
-            course.nudge_periodic_task.delete()
-        else:
-            desired_time = time(18, 31)
-            datetime_comined = datetime.combine(
-                datetime.strptime(course.nudge_start_date, "%Y-%m-%d"), desired_time
-            )
-            scheduled_for = datetime_comined - timedelta(days=1)
-            clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
-            periodic_task = PeriodicTask.objects.create(
-                name=uuid.uuid1(),
-                task="schedularApi.tasks.schedule_nudges",
-                args=[course.id],
-                clocked=clocked,
-                one_off=True,
-            )
-            # create a new periodic task
+        scheduled_for = datetime_comined - timedelta(days=1)
+        clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
+        periodic_task = PeriodicTask.objects.create(
+            name=uuid.uuid1(),
+            task="schedularApi.tasks.schedule_nudges",
+            args=[course.id],
+            clocked=clocked,
+            one_off=True,
+        )
+        course.nudge_periodic_task = periodic_task
+        course.save()
         return Response({"message": "Updated successfully"}, status=201)
     except Course.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
@@ -2039,7 +2031,7 @@ def get_consolidated_feedback_report(request):
                     # Now, you can access the associated Course through the SchedularBatch
                     course = Course.objects.filter(batch=batch).first()
                     if course:
-                        feedback_lesson_name_should_be = f"feedback_for_live_session_{live_session.live_session_number}"
+                        feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
                         feedback_lessons = FeedbackLesson.objects.filter(
                             lesson__course=course
                         )
@@ -2068,12 +2060,19 @@ def get_consolidated_feedback_report(request):
                             )
 
                             if formatted_lesson_name == feedback_lesson_name_should_be:
-                                live_session_key = f"{project.name} Live Session {live_session.live_session_number}"
+                                session_name = None
+                                if live_session.session_type == "live_session":
+                                    session_name = "Live Session"
+                                elif live_session.session_type == "check_in_session":
+                                    session_name = "Check In Session"
+                                elif live_session.session_type == "in_person_session":
+                                    session_name = "In Person Session"
+                                live_session_key = f"{project.name} {session_name} {live_session.live_session_number}"
                                 if live_session_key not in data:
                                     data[live_session_key] = {
                                         "live_session_id": live_session.id,
                                         "project_name": project.name,
-                                        "session_name": f"Live Session {live_session.live_session_number}",
+                                        "session_name": f"{session_name} {live_session.live_session_number}",
                                         "total_participant": total_participant,
                                         "total_responses": total_responses,
                                         "percentage_responded": percentage_responded,
@@ -2329,15 +2328,40 @@ class AssignCourseTemplateToBatch(APIView):
                 )
                 for live_session in live_sessions:
                     max_order = max_order + 1
+                    session_name = None
+                    if live_session.session_type == "live_session":
+                        session_name = "Live Session"
+                    elif live_session.session_type == "check_in_session":
+                        session_name = "Check In Session"
+                    elif live_session.session_type == "in_person_session":
+                        session_name = "In Person Session"
+
                     new_lesson = Lesson.objects.create(
                         course=new_course,
-                        name=f"Live session {live_session.live_session_number}",
+                        name=f"{session_name} {live_session.live_session_number}",
                         status="draft",
                         lesson_type="live_session",
                         order=max_order,
                     )
                     LiveSessionLesson.objects.create(
                         lesson=new_lesson, live_session=live_session
+                    )
+                    max_order_feedback = (
+                        Lesson.objects.filter(course=new_course).aggregate(
+                            Max("order")
+                        )["order__max"]
+                        or 0
+                    )
+                    new_feedback_lesson = Lesson.objects.create(
+                        course=new_course,
+                        name=f"Feedback for {session_name} {live_session.live_session_number}",
+                        status="draft",
+                        lesson_type="feedback",
+                        order=max_order_feedback,
+                    )
+                    unique_id = uuid.uuid4()
+                    feedback_lesson = FeedbackLesson.objects.create(
+                        lesson=new_feedback_lesson, unique_id=unique_id
                     )
                 for coaching_session in coaching_sessions:
                     max_order = max_order + 1
@@ -3050,4 +3074,91 @@ def get_all_feedbacks_download_report(request, feedback_id):
             {"error": "Feedback lesson not found"}, status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_consolidated_feedback_download_report(request, live_session_id):
+    try:
+        live_session = LiveSession.objects.get(id=live_session_id)
+        project = live_session.batch.project
+        batches = SchedularBatch.objects.filter(project=project)
+
+        # Create a DataFrame to store the data
+        data = {
+            "Participant": [],
+            "Participant Email": [],
+            "Question": [],
+            "Answer": [],
+        }
+
+        for batch in batches:
+            course = Course.objects.filter(batch=batch).first()
+            feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
+            feedback_lessons = FeedbackLesson.objects.filter(lesson__course=course)
+            current_feedback_lesson = None
+
+            for feedback_lesson in feedback_lessons:
+                current_lesson_name = feedback_lesson.lesson.name
+                formatted_lesson_name = get_feedback_lesson_name(current_lesson_name)
+
+                if formatted_lesson_name == feedback_lesson_name_should_be:
+                    current_feedback_lesson = feedback_lesson
+
+            # Populate the DataFrame with data from FeedbackLesson and FeedbackLessonResponse
+            if current_feedback_lesson:
+                for participant in batch.learners.all():
+                    participant_name = participant.name
+                    participant_email = (
+                        participant.email
+                    )  # Participant email retrieval moved here
+
+                    # Check if the participant provided feedback
+                    response = FeedbackLessonResponse.objects.filter(
+                        feedback_lesson=current_feedback_lesson, learner=participant
+                    ).first()
+
+                    if response:
+                        for answer in response.answers.all():
+                            question_text = answer.question.text
+                            answer_value = (
+                                answer.text_answer
+                                if answer.text_answer
+                                else answer.rating
+                            )
+                            data["Participant"].append(participant_name)
+                            data["Participant Email"].append(participant_email)
+                            data["Question"].append(question_text)
+                            data["Answer"].append(answer_value)
+                    else:
+                        # If participant did not provide feedback, populate with empty values
+                        for question in current_feedback_lesson.questions.all():
+                            data["Participant"].append(participant_name)
+                            data["Participant Email"].append(participant_email)
+                            data["Question"].append(question.text)
+                            data["Answer"].append("-")
+
+        df = pd.DataFrame(data)
+
+        df_pivot = df.pivot(
+            index=["Participant", "Participant Email"],
+            columns="Question",
+            values="Answer",
+        ).reset_index()
+
+        excel_data = BytesIO()
+        df_pivot.to_excel(excel_data, index=False)
+        excel_data.seek(0)
+
+        response = HttpResponse(
+            excel_data.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f"attachment; filename=Feedback_Report.xlsx"
+
+        return response
+
+    except Exception as e:
+        print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
