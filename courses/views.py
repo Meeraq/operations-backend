@@ -85,7 +85,7 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 import base64
 from openpyxl import Workbook
-from django.db.models import Max
+from django.db.models import Max, Q
 import environ
 import uuid
 import logging
@@ -470,6 +470,20 @@ def create_new_nudge(request):
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_nudge(request, nudge_id):
+    try:
+        nudge = Nudge.objects.get(id=nudge_id)
+    except Nudge.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    serializer = NudgeSerializer(nudge, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -1118,7 +1132,9 @@ def get_course_enrollment(request, course_id, learner_id):
             course_enrollment
         )
         lessons = Lesson.objects.filter(
-            course=course_enrollment.course, status="public"
+            Q(course=course_enrollment.course),
+            Q(status="public"),
+            ~Q(lesson_type="feedback"),
         )
         lessons_serializer = LessonSerializer(lessons, many=True)
 
@@ -1139,7 +1155,11 @@ def get_course_enrollment_for_pmo_preview(request, course_id):
     try:
         course = Course.objects.get(id=course_id)
         course_serializer = CourseSerializer(course)
-        lessons = Lesson.objects.filter(course=course, status="public")
+        lessons = Lesson.objects.filter(
+            Q(course=course),
+            Q(status="public"),
+            ~Q(lesson_type="feedback"),
+        )
         lessons_serializer = LessonSerializer(lessons, many=True)
         completed_lessons = []
         return Response(
@@ -1164,7 +1184,8 @@ def get_course_enrollment_for_pmo_preview_for_course_template(
         course_template = CourseTemplate.objects.get(id=course_template_id)
         course_serializer = CourseTemplateSerializer(course_template)
         lessons = Lesson.objects.filter(
-            course_template=course_template, status="public"
+            Q(course_template=course_template),  Q(status="public"),
+            ~Q(lesson_type="feedback"),
         )
         lessons_serializer = LessonSerializer(lessons, many=True)
         completed_lessons = []
