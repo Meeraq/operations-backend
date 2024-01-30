@@ -391,7 +391,7 @@ def send_coach_morning_reminder_email():
     # Format sessions coach-wise
     coach_sessions = {}
     for session in today_sessions:
-        if session.coaching_session.batch.project.automated_reminder:
+        if True:
             coach_id = session.availibility.coach.id
             if coach_id not in coach_sessions:
                 coach_sessions[coach_id] = []
@@ -401,7 +401,7 @@ def send_coach_morning_reminder_email():
     for coach_id, sessions in coach_sessions.items():
         slots = []
         for session in sessions:
-            if session.coaching_session.batch.project.automated_reminder:
+            if True:
                 start_time_for_mail = datetime.fromtimestamp(
                     (int(session.availibility.start_time) / 1000) + 19800
                 ).strftime("%I:%M %p")
@@ -468,7 +468,7 @@ def send_upcoming_session_pmo_at_10am():
 
         sessions_list = []
         for session in today_sessions:
-            if session.coaching_session.batch.project.automated_reminder:
+            if True:
                 start_time = datetime.fromtimestamp(
                     (int(session.availibility.start_time) / 1000) + 19800
                 ).strftime("%I:%M %p")
@@ -936,7 +936,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
         # Format sessions coach-wise
         coach_sessions = {}
         for session in today_sessions:
-            if session.coaching_session.batch.project.automated_reminder:
+            if True:
                 coach_id = session.availibility.coach.id
                 if coach_id not in coach_sessions:
                     coach_sessions[coach_id] = []
@@ -945,7 +945,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
         for coach_id, sessions in coach_sessions.items():
             slots = []
             for session in sessions:
-                if session.coaching_session.batch.project.automated_reminder:
+                if True:
                     # start_time_for_mail = datetime.fromtimestamp(
                     #     (int(session.availibility.start_time) / 1000) + 19800
                     # ).strftime("%I:%M %p")
@@ -997,7 +997,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
             ~Q(status="completed"),
         )
         for caas_session in session_requests:
-            if caas_session.project.automated_reminder:
+            if True:
                 if caas_session.coach:
                     coach = caas_session.coach
                     coach_name = coach.first_name + " " + coach.last_name
@@ -1129,7 +1129,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
     try:
         # for caas sessions
         caas_session = SessionRequestCaas.objects.get(id=session_id)
-        if caas_session.project.automated_reminder:
+        if True:
             if caas_session.coach:
                 coach = caas_session.coach
                 caas_coach_name = coach.first_name + " " + coach.last_name
@@ -1199,7 +1199,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
     try:
         # for seeq sessions
         session = SchedularSessions.objects.get(id=session_id)
-        if session.coaching_session.batch.project.automated_reminder:
+        if True:
             # seeq_coach_start_time_for_mail = datetime.fromtimestamp(
             #     (int(session.availibility.start_time) / 1000) + 19800
             # ).strftime("%I:%M %p")
@@ -1273,7 +1273,7 @@ def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
     try:
         # for seeq sessions
         session = SchedularSessions.objects.get(id=session_id)
-        if session.coaching_session.batch.project.automated_reminder:
+        if True:
             # seeq_coach_start_time_for_mail = datetime.fromtimestamp(
             #     (int(session.availibility.start_time) / 1000) + 19800
             # ).strftime("%I:%M %p")
@@ -1315,7 +1315,7 @@ def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
     try:
         # for caas sessions
         caas_session = SessionRequestCaas.objects.get(id=session_id)
-        if caas_session.project.automated_reminder:
+        if True:
             if caas_session.coach:
                 coach = caas_session.coach
                 caas_coach_name = coach.first_name + " " + coach.last_name
@@ -1505,6 +1505,46 @@ def send_nudge(nudge_id):
             sleep(5)
         nudge.is_sent = True
         nudge.save()
+
+
+@shared_task
+def celery_send_unbooked_coaching_session_mail(data):
+    try:
+        batch_name = data.get("batchName", "")
+        project_name = data.get("project_name", "")
+        participants = data.get("participants", [])
+        booking_link = data.get("bookingLink", "")
+        expiry_date = data.get("expiry_date", "")
+        date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
+        formatted_date = date_obj.strftime("%d %B %Y")
+        session_type = data.get("session_type", "")
+        for participant in participants:
+            try:
+                learner_name = Learner.objects.get(email=participant).name
+            except:
+                continue
+
+            send_mail_templates(
+                "seteventlink.html",
+                [participant],
+                # "Meeraq -Book Laser Coaching Session"
+                # if session_type == "laser_coaching_session"
+                # else "Meeraq - Book Mentoring Session",
+                f"{project_name} | Book Individual 1:1 coaching sessions",
+                {
+                    "name": learner_name,
+                    "project_name": project_name,
+                    "event_link": booking_link,
+                    "expiry_date": formatted_date,
+                    # "session_type": "mentoring"
+                    # if session_type == "mentoring_session"
+                    # else "laser coaching",
+                },
+                [],
+            )
+            sleep(5)
+    except Exception as e:
+        print(f"Error occurred while sending unbooked coaching email : {e}")
 
 
 @shared_task

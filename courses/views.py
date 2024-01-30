@@ -85,7 +85,7 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 import base64
 from openpyxl import Workbook
-from django.db.models import Max
+from django.db.models import Max, Q
 import environ
 import uuid
 import logging
@@ -470,6 +470,20 @@ def create_new_nudge(request):
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_nudge(request, nudge_id):
+    try:
+        nudge = Nudge.objects.get(id=nudge_id)
+    except Nudge.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    serializer = NudgeSerializer(nudge, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -1118,7 +1132,9 @@ def get_course_enrollment(request, course_id, learner_id):
             course_enrollment
         )
         lessons = Lesson.objects.filter(
-            course=course_enrollment.course, status="public"
+            Q(course=course_enrollment.course),
+            Q(status="public"),
+            ~Q(lesson_type="feedback"),
         )
         lessons_serializer = LessonSerializer(lessons, many=True)
 
@@ -1139,7 +1155,11 @@ def get_course_enrollment_for_pmo_preview(request, course_id):
     try:
         course = Course.objects.get(id=course_id)
         course_serializer = CourseSerializer(course)
-        lessons = Lesson.objects.filter(course=course, status="public")
+        lessons = Lesson.objects.filter(
+            Q(course=course),
+            Q(status="public"),
+            ~Q(lesson_type="feedback"),
+        )
         lessons_serializer = LessonSerializer(lessons, many=True)
         completed_lessons = []
         return Response(
@@ -1164,7 +1184,9 @@ def get_course_enrollment_for_pmo_preview_for_course_template(
         course_template = CourseTemplate.objects.get(id=course_template_id)
         course_serializer = CourseTemplateSerializer(course_template)
         lessons = Lesson.objects.filter(
-            course_template=course_template, status="public"
+            Q(course_template=course_template),
+            Q(status="public"),
+            ~Q(lesson_type="feedback"),
         )
         lessons_serializer = LessonSerializer(lessons, many=True)
         completed_lessons = []
@@ -3162,3 +3184,94 @@ def get_consolidated_feedback_download_report(request, live_session_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def feedback_reports_project_wise_consolidated(request):
+    projects = SchedularProject.objects.all()
+    res = []
+    for project in projects:
+        feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+            feedback_lesson__lesson__course__batch__project=project
+        )
+        if feedback_lesson_responses.exists():
+            total_participants_count = (
+                Learner.objects.filter(schedularbatch__project=project)
+                .distinct()
+                .count()
+            )
+            percentage_responded = (
+                round(
+                    (feedback_lesson_responses.count() / total_participants_count)
+                    * 100,
+                    2,
+                )
+                if total_participants_count
+                else 0
+            )
+            data = {
+                "project_name": project.name,
+                "total_participants": total_participants_count,
+                "total_responses": feedback_lesson_responses.count(),
+                "project_id": project.id,
+                "percentage_responded": percentage_responded,
+            }
+            res.append(data)
+    return Response(res)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def download_consolidated_project_report(request, project_id):
+    # Create a new workbook and add a worksheet
+    wb = Workbook()
+    ws = wb.active
+    # Write headers to the worksheet
+    headers = set()
+    feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+        feedback_lesson__lesson__course__batch__project__id=project_id
+    )
+    total_participants_in_project = Learner.objects.filter(schedularbatch__project__id=project_id).distinct()
+    participants_who_responsded = set()
+    for feedback_lesson_response in feedback_lesson_responses:
+        participants_who_responsded.add(feedback_lesson_response.learner.id)
+        for answer in feedback_lesson_response.answers.all():
+            headers.add(answer.question.text)
+    headers_list = list(headers)
+    headers_list.insert(0, "Participant Name")
+
+    for col_num, header in enumerate(headers_list, 1):
+        ws.cell(row=1, column=col_num, value=header)
+
+    for feedback_lesson_response in feedback_lesson_responses:
+        data = ["-" for _ in headers_list]
+        participant_index = headers_list.index("Participant Name")
+        data[participant_index] = feedback_lesson_response.learner.name
+        for answer in feedback_lesson_response.answers.all():
+            question_index_in_headers = headers_list.index(answer.question.text)
+            if answer.question.type == "descriptive_answer":
+                data[question_index_in_headers] = answer.text_answer
+            elif (
+                answer.question.type == "rating_1_to_5"
+                or answer.question.type == "rating_1_to_10"
+                or answer.question.type == "rating_0_to_10"
+            ):
+                data[question_index_in_headers] = answer.rating
+        ws.append(data)
+    participants_who_responsded_list = list(participants_who_responsded) 
+    participants_not_responded = total_participants_in_project.exclude(id__in=participants_who_responsded_list)
+    
+    for learner in participants_not_responded:
+        data = ["-" for _ in headers_list]
+        participant_index = headers_list.index("Participant Name")
+        data[participant_index] = learner.name
+        ws.append(data)
+        
+    # Create a response with the Excel file
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = "attachment; filename=Project_feedback_report.xlsx"
+    wb.save(response)
+    return response
