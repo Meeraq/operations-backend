@@ -1993,17 +1993,18 @@ def send_unbooked_coaching_session_mail(request):
         send_mail_templates(
             "seteventlink.html",
             [participant],
-            "Meeraq -Book Laser Coaching Session"
-            if session_type == "laser_coaching_session"
-            else "Meeraq - Book Mentoring Session",
+            # "Meeraq -Book Laser Coaching Session"
+            # if session_type == "laser_coaching_session"
+            # else "Meeraq - Book Mentoring Session",
+            f"{project_name} | Book Individual 1:1 coaching sessions",
             {
                 "name": learner_name,
                 "project_name": project_name,
                 "event_link": booking_link,
                 "expiry_date": formatted_date,
-                "session_type": "mentoring"
-                if session_type == "mentoring_session"
-                else "laser coaching",
+                # "session_type": "mentoring"
+                # if session_type == "mentoring_session"
+                # else "laser coaching",
             },
             [],
         )
