@@ -33,3 +33,9 @@ class VendorDepthOneSerializer(serializers.ModelSerializer):
         model = Vendor
         fields = "__all__"
         depth = 1
+
+
+class VendorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vendor
+        fields = "__all__"

@@ -1,4 +1,6 @@
 from django.urls import path, include
+from . import views
+
 
 from .views import (
     CompetencyView,
@@ -265,8 +267,24 @@ urlpatterns = [
     ),
     path("assessment/<int:assessment_id>/", GetOneAssessment.as_view()),
     path("assessments/hr/<int:hr_id>/", GetAssessmentsOfHr.as_view()),
-    path("get-assessments-for-move-participant/", GetAssessmentsDataForMoveParticipant.as_view()),
-    path("create-assessment-and-add-multiple-participants-from-batch/", CreateAssessmentAndAddMultipleParticipantsFromBatch.as_view()),
-    path("assessment-in-assessment-lesson/<int:assessment_id>/", AssessmentInAssessmentLesson.as_view()),
-     path("all-assessment-in-assessment-lesson/", AllAssessmentInAssessmentLesson.as_view()),
+    path(
+        "get-assessments-for-move-participant/",
+        GetAssessmentsDataForMoveParticipant.as_view(),
+    ),
+    path(
+        "create-assessment-and-add-multiple-participants-from-batch/",
+        CreateAssessmentAndAddMultipleParticipantsFromBatch.as_view(),
+    ),
+    path(
+        "assessment-in-assessment-lesson/<int:assessment_id>/",
+        AssessmentInAssessmentLesson.as_view(),
+    ),
+    path(
+        "all-assessment-in-assessment-lesson/",
+        AllAssessmentInAssessmentLesson.as_view(),
+    ),
+    path(
+        "send-mail-to-non-responded-participant/<str:assessment_id>/",
+        views.send_mail_to_not_responded_participant,
+    ),
 ]

@@ -678,7 +678,6 @@ def update_assessment_status():
 
 @shared_task
 def send_assessment_invitation_mail(assessment_id):
-    print("called")
     assessment = Assessment.objects.get(id=assessment_id)
     for participant_observers in assessment.participants_observers.all():
         try:
@@ -1546,3 +1545,45 @@ def celery_send_unbooked_coaching_session_mail(data):
             sleep(5)
     except Exception as e:
         print(f"Error occurred while sending unbooked coaching email : {e}")
+
+
+@shared_task
+def send_assessment_invitation_mail_on_click(data):
+    try:
+        participant_ids = data.get("req")
+        assessment = Assessment.objects.get(id=data.get("assessment_id"))
+
+        participants_observers = assessment.participants_observers.all().filter(
+            participant__id__in=participant_ids
+        )
+
+        for participant_observer_mapping in participants_observers:
+            participant = participant_observer_mapping.participant
+
+            try:
+                participant_response = ParticipantResponse.objects.get(
+                    participant=participant, assessment=assessment
+                )
+            except ObjectDoesNotExist:
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    participant=participant, assessment=assessment
+                )
+                unique_id = participant_unique_id.unique_id
+
+                assessment_link = (
+                    f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
+                )
+                send_mail_templates(
+                    "assessment/assessment_reminder_mail_to_participant.html",
+                    [participant.email],
+                    "Meeraq - Assessment Reminder !",
+                    {
+                        "assessment_name": assessment.participant_view_name,
+                        "participant_name": participant.name.title(),
+                        "link": assessment_link,
+                    },
+                    [],
+                )
+                sleep(5)
+    except Exception as e:
+        print(str(e))

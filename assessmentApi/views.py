@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.template.loader import render_to_string
 from operationsBackend import settings
+from rest_framework.decorators import api_view, permission_classes
 from .models import (
     Competency,
     Question,
@@ -68,15 +69,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib
 import os
+from time import sleep
 from django.http import HttpResponse
 from datetime import datetime
 import io
 from api.views import add_contact_in_wati
-from schedularApi.tasks import send_assessment_invitation_mail, send_whatsapp_message
+from schedularApi.tasks import (
+    send_assessment_invitation_mail,
+    send_whatsapp_message,
+    send_assessment_invitation_mail_on_click,
+)
 from django.shortcuts import render, get_object_or_404
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import permission_classes
-
+from django.http import Http404
 from courses.models import (
     Course,
     Lesson,
@@ -1389,7 +1395,8 @@ class DeleteParticipantFromAssessment(APIView):
                         batch.learners.remove(learner)
                         # Remove the learner from FeedbackLessonResponse if present
                         feedback_responses = FeedbackLessonResponse.objects.filter(
-                            learner=learner, feedback_lesson__lesson__course__batch=batch
+                            learner=learner,
+                            feedback_lesson__lesson__course__batch=batch,
                         )
                         feedback_responses.delete()
                         # Remove the learner from QuizLessonResponse if present
@@ -4081,7 +4088,6 @@ class AssessmentInAssessmentLesson(APIView):
             )
 
 
-
 class AllAssessmentInAssessmentLesson(APIView):
     def get(self, request):
         try:
@@ -4092,10 +4098,9 @@ class AllAssessmentInAssessmentLesson(APIView):
                 assessment_lesson = AssessmentLesson.objects.filter(
                     assessment_modal=assessment
                 ).first()
-                
+
                 if assessment_lesson:
                     assessment_present_in_assessment_lesson_ids.append(assessment.id)
-                
 
             return Response(
                 {
@@ -4110,3 +4115,19 @@ class AllAssessmentInAssessmentLesson(APIView):
                 {"error": "Faliled to get data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_mail_to_not_responded_participant(request, assessment_id):
+        try:
+            data = {"req": request.data, "assessment_id": assessment_id}
+            send_assessment_invitation_mail_on_click.delay(
+                 data
+                )
+            return Response({"message":"Email Sent Sucessfully"},status=200)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":"Faild to send emails"},status=400)
+
+
