@@ -384,7 +384,7 @@ def send_coach_morning_reminder_email():
     # Format sessions coach-wise
     coach_sessions = {}
     for session in today_sessions:
-        if session.coaching_session.batch.project.automated_reminder:
+        if True:
             coach_id = session.availibility.coach.id
             if coach_id not in coach_sessions:
                 coach_sessions[coach_id] = []
@@ -394,7 +394,7 @@ def send_coach_morning_reminder_email():
     for coach_id, sessions in coach_sessions.items():
         slots = []
         for session in sessions:
-            if session.coaching_session.batch.project.automated_reminder:
+            if True:
                 start_time_for_mail = datetime.fromtimestamp(
                     (int(session.availibility.start_time) / 1000) + 19800
                 ).strftime("%I:%M %p")
@@ -461,7 +461,7 @@ def send_upcoming_session_pmo_at_10am():
 
         sessions_list = []
         for session in today_sessions:
-            if session.coaching_session.batch.project.automated_reminder:
+            if True:
                 start_time = datetime.fromtimestamp(
                     (int(session.availibility.start_time) / 1000) + 19800
                 ).strftime("%I:%M %p")
@@ -930,7 +930,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
         # Format sessions coach-wise
         coach_sessions = {}
         for session in today_sessions:
-            if session.coaching_session.batch.project.automated_reminder:
+            if True:
                 coach_id = session.availibility.coach.id
                 if coach_id not in coach_sessions:
                     coach_sessions[coach_id] = []
@@ -939,7 +939,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
         for coach_id, sessions in coach_sessions.items():
             slots = []
             for session in sessions:
-                if session.coaching_session.batch.project.automated_reminder:
+                if True:
                     # start_time_for_mail = datetime.fromtimestamp(
                     #     (int(session.availibility.start_time) / 1000) + 19800
                     # ).strftime("%I:%M %p")
@@ -991,7 +991,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
             ~Q(status="completed"),
         )
         for caas_session in session_requests:
-            if caas_session.project.automated_reminder:
+            if True:
                 if caas_session.coach:
                     coach = caas_session.coach
                     coach_name = coach.first_name + " " + coach.last_name
@@ -1123,7 +1123,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
     try:
         # for caas sessions
         caas_session = SessionRequestCaas.objects.get(id=session_id)
-        if caas_session.project.automated_reminder:
+        if True:
             if caas_session.coach:
                 coach = caas_session.coach
                 caas_coach_name = coach.first_name + " " + coach.last_name
@@ -1193,7 +1193,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
     try:
         # for seeq sessions
         session = SchedularSessions.objects.get(id=session_id)
-        if session.coaching_session.batch.project.automated_reminder:
+        if True:
             # seeq_coach_start_time_for_mail = datetime.fromtimestamp(
             #     (int(session.availibility.start_time) / 1000) + 19800
             # ).strftime("%I:%M %p")
@@ -1267,7 +1267,7 @@ def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
     try:
         # for seeq sessions
         session = SchedularSessions.objects.get(id=session_id)
-        if session.coaching_session.batch.project.automated_reminder:
+        if True:
             # seeq_coach_start_time_for_mail = datetime.fromtimestamp(
             #     (int(session.availibility.start_time) / 1000) + 19800
             # ).strftime("%I:%M %p")
@@ -1309,7 +1309,7 @@ def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
     try:
         # for caas sessions
         caas_session = SessionRequestCaas.objects.get(id=session_id)
-        if caas_session.project.automated_reminder:
+        if True:
             if caas_session.coach:
                 coach = caas_session.coach
                 caas_coach_name = coach.first_name + " " + coach.last_name
