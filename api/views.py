@@ -7523,6 +7523,8 @@ def change_user_role(request, user_id):
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "superadmin":
         serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
+    elif user_profile_role == "facilitator":
+        serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
@@ -7531,6 +7533,7 @@ def change_user_role(request, user_id):
         is_seeq_allowed = SchedularBatch.objects.filter(
             learners=user.profile.learner
         ).exists()
+    
         return Response(
             {
                 **serializer.data,
