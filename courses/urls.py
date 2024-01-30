@@ -330,4 +330,8 @@ urlpatterns = [
         "feedback/reports/project/consolidated/",
         views.feedback_reports_project_wise_consolidated,
     ),
+    path(
+        "consolidated-feedback-download-report/<str:live_session_id>/",
+        views.get_consolidated_feedback_download_report,
+    ),
 ]
