@@ -35,6 +35,7 @@ from .models import (
     ShareCoachProfileActivity,
     CreateProjectActivity,
     FinalizeCoachActivity,
+    SuperAdmin,
 )
 from django.contrib.auth.models import User
 
@@ -48,6 +49,13 @@ class UserSerializer(serializers.ModelSerializer):
 class PmoDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pmo
+        fields = "__all__"
+        depth = 1
+
+
+class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SuperAdmin
         fields = "__all__"
         depth = 1
 
@@ -190,9 +198,12 @@ class SessionRequestWithEngagementCaasDepthOneSerializer(serializers.ModelSerial
         fields = "__all__"
         depth = 2
 
-class SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer(serializers.ModelSerializer):
+
+class SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer(
+    serializers.ModelSerializer
+):
     engagement_status = serializers.CharField()
-    is_seeq_project=serializers.BooleanField()
+    is_seeq_project = serializers.BooleanField()
 
     class Meta:
         model = SessionRequestCaas
@@ -419,3 +430,9 @@ class SessionDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = SessionRequestCaas
         fields = "__all__"
+
+
+class PmoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Pmo
+        fields = ["name", "email", "phone"]

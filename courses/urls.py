@@ -94,6 +94,7 @@ urlpatterns = [
         name="lesson-list",
     ),
     path("nudges/create", views.create_new_nudge),
+    path("nudges/<int:nudge_id>/update/", views.update_nudge),
     path("nudges/<int:nudge_id>/file/download/", views.download_nudge_file),
     path(
         "courses/<int:course_id>/update-nudge-date-frequency/",
@@ -320,5 +321,9 @@ urlpatterns = [
     path(
         "feedback-report-download/<str:feedback_id>/",
         views.get_all_feedbacks_download_report,
+    ),
+    path(
+        "consolidated-feedback-download-report/<str:live_session_id>/",
+        views.get_consolidated_feedback_download_report,
     ),
 ]

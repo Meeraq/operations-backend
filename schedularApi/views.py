@@ -23,7 +23,7 @@ from django.utils import timezone
 from openpyxl import Workbook
 from django.http import HttpResponse
 import pandas as pd
-from django.db.models import Q
+from django.db.models import Q, F, Case, When, Value, IntegerField
 from time import sleep
 import json
 from django.core.exceptions import ObjectDoesNotExist
@@ -78,6 +78,9 @@ from courses.models import (
     QuizLessonResponse,
     FeedbackLesson,
     QuizLesson,
+    LaserCoachingSession,
+    LiveSessionLesson,
+    Lesson,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import CourseSerializer
@@ -96,6 +99,7 @@ from api.views import (
     create_outlook_calendar_invite,
     delete_outlook_calendar_invite,
 )
+from django.db.models import Max
 import io
 from time import sleep
 from django.utils.module_loading import import_string
@@ -105,10 +109,30 @@ from django.views.decorators.debug import sensitive_variables
 from assessmentApi.views import delete_participant_from_assessments
 
 # Create your views here.
-
+from itertools import chain
 import environ
+import re
 
 env = environ.Env()
+
+
+def get_feedback_lesson_name(lesson_name):
+    # Trim leading and trailing whitespaces
+    trimmed_string = lesson_name.strip()
+    # Convert to lowercase
+    lowercased_string = trimmed_string.lower()
+    # Replace spaces between words with underscores
+    underscored_string = "_".join(lowercased_string.split())
+    return underscored_string
+
+
+def extract_number_from_name(name):
+    # Regular expression to match digits at the end of the string
+    match = re.search(r"\d+$", name)
+    if match:
+        return int(match.group())
+    else:
+        return None
 
 
 def send_whatsapp_message_template(phone, payload):
@@ -243,6 +267,8 @@ def create_project_schedular(request):
             name=request.data["project_name"],
             organisation=organisation,
             automated_reminder=request.data["automated_reminder"],
+            nudges=request.data["nudges"],
+            pre_post_assessment=request.data["pre_post_assessment"],
         )
         schedularProject.save()
     except IntegrityError:
@@ -394,6 +420,7 @@ def create_project_structure(request, project_id):
             is_editing = len(project.project_structure) > 0
             project.project_structure = serializer.data
             project.save()
+
             return Response(
                 {
                     "message": "Project structure edited successfully."
@@ -584,8 +611,13 @@ def get_batch_calendar(request, batch_id):
             course = Course.objects.get(batch__id=batch_id)
             course_serailizer = CourseSerializer(course)
             for participant in participants_serializer.data:
-                course_enrollment = CourseEnrollment.objects.get(learner__id=participant['id'], course=course)
-                participant['is_certificate_allowed'] = course_enrollment.is_certificate_allowed
+                course_enrollment = CourseEnrollment.objects.get(
+                    learner__id=participant["id"], course=course
+                )
+                participant[
+                    "is_certificate_allowed"
+                ] = course_enrollment.is_certificate_allowed
+
         except Exception as e:
             print(str(e))
             course = None
@@ -633,79 +665,82 @@ def update_live_session(request, live_session_id):
                 )
                 periodic_task.save()
                 if update_live_session.pt_30_min_before:
-                    update_live_session.delete()
+                    update_live_session.pt_30_min_before.enabled = False
+                    update_live_session.pt_30_min_before.save()
                 live_session.pt_30_min_before = periodic_task
                 live_session.save()
             except Exception as e:
                 # Handle any exceptions that may occur during task creation
                 print(str(e))
                 pass
-        # skipping the calendar invites, dont remove the below calendar invite, can be used in the future.
-        return Response(serializer.data)
-        # Calendar invites
-        try:
-            learners = live_session.batch.learners.all()
-            attendees = list(
-                map(
-                    lambda learner: {
-                        "emailAddress": {
-                            "name": learner.name,
-                            "address": learner.email,
+        AIR_INDIA_PROJECT_ID = 3
+        if not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID:
+            try:
+                learners = live_session.batch.learners.all()
+                attendees = list(
+                    map(
+                        lambda learner: {
+                            "emailAddress": {
+                                "name": learner.name,
+                                "address": learner.email,
+                            },
+                            "type": "required",
                         },
-                        "type": "required",
-                    },
-                    learners,
+                        learners,
+                    )
                 )
-            )
-
-            start_time_stamp = update_live_session.date_time.timestamp() * 1000
-            end_time_stamp = (
-                start_time_stamp + int(update_live_session.duration) * 60000
-            )
-            start_datetime_obj = datetime.fromtimestamp(
-                int(start_time_stamp) / 1000
-            ) + timedelta(hours=5, minutes=30)
-            start_datetime_str = start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
-            description = (
-                f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
-                + update_live_session.description
-            )
-            if not existing_date_time:
-                create_outlook_calendar_invite(
-                    "Meeraq - Live Session",
-                    description,
-                    start_time_stamp,
-                    end_time_stamp,
-                    attendees,
-                    env("CALENDAR_INVITATION_ORGANIZER"),
-                    None,
-                    None,
-                    update_live_session,
+                start_time_stamp = update_live_session.date_time.timestamp() * 1000
+                end_time_stamp = (
+                    start_time_stamp + int(update_live_session.duration) * 60000
                 )
-            elif not existing_date_time.strftime(
-                "%d-%m-%Y %H:%M"
-            ) == update_live_session.date_time.strftime("%d-%m-%Y %H:%M"):
-                existing_calendar_invite = CalendarInvites.objects.filter(
-                    live_session=live_session
-                ).first()
-                # delete the current one
-                if existing_calendar_invite:
-                    delete_outlook_calendar_invite(existing_calendar_invite)
-                # create the new one
-                create_outlook_calendar_invite(
-                    "Meeraq - Live Session",
-                    description,
-                    start_time_stamp,
-                    end_time_stamp,
-                    attendees,
-                    env("CALENDAR_INVITATION_ORGANIZER"),
-                    None,
-                    None,
-                    update_live_session,
+                start_datetime_obj = datetime.fromtimestamp(
+                    int(start_time_stamp) / 1000
+                ) + timedelta(hours=5, minutes=30)
+                start_datetime_str = (
+                    start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
                 )
-        except Exception as e:
-            print(str(e))
-            pass
+                description = (
+                    f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
+                    + update_live_session.description
+                )
+                if not existing_date_time:
+                    create_outlook_calendar_invite(
+                        "Meeraq - Live Session",
+                        description,
+                        start_time_stamp,
+                        end_time_stamp,
+                        attendees,
+                        env("CALENDAR_INVITATION_ORGANIZER"),
+                        None,
+                        None,
+                        update_live_session,
+                        None,
+                    )
+                elif not existing_date_time.strftime(
+                    "%d-%m-%Y %H:%M"
+                ) == update_live_session.date_time.strftime("%d-%m-%Y %H:%M"):
+                    existing_calendar_invite = CalendarInvites.objects.filter(
+                        live_session=live_session
+                    ).first()
+                    # delete the current one
+                    if existing_calendar_invite:
+                        delete_outlook_calendar_invite(existing_calendar_invite)
+                    # create the new one
+                    create_outlook_calendar_invite(
+                        "Meeraq - Live Session",
+                        description,
+                        start_time_stamp,
+                        end_time_stamp,
+                        attendees,
+                        env("CALENDAR_INVITATION_ORGANIZER"),
+                        None,
+                        None,
+                        update_live_session,
+                        None,
+                    )
+            except Exception as e:
+                print(str(e))
+                pass
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1011,7 +1046,7 @@ def add_batch(request, project_id):
             for participant_data in participants_data:
                 name = participant_data.get("name")
                 email = participant_data.get("email", "").strip().lower()
-                phone = participant_data.get("phone", None) 
+                phone = participant_data.get("phone", None)
                 batch_name = participant_data.get("batch").strip().upper()
                 # Assuming 'project_id' is in your request data
 
@@ -1032,15 +1067,23 @@ def add_batch(request, project_id):
                         duration = session_data.get("duration")
                         session_type = session_data.get("session_type")
 
-                        if session_type == "live_session":
-                            live_session_number = (
-                                LiveSession.objects.filter(batch=batch).count() + 1
+                        if session_type in [
+                            "live_session",
+                            "check_in_session",
+                            "in_person_session",
+                        ]:
+                            session_number = (
+                                LiveSession.objects.filter(
+                                    batch=batch, session_type=session_type
+                                ).count()
+                                + 1
                             )
                             live_session = LiveSession.objects.create(
                                 batch=batch,
-                                live_session_number=live_session_number,
+                                live_session_number=session_number,
                                 order=order,
                                 duration=duration,
+                                session_type=session_type,
                             )
                         elif session_type == "laser_coaching_session":
                             coaching_session_number = (
@@ -1065,7 +1108,7 @@ def add_batch(request, project_id):
                                 ).count()
                                 + 1
                             )
-                            
+
                             booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
                             coaching_session = CoachingSession.objects.create(
                                 batch=batch,
@@ -1077,7 +1120,7 @@ def add_batch(request, project_id):
                             )
 
                 # Check if participant with the same email exists
-                
+
                 learner = create_or_get_learner(
                     {"name": name, "email": email, "phone": phone}
                 )
@@ -1183,6 +1226,7 @@ def get_coach_availabilities_booking_link(request):
                 }
             )
         except Exception as e:
+            print(str(e))
             return Response({"error": "Unable to get slots"}, status=400)
     else:
         return Response({"error": "Booking link is not available"})
@@ -1386,6 +1430,42 @@ def schedule_session(request):
 TIME_INTERVAL = 900000
 
 
+def check_if_selected_slot_can_be_booked(coach_id, start_time, end_time):
+    slot_date = datetime.fromtimestamp((int(start_time) / 1000)).date()
+    start_timestamp = str(
+        int(datetime.combine(slot_date, datetime.min.time()).timestamp() * 1000)
+    )
+    end_timestamp = str(
+        int(datetime.combine(slot_date, datetime.max.time()).timestamp() * 1000)
+    )
+    selected_date_availabilities = CoachSchedularAvailibilty.objects.filter(
+        start_time__lte=end_timestamp,
+        end_time__gte=start_timestamp,
+        coach__id=coach_id,
+        is_confirmed=False,
+    )
+    availability_serializer = AvailabilitySerializer(
+        selected_date_availabilities, many=True
+    )
+    sorted_slots = sorted(availability_serializer.data, key=lambda x: x["start_time"])
+    merged_slots = []
+    for i in range(len(sorted_slots)):
+        if (
+            len(merged_slots) == 0
+            or sorted_slots[i]["start_time"] > merged_slots[-1]["end_time"]
+        ):
+            merged_slots.append(sorted_slots[i])
+        else:
+            merged_slots[-1]["end_time"] = max(
+                merged_slots[-1]["end_time"], sorted_slots[i]["end_time"]
+            )
+    for slot in merged_slots:
+        if int(start_time) >= int(slot["start_time"]) and int(end_time) <= int(
+            slot["end_time"]
+        ):
+            return True
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def schedule_session_fixed(request):
@@ -1398,9 +1478,15 @@ def schedule_session_fixed(request):
             end_time = request.data.get("end_time", "")
             coach_id = request.data.get("coach_id", "")
             request_id = request.data.get("request_id", "")
-
             request_avail = RequestAvailibilty.objects.get(id=request_id)
             coach = Coach.objects.get(id=coach_id)
+            if not check_if_selected_slot_can_be_booked(coach_id, timestamp, end_time):
+                return Response(
+                    {
+                        "error": "Sorry! This slot has just been booked. Please refresh and try selecting a different time."
+                    },
+                    status=401,
+                )
             coach_availability = CoachSchedularAvailibilty.objects.create(
                 request=request_avail,
                 coach=coach,
@@ -1539,6 +1625,8 @@ def schedule_session_fixed(request):
                     if session_type == "laser_coaching_session"
                     else "mentoring"
                 )
+                booking_id = coach_availability.coach.room_id
+                meeting_location = f"{env('CAAS_APP_URL')}/call/{booking_id}"
                 create_outlook_calendar_invite(
                     f"Meeraq - {session_type_value.capitalize()} Session",
                     f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
@@ -1564,8 +1652,8 @@ def schedule_session_fixed(request):
                     None,
                     scheduled_session,
                     None,
+                    meeting_location,
                 )
-                booking_id = coach_availability.coach.room_id
                 send_mail_templates(
                     "schedule_session.html",
                     [coach_availability.coach.email],
@@ -1963,37 +2051,37 @@ def delete_slots(request):
 @permission_classes([IsAuthenticated])
 def send_unbooked_coaching_session_mail(request):
     batch_name = request.data.get("batchName", "")
+    project_name = request.data.get("project_name", "")
     participants = request.data.get("participants", [])
     booking_link = request.data.get("bookingLink", "")
     expiry_date = request.data.get("expiry_date", "")
     date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
     formatted_date = date_obj.strftime("%d %B %Y")
     session_type = request.data.get("session_type", "")
-
     for participant in participants:
         try:
             learner_name = Learner.objects.get(email=participant).name
         except:
             continue
-            # Handle the case when "name" is not in participant
-        # Load the HTML template
         send_mail_templates(
             "seteventlink.html",
             [participant],
-            "Meeraq -Book Laser Coaching Session"
-            if session_type == "laser_coaching_session"
-            else "Meeraq - Book Mentoring Session",
+            # "Meeraq -Book Laser Coaching Session"
+            # if session_type == "laser_coaching_session"
+            # else "Meeraq - Book Mentoring Session",
+            f"{project_name} | Book Individual 1:1 coaching sessions",
             {
                 "name": learner_name,
+                "project_name": project_name,
                 "event_link": booking_link,
                 "expiry_date": formatted_date,
-                "session_type": "mentoring"
-                if session_type == "mentoring_session"
-                else "laser coaching",
+                # "session_type": "mentoring"
+                # if session_type == "mentoring_session"
+                # else "laser coaching",
             },
             [],
         )
-
+        sleep(5)
     return Response("Emails sent to participants.")
 
 
@@ -2092,7 +2180,7 @@ def add_participant_to_batch(request, batch_id):
     with transaction.atomic():
         name = request.data.get("name")
         email = request.data.get("email", "").strip().lower()
-        phone = request.data.get("phone", None) 
+        phone = request.data.get("phone", None)
         try:
             batch = SchedularBatch.objects.get(id=batch_id)
         except SchedularBatch.DoesNotExist:
@@ -2362,7 +2450,9 @@ def project_report_download_session_wise(request, project_id, batch_id):
             dfs.append((session_name, df))
 
         response = HttpResponse(content_type="application/ms-excel")
-        response["Content-Disposition"] = f'attachment; filename="{batch.name}_batches.xlsx"'
+        response[
+            "Content-Disposition"
+        ] = f'attachment; filename="{batch.name}_batches.xlsx"'
 
         with pd.ExcelWriter(response, engine="openpyxl") as writer:
             for session_name, df in dfs:
@@ -2371,7 +2461,6 @@ def project_report_download_session_wise(request, project_id, batch_id):
         return response
     except Exception as e:
         print(str(e))
-
 
 
 @api_view(["POST"])
@@ -2885,7 +2974,20 @@ def edit_schedular_project(request, project_id):
                 status=status.HTTP_404_NOT_FOUND,
             )
     project.automated_reminder = request.data.get("automated_reminder")
+    project.nudges = request.data.get("nudges")
+    project.pre_post_assessment = request.data.get("pre_post_assessment")
     project.save()
+    if not project.pre_post_assessment:
+        batches = SchedularBatch.objects.filter(project=project)
+        if batches:
+            for batch in batches:
+                course = Course.objects.filter(batch=batch).first()
+                if course:
+                    lessons = Lesson.objects.filter(course=course)
+                    for lesson in lessons:
+                        if lesson.lesson_type == "assessment":
+                            lesson.status = "draft"
+                            lesson.save()
     return Response(
         {"message": "Project updated successfully"}, status=status.HTTP_200_OK
     )
@@ -2981,6 +3083,7 @@ def live_session_detail_view(request, pk):
     }
 
     return Response(response_data)
+
 
 
 @api_view(["GET"])
@@ -3126,12 +3229,14 @@ def get_facilitator_sessions(request, facilitator_id):
 @permission_classes([IsAuthenticated])
 def update_certificate_status(request):
     try:
-        participant_id = request.data.get('participantId')
-        is_certificate_allowed = request.data.get('is_certificate_allowed')
-        course_id=request.data.get('courseId')
+        participant_id = request.data.get("participantId")
+        is_certificate_allowed = request.data.get("is_certificate_allowed")
+        course_id = request.data.get("courseId")
 
         # Use filter instead of get to handle multiple instances
-        course_enrollments = CourseEnrollment.objects.filter(learner__id=participant_id,course__id=course_id)
+        course_enrollments = CourseEnrollment.objects.filter(
+            learner__id=participant_id, course__id=course_id
+        )
 
         # If there are multiple instances, you need to decide which one to update
         # For example, you might want to update the first one:
@@ -3139,9 +3244,419 @@ def update_certificate_status(request):
             course_for_that_participant = course_enrollments.first()
             course_for_that_participant.is_certificate_allowed = is_certificate_allowed
             course_for_that_participant.save()
-            return JsonResponse({'message': 'Certificate status updated successfully'}, status=200)
+            return JsonResponse(
+                {"message": "Certificate status updated successfully"}, status=200
+            )
         else:
-            return JsonResponse({'error': 'No Course Enrolled in this Batch'}, status=404)
+            return JsonResponse(
+                {"error": "No Course Enrolled in this Batch"}, status=404
+            )
 
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_new_session_in_project_structure(request):
+    try:
+        with transaction.atomic():
+            project_id = request.data.get("project_id")
+            session_type = request.data.get("session_type")
+            duration = request.data.get("duration")
+            description = request.data.get("description")
+
+            # Get the project and batches
+            project = get_object_or_404(SchedularProject, id=project_id)
+            batches = SchedularBatch.objects.filter(project=project)
+
+            # Get the previous structure
+            prev_structure = project.project_structure
+
+            # Create a new session object
+            new_session = {
+                "order": len(prev_structure) + 1,
+                "duration": duration,
+                "session_type": session_type,
+                "description": description,
+            }
+
+            # Update the project structure
+            prev_structure.append(new_session)
+            project.project_structure = prev_structure
+            project.save()
+
+            # Update the sessions for each batch
+            for batch in batches:
+                course = Course.objects.filter(batch=batch).first()
+                if session_type in [
+                    "live_session",
+                    "check_in_session",
+                    "in_person_session",
+                ]:
+                    session_number = (
+                        LiveSession.objects.filter(
+                            batch=batch, session_type=session_type
+                        ).count()
+                        + 1
+                    )
+                    live_session = LiveSession.objects.create(
+                        batch=batch,
+                        live_session_number=session_number,
+                        order=new_session["order"],
+                        duration=new_session["duration"],
+                        session_type=session_type,
+                    )
+                    if course:
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+                        session_name = None
+                        if live_session.session_type == "live_session":
+                            session_name = "Live Session"
+                        elif live_session.session_type == "check_in_session":
+                            session_name = "Check In Session"
+                        elif live_session.session_type == "in_person_session":
+                            session_name = "In Person Session"
+
+                        new_lesson = Lesson.objects.create(
+                            course=course,
+                            name=f"{session_name} {live_session.live_session_number}",
+                            status="draft",
+                            lesson_type="live_session",
+                            order=max_order,
+                        )
+                        LiveSessionLesson.objects.create(
+                            lesson=new_lesson, live_session=live_session
+                        )
+                        max_order_feedback = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+
+                        new_feedback_lesson = Lesson.objects.create(
+                            course=course,
+                            name=f"Feedback for {session_name} {live_session.live_session_number}",
+                            status="draft",
+                            lesson_type="feedback",
+                            order=max_order_feedback,
+                        )
+                        unique_id = uuid.uuid4()
+                        feedback_lesson = FeedbackLesson.objects.create(
+                            lesson=new_feedback_lesson, unique_id=unique_id
+                        )
+                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                    coaching_session_number = (
+                        CoachingSession.objects.filter(
+                            batch=batch, session_type=session_type
+                        ).count()
+                        + 1
+                    )
+
+                    booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+                    coaching_session = CoachingSession.objects.create(
+                        batch=batch,
+                        coaching_session_number=coaching_session_number,
+                        order=new_session["order"],
+                        duration=new_session["duration"],
+                        booking_link=booking_link,
+                        session_type=session_type,
+                    )
+                    if course:
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+                        max_order = max_order + 1
+                        session_name = None
+                        if coaching_session.session_type == "laser_coaching_session":
+                            session_name = "Laser coaching"
+                        elif coaching_session.session_type == "mentoring_session":
+                            session_name = "Mentoring session"
+                        new_lesson = Lesson.objects.create(
+                            course=course,
+                            name=f"{session_name} {coaching_session.coaching_session_number}",
+                            status="draft",
+                            lesson_type="laser_coaching",
+                            order=max_order,
+                        )
+                        LaserCoachingSession.objects.create(
+                            lesson=new_lesson, coaching_session=coaching_session
+                        )
+
+            return Response({"message": "Session added successfully."}, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to add session"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_completed_sessions_for_project(request, project_id):
+    try:
+        current_datetime = timezone.now()
+
+        # Get all LiveSessions where date_time is in the past
+        complete_live_sessions = LiveSession.objects.filter(
+            batch__project__id=project_id, date_time__lt=current_datetime
+        )
+
+        # Get all CoachingSessions where end_date is in the past
+        complete_coaching_sessions = CoachingSession.objects.filter(
+            batch__project__id=project_id, end_date__lt=current_datetime
+        )
+
+        # Convert LiveSession objects to dictionaries
+        live_session_data = [
+            {
+                "id": session.id,
+                "live_session_number": session.live_session_number,
+                "order": session.order,
+                "date_time": session.date_time,
+                "attendees": session.attendees,
+                "description": session.description,
+                "status": session.status,
+                "duration": session.duration,
+                "pt_30_min_before": session.pt_30_min_before_id,
+                "session_type": session.session_type,
+            }
+            for session in complete_live_sessions
+        ]
+
+        # Convert CoachingSession objects to dictionaries
+        coaching_session_data = [
+            {
+                "id": session.id,
+                "booking_link": session.booking_link,
+                "start_date": session.start_date,
+                "end_date": session.end_date,
+                "expiry_date": session.expiry_date,
+                "batch_id": session.batch_id,
+                "coaching_session_number": session.coaching_session_number,
+                "order": session.order,
+                "duration": session.duration,
+                "session_type": session.session_type,
+            }
+            for session in complete_coaching_sessions
+        ]
+
+        # Combine both lists into a single list
+        complete_sessions = live_session_data + coaching_session_data
+
+        return Response(complete_sessions, status=200)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_session_from_project_structure(request):
+    try:
+        with transaction.atomic():
+            project_id = request.data.get("project_id")
+            session_to_delete = request.data.get("session_to_delete")
+
+            project = SchedularProject.objects.get(id=project_id)
+            batches = SchedularBatch.objects.filter(project=project)
+
+            order = session_to_delete.get("order")
+            session_type = session_to_delete.get("session_type")
+
+            project_structure = project.project_structure
+            if session_to_delete in project_structure:
+                project_structure.remove(session_to_delete)
+                project.project_structure = project_structure
+                project.save()
+
+                for session in project_structure:
+                    if session.get("order") > order:
+                        session["order"] -= 1
+                project.project_structure = project_structure
+                project.save()
+
+            for batch in batches:
+                course = Course.objects.filter(batch=batch).first()
+
+                if session_type in [
+                    "live_session",
+                    "check_in_session",
+                    "in_person_session",
+                ]:
+                    live_session = LiveSession.objects.filter(
+                        batch=batch, order=order, session_type=session_type
+                    ).first()
+                    if live_session:
+                        live_session_lesson = LiveSessionLesson.objects.filter(
+                            live_session=live_session
+                        ).first()
+                        if live_session_lesson:
+                            feedback_lesson_name = f"feedback_for_{session_type}_{live_session_lesson.live_session.live_session_number}"
+                            feedback_lessons = FeedbackLesson.objects.filter(
+                                lesson__course=course,
+                            )
+
+                            for feedback_lesson in feedback_lessons:
+                                if feedback_lesson:
+                                    current_lesson_name = feedback_lesson.lesson.name
+                                    formatted_lesson_name = get_feedback_lesson_name(
+                                        current_lesson_name
+                                    )
+
+                                    if formatted_lesson_name == feedback_lesson_name:
+                                        feedback_lesson_lesson = feedback_lesson.lesson
+                                        feedback_lesson_lesson.delete()
+                                        feedback_lesson.delete()
+                            lesson = live_session_lesson.lesson
+                            lesson.delete()
+                        live_session.delete()
+
+                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                    coaching_session = CoachingSession.objects.filter(
+                        batch=batch, order=order, session_type=session_type
+                    ).first()
+                    if coaching_session:
+                        coaching_session_lesson = LaserCoachingSession.objects.filter(
+                            coaching_session=coaching_session
+                        ).first()
+                        if coaching_session_lesson:
+                            lesson = coaching_session_lesson.lesson
+                            lesson.delete()
+                        coaching_session.delete()
+
+                
+                LiveSession.objects.filter(batch=batch, order__gt=order).update(
+                    order=F("order") - 1,
+                    live_session_number=Case(
+                        When(
+                            session_type=session_type, then=F("live_session_number") - 1
+                        ),
+                        default=F("live_session_number"),
+                        output_field=IntegerField(),
+                    ),
+                )
+                CoachingSession.objects.filter(batch=batch, order__gt=order).update(
+                    order=F("order") - 1,
+                    coaching_session_number=Case(
+                        When(
+                            session_type=session_type,
+                            then=F("coaching_session_number") - 1,
+                        ),
+                        default=F("coaching_session_number"),
+                        output_field=IntegerField(),
+                    ),
+                )
+
+                # Update lesson names for remaining sessions
+                if session_type in [
+                    "live_session",
+                    "check_in_session",
+                    "in_person_session",
+                ]:
+                    for lesson in Lesson.objects.filter(
+                        course=course, lesson_type="live_session"
+                    ):
+                        live_session_lesson = LiveSessionLesson.objects.filter(
+                            lesson=lesson
+                        ).first()
+
+                        if (
+                            live_session_lesson
+                            and live_session_lesson.live_session.session_type
+                            == session_type
+                        ):
+                            lesson_number = extract_number_from_name(lesson.name)
+
+                            session_type_display = session_type.replace(
+                                "_", " "
+                            ).title()
+                            lesson_name = f"{session_type_display} {live_session_lesson.live_session.live_session_number}"
+
+                            lesson.name = lesson_name
+                            lesson.save()
+
+                            feedback_lesson_name = (
+                                f"feedback_for_{session_type}_{lesson_number}"
+                            )
+
+                            feedback_lessons = FeedbackLesson.objects.filter(
+                                lesson__course=course,
+                            )
+
+                            for feedback_lesson in feedback_lessons:
+                                if feedback_lesson:
+                                    current_lesson_name = feedback_lesson.lesson.name
+                                    formatted_lesson_name = get_feedback_lesson_name(
+                                        current_lesson_name
+                                    )
+
+                                    if formatted_lesson_name == feedback_lesson_name:
+                                        session_type_display = session_type.replace(
+                                            "_", " "
+                                        ).title()
+
+                                        feedback_lesson.lesson.name = f"Feedback for {session_type_display} {live_session_lesson.live_session.live_session_number}"
+
+                                        feedback_lesson.lesson.save()
+                                        feedback_lesson.save()
+
+                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                    for lesson in Lesson.objects.filter(
+                        course=course, lesson_type="laser_coaching"
+                    ):
+                        coaching_session_lesson = LaserCoachingSession.objects.filter(
+                            lesson=lesson
+                        ).first()
+                        if (
+                            coaching_session_lesson
+                            and coaching_session_lesson.coaching_session.session_type
+                            == session_type
+                        ):
+                            session_type_display = session_type.replace(
+                                "_", " "
+                            ).title()
+                            lesson_name = f"{session_type_display} {coaching_session_lesson.coaching_session.coaching_session_number}"
+                            lesson.name = lesson_name
+                            lesson.save()
+
+            return Response({"message": "Session deleted successfully."}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to delete session"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_certificate_status_for_multiple_participants(request):
+    try:
+        with transaction.atomic():
+            participants_ids = request.data.get("participants")
+            course_id = request.data.get("course_id")
+
+            for participant_id in participants_ids:
+                participant = Learner.objects.get(id=participant_id)
+
+                course_enrollments = CourseEnrollment.objects.filter(
+                    learner=participant, course__id=course_id
+                ).first()
+
+                if course_enrollments:
+                    course_for_that_participant = course_enrollments
+                    course_for_that_participant.is_certificate_allowed = True
+                    course_for_that_participant.save()
+                else:
+                    return JsonResponse(
+                        {"error": "No Course Enrolled in this Batch"}, status=404
+                    )
+            return Response({"message": "Certificate released successfully"})
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to release certificate"}, status=500)

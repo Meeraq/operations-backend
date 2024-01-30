@@ -9,12 +9,13 @@ from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
 from django.conf import settings
 from api.models import Coach, User, UserToken, SessionRequestCaas, Learner
-from schedularApi.models import CoachingSession, SchedularSessions, RequestAvailibilty
+from schedularApi.models import CoachingSession, SchedularSessions, RequestAvailibilty,CoachSchedularAvailibilty
 from django.utils import timezone
 from api.views import (
     send_mail_templates,
     refresh_microsoft_access_token,
 )
+from schedularApi.serializers import AvailabilitySerializer
 from datetime import timedelta, time, datetime
 import pytz
 
@@ -31,6 +32,117 @@ import requests
 
 env = environ.Env()
 environ.Env.read_env()
+
+def timestamp_to_datetime(timestamp):
+    return datetime.utcfromtimestamp(int(timestamp) / 1000.0)
+
+
+def generate_slots(start, end, duration):
+    slots = []
+    current_time = timestamp_to_datetime(start)
+
+    while current_time + timedelta(minutes=duration) <= timestamp_to_datetime(end):
+        new_end_time = current_time + timedelta(minutes=duration)
+        slots.append(
+            {
+                "start_time": int(current_time.timestamp() * 1000),
+                "end_time": int(new_end_time.timestamp() * 1000),
+            }
+        )
+        current_time += timedelta(minutes=15)
+    return slots
+
+
+def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
+    coaching_session = CoachingSession.objects.get(id=coaching_session_id)
+    if (
+        not coaching_session.start_date
+        or not coaching_session.end_date
+        or not coaching_session.end_date
+    ):
+        return None
+    coaches_in_batch = coaching_session.batch.coaches.all()
+    start_date = datetime.combine(coaching_session.start_date, datetime.min.time())
+    end_date = (
+        datetime.combine(coaching_session.end_date, datetime.min.time())
+        + timedelta(days=1)
+        - timedelta(milliseconds=1)
+    )
+    start_timestamp = str(int(start_date.timestamp() * 1000))
+    end_timestamp = str(int(end_date.timestamp() * 1000))
+    coach_availabilities = CoachSchedularAvailibilty.objects.filter(
+        coach__in=coaches_in_batch,
+        start_time__gte=start_timestamp,
+        end_time__lte=end_timestamp,
+        is_confirmed=False,
+    )
+    current_time = timezone.now()
+    timestamp_milliseconds = str(int(current_time.timestamp() * 1000))
+    upcoming_availabilities = coach_availabilities.filter(
+        start_time__gt=timestamp_milliseconds
+    )
+    serializer = AvailabilitySerializer(upcoming_availabilities, many=True)
+    return serializer.data
+
+def merge_time_slots(slots, slots_by_coach):
+    res = []
+    for key in slots_by_coach:
+        sorted_slots = sorted(slots_by_coach[key], key=lambda x: x["start_time"])
+        merged_slots = []
+        for i in range(len(sorted_slots)):
+            if (
+                len(merged_slots) == 0
+                or sorted_slots[i]["start_time"] > merged_slots[-1]["end_time"]
+            ):
+                merged_slots.append(sorted_slots[i])
+            else:
+                merged_slots[-1]["end_time"] = max(
+                    merged_slots[-1]["end_time"], sorted_slots[i]["end_time"]
+                )
+        res.extend(merged_slots)
+
+    return res
+
+
+def available_slots_count_for_participant(id):
+    try:
+        coaching_session = CoachingSession.objects.filter(id=id)
+        session_duration = coaching_session[0].duration
+        availabilities = get_upcoming_availabilities_of_coaching_session(
+            coaching_session[0].id
+        )
+        result = []
+
+        if availabilities is not None and len(availabilities):
+            slots = []
+            slots_by_coach = {}
+            for availability in availabilities:
+                slots_by_coach[availability["coach"]] = (
+                    [*slots_by_coach[availability["coach"]], availability]
+                    if availability["coach"] in slots_by_coach
+                    else [availability]
+                )
+                slots.append(availability)
+
+            final_merge_slots = merge_time_slots(slots, slots_by_coach)
+            for slot in final_merge_slots:
+                startT = slot["start_time"]
+                endT = slot["end_time"]
+                small_session_duration = int(session_duration)
+                result += generate_slots(startT, endT, small_session_duration)
+        return result 
+
+    except Exception as inner_exception:
+        print(f"Inner Exception: {str(inner_exception)}")
+        return 0 
+
+
+
+def get_time(timestamp):
+    dt = datetime.fromtimestamp(timestamp / 1000) + timedelta(
+        hours=5, minutes=30
+    )  # Convert milliseconds to seconds
+    return dt.strftime("%I:%M %p")
 
 
 def send_whatsapp_message(user_type, participant, assessment, unique_id):
@@ -110,7 +222,6 @@ def get_current_date_timestamps():
         int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
     )
     return start_timestamp, end_timestamp
-
 
 @shared_task
 def send_email_to_recipients(id):
@@ -273,7 +384,7 @@ def send_coach_morning_reminder_email():
     # Format sessions coach-wise
     coach_sessions = {}
     for session in today_sessions:
-        if session.coaching_session.batch.project.automated_reminder:
+        if True:
             coach_id = session.availibility.coach.id
             if coach_id not in coach_sessions:
                 coach_sessions[coach_id] = []
@@ -283,7 +394,7 @@ def send_coach_morning_reminder_email():
     for coach_id, sessions in coach_sessions.items():
         slots = []
         for session in sessions:
-            if session.coaching_session.batch.project.automated_reminder:
+            if True:
                 start_time_for_mail = datetime.fromtimestamp(
                     (int(session.availibility.start_time) / 1000) + 19800
                 ).strftime("%I:%M %p")
@@ -350,7 +461,7 @@ def send_upcoming_session_pmo_at_10am():
 
         sessions_list = []
         for session in today_sessions:
-            if session.coaching_session.batch.project.automated_reminder:
+            if True:
                 start_time = datetime.fromtimestamp(
                     (int(session.availibility.start_time) / 1000) + 19800
                 ).strftime("%I:%M %p")
@@ -738,7 +849,7 @@ def send_feedback_lesson_reminders():
                     # Now, you can access the associated Course through the SchedularBatch
                     course = Course.objects.filter(batch=schedular_batch).first()
                     if course:
-                        feedback_lesson_name_should_be = f"feedback_for_live_session_{live_session.live_session_number}"
+                        feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
                         feedback_lessons = FeedbackLesson.objects.filter(
                             lesson__course=course
                         )
@@ -819,7 +930,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
         # Format sessions coach-wise
         coach_sessions = {}
         for session in today_sessions:
-            if session.coaching_session.batch.project.automated_reminder:
+            if True:
                 coach_id = session.availibility.coach.id
                 if coach_id not in coach_sessions:
                     coach_sessions[coach_id] = []
@@ -828,10 +939,11 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
         for coach_id, sessions in coach_sessions.items():
             slots = []
             for session in sessions:
-                if session.coaching_session.batch.project.automated_reminder:
-                    start_time_for_mail = datetime.fromtimestamp(
-                        (int(session.availibility.start_time) / 1000) + 19800
-                    ).strftime("%I:%M %p")
+                if True:
+                    # start_time_for_mail = datetime.fromtimestamp(
+                    #     (int(session.availibility.start_time) / 1000) + 19800
+                    # ).strftime("%I:%M %p")
+                    start_time_for_mail = get_time(int(session.availibility.start_time))
                     phone = (
                         session.availibility.coach.phone_country_code
                         + session.availibility.coach.phone
@@ -853,7 +965,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
                                 },
                                 {
                                     "name": "time",
-                                    "value": start_time_for_mail,
+                                    "value": f"{start_time_for_mail} IST",
                                 },
                                 {
                                     "name": "booking_id",
@@ -879,15 +991,16 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
             ~Q(status="completed"),
         )
         for caas_session in session_requests:
-            if caas_session.project.automated_reminder:
+            if True:
                 if caas_session.coach:
                     coach = caas_session.coach
                     coach_name = coach.first_name + " " + coach.last_name
                     phone = coach.phone_country_code + coach.phone
                     time = caas_session.confirmed_availability.start_time
-                    final_time = datetime.fromtimestamp(
-                        (int(time) / 1000) + 19800
-                    ).strftime("%I:%M %p")
+                    # final_time = datetime.fromtimestamp(
+                    #     (int(time) / 1000) + 19800
+                    # ).strftime("%I:%M %p")
+                    final_time = get_time(int(time))
                     booking_id = caas_session.coach.room_id
                     print(booking_id)
                     send_whatsapp_message_template(
@@ -901,7 +1014,7 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
                                 },
                                 {
                                     "name": "time",
-                                    "value": final_time,
+                                    "value": f"{final_time} IST",
                                 },
                                 {
                                     "name": "booking_id",
@@ -929,10 +1042,10 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_seeq():
                 name = session.learner.name
                 phone = session.learner.phone
                 booking_id = session.availibility.coach.room_id
-                time = datetime.fromtimestamp(
-                    (int(session.availibility.start_time) / 1000) + 19800
-                ).strftime("%I:%M %p")
-
+                # time = datetime.fromtimestamp(
+                #     (int(session.availibility.start_time) / 1000) + 19800
+                # ).strftime("%I:%M %p")
+                time = get_time(int(session.availibility.start_time))
                 send_whatsapp_message_template(
                     phone,
                     {
@@ -944,7 +1057,7 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_seeq():
                             },
                             {
                                 "name": "time",
-                                "value": time,
+                                "value": f"{time} IST",
                             },
                             {
                                 "name": "booking_id",
@@ -975,9 +1088,10 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_caas():
                 learner_name = learner.name
                 phone = learner.phone
                 time = caas_session.confirmed_availability.start_time
-                final_time = datetime.fromtimestamp(
-                    (int(time) / 1000) + 19800
-                ).strftime("%I:%M %p")
+                # final_time = datetime.fromtimestamp(
+                #     (int(time) / 1000) + 19800
+                # ).strftime("%I:%M %p")
+                final_time = get_time(int(time))
                 booking_id = caas_session.coach.room_id
                 send_whatsapp_message_template(
                     phone,
@@ -990,7 +1104,7 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_caas():
                             },
                             {
                                 "name": "time",
-                                "value": final_time,
+                                "value": f"{final_time} IST",
                             },
                             {
                                 "name": "booking_id",
@@ -1009,15 +1123,16 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
     try:
         # for caas sessions
         caas_session = SessionRequestCaas.objects.get(id=session_id)
-        if caas_session.project.automated_reminder:
+        if True:
             if caas_session.coach:
                 coach = caas_session.coach
                 caas_coach_name = coach.first_name + " " + coach.last_name
                 caas_coach_phone = coach.phone_country_code + coach.phone
                 time = caas_session.confirmed_availability.start_time
-                caas_coach_final_time = datetime.fromtimestamp(
-                    (int(time) / 1000) + 19800
-                ).strftime("%I:%M %p")
+                # caas_coach_final_time = datetime.fromtimestamp(
+                #     (int(time) / 1000) + 19800
+                # ).strftime("%I:%M %p")
+                caas_coach_final_time = get_time(int(time))
                 booking_id = caas_session.coach.room_id
                 send_whatsapp_message_template(
                     caas_coach_phone,
@@ -1030,7 +1145,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
                             },
                             {
                                 "name": "time",
-                                "value": caas_coach_final_time,
+                                "value": f"{caas_coach_final_time} IST",
                             },
                             {
                                 "name": "booking_id",
@@ -1044,9 +1159,10 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
             caas_learner_name = learner.name
             caas_learner_phone = learner.phone
             time = caas_session.confirmed_availability.start_time
-            caas_learner_final_time = datetime.fromtimestamp(
-                (int(time) / 1000) + 19800
-            ).strftime("%I:%M %p")
+            # caas_learner_final_time = datetime.fromtimestamp(
+            #     (int(time) / 1000) + 19800
+            # ).strftime("%I:%M %p")
+            caas_learner_final_time = get_time(int(time))
             send_whatsapp_message_template(
                 caas_learner_phone,
                 {
@@ -1058,7 +1174,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
                         },
                         {
                             "name": "time",
-                            "value": caas_learner_final_time,
+                            "value": f"{caas_learner_final_time} IST",
                         },
                         {
                             "name": "booking_id",
@@ -1077,10 +1193,13 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
     try:
         # for seeq sessions
         session = SchedularSessions.objects.get(id=session_id)
-        if session.coaching_session.batch.project.automated_reminder:
-            seeq_coach_start_time_for_mail = datetime.fromtimestamp(
-                (int(session.availibility.start_time) / 1000) + 19800
-            ).strftime("%I:%M %p")
+        if True:
+            # seeq_coach_start_time_for_mail = datetime.fromtimestamp(
+            #     (int(session.availibility.start_time) / 1000) + 19800
+            # ).strftime("%I:%M %p")
+            seeq_coach_start_time_for_mail = get_time(
+                int(session.availibility.start_time)
+            )
             seeq_coach_phone = (
                 session.availibility.coach.phone_country_code
                 + session.availibility.coach.phone
@@ -1102,7 +1221,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
                         },
                         {
                             "name": "time",
-                            "value": seeq_coach_start_time_for_mail,
+                            "value": f"{seeq_coach_start_time_for_mail} IST",
                         },
                         {
                             "name": "booking_id",
@@ -1114,10 +1233,10 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
             )
             seeq_participant_name = session.learner.name
             seeq_participant_phone = session.learner.phone
-            seeq_participant_time = datetime.fromtimestamp(
-                (int(session.availibility.start_time) / 1000) + 19800
-            ).strftime("%I:%M %p")
-
+            # seeq_participant_time = datetime.fromtimestamp(
+            #     (int(session.availibility.start_time) / 1000) + 19800
+            # ).strftime("%I:%M %p")
+            seeq_participant_time = get_time(int(session.availibility.start_time))
             send_whatsapp_message_template(
                 seeq_participant_phone,
                 {
@@ -1129,7 +1248,7 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
                         },
                         {
                             "name": "time",
-                            "value": seeq_participant_time,
+                            "value": f"{seeq_participant_time} IST",
                         },
                         {
                             "name": "booking_id",
@@ -1148,10 +1267,13 @@ def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
     try:
         # for seeq sessions
         session = SchedularSessions.objects.get(id=session_id)
-        if session.coaching_session.batch.project.automated_reminder:
-            seeq_coach_start_time_for_mail = datetime.fromtimestamp(
-                (int(session.availibility.start_time) / 1000) + 19800
-            ).strftime("%I:%M %p")
+        if True:
+            # seeq_coach_start_time_for_mail = datetime.fromtimestamp(
+            #     (int(session.availibility.start_time) / 1000) + 19800
+            # ).strftime("%I:%M %p")
+            seeq_coach_start_time_for_mail = get_time(
+                int(session.availibility.start_time)
+            )
             seeq_coach_phone = (
                 session.availibility.coach.phone_country_code
                 + session.availibility.coach.phone
@@ -1172,7 +1294,7 @@ def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
                         },
                         {
                             "name": "time",
-                            "value": seeq_coach_start_time_for_mail,
+                            "value": f"{seeq_coach_start_time_for_mail} IST",
                         },
                     ],
                     "template_name": "did_you_start_session_msg_to_coach",
@@ -1187,16 +1309,16 @@ def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
     try:
         # for caas sessions
         caas_session = SessionRequestCaas.objects.get(id=session_id)
-        if caas_session.project.automated_reminder:
+        if True:
             if caas_session.coach:
                 coach = caas_session.coach
                 caas_coach_name = coach.first_name + " " + coach.last_name
                 caas_coach_phone = coach.phone_country_code + coach.phone
                 time = caas_session.confirmed_availability.start_time
-                caas_coach_final_time = datetime.fromtimestamp(
-                    (int(time) / 1000) + 19800
-                ).strftime("%I:%M %p")
-
+                # caas_coach_final_time = datetime.fromtimestamp(
+                #     (int(time) / 1000) + 19800
+                # ).strftime("%I:%M %p")
+                caas_coach_final_time = get_time(int(time))
                 send_whatsapp_message_template(
                     caas_coach_phone,
                     {
@@ -1208,7 +1330,7 @@ def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
                             },
                             {
                                 "name": "time",
-                                "value": caas_coach_final_time,
+                                "value": f"{caas_coach_final_time} IST",
                             },
                         ],
                         "template_name": "did_you_start_session_msg_to_coach",
@@ -1226,46 +1348,57 @@ def coachee_booking_reminder_whatsapp_at_8am():
             expiry_date__isnull=False, expiry_date__gt=current_date
         )
         for coaching_session in coaching_sessions_exist:
+            result = available_slots_count_for_participant(coaching_session.id)
             if coaching_session.batch.project.automated_reminder:
                 learners_in_coaching_session = coaching_session.batch.learners.all()
                 for learner in learners_in_coaching_session:
                     try:
                         SchedularSessions.objects.get(
                             learner=learner, coaching_session=coaching_session
-                        ).exists()
+                        )
                         print(f"Don't send WhatsApp message to {learner.name}")
                     except ObjectDoesNotExist:
                         name = learner.name
                         phone = learner.phone
-                        session_name = coaching_session.session_type
-                        project_name = coaching_session.batch.project.name
-                        path_parts = coaching_session.booking_link.split("/")
-                        booking_id = path_parts[-1]
-                        send_whatsapp_message_template(
-                            phone,
-                            {
-                                "broadcast_name": "coachee_booking_reminder_whatsapp_at_8am",
-                                "parameters": [
-                                    {
-                                        "name": "name",
-                                        "value": name,
-                                    },
-                                    {
-                                        "name": "session_name",
-                                        "value": session_name,
-                                    },
-                                    {
-                                        "name": "project_name",
-                                        "value": project_name,
-                                    },
-                                    {
-                                        "name": "1",
-                                        "value": booking_id,
-                                    },
-                                ],
-                                "template_name": "reminder_coachee_coaching_session",
-                            },
-                        )
+                        if len(result) != 0:
+                            session_name = (
+                                coaching_session.session_type.replace("_", " ").capitalize()
+                                if not coaching_session.session_type
+                                == "laser_coaching_session"
+                                else "Coaching Session"
+                                + " "
+                                + str(coaching_session.coaching_session_number)
+                            )
+                            project_name = coaching_session.batch.project.name
+                            path_parts = coaching_session.booking_link.split("/")
+                            booking_id = path_parts[-1]
+                            send_whatsapp_message_template(
+                                phone,
+                                {
+                                    "broadcast_name": "coachee_booking_reminder_whatsapp_at_8am",
+                                    "parameters": [
+                                        {
+                                            "name": "name",
+                                            "value": name,
+                                        },
+                                        {
+                                            "name": "session_name",
+                                            "value": session_name,
+                                        },
+                                        {
+                                            "name": "project_name",
+                                            "value": project_name,
+                                        },
+                                        {
+                                            "name": "1",
+                                            "value": booking_id,
+                                        },
+                                    ],
+                                    "template_name": "reminder_coachee_book_slot_daily",
+                                },
+                            )
+                    except Exception as e:
+                        print(str(e))
     except Exception as e:
         print(str(e))
 
@@ -1314,7 +1447,10 @@ def schedule_nudges(course_id):
     desired_time = time(8, 30)
     nudge_scheduled_for = datetime.combine(course.nudge_start_date, desired_time)
     for nudge in nudges:
-        if nudge.course.batch.project.automated_reminder:
+        if (
+            nudge.course.batch.project.automated_reminder
+            and nudge.course.batch.project.nudges
+        ):
             clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
             periodic_task = PeriodicTask.objects.create(
                 name=uuid.uuid1(),
@@ -1336,7 +1472,10 @@ def get_file_content(file_url):
 @shared_task
 def send_nudge(nudge_id):
     nudge = Nudge.objects.get(id=nudge_id)
-    if nudge.course.batch.project.automated_reminder:
+    if (
+        nudge.course.batch.project.automated_reminder
+        and nudge.course.batch.project.nudges
+    ):
         subject = f"New Nudge: {nudge.name}"
         if nudge.is_sent:
             return

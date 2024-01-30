@@ -40,6 +40,8 @@ import os
 from django.http import HttpResponse
 import io
 import pdfkit
+from django.middleware.csrf import get_token
+
 
 env = environ.Env()
 
@@ -333,7 +335,7 @@ def validate_otp(request):
         UserLoginActivity.objects.create(
             user=user, timestamp=login_timestamp, platform=platform
         )
-        return Response(
+        response = Response(
             {
                 "detail": "Successfully logged in.",
                 "user": {**user_data, "last_login": last_login},
@@ -341,6 +343,8 @@ def validate_otp(request):
                 "zoho_vendor": zoho_vendor,
             }
         )
+        response["X-CSRFToken"] = get_token(request)
+        return response
     else:
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
@@ -356,7 +360,7 @@ def session_view(request):
     if user_data:
         organization = get_organization_data()
         zoho_vendor = get_vendor(user_data["vendor_id"])
-        return Response(
+        response = Response(
             {
                 "isAuthenticated": True,
                 "user": {**user_data, "last_login": last_login},
@@ -364,6 +368,8 @@ def session_view(request):
                 "zoho_vendor": zoho_vendor,
             }
         )
+        response["X-CSRFToken"] = get_token(request)
+        return response
     else:
         logout(request)
         return Response({"error": "Invalid user type."}, status=400)
@@ -392,7 +398,7 @@ def login_view(request):
         UserLoginActivity.objects.create(
             user=user, timestamp=login_timestamp, platform=platform
         )
-        return Response(
+        response = Response(
             {
                 "detail": "Successfully logged in.",
                 "user": {**user_data, "last_login": last_login},
@@ -400,6 +406,8 @@ def login_view(request):
                 "zoho_vendor": zoho_vendor,
             }
         )
+        response["X-CSRFToken"] = get_token(request)
+        return response
     else:
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
