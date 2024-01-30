@@ -9,7 +9,12 @@ from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
 from django.conf import settings
 from api.models import Coach, User, UserToken, SessionRequestCaas, Learner
-from schedularApi.models import CoachingSession, SchedularSessions, RequestAvailibilty,CoachSchedularAvailibilty
+from schedularApi.models import (
+    CoachingSession,
+    SchedularSessions,
+    RequestAvailibilty,
+    CoachSchedularAvailibilty,
+)
 from django.utils import timezone
 from api.views import (
     send_mail_templates,
@@ -32,6 +37,7 @@ import requests
 
 env = environ.Env()
 environ.Env.read_env()
+
 
 def timestamp_to_datetime(timestamp):
     return datetime.utcfromtimestamp(int(timestamp) / 1000.0)
@@ -84,6 +90,7 @@ def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
     serializer = AvailabilitySerializer(upcoming_availabilities, many=True)
     return serializer.data
 
+
 def merge_time_slots(slots, slots_by_coach):
     res = []
     for key in slots_by_coach:
@@ -130,12 +137,11 @@ def available_slots_count_for_participant(id):
                 endT = slot["end_time"]
                 small_session_duration = int(session_duration)
                 result += generate_slots(startT, endT, small_session_duration)
-        return result 
+        return result
 
     except Exception as inner_exception:
         print(f"Inner Exception: {str(inner_exception)}")
-        return 0 
-
+        return 0
 
 
 def get_time(timestamp):
@@ -222,6 +228,7 @@ def get_current_date_timestamps():
         int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
     )
     return start_timestamp, end_timestamp
+
 
 @shared_task
 def send_email_to_recipients(id):
@@ -671,7 +678,6 @@ def update_assessment_status():
 
 @shared_task
 def send_assessment_invitation_mail(assessment_id):
-    print("called")
     assessment = Assessment.objects.get(id=assessment_id)
     for participant_observers in assessment.participants_observers.all():
         try:
@@ -1362,7 +1368,9 @@ def coachee_booking_reminder_whatsapp_at_8am():
                         phone = learner.phone
                         if len(result) != 0:
                             session_name = (
-                                coaching_session.session_type.replace("_", " ").capitalize()
+                                coaching_session.session_type.replace(
+                                    "_", " "
+                                ).capitalize()
                                 if not coaching_session.session_type
                                 == "laser_coaching_session"
                                 else "Coaching Session"
@@ -1497,3 +1505,85 @@ def send_nudge(nudge_id):
             sleep(5)
         nudge.is_sent = True
         nudge.save()
+
+
+@shared_task
+def celery_send_unbooked_coaching_session_mail(data):
+    try:
+        batch_name = data.get("batchName", "")
+        project_name = data.get("project_name", "")
+        participants = data.get("participants", [])
+        booking_link = data.get("bookingLink", "")
+        expiry_date = data.get("expiry_date", "")
+        date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
+        formatted_date = date_obj.strftime("%d %B %Y")
+        session_type = data.get("session_type", "")
+        for participant in participants:
+            try:
+                learner_name = Learner.objects.get(email=participant).name
+            except:
+                continue
+
+            send_mail_templates(
+                "seteventlink.html",
+                [participant],
+                # "Meeraq -Book Laser Coaching Session"
+                # if session_type == "laser_coaching_session"
+                # else "Meeraq - Book Mentoring Session",
+                f"{project_name} | Book Individual 1:1 coaching sessions",
+                {
+                    "name": learner_name,
+                    "project_name": project_name,
+                    "event_link": booking_link,
+                    "expiry_date": formatted_date,
+                    # "session_type": "mentoring"
+                    # if session_type == "mentoring_session"
+                    # else "laser coaching",
+                },
+                [],
+            )
+            sleep(5)
+    except Exception as e:
+        print(f"Error occurred while sending unbooked coaching email : {e}")
+
+
+@shared_task
+def send_assessment_invitation_mail_on_click(data):
+    try:
+        participant_ids = data.get("req")
+        assessment = Assessment.objects.get(id=data.get("assessment_id"))
+
+        participants_observers = assessment.participants_observers.all().filter(
+            participant__id__in=participant_ids
+        )
+
+        for participant_observer_mapping in participants_observers:
+            participant = participant_observer_mapping.participant
+
+            try:
+                participant_response = ParticipantResponse.objects.get(
+                    participant=participant, assessment=assessment
+                )
+            except ObjectDoesNotExist:
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    participant=participant, assessment=assessment
+                )
+                unique_id = participant_unique_id.unique_id
+
+                assessment_link = (
+                    f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
+                )
+                send_mail_templates(
+                    "assessment/assessment_reminder_mail_to_participant.html",
+                    [participant.email],
+                    "Meeraq - Assessment Reminder !",
+                    {
+                        "assessment_name": assessment.participant_view_name,
+                        "participant_name": participant.name.title(),
+                        "link": assessment_link,
+                    },
+                    [],
+                )
+                sleep(5)
+    except Exception as e:
+        print(str(e))
