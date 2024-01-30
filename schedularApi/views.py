@@ -117,6 +117,7 @@ from django.core.exceptions import ImproperlyConfigured, PermissionDenied
 from django.views.decorators.debug import sensitive_variables
 
 from assessmentApi.views import delete_participant_from_assessments
+from schedularApi.tasks import celery_send_unbooked_coaching_session_mail
 
 # Create your views here.
 from itertools import chain
@@ -2075,39 +2076,16 @@ def delete_slots(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def send_unbooked_coaching_session_mail(request):
-    batch_name = request.data.get("batchName", "")
-    project_name = request.data.get("project_name", "")
-    participants = request.data.get("participants", [])
-    booking_link = request.data.get("bookingLink", "")
-    expiry_date = request.data.get("expiry_date", "")
-    date_obj = datetime.strptime(expiry_date, "%Y-%m-%d")
-    formatted_date = date_obj.strftime("%d %B %Y")
-    session_type = request.data.get("session_type", "")
-    for participant in participants:
-        try:
-            learner_name = Learner.objects.get(email=participant).name
-        except:
-            continue
-        send_mail_templates(
-            "seteventlink.html",
-            [participant],
-            # "Meeraq -Book Laser Coaching Session"
-            # if session_type == "laser_coaching_session"
-            # else "Meeraq - Book Mentoring Session",
-            f"{project_name} | Book Individual 1:1 coaching sessions",
-            {
-                "name": learner_name,
-                "project_name": project_name,
-                "event_link": booking_link,
-                "expiry_date": formatted_date,
-                # "session_type": "mentoring"
-                # if session_type == "mentoring_session"
-                # else "laser coaching",
-            },
-            [],
+    try:
+        celery_send_unbooked_coaching_session_mail.delay(request.data)
+
+        return Response({"message": "Emails sent to participants."}, status.HTTP_200_OK)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to send emails."}, status.HTTP_400_BAD_REQUEST
         )
-        sleep(5)
-    return Response("Emails sent to participants.")
 
 
 @api_view(["GET"])

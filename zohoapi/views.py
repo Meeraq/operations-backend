@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from api.models import Coach, OTP, UserLoginActivity
+from api.models import Coach, OTP, UserLoginActivity, Profile, Role
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 
@@ -27,6 +27,7 @@ from .serializers import (
     InvoiceDataEditSerializer,
     InvoiceDataSerializer,
     VendorDepthOneSerializer,
+    VendorSerializer,
 )
 from .models import InvoiceData, AccessToken, Vendor
 import base64
@@ -992,3 +993,115 @@ class DownloadInvoice(APIView):
                 {"error": "Failed to download invoice."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+
+@api_view(["POST"])
+def add_vendor(request):
+    # Extract data from the request
+    data = request.data
+    name = data.get("name", "")
+    email = data.get("email", "")
+    vendor_id = data.get("vendor", "")
+    phone = data.get("phone", "")
+
+    try:
+        # Check if the user with the given email already exists
+        user_profile = Profile.objects.get(user__email=email)
+        user = user_profile.user
+
+        # Check if the user has the role 'vendor'
+        if user_profile.roles.filter(name="vendor").exists():
+            return Response(
+                {"detail": "User already exists as a vendor."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # If the user was not a vendor, update the Vendor model
+        try:
+            vendor = Vendor.objects.get(user=user_profile)
+
+            # Check if the provided vendor_id already exists for another vendor
+            if Vendor.objects.exclude(id=vendor.id).filter(vendor_id=vendor_id).exists():
+                return Response(
+                    {"detail": "Vendor with the same vendor_id already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            vendor.name = name
+            vendor.phone = phone
+            vendor.vendor_id = vendor_id
+            vendor.save()
+
+        except Vendor.DoesNotExist:
+            # Check if the provided vendor_id already exists for another vendor
+            if Vendor.objects.filter(vendor_id=vendor_id).exists():
+                return Response(
+                    {"detail": "Vendor with the same vendor_id already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            vendor_role = Role.objects.get(name="vendor")
+            vendor = Vendor.objects.create(
+                user=user_profile,
+                name=name,
+                email=email,
+                vendor_id=vendor_id,
+                phone=phone,
+            )
+            vendor.save()
+
+        return Response(
+            {"detail": 'Role "vendor" assigned to the existing user successfully.'},
+            status=status.HTTP_200_OK,
+        )
+
+    except Profile.DoesNotExist:
+        # User with the given email doesn't exist, create a new Vendor
+        try:
+            user = User.objects.create_user(email, email=email)
+            user.set_unusable_password()
+            user.save()
+
+            # Check if the provided vendor_id already exists for another vendor
+            if Vendor.objects.filter(vendor_id=vendor_id).exists():
+                return Response(
+                    {"detail": "Vendor with the same vendor_id already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            vendor_role = Role.objects.get(name="vendor")
+
+            profile = Profile.objects.create(user=user)
+            profile.roles.add(vendor_role)
+            profile.save()
+
+            vendor = Vendor.objects.create(
+                user=profile, name=name, email=email, vendor_id=vendor_id, phone=phone
+            )
+            vendor.save()
+
+            return Response(
+                {"detail": "New vendor created successfully."},
+                status=status.HTTP_201_CREATED,
+            )
+
+        except Exception as e:
+            return Response(
+                {"detail": f"Error creating vendor: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+@api_view(["GET"])
+def get_all_vendors(request):
+    try:
+        vendors = Vendor.objects.all()
+        serializer = VendorSerializer(vendors, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {"detail": f"Error fetching vendors: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
