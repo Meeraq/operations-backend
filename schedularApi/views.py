@@ -30,7 +30,17 @@ from django.core.exceptions import ObjectDoesNotExist
 from api.views import get_date, get_time, add_contact_in_wati
 from django.shortcuts import render
 from django.http import JsonResponse
-from api.models import Organisation, HR, Coach, User, Profile, Learner, Pmo, Role, UserToken
+from api.models import (
+    Organisation,
+    HR,
+    Coach,
+    User,
+    Profile,
+    Learner,
+    Pmo,
+    Role,
+    UserToken,
+)
 from .serializers import (
     SchedularProjectSerializer,
     SchedularBatchSerializer,
@@ -677,18 +687,33 @@ def update_live_session(request, live_session_id):
         if not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID:
             try:
                 learners = live_session.batch.learners.all()
-                attendees = list(
-                    map(
-                        lambda learner: {
-                            "emailAddress": {
-                                "name": learner.name,
-                                "address": learner.email,
-                            },
-                            "type": "required",
+                facilitators = live_session.batch.facilitator.all()
+                attendees = []
+
+                # Adding learners to attendees list
+                for learner in learners:
+                    attendee = {
+                        "emailAddress": {
+                            "name": learner.name,
+                            "address": learner.email,
                         },
-                        learners,
-                    )
-                )
+                        "type": "required",
+                    }
+                    attendees.append(attendee)
+
+                # Adding facilitators to attendees list
+                for facilitator in facilitators:
+                    attendee = {
+                        "emailAddress": {
+                            "name": facilitator.first_name
+                            + " "
+                            + facilitator.last_name,
+                            "address": facilitator.email,
+                        },
+                        "type": "required",
+                    }
+                    attendees.append(attendee)
+                
                 start_time_stamp = update_live_session.date_time.timestamp() * 1000
                 end_time_stamp = (
                     start_time_stamp + int(update_live_session.duration) * 60000
@@ -2681,7 +2706,6 @@ def get_facilitators(request):
 #     )
 
 
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_multiple_facilitator(request):
@@ -2700,9 +2724,7 @@ def add_multiple_facilitator(request):
 
             with transaction.atomic():
                 # Create Django User
-                user, created = User.objects.get_or_create(
-                    username=email, email=email
-                )
+                user, created = User.objects.get_or_create(username=email, email=email)
                 if created:
                     temp_password = "".join(
                         random.choices(
@@ -2718,8 +2740,10 @@ def add_multiple_facilitator(request):
                     profile = Profile.objects.create(user=user)
                 else:
                     profile = Profile.objects.get(user=user)
-                
-                facilitator_role, created = Role.objects.get_or_create(name="facilitator")
+
+                facilitator_role, created = Role.objects.get_or_create(
+                    name="facilitator"
+                )
                 profile.roles.add(facilitator_role)
                 profile.save()
 
@@ -2736,14 +2760,18 @@ def add_multiple_facilitator(request):
                     rating=facilitator_data.get("rating", ""),
                     area_of_expertise=facilitator_data.get("industries", []),
                     education=facilitator_data.get("education", []),
-                    years_of_corporate_experience=facilitator_data.get("corporate_yoe", ""),
+                    years_of_corporate_experience=facilitator_data.get(
+                        "corporate_yoe", ""
+                    ),
                     city=facilitator_data.get("city", []),
                     language=facilitator_data.get("language", []),
                     job_roles=facilitator_data.get("job_roles", []),
                     country=facilitator_data.get("country", []),
                     linkedin_profile_link=facilitator_data.get("linkedin_profile", ""),
                     companies_worked_in=facilitator_data.get("companies_worked_in", []),
-                    educational_qualification=facilitator_data.get("educational_qualification", []),
+                    educational_qualification=facilitator_data.get(
+                        "educational_qualification", []
+                    ),
                     client_companies=facilitator_data.get("client_companies", []),
                     fees_per_hour=facilitator_data.get("fees_per_hour", ""),
                     fees_per_day=facilitator_data.get("fees_per_day", ""),
@@ -2758,19 +2786,19 @@ def add_multiple_facilitator(request):
 
         return Response(
             {"message": "Facilitators added successfully"},
-            status=status.HTTP_201_CREATED
+            status=status.HTTP_201_CREATED,
         )
 
     except KeyError as e:
         return Response(
             {"error": f"Missing key in facilitator data: {str(e)}"},
-            status=status.HTTP_400_BAD_REQUEST
+            status=status.HTTP_400_BAD_REQUEST,
         )
     except Exception as e:
         print(e)
         return Response(
             {"error": "An error occurred while creating the facilitators."},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
@@ -3085,7 +3113,6 @@ def live_session_detail_view(request, pk):
     return Response(response_data)
 
 
-
 @api_view(["GET"])
 def facilitator_projects(request, facilitator_id):
     print(facilitator_id)
@@ -3224,6 +3251,7 @@ def get_facilitator_sessions(request, facilitator_id):
 
     except Facilitator.DoesNotExist:
         return Response({"message": "Facilitator not found"}, status=404)
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -3532,7 +3560,6 @@ def delete_session_from_project_structure(request):
                             lesson.delete()
                         coaching_session.delete()
 
-                
                 LiveSession.objects.filter(batch=batch, order__gt=order).update(
                     order=F("order") - 1,
                     live_session_number=Case(
