@@ -104,8 +104,28 @@ from assessmentApi.views import delete_participant_from_assessments
 # Create your views here.
 from itertools import chain
 import environ
+import re
 
 env = environ.Env()
+
+
+def get_feedback_lesson_name(lesson_name):
+    # Trim leading and trailing whitespaces
+    trimmed_string = lesson_name.strip()
+    # Convert to lowercase
+    lowercased_string = trimmed_string.lower()
+    # Replace spaces between words with underscores
+    underscored_string = "_".join(lowercased_string.split())
+    return underscored_string
+
+
+def extract_number_from_name(name):
+    # Regular expression to match digits at the end of the string
+    match = re.search(r"\d+$", name)
+    if match:
+        return int(match.group())
+    else:
+        return None
 
 
 def send_whatsapp_message_template(phone, payload):
@@ -3021,12 +3041,14 @@ def get_completed_sessions_for_project(request, project_id):
 def delete_session_from_project_structure(request):
     try:
         with transaction.atomic():
-            project = SchedularProject.objects.get(id=request.data.get("project_id"))
+            project_id = request.data.get("project_id")
             session_to_delete = request.data.get("session_to_delete")
+
+            project = SchedularProject.objects.get(id=project_id)
             batches = SchedularBatch.objects.filter(project=project)
+
             order = session_to_delete.get("order")
             session_type = session_to_delete.get("session_type")
-            duration = session_to_delete.get("duration")
 
             project_structure = project.project_structure
             if session_to_delete in project_structure:
@@ -3037,31 +3059,64 @@ def delete_session_from_project_structure(request):
                 for session in project_structure:
                     if session.get("order") > order:
                         session["order"] -= 1
-
                 project.project_structure = project_structure
                 project.save()
 
             for batch in batches:
+                course = Course.objects.filter(batch=batch).first()
+
                 if session_type in [
                     "live_session",
                     "check_in_session",
                     "in_person_session",
                 ]:
-                    LiveSession.objects.filter(
+                    live_session = LiveSession.objects.filter(
                         batch=batch, order=order, session_type=session_type
-                    ).delete()
+                    ).first()
+                    if live_session:
+                        live_session_lesson = LiveSessionLesson.objects.filter(
+                            live_session=live_session
+                        ).first()
+                        if live_session_lesson:
+                            feedback_lesson_name = f"feedback_for_{session_type}_{live_session_lesson.live_session.live_session_number}"
+                            feedback_lessons = FeedbackLesson.objects.filter(
+                                lesson__course=course,
+                            )
+
+                            for feedback_lesson in feedback_lessons:
+                                if feedback_lesson:
+                                    current_lesson_name = feedback_lesson.lesson.name
+                                    formatted_lesson_name = get_feedback_lesson_name(
+                                        current_lesson_name
+                                    )
+
+                                    if formatted_lesson_name == feedback_lesson_name:
+                                        feedback_lesson_lesson = feedback_lesson.lesson
+                                        feedback_lesson_lesson.delete()
+                                        feedback_lesson.delete()
+                            lesson = live_session_lesson.lesson
+                            lesson.delete()
+                        live_session.delete()
 
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
-                    CoachingSession.objects.filter(
+                    coaching_session = CoachingSession.objects.filter(
                         batch=batch, order=order, session_type=session_type
-                    ).delete()
+                    ).first()
+                    if coaching_session:
+                        coaching_session_lesson = LaserCoachingSession.objects.filter(
+                            coaching_session=coaching_session
+                        ).first()
+                        if coaching_session_lesson:
+                            lesson = coaching_session_lesson.lesson
+                            lesson.delete()
+                        coaching_session.delete()
 
+                
                 LiveSession.objects.filter(batch=batch, order__gt=order).update(
                     order=F("order") - 1,
                     live_session_number=Case(
                         When(
-                            session_type=session_type,
-                            then=F("live_session_number") - 1,
+                            session_type=session_type, then=F("live_session_number") - 1
                         ),
                         default=F("live_session_number"),
                         output_field=IntegerField(),
@@ -3078,6 +3133,79 @@ def delete_session_from_project_structure(request):
                         output_field=IntegerField(),
                     ),
                 )
+
+                # Update lesson names for remaining sessions
+                if session_type in [
+                    "live_session",
+                    "check_in_session",
+                    "in_person_session",
+                ]:
+                    for lesson in Lesson.objects.filter(
+                        course=course, lesson_type="live_session"
+                    ):
+                        live_session_lesson = LiveSessionLesson.objects.filter(
+                            lesson=lesson
+                        ).first()
+
+                        if (
+                            live_session_lesson
+                            and live_session_lesson.live_session.session_type
+                            == session_type
+                        ):
+                            lesson_number = extract_number_from_name(lesson.name)
+
+                            session_type_display = session_type.replace(
+                                "_", " "
+                            ).title()
+                            lesson_name = f"{session_type_display} {live_session_lesson.live_session.live_session_number}"
+
+                            lesson.name = lesson_name
+                            lesson.save()
+
+                            feedback_lesson_name = (
+                                f"feedback_for_{session_type}_{lesson_number}"
+                            )
+
+                            feedback_lessons = FeedbackLesson.objects.filter(
+                                lesson__course=course,
+                            )
+
+                            for feedback_lesson in feedback_lessons:
+                                if feedback_lesson:
+                                    current_lesson_name = feedback_lesson.lesson.name
+                                    formatted_lesson_name = get_feedback_lesson_name(
+                                        current_lesson_name
+                                    )
+
+                                    if formatted_lesson_name == feedback_lesson_name:
+                                        session_type_display = session_type.replace(
+                                            "_", " "
+                                        ).title()
+
+                                        feedback_lesson.lesson.name = f"Feedback for {session_type_display} {live_session_lesson.live_session.live_session_number}"
+
+                                        feedback_lesson.lesson.save()
+                                        feedback_lesson.save()
+
+                elif session_type in ["laser_coaching_session", "mentoring_session"]:
+                    for lesson in Lesson.objects.filter(
+                        course=course, lesson_type="laser_coaching"
+                    ):
+                        coaching_session_lesson = LaserCoachingSession.objects.filter(
+                            lesson=lesson
+                        ).first()
+                        if (
+                            coaching_session_lesson
+                            and coaching_session_lesson.coaching_session.session_type
+                            == session_type
+                        ):
+                            session_type_display = session_type.replace(
+                                "_", " "
+                            ).title()
+                            lesson_name = f"{session_type_display} {coaching_session_lesson.coaching_session.coaching_session_number}"
+                            lesson.name = lesson_name
+                            lesson.save()
+
             return Response({"message": "Session deleted successfully."}, status=200)
     except Exception as e:
         print(str(e))
