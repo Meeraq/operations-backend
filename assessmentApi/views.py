@@ -74,7 +74,11 @@ from django.http import HttpResponse
 from datetime import datetime
 import io
 from api.views import add_contact_in_wati
-from schedularApi.tasks import send_assessment_invitation_mail, send_whatsapp_message, send_assessment_invitation_mail_on_click
+from schedularApi.tasks import (
+    send_assessment_invitation_mail,
+    send_whatsapp_message,
+    send_assessment_invitation_mail_on_click,
+)
 from django.shortcuts import render, get_object_or_404
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import permission_classes
@@ -4113,116 +4117,17 @@ class AllAssessmentInAssessmentLesson(APIView):
             )
 
 
-# @api_view(["POST"])
-# @permission_classes([IsAuthenticated])
-# def send_mail_to_not_responded_participant(request, assessment_id):
-#     print(request.data, "abcd")
-#     print(assessment_id)
-#     participant_ids = request.data
-#     assessment = Assessment.objects.get(id=assessment_id)
-#     participants_observers = assessment.participants_observers.all().filter(
-#         participant__id__in=participant_ids
-#     )
-#     for participant_observer_mapping in participants_observers:
-#         participant = participant_observer_mapping.participant
-
-#     try:
-#         participant_response = ParticipantResponse.objects.filter(
-#             participant=participant, assessment=assessment
-#         )
-
-#         if not participant_response:
-#             participant_unique_id = ParticipantUniqueId.objects.get(
-#                 participant=participant, assessment=assessment
-#             )
-#             unique_id = participant_unique_id.unique_id
-
-#             assessment_link = (
-#                 f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
-#             )
-
-#             # Send email only if today's date is within the assessment date range
-#             send_mail_templates(
-#                 "assessment/assessment_reminder_mail_to_participant.html",
-#                 [participant.email],
-#                 "Meeraq - Assessment Reminder !",
-#                 {
-#                     "assessment_name": assessment.participant_view_name,
-#                     "participant_name": participant.name.capitalize(),
-#                     "link": assessment_link,
-#                 },
-#                 [],
-#             )
-
-#     except ObjectDoesNotExist:
-#         print(f"No unique ID found for participant {participant.name}")
-#     sleep(5)
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def send_mail_to_not_responded_participant(request, assessment_id):
-    try:
-        participant_ids = request.data
-        assessment = Assessment.objects.get(id=assessment_id)
-
-        participants_observers = assessment.participants_observers.all().filter(
-            participant__id__in=participant_ids
-        )
-
-        for participant_observer_mapping in participants_observers:
-            participant = participant_observer_mapping.participant
-
-            try:
-                participant_response = ParticipantResponse.objects.get(
-                    participant=participant, assessment=assessment
+        try:
+            data = {"req": request.data, "assessment_id": assessment_id}
+            send_assessment_invitation_mail_on_click.delay(
+                 data
                 )
-            except ObjectDoesNotExist:
-                participant_unique_id = ParticipantUniqueId.objects.get(
-                    participant=participant, assessment=assessment
-                )
-                unique_id = participant_unique_id.unique_id
+            return Response({"message":"Email Sent Sucessfully"},status=200)
+        except Exception as e:
+            print(str(e))
+            return Response({"error":"Faild to send emails"},status=400)
 
-                assessment_link = (
-                    f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
-                )
 
-                send_assessment_invitation_mail_on_click.delay(
-                    assessment_link, participant, assessment
-                )
-
-                # # Send email only if today's date is within the assessment date range
-                # send_mail_templates(
-                #     "assessment/assessment_reminder_mail_to_participant.html",
-                #     [participant.email],
-                #     "Meeraq - Assessment Reminder !",
-                #     {
-                #         "assessment_name": assessment.participant_view_name,
-                #         "participant_name": participant.name.capitalize(),
-                #         "link": assessment_link,
-                #     },
-                #     [],
-                # )
-                # sleep(5)
-
-        return Response(
-            {"message": "Emails sent successfully"}, status=status.HTTP_200_OK
-        )
-
-    except Assessment.DoesNotExist:
-        raise Http404("Assessment not found")
-    except ObjectDoesNotExist as e:
-        print(f"No unique ID found for participant {participant.name}: {e}")
-        return Response(
-            {"error": f"No unique ID found for participant {participant.name}"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        return Response(
-            {"error": "An unexpected error occurred"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
-    finally:
-        # Add a sleep if needed
-        sleep(5)
