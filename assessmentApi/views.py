@@ -74,7 +74,7 @@ from django.http import HttpResponse
 from datetime import datetime
 import io
 from api.views import add_contact_in_wati
-from schedularApi.tasks import send_assessment_invitation_mail, send_whatsapp_message
+from schedularApi.tasks import send_assessment_invitation_mail, send_whatsapp_message, send_assessment_invitation_mail_on_click
 from django.shortcuts import render, get_object_or_404
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import permission_classes
@@ -4163,8 +4163,6 @@ class AllAssessmentInAssessmentLesson(APIView):
 @permission_classes([IsAuthenticated])
 def send_mail_to_not_responded_participant(request, assessment_id):
     try:
-        
-
         participant_ids = request.data
         assessment = Assessment.objects.get(id=assessment_id)
 
@@ -4189,19 +4187,23 @@ def send_mail_to_not_responded_participant(request, assessment_id):
                     f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
                 )
 
-                # Send email only if today's date is within the assessment date range
-                send_mail_templates(
-                    "assessment/assessment_reminder_mail_to_participant.html",
-                    [participant.email],
-                    "Meeraq - Assessment Reminder !",
-                    {
-                        "assessment_name": assessment.participant_view_name,
-                        "participant_name": participant.name.capitalize(),
-                        "link": assessment_link,
-                    },
-                    [],
+                send_assessment_invitation_mail_on_click.delay(
+                    assessment_link, participant, assessment
                 )
-                sleep(5)
+
+                # # Send email only if today's date is within the assessment date range
+                # send_mail_templates(
+                #     "assessment/assessment_reminder_mail_to_participant.html",
+                #     [participant.email],
+                #     "Meeraq - Assessment Reminder !",
+                #     {
+                #         "assessment_name": assessment.participant_view_name,
+                #         "participant_name": participant.name.capitalize(),
+                #         "link": assessment_link,
+                #     },
+                #     [],
+                # )
+                # sleep(5)
 
         return Response(
             {"message": "Emails sent successfully"}, status=status.HTTP_200_OK

@@ -671,7 +671,6 @@ def update_assessment_status():
 
 @shared_task
 def send_assessment_invitation_mail(assessment_id):
-    print("called")
     assessment = Assessment.objects.get(id=assessment_id)
     for participant_observers in assessment.participants_observers.all():
         try:
@@ -1497,3 +1496,20 @@ def send_nudge(nudge_id):
             sleep(5)
         nudge.is_sent = True
         nudge.save()
+
+
+@shared_task
+def send_assessment_invitation_mail_on_click(assessment, participant, assessment_link):
+    assessment = Assessment.objects.get(id=assessment.id)
+    send_mail_templates(
+        "assessment/assessment_reminder_mail_to_participant.html",
+        [participant.email],
+        "Meeraq - Assessment Reminder !",
+        {
+            "assessment_name": assessment.participant_view_name,
+            "participant_name": participant.name.capitalize(),
+            "link": assessment_link,
+            },
+            [],
+            )
+    sleep(5)
