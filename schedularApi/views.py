@@ -112,10 +112,6 @@ from api.views import (
 from django.db.models import Max
 import io
 from time import sleep
-from django.utils.module_loading import import_string
-from django.core.exceptions import ImproperlyConfigured, PermissionDenied
-from django.views.decorators.debug import sensitive_variables
-
 from assessmentApi.views import delete_participant_from_assessments
 from schedularApi.tasks import celery_send_unbooked_coaching_session_mail
 
@@ -166,63 +162,12 @@ def send_whatsapp_message_template(phone, payload):
         print(str(e))
 
 
-def load_backend(path):
-    return import_string(path)()
-
-
-def _get_backends(return_tuples=False):
-    backends = []
-    for backend_path in settings.AUTHENTICATION_BACKENDS:
-        backend = load_backend(backend_path)
-        backends.append((backend, backend_path) if return_tuples else backend)
-    if not backends:
-        raise ImproperlyConfigured(
-            "No authentication backends have been defined. Does "
-            "AUTHENTICATION_BACKENDS contain anything?"
-        )
-    return backends
-
-
-def get_backends():
-    return _get_backends(return_tuples=False)
-
-
 def updateLastLogin(email):
     today = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     user = User.objects.get(username=email)
     user.last_login = today
     user.save()
 
-
-@sensitive_variables("credentials")
-def authenticate(request=None, **credentials):
-    """
-    If the given credentials are valid, return a User object.
-    """
-    for backend, backend_path in _get_backends(return_tuples=True):
-        backend_signature = inspect.signature(backend.authenticate)
-        try:
-            backend_signature.bind(request, **credentials)
-        except TypeError:
-            # This backend doesn't accept these credentials as arguments. Try
-            # the next one.
-            continue
-        try:
-            user = backend.authenticate(request, **credentials)
-        except PermissionDenied:
-            # This backend says to stop in our tracks - this user should not be
-            # allowed in at all.
-            break
-        if user is None:
-            continue
-        # Annotate the user object with the path of the backend.
-        user.backend = backend_path
-        return user
-
-    # The credentials supplied are invalid to all backends, fire signal
-    user_login_failed.send(
-        sender=__name__, credentials=_clean_credentials(credentials), request=request
-    )
 
 
 def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
@@ -2423,6 +2368,7 @@ def project_report_download(request, project_id):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def project_report_download_session_wise(request, project_id, batch_id):
     try:
         batch = get_object_or_404(SchedularBatch, pk=batch_id)
@@ -3073,6 +3019,7 @@ def get_live_sessions_by_status(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def live_session_detail_view(request, pk):
     try:
         live_session = LiveSession.objects.get(pk=pk)
@@ -3092,6 +3039,7 @@ def live_session_detail_view(request, pk):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def facilitator_projects(request, facilitator_id):
     print(facilitator_id)
     try:
@@ -3103,6 +3051,7 @@ def facilitator_projects(request, facilitator_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_facilitator_sessions(request, facilitator_id):
     try:
         facilitator = Facilitator.objects.get(id=facilitator_id)

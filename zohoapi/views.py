@@ -42,6 +42,8 @@ from django.http import HttpResponse
 import io
 import pdfkit
 from django.middleware.csrf import get_token
+from django.db import transaction
+
 
 
 env = environ.Env()
@@ -997,103 +999,103 @@ class DownloadInvoice(APIView):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_vendor(request):
     # Extract data from the request
-    data = request.data
-    name = data.get("name", "")
-    email = data.get("email", "")
-    vendor_id = data.get("vendor", "")
-    phone = data.get("phone", "")
+    with transaction.atomic():
+        data = request.data
+        name = data.get("name", "")
+        email = data.get("email", "").trim().lower()
+        vendor_id = data.get("vendor", "")
+        phone = data.get("phone", "")
 
-    try:
-        # Check if the user with the given email already exists
-        user_profile = Profile.objects.get(user__email=email)
-        user = user_profile.user
-
-        # Check if the user has the role 'vendor'
-        if user_profile.roles.filter(name="vendor").exists():
-            return Response(
-                {"detail": "User already exists as a vendor."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        # If the user was not a vendor, update the Vendor model
         try:
-            vendor = Vendor.objects.get(user=user_profile)
+            # Check if the user with the given email already exists
+            user_profile = Profile.objects.get(user__email=email)
+            user = user_profile.user
 
-            # Check if the provided vendor_id already exists for another vendor
-            if Vendor.objects.exclude(id=vendor.id).filter(vendor_id=vendor_id).exists():
+            # Check if the user has the role 'vendor'
+            if user_profile.roles.filter(name="vendor").exists():
                 return Response(
-                    {"detail": "Vendor with the same vendor_id already exists."},
+                    {"detail": "User already exists as a vendor."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            vendor.name = name
-            vendor.phone = phone
-            vendor.vendor_id = vendor_id
-            vendor.save()
+            # If the user was not a vendor, update the Vendor model
+            try:
+                vendor = Vendor.objects.get(user=user_profile)
+                # Check if the provided vendor_id already exists for another vendor
+                if Vendor.objects.exclude(id=vendor.id).filter(vendor_id=vendor_id).exists():
+                    return Response(
+                        {"detail": "Vendor with the same vendor_id already exists."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
-        except Vendor.DoesNotExist:
-            # Check if the provided vendor_id already exists for another vendor
-            if Vendor.objects.filter(vendor_id=vendor_id).exists():
-                return Response(
-                    {"detail": "Vendor with the same vendor_id already exists."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                vendor.name = name
+                vendor.phone = phone
+                vendor.vendor_id = vendor_id
+                vendor.save()
+
+            except Vendor.DoesNotExist:
+                # Check if the provided vendor_id already exists for another vendor
+                if Vendor.objects.filter(vendor_id=vendor_id).exists():
+                    return Response(
+                        {"detail": "Vendor with the same vendor_id already exists."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                vendor_role, created = Role.objects.get_or_create(name="vendor")
+                vendor = Vendor.objects.create(
+                    user=user_profile,
+                    name=name,
+                    email=email,
+                    vendor_id=vendor_id,
+                    phone=phone,
                 )
+                vendor.save()
 
-            vendor_role = Role.objects.get(name="vendor")
-            vendor = Vendor.objects.create(
-                user=user_profile,
-                name=name,
-                email=email,
-                vendor_id=vendor_id,
-                phone=phone,
+            return Response(
+                {"detail": 'Role "vendor" assigned to the existing user successfully.'},
+                status=status.HTTP_200_OK,
             )
-            vendor.save()
 
-        return Response(
-            {"detail": 'Role "vendor" assigned to the existing user successfully.'},
-            status=status.HTTP_200_OK,
-        )
-
-    except Profile.DoesNotExist:
+        except Profile.DoesNotExist:
         # User with the given email doesn't exist, create a new Vendor
-        try:
-            user = User.objects.create_user(email, email=email)
-            user.set_unusable_password()
-            user.save()
+            try:
+                # Check if the provided vendor_id already exists for another vendor
+                if Vendor.objects.filter(vendor_id=vendor_id).exists():
+                    return Response(
+                        {"detail": "Vendor with the same vendor_id already exists."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                
+                user = User.objects.create_user(email, email=email)
+                user.set_unusable_password()
+                user.save()
+                vendor_role, created = Role.objects.get_or_create(name="vendor")
+                profile = Profile.objects.create(user=user)
+                profile.roles.add(vendor_role)
+                profile.save()
 
-            # Check if the provided vendor_id already exists for another vendor
-            if Vendor.objects.filter(vendor_id=vendor_id).exists():
+                vendor = Vendor.objects.create(
+                    user=profile, name=name, email=email, vendor_id=vendor_id, phone=phone
+                )
+                vendor.save()
+
                 return Response(
-                    {"detail": "Vendor with the same vendor_id already exists."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    {"detail": "New vendor created successfully."},
+                    status=status.HTTP_201_CREATED,
                 )
 
-            vendor_role = Role.objects.get(name="vendor")
-
-            profile = Profile.objects.create(user=user)
-            profile.roles.add(vendor_role)
-            profile.save()
-
-            vendor = Vendor.objects.create(
-                user=profile, name=name, email=email, vendor_id=vendor_id, phone=phone
-            )
-            vendor.save()
-
-            return Response(
-                {"detail": "New vendor created successfully."},
-                status=status.HTTP_201_CREATED,
-            )
-
-        except Exception as e:
-            return Response(
-                {"detail": f"Error creating vendor: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            except Exception as e:
+                return Response(
+                    {"detail": f"Error creating vendor: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_vendors(request):
     try:
         vendors = Vendor.objects.all()

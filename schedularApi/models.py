@@ -154,8 +154,6 @@ class LiveSession(models.Model):
     session_type = models.CharField(
         max_length=50, choices=SESSION_CHOICES, default="live_session"
     )
-
-   
     meeting_link = models.TextField(default="", blank=True)
 
 

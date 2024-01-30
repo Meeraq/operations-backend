@@ -70,7 +70,7 @@ MIDDLEWARE = [
     "api.middlewares.APILoggingMiddleware",
 ]
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = env("EMAIL_HOST")
 EMAIL_PORT = env("EMAIL_PORT")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
@@ -210,7 +210,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=3, minute=15, day_of_week="*"),
     },
     "send_upcoming_session_pmo_at_10am": {
-        "task": "your_app.tasks.send_upcoming_session_pmo_at_10am",
+        "task": "schedularApi.tasks.send_upcoming_session_pmo_at_10am",
         "schedule": crontab(hour=4, minute=30, day_of_week="*"),
     },
     "send_participant_morning_reminder_one_day_before_email": {
