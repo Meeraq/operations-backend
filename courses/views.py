@@ -1993,6 +1993,13 @@ def quiz_report_download(request, quiz_id):
     return response
 
 
+def calculate_nps(ratings):
+    promoters = sum(rating >= 9 for rating in ratings)
+    detractors = sum(rating <= 6 for rating in ratings)
+    nps = ((promoters - detractors) / len(ratings)) * 100
+    return nps
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_feedbacks_report(request):
@@ -2017,6 +2024,31 @@ def get_all_feedbacks_report(request):
             if total_participants > 0
             else 0
         )
+        questions_serializer = QuestionSerializer(feedback.questions, many=True)
+        question_data = {
+            question["id"]: {**question, "descriptive_answers": [], "ratings": []}
+            for question in questions_serializer.data
+        }
+        for response in feedback_lesson_responses:
+            for answer in response.answers.all():
+                question_id = answer.question.id
+                if answer.question.type.startswith("rating"):
+                    question_data[question_id]["ratings"].append(answer.rating)
+                elif answer.question.type == "descriptive_answer":
+                    question_data[question_id]["descriptive_answers"].append(
+                        answer.text_answer
+                    )
+        nps = None
+        for question_id, data in question_data.items():
+            # Calculate average rating for each question
+            ratings = data["ratings"]
+            if ratings:
+                if data["type"] == "rating_0_to_10":
+                    # Calculate NPS
+
+                    data["nps"] = calculate_nps(ratings)
+                    nps = data["nps"]
+                    break
         res.append(
             {
                 "id": feedback.id,
@@ -2026,6 +2058,7 @@ def get_all_feedbacks_report(request):
                 "total_participants": total_participants,
                 "total_responses": total_responses,
                 "response_percentage": response_percentage,
+                "nps": nps,
             }
         )
 
@@ -2152,10 +2185,9 @@ def get_feedback_report(request, feedback_id):
             if ratings:
                 if data["type"] == "rating_0_to_10":
                     # Calculate NPS
-                    promoters = sum(rating >= 9 for rating in ratings)
-                    detractors = sum(rating <= 6 for rating in ratings)
-                    nps = ((promoters - detractors) / len(ratings)) * 100
-                    data["nps"] = nps
+
+                    data["nps"] = calculate_nps(ratings)
+
                 else:
                     # Calculate average rating
                     data["average_rating"] = sum(ratings) / len(ratings)
