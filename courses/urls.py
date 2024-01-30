@@ -323,7 +323,11 @@ urlpatterns = [
         views.get_all_feedbacks_download_report,
     ),
     path(
-        "consolidated-feedback-download-report/<str:live_session_id>/",
-        views.get_consolidated_feedback_download_report,
+        "feedback/reports/project/consolidated/download/<int:project_id>/",
+        views.download_consolidated_project_report,
+    ),
+    path(
+        "feedback/reports/project/consolidated/",
+        views.feedback_reports_project_wise_consolidated,
     ),
 ]

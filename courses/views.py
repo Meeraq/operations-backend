@@ -1184,7 +1184,8 @@ def get_course_enrollment_for_pmo_preview_for_course_template(
         course_template = CourseTemplate.objects.get(id=course_template_id)
         course_serializer = CourseTemplateSerializer(course_template)
         lessons = Lesson.objects.filter(
-            Q(course_template=course_template),  Q(status="public"),
+            Q(course_template=course_template),
+            Q(status="public"),
             ~Q(lesson_type="feedback"),
         )
         lessons_serializer = LessonSerializer(lessons, many=True)
@@ -1993,6 +1994,13 @@ def quiz_report_download(request, quiz_id):
     return response
 
 
+def calculate_nps(ratings):
+    promoters = sum(rating >= 9 for rating in ratings)
+    detractors = sum(rating <= 6 for rating in ratings)
+    nps = ((promoters - detractors) / len(ratings)) * 100
+    return nps
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_feedbacks_report(request):
@@ -2017,6 +2025,31 @@ def get_all_feedbacks_report(request):
             if total_participants > 0
             else 0
         )
+        questions_serializer = QuestionSerializer(feedback.questions, many=True)
+        question_data = {
+            question["id"]: {**question, "descriptive_answers": [], "ratings": []}
+            for question in questions_serializer.data
+        }
+        for response in feedback_lesson_responses:
+            for answer in response.answers.all():
+                question_id = answer.question.id
+                if answer.question.type.startswith("rating"):
+                    question_data[question_id]["ratings"].append(answer.rating)
+                elif answer.question.type == "descriptive_answer":
+                    question_data[question_id]["descriptive_answers"].append(
+                        answer.text_answer
+                    )
+        nps = None
+        for question_id, data in question_data.items():
+            # Calculate average rating for each question
+            ratings = data["ratings"]
+            if ratings:
+                if data["type"] == "rating_0_to_10":
+                    # Calculate NPS
+
+                    data["nps"] = calculate_nps(ratings)
+                    nps = data["nps"]
+                    break
         res.append(
             {
                 "id": feedback.id,
@@ -2026,6 +2059,7 @@ def get_all_feedbacks_report(request):
                 "total_participants": total_participants,
                 "total_responses": total_responses,
                 "response_percentage": response_percentage,
+                "nps": nps,
             }
         )
 
@@ -2152,10 +2186,9 @@ def get_feedback_report(request, feedback_id):
             if ratings:
                 if data["type"] == "rating_0_to_10":
                     # Calculate NPS
-                    promoters = sum(rating >= 9 for rating in ratings)
-                    detractors = sum(rating <= 6 for rating in ratings)
-                    nps = ((promoters - detractors) / len(ratings)) * 100
-                    data["nps"] = nps
+
+                    data["nps"] = calculate_nps(ratings)
+
                 else:
                     # Calculate average rating
                     data["average_rating"] = sum(ratings) / len(ratings)
@@ -3183,3 +3216,94 @@ def get_consolidated_feedback_download_report(request, live_session_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def feedback_reports_project_wise_consolidated(request):
+    projects = SchedularProject.objects.all()
+    res = []
+    for project in projects:
+        feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+            feedback_lesson__lesson__course__batch__project=project
+        )
+        if feedback_lesson_responses.exists():
+            total_participants_count = (
+                Learner.objects.filter(schedularbatch__project=project)
+                .distinct()
+                .count()
+            )
+            percentage_responded = (
+                round(
+                    (feedback_lesson_responses.count() / total_participants_count)
+                    * 100,
+                    2,
+                )
+                if total_participants_count
+                else 0
+            )
+            data = {
+                "project_name": project.name,
+                "total_participants": total_participants_count,
+                "total_responses": feedback_lesson_responses.count(),
+                "project_id": project.id,
+                "percentage_responded": percentage_responded,
+            }
+            res.append(data)
+    return Response(res)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def download_consolidated_project_report(request, project_id):
+    # Create a new workbook and add a worksheet
+    wb = Workbook()
+    ws = wb.active
+    # Write headers to the worksheet
+    headers = set()
+    feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+        feedback_lesson__lesson__course__batch__project__id=project_id
+    )
+    total_participants_in_project = Learner.objects.filter(schedularbatch__project__id=project_id).distinct()
+    participants_who_responsded = set()
+    for feedback_lesson_response in feedback_lesson_responses:
+        participants_who_responsded.add(feedback_lesson_response.learner.id)
+        for answer in feedback_lesson_response.answers.all():
+            headers.add(answer.question.text)
+    headers_list = list(headers)
+    headers_list.insert(0, "Participant Name")
+
+    for col_num, header in enumerate(headers_list, 1):
+        ws.cell(row=1, column=col_num, value=header)
+
+    for feedback_lesson_response in feedback_lesson_responses:
+        data = ["-" for _ in headers_list]
+        participant_index = headers_list.index("Participant Name")
+        data[participant_index] = feedback_lesson_response.learner.name
+        for answer in feedback_lesson_response.answers.all():
+            question_index_in_headers = headers_list.index(answer.question.text)
+            if answer.question.type == "descriptive_answer":
+                data[question_index_in_headers] = answer.text_answer
+            elif (
+                answer.question.type == "rating_1_to_5"
+                or answer.question.type == "rating_1_to_10"
+                or answer.question.type == "rating_0_to_10"
+            ):
+                data[question_index_in_headers] = answer.rating
+        ws.append(data)
+    participants_who_responsded_list = list(participants_who_responsded) 
+    participants_not_responded = total_participants_in_project.exclude(id__in=participants_who_responsded_list)
+    
+    for learner in participants_not_responded:
+        data = ["-" for _ in headers_list]
+        participant_index = headers_list.index("Participant Name")
+        data[participant_index] = learner.name
+        ws.append(data)
+        
+    # Create a response with the Excel file
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = "attachment; filename=Project_feedback_report.xlsx"
+    wb.save(response)
+    return response

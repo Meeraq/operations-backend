@@ -122,6 +122,7 @@ class Profile(models.Model):
         ("learner", "learner"),
         ("hr", "hr"),
         ("superadmin", "superadmin"),
+        ("facilitator", "facilitator")
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)

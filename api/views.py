@@ -158,6 +158,10 @@ from schedularApi.models import (
 )
 from schedularApi.serializers import SchedularProjectSerializer
 
+
+from schedularApi.serializers import (
+    FacilitatorDepthOneSerializer
+)
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
@@ -1573,12 +1577,14 @@ def get_csrf(request):
 @permission_classes([AllowAny])
 def login_view(request):
     data = request.data
+    print(data)
     username = data.get("username")
     password = data.get("password")
     platform = data.get("platform", "unknown")
     if username is None or password is None:
         raise ValidationError({"detail": "Please provide username and password."})
     user = authenticate(request, username=username, password=password)
+
 
     if user is None:
         raise AuthenticationFailed({"detail": "Invalid credentials."})
@@ -1666,6 +1672,13 @@ def get_user_data(user):
             **serializer.data,
             "is_caas_allowed": is_caas_allowed,
             "is_seeq_allowed": is_seeq_allowed,
+            "roles": roles,
+            "user": {**serializer.data["user"], "type": user_profile_role},
+        }
+    elif user_profile_role == "facilitator":
+        serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
+        return {
+            **serializer.data,
             "roles": roles,
             "user": {**serializer.data["user"], "type": user_profile_role},
         }
@@ -7511,6 +7524,8 @@ def change_user_role(request, user_id):
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "superadmin":
         serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
+    elif user_profile_role == "facilitator":
+        serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
@@ -7519,6 +7534,7 @@ def change_user_role(request, user_id):
         is_seeq_allowed = SchedularBatch.objects.filter(
             learners=user.profile.learner
         ).exists()
+    
         return Response(
             {
                 **serializer.data,
