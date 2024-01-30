@@ -122,6 +122,7 @@ class Profile(models.Model):
         ("learner", "learner"),
         ("hr", "hr"),
         ("superadmin", "superadmin"),
+        ("facilitator", "facilitator")
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)
@@ -741,3 +742,15 @@ class FinalizeCoachActivity(models.Model):
 
     def __str__(self):
         return f"{self.user_who_finalized.username} finalized the coach."
+
+
+class APILog(models.Model):
+    path = models.CharField(max_length=255)
+    method = models.CharField(max_length=10)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)

@@ -131,7 +131,7 @@ urlpatterns = [
     ),
     path(
         "add-facilitator/",
-        views.addFacilitator,
+        views.add_facilitator,
     ),
     path(
         "facilitators/",
@@ -161,6 +161,15 @@ urlpatterns = [
     path(
         "live-session/<int:pk>/",
         views.live_session_detail_view,
+    ),
+    path(
+        "facilitators/<int:facilitator_id>/batches_and_projects/",
+        views.facilitator_projects,
+        name="facilitator_batches_projects",
+    ),
+    path(
+        "facilitators/<int:facilitator_id>/sessions/",
+        views.get_facilitator_sessions,
     ),
     path(
         "update-certificate-status/",
