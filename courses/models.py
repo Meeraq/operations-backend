@@ -31,7 +31,9 @@ class Course(models.Model):
     name = models.TextField()
     description = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
-    course_template = models.ForeignKey(CourseTemplate, on_delete=models.CASCADE)
+    course_template = models.ForeignKey(
+        CourseTemplate, on_delete=models.SET_NULL, blank=True, null=True
+    )
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
     nudge_start_date = models.DateField(default=None, blank=True, null=True)
     nudge_frequency = models.CharField(max_length=50, default="", blank=True, null=True)
