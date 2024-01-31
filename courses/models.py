@@ -147,6 +147,7 @@ class Video(models.Model):
 class VideoLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     video = models.ForeignKey(Video, on_delete=models.CASCADE)
+    content = models.TextField(default="", blank=True)
 
 
 class File(models.Model):

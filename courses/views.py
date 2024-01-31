@@ -1646,6 +1646,7 @@ def create_video_lesson(request):
     if request.method == "POST":
         lesson_data = request.data.get("lesson")
         video_id = request.data.get("video")
+        content = request.data.get("content")
 
         # Create or update lesson
         lesson_serializer = LessonSerializer(data=lesson_data)
@@ -1665,6 +1666,7 @@ def create_video_lesson(request):
             video_lesson_data = {
                 "lesson": lesson_instance.id,
                 "video": video_instance.id,
+                "content": content,
             }
             video_lesson_serializer = VideoLessonSerializer(data=video_lesson_data)
             if video_lesson_serializer.is_valid():
@@ -1716,6 +1718,7 @@ def update_video_lesson(request, lesson_id):
         )
 
     video_id = request.data.get("video")
+    content=request.data.get("content")
 
     try:
         video = Video.objects.get(pk=video_id)
@@ -1730,7 +1733,7 @@ def update_video_lesson(request, lesson_id):
         if lesson_serializer.is_valid():
             lesson_serializer.save()
 
-    video_lesson_data = {"lesson": lesson_id, "video": video_id}
+    video_lesson_data = {"lesson": lesson_id, "video": video_id, "content":content}
 
     try:
         video_lesson = VideoLesson.objects.get(lesson_id=lesson_id)
