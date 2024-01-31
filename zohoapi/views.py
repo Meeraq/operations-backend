@@ -506,12 +506,14 @@ def filter_purchase_order_data(purchase_orders):
         filtered_purchase_orders = []
         for order in purchase_orders:
             purchaseorder_number = order.get("purchaseorder_number", "").strip()
-            created_time = order.get("created_time", "").strip()
+            created_time_str = order.get("created_time", "").strip()
+            if created_time_str:
+                created_time = datetime.strptime(
+                    created_time_str, "%Y-%m-%dT%H:%M:%S%z"
+                )
             if (
                 purchaseorder_number in purchase_orders_allowed
-                or created_time
-                and created_time[:4].isdigit()
-                and int(created_time[:4]) >= 2024
+                or created_time.year >= 2024
             ):
                 filtered_purchase_orders.append(order)
         return filtered_purchase_orders
@@ -549,12 +551,8 @@ def filter_invoice_data(invoices):
     try:
         filtered_invoices = []
         for invoice in invoices:
-            # Assuming created_time is a field in the InvoiceData model
-            created_time = str(invoice.created_at).strip()
-
             if (
-                created_time[:4].isdigit()
-                and int(created_time[:4]) >= 2024
+                invoice.created_at.year >= 2024
                 or invoice.purchase_order_no.strip() in purchase_orders_allowed
             ):
                 filtered_invoices.append(invoice)
@@ -618,7 +616,7 @@ def get_purchase_order_data(request, purchaseorder_id):
         response = requests.get(api_url, headers=auth_header)
         if response.status_code == 200:
             purchase_order = response.json().get("purchaseorder")
-            purchase_orders = filter_purchase_order_data(purchase_orders)
+
             invoices = InvoiceData.objects.filter(
                 purchase_order_no=purchase_order.get("purchaseorder_number")
             )
@@ -807,7 +805,7 @@ def get_purchase_order_and_invoices(request, purchase_order_id):
         response = requests.get(api_url, headers=auth_header)
         if response.status_code == 200:
             purchase_order = response.json()["purchaseorder"]
-            purchase_orders = filter_purchase_order_data(purchase_orders)
+
             invoices = InvoiceData.objects.filter(purchase_order_id=purchase_order_id)
             invoices = filter_invoice_data(invoices)
             invoice_serializer = InvoiceDataSerializer(invoices, many=True)
