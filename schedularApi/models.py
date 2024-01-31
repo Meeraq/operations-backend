@@ -24,9 +24,6 @@ class SchedularProject(models.Model):
 
 
 class Facilitator(models.Model):
-    user = models.OneToOneField(
-        Profile, on_delete=models.CASCADE, blank=True, default=""
-    )
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
