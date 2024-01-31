@@ -511,11 +511,11 @@ def filter_purchase_order_data(purchase_orders):
                 created_time = datetime.strptime(
                     created_time_str, "%Y-%m-%dT%H:%M:%S%z"
                 )
-            if (
-                purchaseorder_number in purchase_orders_allowed
-                or created_time.year >= 2024
-            ):
-                filtered_purchase_orders.append(order)
+                if (
+                    purchaseorder_number in purchase_orders_allowed
+                    or created_time.year >= 2024
+                ):
+                    filtered_purchase_orders.append(order)
         return filtered_purchase_orders
     except Exception as e:
         print(str(e))
