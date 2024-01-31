@@ -2488,9 +2488,11 @@ def create_resource(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_pdf_lesson(request):
+    print(request.data)
     try:
         lesson_data = request.data.get("lesson")
         pdf_id = request.data.get("pdf_id")
+        content = request.data.get("content")
         course_template_id = lesson_data.get("course_template", "")
         course_id = lesson_data.get("course", "")
 
@@ -2527,7 +2529,7 @@ def create_pdf_lesson(request):
             )
 
             pdf_lesson_instance, created = PdfLesson.objects.get_or_create(
-                lesson=lesson_instance, defaults={"pdf_id": pdf_id}
+                lesson=lesson_instance, defaults={"pdf_id": pdf_id, "content": content}
             )
 
             if created or not created:
@@ -2558,8 +2560,8 @@ def update_pdf_lesson(request, pk):
 
     # Extract data from request
     lesson_data = request.data.get("lesson", {})
-    print(lesson_data)
     pdf_id = request.data.get("pdf_id")
+    content=request.data.get("content")
 
     try:
         lesson = Lesson.objects.get(id=lesson_data.get("id"))
@@ -2572,7 +2574,8 @@ def update_pdf_lesson(request, pk):
         lesson_serializer.save()
 
         # Update PdfLesson instance
-        pdf_serializer = PdfLessonSerializer(pdf_lesson, data=lesson_data)
+        pdf_data = {"content": content}
+        pdf_serializer = PdfLessonSerializer(pdf_lesson, data=pdf_data)
         if pdf_serializer.is_valid():
             pdf_serializer.save()
 
