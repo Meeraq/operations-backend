@@ -1,6 +1,14 @@
 from django.db import models
 from django_celery_beat.models import PeriodicTask
-from api.models import Organisation, HR, Coach, Learner, Pmo, SessionRequestCaas, Profile
+from api.models import (
+    Organisation,
+    HR,
+    Coach,
+    Learner,
+    Pmo,
+    SessionRequestCaas,
+    Profile,
+)
 
 
 # Create your models here.
@@ -135,7 +143,7 @@ class LiveSession(models.Model):
     SESSION_CHOICES = [
         ("live_session", "Live Session"),
         ("check_in_session", "Check In Session"),
-        ("in_person_session","In Person Session")
+        ("in_person_session", "In Person Session"),
     ]
 
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
@@ -181,8 +189,6 @@ class SentEmail(models.Model):
 
     def __str__(self):
         return f"{self.id} Subject: {self.subject}"
-
-
 
 
 class CalendarInvites(models.Model):
