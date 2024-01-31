@@ -807,7 +807,7 @@ def get_purchase_order_and_invoices(request, purchase_order_id):
             purchase_order = response.json()["purchaseorder"]
 
             invoices = InvoiceData.objects.filter(purchase_order_id=purchase_order_id)
-            invoices = filter_invoice_data(invoices)
+        
             invoice_serializer = InvoiceDataSerializer(invoices, many=True)
             return Response(
                 {"purchase_order": purchase_order, "invoices": invoice_serializer.data},
