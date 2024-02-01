@@ -435,7 +435,10 @@ def send_participant_morning_reminder_email():
         availibility__end_time__gte=start_timestamp,
     )
     for session in today_sessions:
-        if session.coaching_session.batch.project.automated_reminder:
+        if (
+            session.coaching_session.batch.project.automated_reminder
+            and session.coaching_session.batch.project.status == "ongoing"
+        ):
             name = session.learner.name
             meeting_link = (
                 f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}"
@@ -509,7 +512,10 @@ def send_participant_morning_reminder_one_day_before_email():
         availibility__end_time__gte=start_timestamp_one_day_ahead,
     )
     for session in tomorrow_sessions:
-        if session.coaching_session.batch.project.automated_reminder:
+        if (
+            session.coaching_session.batch.project.automated_reminder
+            and session.coaching_session.batch.project.status == "ongoing"
+        ):
             name = session.learner.name
             meeting_link = (
                 f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}"
@@ -715,7 +721,10 @@ def send_whatsapp_reminder_1_day_before_live_session():
         live_sessions = LiveSession.objects.filter(date_time__date=tomorrow)
 
         for session in live_sessions:
-            if session.batch.project.automated_reminder:
+            if (
+                session.batch.project.automated_reminder
+                and session.batch.project.status == "ongoing"
+            ):
                 learners = session.batch.learners.all()
                 session_datetime_str = session.date_time.astimezone(
                     pytz.timezone("Asia/Kolkata")
@@ -761,7 +770,10 @@ def send_whatsapp_reminder_same_day_morning():
         live_sessions = LiveSession.objects.filter(date_time__date=today_morning.date())
 
         for session in live_sessions:
-            if session.batch.project.automated_reminder:
+            if (
+                session.batch.project.automated_reminder
+                and session.batch.project.status == "ongoing"
+            ):
                 learners = session.batch.learners.all()
                 session_datetime_str = session.date_time.astimezone(
                     pytz.timezone("Asia/Kolkata")
@@ -802,7 +814,10 @@ def send_whatsapp_reminder_same_day_morning():
 def send_whatsapp_reminder_30_min_before_live_session(id):
     try:
         live_session = LiveSession.objects.get(id=id)
-        if live_session.batch.project.automated_reminder:
+        if (
+            live_session.batch.project.automated_reminder
+            and live_session.batch.project.status == "ongoing"
+        ):
             learners = live_session.batch.learners.all()
             for learner in learners:
                 send_whatsapp_message_template(
@@ -847,7 +862,10 @@ def send_feedback_lesson_reminders():
     today = timezone.now().date()
     today_live_sessions = LiveSession.objects.filter(date_time__date=today)
     for live_session in today_live_sessions:
-        if live_session.batch.project.automated_reminder:
+        if (
+            live_session.batch.project.automated_reminder
+            and live_session.batch.project.status == "ongoing"
+        ):
             try:
                 # Get the associated SchedularBatch for each LiveSession
                 schedular_batch = live_session.batch
@@ -1044,7 +1062,10 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_seeq():
             availibility__end_time__gte=start_timestamp,
         )
         for session in today_sessions:
-            if session.coaching_session.batch.project.automated_reminder:
+            if (
+                session.coaching_session.batch.project.automated_reminder
+                and session.coaching_session.batch.project.status == "ongoing"
+            ):
                 name = session.learner.name
                 phone = session.learner.phone
                 booking_id = session.availibility.coach.room_id
@@ -1355,7 +1376,10 @@ def coachee_booking_reminder_whatsapp_at_8am():
         )
         for coaching_session in coaching_sessions_exist:
             result = available_slots_count_for_participant(coaching_session.id)
-            if coaching_session.batch.project.automated_reminder:
+            if (
+                coaching_session.batch.project.automated_reminder
+                and coaching_session.batch.project.status == "ongoing"
+            ):
                 learners_in_coaching_session = coaching_session.batch.learners.all()
                 for learner in learners_in_coaching_session:
                     try:
@@ -1458,6 +1482,7 @@ def schedule_nudges(course_id):
         if (
             nudge.course.batch.project.automated_reminder
             and nudge.course.batch.project.nudges
+            and nudge.course.batch.project.status == "ongoing"
         ):
             clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
             periodic_task = PeriodicTask.objects.create(
@@ -1483,6 +1508,7 @@ def send_nudge(nudge_id):
     if (
         nudge.course.batch.project.automated_reminder
         and nudge.course.batch.project.nudges
+        and nudge.course.batch.project.status == "ongoing"
     ):
         subject = f"New Nudge: {nudge.name}"
         if nudge.is_sent:

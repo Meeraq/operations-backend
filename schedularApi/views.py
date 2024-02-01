@@ -169,7 +169,6 @@ def updateLastLogin(email):
     user.save()
 
 
-
 def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
     coaching_session = CoachingSession.objects.get(id=coaching_session_id)
     if (
@@ -630,7 +629,10 @@ def update_live_session(request, live_session_id):
                 print(str(e))
                 pass
         AIR_INDIA_PROJECT_ID = 3
-        if not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID:
+        if (
+            not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
+            and update_live_session.batch.project.status == "ongoing"
+        ):
             try:
                 learners = live_session.batch.learners.all()
                 facilitators = live_session.batch.facilitator.all()
@@ -659,7 +661,7 @@ def update_live_session(request, live_session_id):
                         "type": "required",
                     }
                     attendees.append(attendee)
-                
+
                 start_time_stamp = update_live_session.date_time.timestamp() * 1000
                 end_time_stamp = (
                     start_time_stamp + int(update_live_session.duration) * 60000
@@ -3043,7 +3045,9 @@ def live_session_detail_view(request, pk):
 def facilitator_projects(request, facilitator_id):
     print(facilitator_id)
     try:
-        projects = SchedularProject.objects.filter(schedularbatch__facilitator__id=facilitator_id)
+        projects = SchedularProject.objects.filter(
+            schedularbatch__facilitator__id=facilitator_id
+        )
         serializer = SchedularProjectSerializer(projects, many=True)
         return Response(serializer.data)
     except Facilitator.DoesNotExist:
@@ -3524,3 +3528,30 @@ def update_certificate_status_for_multiple_participants(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to release certificate"}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_project_status(request):
+    project_id = request.data.get("id")
+
+    try:
+        project = SchedularProject.objects.get(id=project_id)
+
+        project.status = request.data.get("status")
+
+        project.save()
+
+        return Response(
+            {"message": "Update successfully."},
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {
+                "error": "Failed to Update Status.",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )

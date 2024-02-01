@@ -191,4 +191,8 @@ urlpatterns = [
         "update-certificate-status-for-multiple-participants/",
         views.update_certificate_status_for_multiple_participants,
     ),
+    path(
+        "update-project-status/",
+        views.update_project_status,
+    ),
 ]
