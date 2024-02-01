@@ -53,8 +53,8 @@ from .views import (
     GetLearnersUniqueId,
     StartAssessmentDataForParticipant,
     StartAssessmentParticipantDisabled,
-    PreReportDownloadForParticipant,
-    PreReportDownloadForAllParticipant,
+    PrePostReportDownloadForParticipant,
+    PrePostReportDownloadForAllParticipant,
     MoveParticipant,
     GetAllLearnersUniqueId,
     DownloadParticipantResponseStatusData,
@@ -243,11 +243,11 @@ urlpatterns = [
     ),
     path(
         "pre-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
-        PreReportDownloadForParticipant.as_view(),
+        PrePostReportDownloadForParticipant.as_view(),
     ),
     path(
         "pre-report-download-for-all-participant/<int:assessment_id>/",
-        PreReportDownloadForAllParticipant.as_view(),
+        PrePostReportDownloadForAllParticipant.as_view(),
     ),
     path(
         "move-participant/",
