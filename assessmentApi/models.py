@@ -52,9 +52,16 @@ class Questionnaire(models.Model):
         ("self", "Self"),
         ("360", "360"),
     ]
+    QUESTIONS_TYPE = [
+        ("single_correct", " Single Correct"),
+        ("rating_type", "Rating Type"),
+    ]
     name = models.CharField(max_length=255, blank=True, null=True)
     type = models.CharField(max_length=10, choices=QUESTIONNAIRE_TYPES, blank=True)
     questions = models.ManyToManyField(Question, blank=True)
+    questions_type = models.CharField(
+        max_length=255, choices=QUESTIONS_TYPE, default="single_correct"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -153,6 +160,7 @@ class Assessment(models.Model):
         "self", on_delete=models.CASCADE, blank=True, null=True
     )
     initial_reminder = models.BooleanField(blank=True, default=False)
+
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -218,10 +226,9 @@ class ParticipantUniqueId(models.Model):
     def __str__(self):
         return f"Unique Id for Participant {self.participant.name} in Assessment {self.assessment.name}."
 
+
 class ParticipantReleasedResults(models.Model):
-    participants =models.ManyToManyField(Learner, blank=True) 
+    participants = models.ManyToManyField(Learner, blank=True)
     assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
-    
