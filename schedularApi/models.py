@@ -144,6 +144,7 @@ class LiveSession(models.Model):
         ("live_session", "Live Session"),
         ("check_in_session", "Check In Session"),
         ("in_person_session", "In Person Session"),
+        ("kickoff_session","Kickoff Session"),
     ]
 
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)

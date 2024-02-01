@@ -1042,6 +1042,7 @@ def add_batch(request, project_id):
                             "live_session",
                             "check_in_session",
                             "in_person_session",
+                            "kickoff_session",
                         ]:
                             session_number = (
                                 LiveSession.objects.filter(
@@ -3158,6 +3159,7 @@ def add_new_session_in_project_structure(request):
                     "live_session",
                     "check_in_session",
                     "in_person_session",
+                    "kickoff_session"
                 ]:
                     session_number = (
                         LiveSession.objects.filter(
@@ -3186,6 +3188,8 @@ def add_new_session_in_project_structure(request):
                             session_name = "Check In Session"
                         elif live_session.session_type == "in_person_session":
                             session_name = "In Person Session"
+                        elif live_session.session_type == "kickoff_session":
+                            session_name = "Kickoff Session"
 
                         new_lesson = Lesson.objects.create(
                             course=course,
@@ -3355,6 +3359,7 @@ def delete_session_from_project_structure(request):
                     "live_session",
                     "check_in_session",
                     "in_person_session",
+                    "kickoff_session"
                 ]:
                     live_session = LiveSession.objects.filter(
                         batch=batch, order=order, session_type=session_type
@@ -3424,6 +3429,7 @@ def delete_session_from_project_structure(request):
                     "live_session",
                     "check_in_session",
                     "in_person_session",
+                    "kickoff_session",
                 ]:
                     for lesson in Lesson.objects.filter(
                         course=course, lesson_type="live_session"

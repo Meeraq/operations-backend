@@ -2122,6 +2122,8 @@ def get_consolidated_feedback_report(request):
                                     session_name = "Check In Session"
                                 elif live_session.session_type == "in_person_session":
                                     session_name = "In Person Session"
+                                elif live_session.session_type == "kickoff_session":
+                                    session_name = "Kickoff Session"
                                 live_session_key = f"{project.name} {session_name} {live_session.live_session_number}"
                                 if live_session_key not in data:
                                     data[live_session_key] = {
@@ -2389,6 +2391,8 @@ class AssignCourseTemplateToBatch(APIView):
                         session_name = "Check In Session"
                     elif live_session.session_type == "in_person_session":
                         session_name = "In Person Session"
+                    elif live_session.session_type == "kickoff_session":
+                        session_name = "Kickoff Session"
 
                     new_lesson = Lesson.objects.create(
                         course=new_course,
