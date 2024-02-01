@@ -178,6 +178,7 @@ from collections import defaultdict
 import pandas as pd
 from django.http import HttpResponse
 import environ
+from time import sleep
 
 env = environ.Env()
 
@@ -6894,26 +6895,23 @@ class ActivitySummary(APIView):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def send_reset_password_link(request):
-    # Assuming you are sending a POST request with a list of emails in the body
     users = request.data["users"]
     for user_data in users:
         try:
             user = User.objects.get(email=user_data["email"])
-            # Replace YourUserModel with your actual user model
             token = get_token_generator().generate_token()
-            # Save the token to the database
             ResetPasswordToken.objects.create(user=user, key=token)
-            # def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
-            reset_password_link = f"https://vendor.meeraq.com/reset-password/{token}"
+            reset_password_link = f"{env('ZOHO_APP_URL')}/reset-password/{token}"
             send_mail_templates(
-                "greeting_email_to_vendor.html",
+                "vendors/vendor_welcome.html",
                 [user_data["email"]],
                 "Meeraq - Exciting News! New Vendor Platform Launch.",
-                {"vendor_name": user_data["name"], "link": reset_password_link},
+                {"name": user_data["name"], "link": reset_password_link},
                 [],
             )
         except Exception as e:
             print(f"Error sending link to {user_data['email']}: {str(e)}")
+        sleep(5)
     return Response({"message": "Reset password links sent successfully"})
 
 
