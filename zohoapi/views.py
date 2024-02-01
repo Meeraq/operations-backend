@@ -1134,7 +1134,7 @@ def add_vendor(request):
     with transaction.atomic():
         data = request.data
         name = data.get("name", "")
-        email = data.get("email", "").trim().lower()
+        email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
 
