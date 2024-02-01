@@ -3833,6 +3833,135 @@ class PrePostReportDownloadForAllParticipant(APIView):
             )
 
 
+class PostReportDownloadForParticipant(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, assessment_id, participant_id):
+        try:
+            try:
+                assessment = Assessment.objects.get(id=assessment_id)
+
+            except Assessment.DoesNotExist as e:
+                print(str(e))
+                return Response(
+                    {"error": "Assessment or participant not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            participant = Learner.objects.get(id=participant_id)
+            encoded_image = None
+            compentency_with_description = None
+            if assessment.questionnaire.questions_type == "single_correct":
+                (
+                    encoded_image,
+                    compentency_with_description,
+                ) = generate_graph_for_participant_single_correct(
+                    participant, assessment_id, assessment
+                )
+            elif assessment.questionnaire.questions_type == "rating_type":
+                (
+                    encoded_image,
+                    compentency_with_description,
+                ) = generate_graph_for_participant_rating_type(
+                    participant, assessment_id, assessment
+                )
+
+            email_message = render_to_string(
+                "assessment/air_india_assessement_report.html",
+                {
+                    "name": participant.name.title(),
+                    "image_base64": encoded_image,
+                    "compentency_with_description": compentency_with_description,
+                    "assessment_timing": assessment.assessment_timing,
+                    "assessment_name": assessment.participant_view_name,
+                },
+            )
+
+            pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response[
+                "Content-Disposition"
+            ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
+
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to downlaod."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class PostReportDownloadForAllParticipant(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, assessment_id):
+        try:
+            try:
+                assessment = Assessment.objects.get(id=assessment_id)
+
+            except Assessment.DoesNotExist as e:
+                print(str(e))
+                return Response(
+                    {"error": "Assessment or participant not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            participant_context = []
+            for participant_observer in assessment.participants_observers.all():
+                participant = participant_observer.participant
+                encoded_image = None
+                compentency_with_description = None
+                if assessment.questionnaire.questions_type == "single_correct":
+                    (
+                        encoded_image,
+                        compentency_with_description,
+                    ) = generate_graph_for_participant_single_correct(
+                        participant, assessment_id, assessment
+                    )
+
+                elif assessment.questionnaire.questions_type == "rating_type":
+                    (
+                        encoded_image,
+                        compentency_with_description,
+                    ) = generate_graph_for_participant_rating_type(
+                        participant, assessment_id, assessment
+                    )
+
+                participant_context.append(
+                    {
+                        "name": participant.name.title(),
+                        "image_base64": encoded_image,
+                        "compentency_with_description": compentency_with_description,
+                        "assessment_timing": assessment.assessment_timing,
+                    }
+                )
+
+            email_message = render_to_string(
+                "assessment/air_india_assessment_report_batch_wise.html",
+                {
+                    "participant_context": participant_context,
+                    "assessment_name": assessment.participant_view_name,
+                },
+            )
+
+            pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response[
+                "Content-Disposition"
+            ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
+
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to donwlaod report."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
 class ReleaseResults(APIView):
     permission_classes = [IsAuthenticated]
 
