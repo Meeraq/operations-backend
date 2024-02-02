@@ -473,7 +473,7 @@ def send_upcoming_session_pmo_at_10am():
                     (int(session.availibility.start_time) / 1000) + 19800
                 ).strftime("%I:%M %p")
                 end_time = datetime.fromtimestamp(
-                    (int(session.availibility.start_time) / 1000) + 19800
+                    (int(session.availibility.end_time) / 1000) + 19800
                 ).strftime("%I:%M %p")
                 session_details = {
                     # "Session ID":,
