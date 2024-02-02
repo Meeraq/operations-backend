@@ -147,6 +147,7 @@ class Video(models.Model):
 class VideoLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     video = models.ForeignKey(Video, on_delete=models.CASCADE)
+    content = models.TextField(default="", blank=True)
 
 
 class File(models.Model):
@@ -233,6 +234,7 @@ class Resources(models.Model):
 class PdfLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     pdf = models.ForeignKey(Resources, on_delete=models.CASCADE)
+    content = models.TextField(default="", blank=True)
 
 
 class ThinkificLessonCompleted(models.Model):

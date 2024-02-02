@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from collections import defaultdict
 
 # Create your views here.
 import boto3
@@ -1646,6 +1647,7 @@ def create_video_lesson(request):
     if request.method == "POST":
         lesson_data = request.data.get("lesson")
         video_id = request.data.get("video")
+        content = request.data.get("content")
 
         # Create or update lesson
         lesson_serializer = LessonSerializer(data=lesson_data)
@@ -1665,6 +1667,7 @@ def create_video_lesson(request):
             video_lesson_data = {
                 "lesson": lesson_instance.id,
                 "video": video_instance.id,
+                "content": content,
             }
             video_lesson_serializer = VideoLessonSerializer(data=video_lesson_data)
             if video_lesson_serializer.is_valid():
@@ -1716,6 +1719,7 @@ def update_video_lesson(request, lesson_id):
         )
 
     video_id = request.data.get("video")
+    content=request.data.get("content")
 
     try:
         video = Video.objects.get(pk=video_id)
@@ -1730,7 +1734,7 @@ def update_video_lesson(request, lesson_id):
         if lesson_serializer.is_valid():
             lesson_serializer.save()
 
-    video_lesson_data = {"lesson": lesson_id, "video": video_id}
+    video_lesson_data = {"lesson": lesson_id, "video": video_id, "content":content}
 
     try:
         video_lesson = VideoLesson.objects.get(lesson_id=lesson_id)
@@ -2489,9 +2493,11 @@ def create_resource(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_pdf_lesson(request):
+    print(request.data)
     try:
         lesson_data = request.data.get("lesson")
         pdf_id = request.data.get("pdf_id")
+        content = request.data.get("content")
         course_template_id = lesson_data.get("course_template", "")
         course_id = lesson_data.get("course", "")
 
@@ -2528,7 +2534,7 @@ def create_pdf_lesson(request):
             )
 
             pdf_lesson_instance, created = PdfLesson.objects.get_or_create(
-                lesson=lesson_instance, defaults={"pdf_id": pdf_id}
+                lesson=lesson_instance, defaults={"pdf_id": pdf_id, "content": content}
             )
 
             if created or not created:
@@ -2559,8 +2565,8 @@ def update_pdf_lesson(request, pk):
 
     # Extract data from request
     lesson_data = request.data.get("lesson", {})
-    print(lesson_data)
     pdf_id = request.data.get("pdf_id")
+    content=request.data.get("content")
 
     try:
         lesson = Lesson.objects.get(id=lesson_data.get("id"))
@@ -2573,7 +2579,8 @@ def update_pdf_lesson(request, pk):
         lesson_serializer.save()
 
         # Update PdfLesson instance
-        pdf_serializer = PdfLessonSerializer(pdf_lesson, data=lesson_data)
+        pdf_data = {"content": content}
+        pdf_serializer = PdfLessonSerializer(pdf_lesson, data=pdf_data)
         if pdf_serializer.is_valid():
             pdf_serializer.save()
 
@@ -3076,17 +3083,23 @@ def get_all_feedbacks_download_report(request, feedback_id):
             schedularbatch__id=feedback_lesson.lesson.course.batch.id
         )
 
-        # Create a DataFrame to store the data
-        data = {"Participant": [], "Question": [], "Answer": []}
+        # Create a list of dictionaries to store the data
+        data = []
 
-        # Populate the DataFrame with data from FeedbackLesson and FeedbackLessonResponse
+        # Populate the list of dictionaries with data from FeedbackLesson and FeedbackLessonResponse
         for participant in participants:
             participant_name = participant.name
+            participant_email = participant.email
 
             # Check if the participant provided feedback
             response = FeedbackLessonResponse.objects.filter(
                 feedback_lesson=feedback_lesson, learner=participant
             ).first()
+
+            temp_data = {
+                "Participant": participant_name,
+                "Participant Email": participant_email,
+            }
 
             if response:
                 for answer in response.answers.all():
@@ -3095,27 +3108,20 @@ def get_all_feedbacks_download_report(request, feedback_id):
                         answer.text_answer if answer.text_answer else answer.rating
                     )
 
-                    data["Participant"].append(participant_name)
-                    data["Question"].append(question_text)
-                    data["Answer"].append(answer_value)
+                    temp_data[question_text] = answer_value
             else:
                 # If participant did not provide feedback, populate with empty values
                 for question in feedback_lesson.questions.all():
-                    data["Participant"].append(participant_name)
-                    data["Question"].append(question.text)
-                    data["Answer"].append("-")
+                    temp_data[question.text] = "-"
 
-        # Create a DataFrame from the data
+            data.append(temp_data)
+
+        # Create a DataFrame from the list of dictionaries
         df = pd.DataFrame(data)
-
-        # Pivot the DataFrame to have Question columns
-        df_pivot = df.pivot(
-            index="Participant", columns="Question", values="Answer"
-        ).reset_index()
 
         # Save the DataFrame to an Excel file in-memory
         excel_data = BytesIO()
-        df_pivot.to_excel(excel_data, index=False)
+        df.to_excel(excel_data, index=False)
         excel_data.seek(0)
 
         # Create the response with the Excel file
@@ -3123,7 +3129,7 @@ def get_all_feedbacks_download_report(request, feedback_id):
             excel_data.read(),
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-        response["Content-Disposition"] = f"attachment; filename=Feedback Report.xlsx"
+        response["Content-Disposition"] = f"attachment; filename=Feedback_Report.xlsx"
 
         return response
 
@@ -3143,13 +3149,8 @@ def get_consolidated_feedback_download_report(request, live_session_id):
         project = live_session.batch.project
         batches = SchedularBatch.objects.filter(project=project)
 
-        # Create a DataFrame to store the data
-        data = {
-            "Participant": [],
-            "Participant Email": [],
-            "Question": [],
-            "Answer": [],
-        }
+        # Create a dictionary to store participant data
+        data_dict = defaultdict(dict)
 
         for batch in batches:
             course = Course.objects.filter(batch=batch).first()
@@ -3164,13 +3165,15 @@ def get_consolidated_feedback_download_report(request, live_session_id):
                 if formatted_lesson_name == feedback_lesson_name_should_be:
                     current_feedback_lesson = feedback_lesson
 
-            # Populate the DataFrame with data from FeedbackLesson and FeedbackLessonResponse
+            # Populate the dictionary with data from FeedbackLesson and FeedbackLessonResponse
             if current_feedback_lesson:
                 for participant in batch.learners.all():
-                    participant_name = participant.name
-                    participant_email = (
-                        participant.email
-                    )  # Participant email retrieval moved here
+                    if participant.id not in data_dict:
+                        data_dict[participant.id]["Participant"] = participant.name
+                        data_dict[participant.id][
+                            "Participant Email"
+                        ] = participant.email
+                        data_dict[participant.id]["Batch Name"] = batch.name
 
                     # Check if the participant provided feedback
                     response = FeedbackLessonResponse.objects.filter(
@@ -3185,28 +3188,19 @@ def get_consolidated_feedback_download_report(request, live_session_id):
                                 if answer.text_answer
                                 else answer.rating
                             )
-                            data["Participant"].append(participant_name)
-                            data["Participant Email"].append(participant_email)
-                            data["Question"].append(question_text)
-                            data["Answer"].append(answer_value)
+
+                            data_dict[participant.id][question_text] = answer_value
+
                     else:
                         # If participant did not provide feedback, populate with empty values
                         for question in current_feedback_lesson.questions.all():
-                            data["Participant"].append(participant_name)
-                            data["Participant Email"].append(participant_email)
-                            data["Question"].append(question.text)
-                            data["Answer"].append("-")
+                            data_dict[participant.id][question.text] = "-"
 
-        df = pd.DataFrame(data)
-
-        df_pivot = df.pivot(
-            index=["Participant", "Participant Email"],
-            columns="Question",
-            values="Answer",
-        ).reset_index()
+        # Create DataFrame from the dictionary
+        df = pd.DataFrame(list(data_dict.values()))
 
         excel_data = BytesIO()
-        df_pivot.to_excel(excel_data, index=False)
+        df.to_excel(excel_data, index=False)
         excel_data.seek(0)
 
         response = HttpResponse(
@@ -3268,7 +3262,9 @@ def download_consolidated_project_report(request, project_id):
     feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
         feedback_lesson__lesson__course__batch__project__id=project_id
     )
-    total_participants_in_project = Learner.objects.filter(schedularbatch__project__id=project_id).distinct()
+    total_participants_in_project = Learner.objects.filter(
+        schedularbatch__project__id=project_id
+    ).distinct()
     participants_who_responsded = set()
     for feedback_lesson_response in feedback_lesson_responses:
         participants_who_responsded.add(feedback_lesson_response.learner.id)
@@ -3295,19 +3291,23 @@ def download_consolidated_project_report(request, project_id):
             ):
                 data[question_index_in_headers] = answer.rating
         ws.append(data)
-    participants_who_responsded_list = list(participants_who_responsded) 
-    participants_not_responded = total_participants_in_project.exclude(id__in=participants_who_responsded_list)
-    
+    participants_who_responsded_list = list(participants_who_responsded)
+    participants_not_responded = total_participants_in_project.exclude(
+        id__in=participants_who_responsded_list
+    )
+
     for learner in participants_not_responded:
         data = ["-" for _ in headers_list]
         participant_index = headers_list.index("Participant Name")
         data[participant_index] = learner.name
         ws.append(data)
-        
+
     # Create a response with the Excel file
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-    response["Content-Disposition"] = "attachment; filename=Project_feedback_report.xlsx"
+    response[
+        "Content-Disposition"
+    ] = "attachment; filename=Project_feedback_report.xlsx"
     wb.save(response)
     return response

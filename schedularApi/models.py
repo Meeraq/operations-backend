@@ -13,6 +13,12 @@ from api.models import (
 
 # Create your models here.
 class SchedularProject(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("ongoing", "Ongoing"),
+        ("completed", "Completed"),
+    ]
+
     name = models.CharField(max_length=100, unique=True, default=None)
     project_structure = models.JSONField(default=list, blank=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
@@ -23,6 +29,7 @@ class SchedularProject(models.Model):
     automated_reminder = models.BooleanField(blank=True, default=True)
     nudges = models.BooleanField(blank=True, default=True)
     pre_post_assessment = models.BooleanField(blank=True, default=True)
+    status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
 
     class Meta:
         ordering = ["-created_at"]
