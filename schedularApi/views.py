@@ -3524,3 +3524,39 @@ def update_certificate_status_for_multiple_participants(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to release certificate"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def coach_inside_skill_training_or_not(request, batch_id):
+    try:
+        batch = get_object_or_404(SchedularBatch, pk=batch_id)
+        sessions = SchedularSessions.objects.filter(coaching_session__batch=batch)
+        coach_status_list = []
+        for session in sessions:
+            coach_detail=session.availibility.coach
+            coach_status_list.append(coach_detail.id)
+        print("coach_status_list",coach_status_list)
+        return Response({"coach_status_list": coach_status_list})
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_coach_from_that_batch(request):
+    try:
+        print("gekko",request.data)
+        batch_id=request.data.get("batch_id")
+        coach_id=request.data.get("coach_id")
+        batch = get_object_or_404(SchedularBatch, pk=batch_id)
+        coach = get_object_or_404(Coach, pk=coach_id)
+        batch.coaches.remove(coach)
+        return Response({"message": f"Coach successfully removed from this batch."})
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
+    except Coach.DoesNotExist:
+        return Response({"error": "Coach not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)

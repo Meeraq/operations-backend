@@ -191,4 +191,12 @@ urlpatterns = [
         "update-certificate-status-for-multiple-participants/",
         views.update_certificate_status_for_multiple_participants,
     ),
+    path(
+        "coach-inside-skill-training-or-not/<str:batch_id>/",
+        views.coach_inside_skill_training_or_not,
+    ),
+    path(
+        "delete-coach-from-that-batch/",
+        views.delete_coach_from_that_batch,
+    ),
 ]
