@@ -1,6 +1,14 @@
 from django.db import models
 from django_celery_beat.models import PeriodicTask
-from api.models import Organisation, HR, Coach, Learner, SessionRequestCaas
+from api.models import (
+    Organisation,
+    HR,
+    Coach,
+    Learner,
+    Pmo,
+    SessionRequestCaas,
+    Profile,
+)
 
 
 # Create your models here.
@@ -12,6 +20,9 @@ class SchedularProject(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
     is_project_structure_finalized = models.BooleanField(default=False)
+    automated_reminder = models.BooleanField(blank=True, default=True)
+    nudges = models.BooleanField(blank=True, default=True)
+    pre_post_assessment = models.BooleanField(blank=True, default=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -20,12 +31,51 @@ class SchedularProject(models.Model):
         return self.name
 
 
+class Facilitator(models.Model):
+    user = models.OneToOneField(
+        Profile, on_delete=models.CASCADE, blank=True, default=""
+    )
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+    email = models.EmailField()
+    age = models.CharField(max_length=10, default="", blank=True)
+    gender = models.CharField(max_length=50, blank=True)
+    domain = models.JSONField(default=list, blank=True)
+    phone_country_code = models.CharField(max_length=20, default="", blank=True)
+    phone = models.CharField(max_length=25)
+    level = models.JSONField(default=list, blank=True)
+    rating = models.CharField(max_length=20, blank=True)
+    area_of_expertise = models.JSONField(default=list, blank=True)
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
+    education = models.JSONField(default=list, blank=True)
+    years_of_corporate_experience = models.CharField(max_length=20, blank=True)
+    city = models.JSONField(default=list, blank=True)
+    language = models.JSONField(default=list, blank=True)
+    job_roles = models.JSONField(default=list, blank=True)
+    city = models.JSONField(default=list, blank=True)
+    country = models.JSONField(default=list, blank=True)
+    created_at = models.DateField(auto_now_add=True)
+    edited_at = models.DateField(auto_now=True)
+    linkedin_profile_link = models.CharField(max_length=500, blank=True)
+    companies_worked_in = models.JSONField(default=list, blank=True)
+    other_certification = models.JSONField(default=list, blank=True)
+    currency = models.CharField(max_length=100, blank=True, default="")
+    client_companies = models.JSONField(default=list, blank=True)
+    educational_qualification = models.JSONField(default=list, blank=True)
+    fees_per_hour = models.CharField(max_length=20, blank=True)
+    fees_per_day = models.CharField(max_length=20, blank=True)
+    topic = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return self.first_name + " " + self.last_name
+
+
 class SchedularBatch(models.Model):
     name = models.CharField(max_length=100, blank=True)
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
     coaches = models.ManyToManyField(Coach, blank=True)
     learners = models.ManyToManyField(Learner, blank=True)
-    facilitator = models.CharField(max_length=100, blank=True)
+    facilitator = models.ManyToManyField(Facilitator, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
 
@@ -90,6 +140,12 @@ class SchedularSessions(models.Model):
 
 
 class LiveSession(models.Model):
+    SESSION_CHOICES = [
+        ("live_session", "Live Session"),
+        ("check_in_session", "Check In Session"),
+        ("in_person_session", "In Person Session"),
+    ]
+
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
     live_session_number = models.IntegerField(blank=True, default=None, null=True)
     order = models.IntegerField(blank=True, default=None, null=True)
@@ -100,6 +156,13 @@ class LiveSession(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     duration = models.CharField(max_length=50, default=None)
+    pt_30_min_before = models.ForeignKey(
+        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
+    )
+    session_type = models.CharField(
+        max_length=50, choices=SESSION_CHOICES, default="live_session"
+    )
+    meeting_link = models.TextField(default="", blank=True)
 
 
 class EmailTemplate(models.Model):
@@ -128,42 +191,6 @@ class SentEmail(models.Model):
         return f"{self.id} Subject: {self.subject}"
 
 
-class Facilitator(models.Model):
-    first_name = models.CharField(max_length=50)
-    last_name = models.CharField(max_length=50)
-    email = models.EmailField()
-    age = models.CharField(max_length=10, default="", blank=True)
-    gender = models.CharField(max_length=50, blank=True)
-    domain = models.JSONField(default=list, blank=True)
-    phone_country_code = models.CharField(max_length=20, default="", blank=True)
-    phone = models.CharField(max_length=25)
-    level = models.JSONField(default=list, blank=True)
-    rating = models.CharField(max_length=20, blank=True)
-    area_of_expertise = models.JSONField(default=list, blank=True)
-    profile_pic = models.ImageField(upload_to="post_images", blank=True)
-    education = models.JSONField(default=list, blank=True)
-    years_of_corporate_experience = models.CharField(max_length=20, blank=True)
-    city = models.JSONField(default=list, blank=True)
-    language = models.JSONField(default=list, blank=True)
-    job_roles = models.JSONField(default=list, blank=True)
-    city = models.JSONField(default=list, blank=True)
-    country = models.JSONField(default=list, blank=True)
-    created_at = models.DateField(auto_now_add=True)
-    edited_at = models.DateField(auto_now=True)
-    linkedin_profile_link = models.CharField(max_length=500, blank=True)
-    companies_worked_in = models.JSONField(default=list, blank=True)
-    other_certification = models.JSONField(default=list, blank=True)
-    currency = models.CharField(max_length=100, blank=True, default="")
-    client_companies = models.JSONField(default=list, blank=True)
-    educational_qualification = models.JSONField(default=list, blank=True)
-    fees_per_hour = models.CharField(max_length=20, blank=True)
-    fees_per_day = models.CharField(max_length=20, blank=True)
-    topic = models.JSONField(default=list, blank=True)
-
-    def __str__(self):
-        return self.first_name + " " + self.last_name
-
-
 class CalendarInvites(models.Model):
     event_id = models.TextField(blank=True, null=True)
     title = models.CharField(max_length=255, blank=True, null=True)
@@ -181,3 +208,14 @@ class CalendarInvites(models.Model):
     live_session = models.ForeignKey(
         LiveSession, on_delete=models.CASCADE, blank=True, null=True
     )
+
+
+class SchedularUpdate(models.Model):
+    pmo = models.ForeignKey(Pmo, on_delete=models.CASCADE)
+    project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
+    message = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.project.name} update by {self.pmo.name}"
