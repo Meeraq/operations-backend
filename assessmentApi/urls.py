@@ -53,8 +53,8 @@ from .views import (
     GetLearnersUniqueId,
     StartAssessmentDataForParticipant,
     StartAssessmentParticipantDisabled,
-    PreReportDownloadForParticipant,
-    PreReportDownloadForAllParticipant,
+    PrePostReportDownloadForParticipant,
+    PrePostReportDownloadForAllParticipant,
     MoveParticipant,
     GetAllLearnersUniqueId,
     DownloadParticipantResponseStatusData,
@@ -66,6 +66,8 @@ from .views import (
     CreateAssessmentAndAddMultipleParticipantsFromBatch,
     AssessmentInAssessmentLesson,
     AllAssessmentInAssessmentLesson,
+    PostReportDownloadForAllParticipant,
+    PostReportDownloadForParticipant,
 )
 
 
@@ -243,11 +245,11 @@ urlpatterns = [
     ),
     path(
         "pre-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
-        PreReportDownloadForParticipant.as_view(),
+        PrePostReportDownloadForParticipant.as_view(),
     ),
     path(
         "pre-report-download-for-all-participant/<int:assessment_id>/",
-        PreReportDownloadForAllParticipant.as_view(),
+        PrePostReportDownloadForAllParticipant.as_view(),
     ),
     path(
         "move-participant/",
@@ -286,5 +288,13 @@ urlpatterns = [
     path(
         "send-mail-to-non-responded-participant/<str:assessment_id>/",
         views.send_mail_to_not_responded_participant,
+    ),
+    path(
+        "post-report-download-for-all-participants/<int:assessment_id>/",
+        PostReportDownloadForAllParticipant.as_view(),
+    ),
+    path(
+        "post-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
+        PostReportDownloadForParticipant.as_view(),
     ),
 ]

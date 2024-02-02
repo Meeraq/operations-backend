@@ -119,6 +119,7 @@ from schedularApi.tasks import celery_send_unbooked_coaching_session_mail
 from itertools import chain
 import environ
 import re
+from rest_framework.views import APIView
 
 env = environ.Env()
 
@@ -584,6 +585,7 @@ def get_batch_calendar(request, batch_id):
                 "course": course_serailizer.data if course else None,
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
+                "batch_name":SchedularBatch.objects.filter(id = batch_id).first().name
             }
         )
     except SchedularProject.DoesNotExist:
@@ -3538,6 +3540,140 @@ def update_certificate_status_for_multiple_participants(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to release certificate"}, status=500)
+
+
+class GetAllBatchesCoachDetails(APIView):
+    def get(self, request, project_id):
+        try:
+            batches = SchedularBatch.objects.filter(project__id=project_id)
+            all_coaches = []
+            all_facilitator = []
+
+            for batch in batches:
+                for coach in batch.coaches.all():
+                    coach_data = {
+                        "id": coach.id,
+                        "first_name": coach.first_name,
+                        "last_name": coach.last_name,
+                        "email": coach.email,
+                        "batchNames": [batch.name],
+                        "phone": coach.phone,
+                    }
+                    all_coaches.append(coach_data)
+                for facilitator in batch.facilitator.all():
+                    facilitator_data = {
+                        "id": facilitator.id,
+                        "first_name": facilitator.first_name,
+                        "last_name": facilitator.last_name,
+                        "email": facilitator.email,
+                        "batchNames": [batch.name],
+                        "phone": facilitator.phone,
+                    }
+                    all_facilitator.append(facilitator_data)
+
+            unique_coaches = {}
+            for coach_data in all_coaches:
+                coach_id = coach_data["id"]
+                if coach_id not in unique_coaches:
+                    unique_coaches[coach_id] = coach_data
+                else:
+                    unique_coaches[coach_id]["batchNames"].extend(
+                        coach_data["batchNames"]
+                    )
+
+            unique_facilitator = {}
+            for facilitator_data in all_facilitator:
+                facilitator_id = facilitator_data["id"]
+                if facilitator_id not in unique_facilitator:
+                    unique_facilitator[facilitator_id] = facilitator_data
+                else:
+                    unique_facilitator[facilitator_id]["batchNames"].extend(
+                        facilitator_data["batchNames"]
+                    )
+
+            return Response(
+                {
+                    "unique_coaches": list(unique_coaches.values()),
+                    "unique_facilitator": list(unique_facilitator.values()),
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get coaches data."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetAllBatchesParticipantDetails(APIView):
+    def get(self, request, project_id):
+        try:
+            batches = SchedularBatch.objects.filter(project__id=project_id)
+
+            learner_data_dict = {}
+
+            for batch in batches:
+                for learner in batch.learners.all():
+                    learner_id = learner.id
+                    if learner_id not in learner_data_dict:
+                        learner_data_dict[learner_id] = {
+                            "id": learner_id,
+                            "name": learner.name,
+                            "email": learner.email,
+                            "batchNames": [
+                                batch.name
+                            ],  # Initialize with list containing batch name
+                            "phone": learner.phone,
+                        }
+                    else:
+                        learner_data_dict[learner_id]["batchNames"].append(batch.name)
+
+            unique_learner_data = list(learner_data_dict.values())
+
+            return Response(unique_learner_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get learners data."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def coach_inside_skill_training_or_not(request, batch_id):
+    try:
+        batch = get_object_or_404(SchedularBatch, pk=batch_id)
+        sessions = SchedularSessions.objects.filter(coaching_session__batch=batch)
+        coach_status_list = []
+        for session in sessions:
+            coach_detail=session.availibility.coach
+            coach_status_list.append(coach_detail.id)
+        return Response({"coach_status_list": coach_status_list})
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_coach_from_that_batch(request):
+    try:
+        batch_id=request.data.get("batch_id")
+        coach_id=request.data.get("coach_id")
+        batch = get_object_or_404(SchedularBatch, pk=batch_id)
+        coach = get_object_or_404(Coach, pk=coach_id)
+        batch.coaches.remove(coach)
+        return Response({"message": f"Coach successfully removed from this batch."})
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
+    except Coach.DoesNotExist:
+        return Response({"error": "Coach not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["PUT"])
