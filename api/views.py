@@ -6112,7 +6112,7 @@ def standard_field_request(request, user_id):
 def coaches_which_are_included_in_projects(request):
     coachesId = []
     projects = Project.objects.all()
-
+    schedular_projects=SchedularProject.objects.all()
     for project in projects:
         for coach_status in project.coaches_status.all():
             if (
@@ -6120,10 +6120,14 @@ def coaches_which_are_included_in_projects(request):
                 and coach_status.status["project_structure"]["status"] == "select"
             ):
                 coachesId.append(coach_status.coach.id)
-
+    for project in schedular_projects:
+        batches = SchedularBatch.objects.filter(project=project)
+        for batch in batches:
+            coaches=batch.coaches.all()
+            for coach in coaches:
+                coachesId.append(coach.id)
     coachesId = set(coachesId)
-
-    return Response(coachesId)
+    return Response(coachesId)  
 
 
 def calculate_session_progress_data_for_hr(user_id):

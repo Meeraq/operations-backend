@@ -3536,7 +3536,6 @@ def coach_inside_skill_training_or_not(request, batch_id):
         for session in sessions:
             coach_detail=session.availibility.coach
             coach_status_list.append(coach_detail.id)
-        print("coach_status_list",coach_status_list)
         return Response({"coach_status_list": coach_status_list})
     except SchedularBatch.DoesNotExist:
         return Response({"error": "Batch not found"}, status=404)
@@ -3547,7 +3546,6 @@ def coach_inside_skill_training_or_not(request, batch_id):
 @permission_classes([IsAuthenticated])
 def delete_coach_from_that_batch(request):
     try:
-        print("gekko",request.data)
         batch_id=request.data.get("batch_id")
         coach_id=request.data.get("coach_id")
         batch = get_object_or_404(SchedularBatch, pk=batch_id)
