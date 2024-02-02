@@ -585,6 +585,7 @@ def get_batch_calendar(request, batch_id):
                 "course": course_serailizer.data if course else None,
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
+                "batch_name":SchedularBatch.objects.filter(id = batch_id).first().name
             }
         )
     except SchedularProject.DoesNotExist:
