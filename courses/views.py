@@ -1719,7 +1719,7 @@ def update_video_lesson(request, lesson_id):
         )
 
     video_id = request.data.get("video")
-    content=request.data.get("content")
+    content = request.data.get("content")
 
     try:
         video = Video.objects.get(pk=video_id)
@@ -1734,7 +1734,7 @@ def update_video_lesson(request, lesson_id):
         if lesson_serializer.is_valid():
             lesson_serializer.save()
 
-    video_lesson_data = {"lesson": lesson_id, "video": video_id, "content":content}
+    video_lesson_data = {"lesson": lesson_id, "video": video_id, "content": content}
 
     try:
         video_lesson = VideoLesson.objects.get(lesson_id=lesson_id)
@@ -2324,11 +2324,13 @@ class AssignCourseTemplateToBatch(APIView):
                             VideoLesson.objects.create(
                                 lesson=new_lesson,
                                 video=original_lesson.videolesson.video,
+                                content=original_lesson.videolesson.content,
                             )
                         elif original_lesson.lesson_type == "ppt":
                             PdfLesson.objects.create(
                                 lesson=new_lesson,
                                 pdf=original_lesson.pdflesson.pdf,
+                                content=original_lesson.pdflesson.content,
                             )
                         elif original_lesson.lesson_type == "downloadable_file":
                             DownloadableLesson.objects.create(
@@ -2495,64 +2497,62 @@ def create_resource(request):
 def create_pdf_lesson(request):
     print(request.data)
     try:
-        lesson_data = request.data.get("lesson")
-        pdf_id = request.data.get("pdf_id")
-        content = request.data.get("content")
-        course_template_id = lesson_data.get("course_template", "")
-        course_id = lesson_data.get("course", "")
+        with transaction.atomic():
+            lesson_data = request.data.get("lesson")
+            pdf_id = request.data.get("pdf_id")
+            content = request.data.get("content")
+            course_template_id = lesson_data.get("course_template", "")
+            course_id = lesson_data.get("course", "")
 
-        if course_id:
-            course_instance = Course.objects.get(id=course_id)
-            course_template_instance = course_instance.course_template
+            resources = Resources.objects.filter(id=pdf_id).first()
+            if course_id:
+                course_instance = Course.objects.get(id=course_id)
+                course_template_instance = course_instance.course_template
 
-            lesson_instance = Lesson.objects.create(
-                course=course_instance,
-                name=lesson_data["name"],
-                status=lesson_data["status"],
-                lesson_type=lesson_data["lesson_type"],
-                order=lesson_data["order"],
-            )
+                lesson_instance = Lesson.objects.create(
+                    course=course_instance,
+                    name=lesson_data["name"],
+                    status=lesson_data["status"],
+                    lesson_type=lesson_data["lesson_type"],
+                    order=lesson_data["order"],
+                )
 
-            pdf_lesson_instance, created = PdfLesson.objects.get_or_create(
-                lesson=lesson_instance, defaults={"pdf_id": pdf_id}
-            )
+                pdf_lesson_instance = PdfLesson.objects.create(
+                    lesson=lesson_instance, content=content, pdf=resources
+                )
 
-            if created or not created:
                 return Response({"message": "PDF lesson created successfully."})
-            else:
-                return Response({"message": "Failed to create PDF lesson."})
 
-        elif course_template_id:
-            course_template_instance = CourseTemplate.objects.get(id=course_template_id)
+            elif course_template_id:
+                course_template_instance = CourseTemplate.objects.get(
+                    id=course_template_id
+                )
 
-            lesson_instance = Lesson.objects.create(
-                course_template=course_template_instance,
-                name=lesson_data["name"],
-                status=lesson_data["status"],
-                lesson_type=lesson_data["lesson_type"],
-                order=lesson_data["order"],
-            )
+                lesson_instance = Lesson.objects.create(
+                    course_template=course_template_instance,
+                    name=lesson_data["name"],
+                    status=lesson_data["status"],
+                    lesson_type=lesson_data["lesson_type"],
+                    order=lesson_data["order"],
+                )
 
-            pdf_lesson_instance, created = PdfLesson.objects.get_or_create(
-                lesson=lesson_instance, defaults={"pdf_id": pdf_id, "content": content}
-            )
+                pdf_lesson_instance = PdfLesson.objects.create(
+                    lesson=lesson_instance, content=content, pdf=resources
+                )
 
-            if created or not created:
                 return Response({"message": "PDF lesson created successfully."})
-            else:
-                return Response({"message": "Failed to create PDF lesson."})
 
-        else:
-            return Response(
-                {"message": "Neither Course ID nor Course Template ID provided."}
-            )
+            else:
+                return Response(
+                    {"message": "Neither Course ID nor Course Template ID provided."}
+                )
 
     except Course.DoesNotExist:
         return Response({"message": "Course does not exist."})
     except CourseTemplate.DoesNotExist:
         return Response({"message": "Course Template does not exist."})
     except Exception as e:
-        return Response({"message": f"Error: {str(e)}"})
+        return Response({"message": "Failed to create pdf lesson."})
 
 
 @api_view(["PUT"])
@@ -2566,7 +2566,7 @@ def update_pdf_lesson(request, pk):
     # Extract data from request
     lesson_data = request.data.get("lesson", {})
     pdf_id = request.data.get("pdf_id")
-    content=request.data.get("content")
+    content = request.data.get("content")
 
     try:
         lesson = Lesson.objects.get(id=lesson_data.get("id"))
@@ -2579,7 +2579,7 @@ def update_pdf_lesson(request, pk):
         lesson_serializer.save()
 
         # Update PdfLesson instance
-        pdf_data = {"content": content}
+        pdf_data = {"lesson": lesson_data, "content": content, "pdf": pdf_id}
         pdf_serializer = PdfLessonSerializer(pdf_lesson, data=pdf_data)
         if pdf_serializer.is_valid():
             pdf_serializer.save()
@@ -2920,11 +2920,13 @@ class DuplicateLesson(APIView):
                         VideoLesson.objects.create(
                             lesson=new_lesson,
                             video=lesson.videolesson.video,
+                            content=lesson.videolesson.content,
                         )
                     elif lesson.lesson_type == "ppt":
                         PdfLesson.objects.create(
                             lesson=new_lesson,
                             pdf=lesson.pdflesson.pdf,
+                            content=lesson.pdflesson.content,
                         )
                     elif lesson.lesson_type == "downloadable_file":
                         DownloadableLesson.objects.create(
