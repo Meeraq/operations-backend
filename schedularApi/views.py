@@ -119,6 +119,7 @@ from schedularApi.tasks import celery_send_unbooked_coaching_session_mail
 from itertools import chain
 import environ
 import re
+from rest_framework.views import APIView
 
 env = environ.Env()
 
@@ -167,7 +168,6 @@ def updateLastLogin(email):
     user = User.objects.get(username=email)
     user.last_login = today
     user.save()
-
 
 
 def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
@@ -659,7 +659,7 @@ def update_live_session(request, live_session_id):
                         "type": "required",
                     }
                     attendees.append(attendee)
-                
+
                 start_time_stamp = update_live_session.date_time.timestamp() * 1000
                 end_time_stamp = (
                     start_time_stamp + int(update_live_session.duration) * 60000
@@ -3043,7 +3043,9 @@ def live_session_detail_view(request, pk):
 def facilitator_projects(request, facilitator_id):
     print(facilitator_id)
     try:
-        projects = SchedularProject.objects.filter(schedularbatch__facilitator__id=facilitator_id)
+        projects = SchedularProject.objects.filter(
+            schedularbatch__facilitator__id=facilitator_id
+        )
         serializer = SchedularProjectSerializer(projects, many=True)
         return Response(serializer.data)
     except Facilitator.DoesNotExist:
@@ -3524,3 +3526,105 @@ def update_certificate_status_for_multiple_participants(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to release certificate"}, status=500)
+
+
+class GetAllBatchesCoachDetails(APIView):
+    def get(self, request, project_id):
+        try:
+            batches = SchedularBatch.objects.filter(project__id=project_id)
+            all_coaches = []
+            all_facilitator = []
+            # Iterate through batches and collect coaches
+            for batch in batches:
+                for coach in batch.coaches.all():
+                    coach_data = {
+                        "id": coach.id,
+                        "first_name": coach.first_name,
+                        "last_name": coach.last_name,
+                        "email": coach.email,
+                        "batchName": batch.name,
+                        "phone": coach.phone,
+                    }
+                    all_coaches.append(coach_data)
+                for facilitator in batch.facilitator.all():
+                    facilitator_data = {
+                        "id": facilitator.id,
+                        "first_name": facilitator.first_name,
+                        "last_name": facilitator.last_name,
+                        "email": facilitator.email,
+                        "batchName": batch.name,
+                        "phone": facilitator.phone,
+                    }
+                    all_facilitator.append(facilitator_data)
+
+            # Remove duplicate coaches based on 'id'
+            unique_coaches = []
+            seen_ids = set()
+
+            for coach_data in all_coaches:
+                coach_id = coach_data["id"]
+                if coach_id not in seen_ids:
+                    seen_ids.add(coach_id)
+                    unique_coaches.append(coach_data)
+
+            unique_facilitator = []
+            facilitator_seen_ids = set()
+
+            for facilitator_data in all_facilitator:
+                facilitator_id = facilitator_data["id"]
+                if facilitator_id not in facilitator_seen_ids:
+                    facilitator_seen_ids.add(facilitator_id)
+                    unique_facilitator.append(facilitator_data)
+
+            return Response(
+                {
+                    "unique_coaches": unique_coaches,
+                    "unique_facilitator": unique_facilitator,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get coaches data."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetAllBatchesParticipantDetails(APIView):
+    def get(self, request, project_id):
+        try:
+            batches = SchedularBatch.objects.filter(project__id=project_id)
+            all_learners = []
+
+            # Iterate through batches and collect coaches
+            for batch in batches:
+                for learner in batch.learners.all():
+                    learner_data = {
+                        "id": learner.id,
+                        "name": learner.name,
+                        "email": learner.email,
+                        "batchName": batch.name,
+                        "phone": learner.phone,
+                    }
+                    all_learners.append(learner_data)
+
+            # Remove duplicate coaches based on 'id'
+            unique_learner = []
+            seen_ids = set()
+
+            for learner_data in all_learners:
+                learner_id = learner_data["id"]
+                if learner_id not in seen_ids:
+                    seen_ids.add(learner_id)
+                    unique_learner.append(learner_data)
+
+            return Response(unique_learner, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get learners data."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
