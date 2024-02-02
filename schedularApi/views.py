@@ -1193,6 +1193,7 @@ def get_coach_availabilities_booking_link(request):
             serializer = AvailabilitySerializer(coach_availabilities, many=True)
             return Response(
                 {
+                    "project_status": coaching_session.batch.project.status,
                     "slots": serializer.data,
                     "session_duration": session_duration,
                     "session_type": session_type,
@@ -1354,36 +1355,38 @@ def schedule_session(request):
                 print(slot_created)
             booking_id = coach_availability.coach.room_id
             print(json.dumps(unblock_slots))
-            send_mail_templates(
-                "schedule_session.html",
-                [coach_availability.coach.email],
-                "Meeraq - Participant booked session",
-                {
-                    "name": coach_name,
-                    "date": date_for_mail,
-                    "time": session_time,
-                    "booking_id": booking_id,
-                },
-                [],
-            )
+            # Only send email if project status is ongoing
+            if coaching_session.batch.project.status == "ongoing":
+                send_mail_templates(
+                    "schedule_session.html",
+                    [coach_availability.coach.email],
+                    "Meeraq - Participant booked session",
+                    {
+                        "name": coach_name,
+                        "date": date_for_mail,
+                        "time": session_time,
+                        "booking_id": booking_id,
+                    },
+                    [],
+                )
 
-            send_mail_templates(
-                "coach_templates/coaching_email_template.html",
-                [participant_email],
-                "Meeraq - Laser Coaching Session Booked"
-                if session_type == "laser_coaching_session"
-                else "Meeraq - Mentoring Session Booked",
-                {
-                    "name": learner.name,
-                    "date": date_for_mail,
-                    "time": session_time,
-                    "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
-                    "session_type": "Mentoring"
-                    if session_type == "mentoring_session"
-                    else "Laser Coaching",
-                },
-                [],
-            )
+                send_mail_templates(
+                    "coach_templates/coaching_email_template.html",
+                    [participant_email],
+                    "Meeraq - Laser Coaching Session Booked"
+                    if session_type == "laser_coaching_session"
+                    else "Meeraq - Mentoring Session Booked",
+                    {
+                        "name": learner.name,
+                        "date": date_for_mail,
+                        "time": session_time,
+                        "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
+                        "session_type": "Mentoring"
+                        if session_type == "mentoring_session"
+                        else "Laser Coaching",
+                    },
+                    [],
+                )
 
             return Response(
                 {"message": "Session scheduled successfully."},
@@ -1600,45 +1603,47 @@ def schedule_session_fixed(request):
                 )
                 booking_id = coach_availability.coach.room_id
                 meeting_location = f"{env('CAAS_APP_URL')}/call/{booking_id}"
-                create_outlook_calendar_invite(
-                    f"Meeraq - {session_type_value.capitalize()} Session",
-                    f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
-                    coach_availability.start_time,
-                    coach_availability.end_time,
-                    [
-                        {
-                            "emailAddress": {
-                                "name": coach_name,
-                                "address": coach_availability.coach.email,
+                 # Only send email if project status is ongoing
+                if coaching_session.batch.project.status == "ongoing":
+                    create_outlook_calendar_invite(
+                        f"Meeraq - {session_type_value.capitalize()} Session",
+                        f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
+                        coach_availability.start_time,
+                        coach_availability.end_time,
+                        [
+                            {
+                                "emailAddress": {
+                                    "name": coach_name,
+                                    "address": coach_availability.coach.email,
+                                },
+                                "type": "required",
                             },
-                            "type": "required",
-                        },
-                        {
-                            "emailAddress": {
-                                "name": learner.name,
-                                "address": participant_email,
+                            {
+                                "emailAddress": {
+                                    "name": learner.name,
+                                    "address": participant_email,
+                                },
+                                "type": "required",
                             },
-                            "type": "required",
+                        ],
+                        env("CALENDAR_INVITATION_ORGANIZER"),
+                        None,
+                        scheduled_session,
+                        None,
+                        meeting_location,
+                    )
+                    send_mail_templates(
+                        "schedule_session.html",
+                        [coach_availability.coach.email],
+                        "Meeraq - Participant booked session",
+                        {
+                            "name": coach_name,
+                            "date": date_for_mail,
+                            "time": session_time,
+                            "booking_id": booking_id,
                         },
-                    ],
-                    env("CALENDAR_INVITATION_ORGANIZER"),
-                    None,
-                    scheduled_session,
-                    None,
-                    meeting_location,
-                )
-                send_mail_templates(
-                    "schedule_session.html",
-                    [coach_availability.coach.email],
-                    "Meeraq - Participant booked session",
-                    {
-                        "name": coach_name,
-                        "date": date_for_mail,
-                        "time": session_time,
-                        "booking_id": booking_id,
-                    },
-                    [],
-                )
+                        [],
+                    )
 
                 # WHATSAPP MESSAGE CHECK
 
@@ -1679,24 +1684,25 @@ def schedule_session_fixed(request):
                 periodic_task.save()
 
                 # WHATSAPP MESSAGE CHECK
-
-                send_mail_templates(
-                    "coach_templates/coaching_email_template.html",
-                    [participant_email],
-                    "Meeraq - Laser Coaching Session Booked"
-                    if session_type == "laser_coaching_session"
-                    else "Meeraq - Mentoring Session Booked",
-                    {
-                        "name": learner.name,
-                        "date": date_for_mail,
-                        "time": session_time,
-                        "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
-                        "session_type": "Mentoring"
-                        if session_type == "mentoring_session"
-                        else "Laser Coaching",
-                    },
-                    [],
-                )
+                 # Only send email if project status is ongoing
+                if coaching_session.batch.project.status == "ongoing":
+                    send_mail_templates(
+                        "coach_templates/coaching_email_template.html",
+                        [participant_email],
+                        "Meeraq - Laser Coaching Session Booked"
+                        if session_type == "laser_coaching_session"
+                        else "Meeraq - Mentoring Session Booked",
+                        {
+                            "name": learner.name,
+                            "date": date_for_mail,
+                            "time": session_time,
+                            "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
+                            "session_type": "Mentoring"
+                            if session_type == "mentoring_session"
+                            else "Laser Coaching",
+                        },
+                        [],
+                    )
 
                 return Response(
                     {"message": "Session scheduled successfully."},
@@ -2235,19 +2241,21 @@ def finalize_project_structure(request, project_id):
 def send_live_session_link(request):
     live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
     for learner in live_session.batch.learners.all():
-        send_mail_templates(
-            "send_live_session_link.html",
-            [learner.email],
-            "Meeraq - Live Session",
-            {
-                "participant_name": learner.name,
-                "live_session_name": f"Live Session {live_session.order}",
-                "project_name": live_session.batch.project.name,
-                "description": live_session.description,
-            },
-            [],
-        )
-        sleep(4)
+         # Only send email if project status is ongoing
+        if live_session.batch.project.status == "ongoing":
+            send_mail_templates(
+                "send_live_session_link.html",
+                [learner.email],
+                "Meeraq - Live Session",
+                {
+                    "participant_name": learner.name,
+                    "live_session_name": f"Live Session {live_session.order}",
+                    "project_name": live_session.batch.project.name,
+                    "description": live_session.description,
+                },
+                [],
+            )
+            sleep(4)
     return Response({"message": "Emails sent successfully"})
 
 
@@ -2256,31 +2264,33 @@ def send_live_session_link(request):
 def send_live_session_link_whatsapp(request):
     live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
     for learner in live_session.batch.learners.all():
-        send_whatsapp_message_template(
-            learner.phone,
-            {
-                "broadcast_name": "Instant_live_session_whatsapp_reminder",
-                "parameters": [
-                    {
-                        "name": "name",
-                        "value": learner.name,
-                    },
-                    {
-                        "name": "live_session_name",
-                        "value": f"Live Session {live_session.order}",
-                    },
-                    {
-                        "name": "project_name",
-                        "value": live_session.batch.project.name,
-                    },
-                    {
-                        "name": "description",
-                        "value": live_session.description,
-                    },
-                ],
-                "template_name": "instant_whatsapp_live_session",
-            },
-        )
+         # Only send email or whatsapp if project status is ongoing
+        if live_session.batch.project.status == "ongoing":
+            send_whatsapp_message_template(
+                learner.phone,
+                {
+                    "broadcast_name": "Instant_live_session_whatsapp_reminder",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value": learner.name,
+                        },
+                        {
+                            "name": "live_session_name",
+                            "value": f"Live Session {live_session.order}",
+                        },
+                        {
+                            "name": "project_name",
+                            "value": live_session.batch.project.name,
+                        },
+                        {
+                            "name": "description",
+                            "value": live_session.description,
+                        },
+                    ],
+                    "template_name": "instant_whatsapp_live_session",
+                },
+            )
 
     return Response({"message": "Message sent successfully"})
 
