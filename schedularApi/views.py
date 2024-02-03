@@ -1213,7 +1213,7 @@ def get_coach_availabilities_booking_link(request):
                     "slots": serializer.data,
                     "session_duration": session_duration,
                     "session_type": session_type,
-                    "coaches": coaches_serializer.data,
+                    "coaches": coaches_serializer.data if coaches_serializer else None,
                 }
             )
         except Exception as e:
