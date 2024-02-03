@@ -66,6 +66,7 @@ urlpatterns = [
     ),
     path("coach-availability/", views.get_coach_availabilities_booking_link),
     path("schedule-session/", views.schedule_session_fixed),
+    path("reschedule-session/<int:session_id>/", views.reschedule_session),
     path(
         "give_availibilty/",
         views.create_coach_availabilities,
