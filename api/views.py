@@ -4359,6 +4359,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "session_type": session.coaching_session.session_type,
             "end_time": session.availibility.end_time,
             "is_seeq_project": True,
+            "coaching_session_id": session.coaching_session.id,
         }
         session_details.append(session_detail)
 
