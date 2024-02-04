@@ -1,6 +1,6 @@
 from django.urls import path, include
 from . import views
-
+from .views import GetAllBatchesCoachDetails, GetAllBatchesParticipantDetails
 
 urlpatterns = [
     path(
@@ -66,6 +66,7 @@ urlpatterns = [
     ),
     path("coach-availability/", views.get_coach_availabilities_booking_link),
     path("schedule-session/", views.schedule_session_fixed),
+    path("reschedule-session/<int:session_id>/", views.reschedule_session),
     path(
         "give_availibilty/",
         views.create_coach_availabilities,
@@ -175,7 +176,7 @@ urlpatterns = [
         "update-certificate-status/",
         views.update_certificate_status,
     ),
-     path(
+    path(
         "add-new-session-in-project-structure/",
         views.add_new_session_in_project_structure,
     ),
@@ -183,12 +184,31 @@ urlpatterns = [
         "delete-session-from-project-structure/",
         views.delete_session_from_project_structure,
     ),
-     path(
+    path(
         "get-completed-sessions-for-project/<int:project_id>/",
         views.get_completed_sessions_for_project,
     ),
-       path(
+    path(
         "update-certificate-status-for-multiple-participants/",
         views.update_certificate_status_for_multiple_participants,
+    ),
+    path(
+        "batches-coach-details/<int:project_id>/", GetAllBatchesCoachDetails.as_view()
+    ),
+    path(
+        "batches-learner-details/<int:project_id>/",
+        GetAllBatchesParticipantDetails.as_view(),
+    ),
+    path(
+        "coach-inside-skill-training-or-not/<str:batch_id>/",
+        views.coach_inside_skill_training_or_not,
+    ),
+    path(
+        "delete-coach-from-that-batch/",
+        views.delete_coach_from_that_batch,
+    ),
+    path(
+        "update-project-status/",
+        views.update_project_status,
     ),
 ]

@@ -156,12 +156,10 @@ from schedularApi.models import (
     SchedularSessions,
     CalendarInvites,
 )
-from schedularApi.serializers import SchedularProjectSerializer
-
-
 from schedularApi.serializers import (
-    FacilitatorDepthOneSerializer
+    SchedularProjectSerializer,
 )
+from schedularApi.serializers import FacilitatorDepthOneSerializer
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
@@ -1586,7 +1584,6 @@ def login_view(request):
         raise ValidationError({"detail": "Please provide username and password."})
     user = authenticate(request, username=username, password=password)
 
-
     if user is None:
         raise AuthenticationFailed({"detail": "Invalid credentials."})
 
@@ -1655,9 +1652,9 @@ def session_view(request):
 def get_user_data(user):
     if not user.profile:
         return None
-    elif user.profile.roles.count() == 0:
+    elif user.profile.roles.exclude(name="vendor").count() == 0:
         return None
-    user_profile_role = user.profile.roles.all().first().name
+    user_profile_role = user.profile.roles.all().exclude(name="vendor").first().name
     roles = []
     for role in user.profile.roles.all():
         roles.append(role.name)
@@ -4362,6 +4359,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "session_type": session.coaching_session.session_type,
             "end_time": session.availibility.end_time,
             "is_seeq_project": True,
+            "coaching_session_id": session.coaching_session.id,
         }
         session_details.append(session_detail)
 
@@ -5250,67 +5248,89 @@ def get_current_session(request, user_type, room_id, user_id):
     five_minutes_in_milliseconds = 300000
     current_time = int(timezone.now().timestamp() * 1000)
     five_minutes_plus_current_time = current_time + five_minutes_in_milliseconds
+    sessions = None
+    session_modal = "CAAS"
     if user_type == "coach":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
-            & Q(confirmed_availability__end_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
             Q(coach__room_id=room_id),
             Q(is_archive=False),
             ~Q(status="completed"),
-        )
+        ).order_by("confirmed_availability__start_time")
+
         if sessions.count() == 0:
             coach = Coach.objects.get(id=user_id)
             sessions = SchedularSessions.objects.filter(
-                availibility__start_time__lt=five_minutes_plus_current_time,
                 availibility__end_time__gt=current_time,
                 availibility__coach__email=coach.email,
                 availibility__coach__room_id=room_id,
-            )
+            ).order_by("availibility__start_time")
+            session_modal = "SEEQ"
+
     elif user_type == "learner":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
-            & Q(confirmed_availability__end_time__gt=current_time),
+             Q(confirmed_availability__end_time__gt=current_time),
             Q(learner__id=user_id),
             (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
             ~Q(status="completed"),
-        )
+        ).order_by("confirmed_availability__start_time")
 
         if sessions.count() == 0:
             learner = Learner.objects.get(id=user_id)
             sessions = SchedularSessions.objects.filter(
-                availibility__start_time__lt=five_minutes_plus_current_time,
                 availibility__end_time__gt=current_time,
                 learner__email=learner.email,
                 availibility__coach__room_id=room_id,
-            )
+            ).order_by("availibility__start_time")
+            session_modal = "SEEQ"
 
     elif user_type == "hr":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
-            & Q(confirmed_availability__end_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             Q(hr__id=user_id),
             (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
             ~Q(status="completed"),
-        )
+        ).order_by("confirmed_availability__start_time")
+
     elif user_type == "pmo":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
-            & Q(confirmed_availability__end_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             Q(pmo__id=user_id),
             (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
             ~Q(status="completed"),
-        )
-    if len(sessions) == 0:
-        return Response({"error": "You don't have any sessions right now."}, status=404)
-    return Response({"message": "success"}, status=200)
+        ).order_by("confirmed_availability__start_time")
+
+    if not sessions:
+        return Response({"error": "You don't have any upcoming sessions."}, status=404)
+
+    # Get the upcoming next session and current session
+    upcoming_session = sessions.first()
+    if session_modal == "CAAS" and upcoming_session:
+        session_details = {
+            "start_time": upcoming_session.confirmed_availability.start_time,
+            "end_time": upcoming_session.confirmed_availability.end_time,
+        }
+    elif session_modal == "SEEQ" and upcoming_session:
+        session_details = {
+            "start_time": upcoming_session.availibility.start_time,
+            "end_time": upcoming_session.availibility.end_time,
+        }
+
+    # You can customize the response data based on your requirements
+    response_data = {
+        "message": "success",
+        "upcoming_session": session_details if upcoming_session else None,
+    }
+
+    return Response(response_data, status=200)
 
 
 @api_view(["POST"])
@@ -6112,7 +6132,7 @@ def standard_field_request(request, user_id):
 def coaches_which_are_included_in_projects(request):
     coachesId = []
     projects = Project.objects.all()
-
+    schedular_projects=SchedularProject.objects.all()
     for project in projects:
         for coach_status in project.coaches_status.all():
             if (
@@ -6120,10 +6140,14 @@ def coaches_which_are_included_in_projects(request):
                 and coach_status.status["project_structure"]["status"] == "select"
             ):
                 coachesId.append(coach_status.coach.id)
-
+    for project in schedular_projects:
+        batches = SchedularBatch.objects.filter(project=project)
+        for batch in batches:
+            coaches=batch.coaches.all()
+            for coach in coaches:
+                coachesId.append(coach.id)
     coachesId = set(coachesId)
-
-    return Response(coachesId)
+    return Response(coachesId)  
 
 
 def calculate_session_progress_data_for_hr(user_id):
@@ -7983,15 +8007,14 @@ def get_pmo(request):
 
 
 PATH_ACTIVITY_MAPPING = {
-    "/api/login/": "Login",# for all
-    "/api/send_list_to_hr/": "Send profile to HR", #Pmo
-    "/schedular/give_availibilty/": "Give availability", #coach
-    "/api/accept-coach-caas/hr": "Finalize Coach", #hr
-    "/schedular/send_coaching_session_mail": "Send booking link email manually", #pmo
-		"/api/competency/":  "Add competency", #coach
-    "/api/competency/score/" : "Add score",#coach
-    "/schedular/schedule-session/" : "Book slot" , #coachee
-    
+    "/api/login/": "Login",  # for all
+    "/api/send_list_to_hr/": "Send profile to HR",  # Pmo
+    "/schedular/give_availibilty/": "Give availability",  # coach
+    "/api/accept-coach-caas/hr": "Finalize Coach",  # hr
+    "/schedular/send_coaching_session_mail": "Send booking link email manually",  # pmo
+    "/api/competency/": "Add competency",  # coach
+    "/api/competency/score/": "Add score",  # coach
+    "/schedular/schedule-session/": "Book slot",  # coachee
     # "/schedular/add_learner_to_batch/": "User created",#Any
     # "/api/add_hr/" : "User created",
     # "/api/add-coach/": "User created",
@@ -8071,7 +8094,10 @@ def get_api_logs(request):
                 if log.user and log.user.profile
                 else None
             )
-            if user_type in  ACTIVITIES_PER_USER_TYPE and activity in  ACTIVITIES_PER_USER_TYPE[user_type]: 
+            if (
+                user_type in ACTIVITIES_PER_USER_TYPE
+                and activity in ACTIVITIES_PER_USER_TYPE[user_type]
+            ):
                 key = (user_type, activity)
                 result_dict[key] = result_dict.get(key, 0) + 1
 
@@ -8090,9 +8116,7 @@ def get_api_logs(request):
     output_list = []
     for user_type, activities in user_activity_count_dict.items():
         for activity, count in activities.items():
-            output_list.append({
-            "user_type": user_type,
-            "activity": activity,
-            "count": count
-        })
+            output_list.append(
+                {"user_type": user_type, "activity": activity, "count": count}
+            )
     return Response(output_list)
