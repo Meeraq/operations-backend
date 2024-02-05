@@ -5314,11 +5314,15 @@ def get_current_session(request, user_type, room_id, user_id):
     upcoming_session = sessions.first()
     if session_modal == "CAAS" and upcoming_session:
         session_details = {
+            "session_id" : upcoming_session.id,
+						"type" : "CAAS",
             "start_time": upcoming_session.confirmed_availability.start_time,
             "end_time": upcoming_session.confirmed_availability.end_time,
         }
     elif session_modal == "SEEQ" and upcoming_session:
         session_details = {
+            "session_id" : upcoming_session.id,
+						"type" : "SEEQ",
             "start_time": upcoming_session.availibility.start_time,
             "end_time": upcoming_session.availibility.end_time,
         }
@@ -8014,54 +8018,16 @@ PATH_ACTIVITY_MAPPING = {
     "/api/competency/": "Add competency",  # coach
     "/api/competency/score/": "Add score",  # coach
     "/schedular/schedule-session/": "Book slot",  # coachee
-    # "/schedular/add_learner_to_batch/": "User created",#Any
-    # "/api/add_hr/" : "User created",
-    # "/api/add-coach/": "User created",
-    # "/api/add/pmo/" : "User created",
-    # Add more mappings as needed
+    "/api/otp/validate/" : "Login with OTP" # for all
 }
 
 
 ACTIVITIES_PER_USER_TYPE = {
-    "hr": ["Login", "Finalize Coach"],
-    "pmo": ["Login", "Send profile to HR", "Send booking link email manually"],
-    "coach": ["Login", "Give availability", "Add competency", "Add score"],
-    "learner": ["Login", "Book slot"],
+    "hr": ["Login", "Finalize Coach","Login with OTP"],
+    "pmo": ["Login", "Send profile to HR", "Send booking link email manually","Login with OTP"],
+    "coach": ["Login", "Give availability", "Add competency", "Add score","Login with OTP"],
+    "learner": ["Login", "Book slot","Login with OTP"],
 }
-
-
-# @api_view(["GET"])
-# @permission_classes([AllowAny])
-# def get_api_logs(request):
-#     start_date = request.GET.get("start_date")
-#     end_date = request.GET.get("end_date")
-#     if not start_date or not end_date:
-#         logs = APILog.objects.all()
-#     else:
-#         try:
-#             start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
-#             end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
-#             logs = APILog.objects.filter(created_at__date__range=(start_date, end_date))
-#         except ValueError:
-#             return JsonResponse(
-#                 {"error": "Invalid date format. Please use YYYY-MM-DD."}, status=400
-#             )
-#     result = [
-#         {"user_type": "coach", "activity": "Book session", "count": 0},
-#     ]
-
-#     for log in logs:
-#         if log.path in PATH_ACTIVITY_MAPPING:
-#             if (
-#                 log.path == "/api/login/"
-#                 and log.user
-#                 and log.user.profile
-#             ):
-#                 for item in result:
-#                     if item["activity"] == "Login" and item["user_type"].lower() == log.user.profile.roles.all().first().name:
-#                         item["count"] += 1
-#     return Response(result)
-
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
@@ -8089,7 +8055,7 @@ def get_api_logs(request):
         if matching_key:
             activity = PATH_ACTIVITY_MAPPING[matching_key]
             user_type = (
-                log.user.profile.roles.all().first().name.lower()
+                log.user.profile.roles.all().exclude(name="vendor").first().name.lower()
                 if log.user and log.user.profile
                 else None
             )
