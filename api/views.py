@@ -3163,9 +3163,9 @@ def transform_project_structure(sessions):
                 "session_number": session_counts[session_type],
                 "session_type": session_type,
                 "session_duration": session_duration,
-                "billable_session_number": billable_session_number
-                if is_billable
-                else None,
+                "billable_session_number": (
+                    billable_session_number if is_billable else None
+                ),
                 "status": "pending",
             }
             print(transformed_session)
@@ -4331,14 +4331,14 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     for session in avaliable_sessions:
         session_detail = {
             "id": session.id,
-            "batch_name": session.coaching_session.batch.name
-            if coach_id is None
-            else None,
+            "batch_name": (
+                session.coaching_session.batch.name if coach_id is None else None
+            ),
             "project_name": session.coaching_session.batch.project.name,
             "organisation_name": session.coaching_session.batch.project.organisation.name,
-            "project_id": session.coaching_session.batch.project.id
-            if coach_id is None
-            else None,
+            "project_id": (
+                session.coaching_session.batch.project.id if coach_id is None else None
+            ),
             "coach_name": session.availibility.coach.first_name
             + " "
             + session.availibility.coach.last_name,
@@ -4349,9 +4349,11 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "participant_name": session.learner.name,
             "participant_email": session.learner.email,
             "participant_phone": session.learner.phone,
-            "coaching_session_number": session.coaching_session.coaching_session_number
-            if coach_id is None
-            else None,
+            "coaching_session_number": (
+                session.coaching_session.coaching_session_number
+                if coach_id is None
+                else None
+            ),
             "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
@@ -4359,6 +4361,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "session_type": session.coaching_session.session_type,
             "end_time": session.availibility.end_time,
             "is_seeq_project": True,
+            "coaching_session_id": session.coaching_session.id,
         }
         session_details.append(session_detail)
 
@@ -4504,14 +4507,14 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
     for session in avaliable_sessions:
         session_detail = {
             "id": session.id,
-            "batch_name": session.coaching_session.batch.name
-            if coach_id is None
-            else None,
+            "batch_name": (
+                session.coaching_session.batch.name if coach_id is None else None
+            ),
             "project_name": session.coaching_session.batch.project.name,
             "organisation_name": session.coaching_session.batch.project.organisation.name,
-            "project_id": session.coaching_session.batch.project.id
-            if coach_id is None
-            else None,
+            "project_id": (
+                session.coaching_session.batch.project.id if coach_id is None else None
+            ),
             "coach_name": session.availibility.coach.first_name
             + " "
             + session.availibility.coach.last_name,
@@ -4522,9 +4525,11 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "participant_name": session.learner.name,
             "participant_email": session.learner.email,
             "participant_phone": session.learner.phone,
-            "coaching_session_number": session.coaching_session.coaching_session_number
-            if coach_id is None
-            else None,
+            "coaching_session_number": (
+                session.coaching_session.coaching_session_number
+                if coach_id is None
+                else None
+            ),
             "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
@@ -5271,7 +5276,7 @@ def get_current_session(request, user_type, room_id, user_id):
     elif user_type == "learner":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-             Q(confirmed_availability__end_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             Q(learner__id=user_id),
             (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
@@ -6135,7 +6140,7 @@ def standard_field_request(request, user_id):
 def coaches_which_are_included_in_projects(request):
     coachesId = []
     projects = Project.objects.all()
-    schedular_projects=SchedularProject.objects.all()
+    schedular_projects = SchedularProject.objects.all()
     for project in projects:
         for coach_status in project.coaches_status.all():
             if (
@@ -6146,11 +6151,11 @@ def coaches_which_are_included_in_projects(request):
     for project in schedular_projects:
         batches = SchedularBatch.objects.filter(project=project)
         for batch in batches:
-            coaches=batch.coaches.all()
+            coaches = batch.coaches.all()
             for coach in coaches:
                 coachesId.append(coach.id)
     coachesId = set(coachesId)
-    return Response(coachesId)  
+    return Response(coachesId)
 
 
 def calculate_session_progress_data_for_hr(user_id):
@@ -6228,13 +6233,15 @@ def calculate_and_send_session_data(user_id):
             project_name: {
                 session_type: {
                     **session,
-                    "completion_percentage": format(
-                        (session["completed_sessions"] / session["total_sessions"])
-                        * 100,
-                        ".1f",
-                    )
-                    if session["total_sessions"] > 0
-                    else 0,
+                    "completion_percentage": (
+                        format(
+                            (session["completed_sessions"] / session["total_sessions"])
+                            * 100,
+                            ".1f",
+                        )
+                        if session["total_sessions"] > 0
+                        else 0
+                    ),
                 }
                 for session_type, session in project_data.items()
             }
@@ -7559,7 +7566,7 @@ def change_user_role(request, user_id):
         is_seeq_allowed = SchedularBatch.objects.filter(
             learners=user.profile.learner
         ).exists()
-    
+
         return Response(
             {
                 **serializer.data,
@@ -7963,37 +7970,42 @@ class DownloadCoachContract(APIView):
 @api_view(["POST"])
 def add_pmo(request):
     try:
-        data = request.data.copy()
-        data["user"] = {"user_types": "pmo"}  # Assigning the role 'pmo' to the user
+        with transaction.atomic():
+            data = request.data.copy()
+            data["user"] = {"user_types": "pmo"}  # Assigning the role 'pmo' to the user
 
-        pmo_serializer = PmoSerializer(data=data)
+            pmo_serializer = PmoSerializer(data=data)
 
-        if pmo_serializer.is_valid():
-            name = data.get("name")
-            email = data.get("email")
-            phone = data.get("phone")
+            if pmo_serializer.is_valid():
+                name = data.get("name")
+                email = data.get("email")
+                phone = data.get("phone")
 
-            if not (name and phone):
+                if not (name and phone):
+                    return Response(
+                        {"error": "Name and phone are mandatory fields."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    user = User.objects.create_user(
+                        username=email,
+                        email=email,
+                        password=User.objects.make_random_password(),
+                    )
+
+                    profile = Profile.objects.create(user=user)
+                else:
+                    profile = Profile.objects.get(user=user)
+                pmo_role, created = Role.objects.get_or_create(name="pmo")
+                profile.roles.add(pmo_role)
+                profile.save()
+                pmo_serializer.save(user=profile)
+                return Response(pmo_serializer.data, status=status.HTTP_201_CREATED)
+            else:
                 return Response(
-                    {"error": "Name and phone are mandatory fields."},
-                    status=status.HTTP_400_BAD_REQUEST,
+                    pmo_serializer.errors, status=status.HTTP_400_BAD_REQUEST
                 )
-
-            user = User.objects.create_user(
-                username=email,
-                email=email,
-                password=User.objects.make_random_password(),
-            )
-
-            profile = Profile.objects.create(user=user)
-            profile.roles.add(
-                Role.objects.get(name="pmo")
-            )  # Assigning 'pmo' role to the profile
-
-            pmo_serializer.save(user=profile)
-            return Response(pmo_serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            return Response(pmo_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

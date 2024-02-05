@@ -436,7 +436,7 @@ def send_participant_morning_reminder_email():
     )
     for session in today_sessions:
         if (
-            session.coaching_session.batch.project.automated_reminder
+            session.coaching_session.batch.project.email_reminder
             and session.coaching_session.batch.project.status == "ongoing"
         ):
             name = session.learner.name
@@ -513,7 +513,7 @@ def send_participant_morning_reminder_one_day_before_email():
     )
     for session in tomorrow_sessions:
         if (
-            session.coaching_session.batch.project.automated_reminder
+            session.coaching_session.batch.project.email_reminder
             and session.coaching_session.batch.project.status == "ongoing"
         ):
             name = session.learner.name
@@ -722,7 +722,7 @@ def send_whatsapp_reminder_1_day_before_live_session():
 
         for session in live_sessions:
             if (
-                session.batch.project.automated_reminder
+                session.batch.project.whatsapp_reminder
                 and session.batch.project.status == "ongoing"
             ):
                 learners = session.batch.learners.all()
@@ -771,7 +771,7 @@ def send_whatsapp_reminder_same_day_morning():
 
         for session in live_sessions:
             if (
-                session.batch.project.automated_reminder
+                session.batch.project.whatsapp_reminder
                 and session.batch.project.status == "ongoing"
             ):
                 learners = session.batch.learners.all()
@@ -815,7 +815,7 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
     try:
         live_session = LiveSession.objects.get(id=id)
         if (
-            live_session.batch.project.automated_reminder
+            live_session.batch.project.whatsapp_reminder
             and live_session.batch.project.status == "ongoing"
         ):
             learners = live_session.batch.learners.all()
@@ -863,7 +863,7 @@ def send_feedback_lesson_reminders():
     today_live_sessions = LiveSession.objects.filter(date_time__date=today)
     for live_session in today_live_sessions:
         if (
-            live_session.batch.project.automated_reminder
+            live_session.batch.project.whatsapp_reminder
             and live_session.batch.project.status == "ongoing"
         ):
             try:
@@ -1063,7 +1063,7 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_seeq():
         )
         for session in today_sessions:
             if (
-                session.coaching_session.batch.project.automated_reminder
+                session.coaching_session.batch.project.whatsapp_reminder
                 and session.coaching_session.batch.project.status == "ongoing"
             ):
                 name = session.learner.name
@@ -1377,7 +1377,7 @@ def coachee_booking_reminder_whatsapp_at_8am():
         for coaching_session in coaching_sessions_exist:
             result = available_slots_count_for_participant(coaching_session.id)
             if (
-                coaching_session.batch.project.automated_reminder
+                coaching_session.batch.project.whatsapp_reminder
                 and coaching_session.batch.project.status == "ongoing"
             ):
                 learners_in_coaching_session = coaching_session.batch.learners.all()
@@ -1480,8 +1480,7 @@ def schedule_nudges(course_id):
     nudge_scheduled_for = datetime.combine(course.nudge_start_date, desired_time)
     for nudge in nudges:
         if (
-            nudge.course.batch.project.automated_reminder
-            and nudge.course.batch.project.nudges
+            nudge.course.batch.project.nudges
             and nudge.course.batch.project.status == "ongoing"
         ):
             clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
@@ -1506,8 +1505,7 @@ def get_file_content(file_url):
 def send_nudge(nudge_id):
     nudge = Nudge.objects.get(id=nudge_id)
     if (
-        nudge.course.batch.project.automated_reminder
-        and nudge.course.batch.project.nudges
+         nudge.course.batch.project.nudges
         and nudge.course.batch.project.status == "ongoing"
     ):
         subject = f"New Nudge: {nudge.name}"
