@@ -171,7 +171,7 @@ class LiveSession(models.Model):
         PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
     )
     session_type = models.CharField(
-        max_length=50, choices=SESSION_CHOICES, default="live_session"
+        max_length=50, choices=SESSION_CHOICES, default="virtual_session"
     )
     meeting_link = models.TextField(default="", blank=True)
 
