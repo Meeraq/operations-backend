@@ -1647,7 +1647,7 @@ def create_video_lesson(request):
     if request.method == "POST":
         lesson_data = request.data.get("lesson")
         video_id = request.data.get("video")
-        content = request.data.get("content")
+        content = request.data.get("content","")
 
         # Create or update lesson
         lesson_serializer = LessonSerializer(data=lesson_data)
@@ -1719,7 +1719,7 @@ def update_video_lesson(request, lesson_id):
         )
 
     video_id = request.data.get("video")
-    content = request.data.get("content")
+    content = request.data.get("content","")
 
     try:
         video = Video.objects.get(pk=video_id)
@@ -2495,12 +2495,12 @@ def create_resource(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_pdf_lesson(request):
-    print(request.data)
+ 
     try:
         with transaction.atomic():
             lesson_data = request.data.get("lesson")
             pdf_id = request.data.get("pdf_id")
-            content = request.data.get("content")
+            content = request.data.get("content","")
             course_template_id = lesson_data.get("course_template", "")
             course_id = lesson_data.get("course", "")
 
@@ -2566,7 +2566,7 @@ def update_pdf_lesson(request, pk):
     # Extract data from request
     lesson_data = request.data.get("lesson", {})
     pdf_id = request.data.get("pdf_id")
-    content = request.data.get("content")
+    content = request.data.get("content","")
 
     try:
         lesson = Lesson.objects.get(id=lesson_data.get("id"))
