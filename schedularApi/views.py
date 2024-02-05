@@ -222,7 +222,9 @@ def create_project_schedular(request):
         schedularProject = SchedularProject(
             name=request.data["project_name"],
             organisation=organisation,
-            automated_reminder=request.data["automated_reminder"],
+            email_reminder=request.data["email_reminder"],
+            whatsapp_reminder=request.data["whatsapp_reminder"],
+            calendar_invites=request.data["calendar_invites"],
             nudges=request.data["nudges"],
             pre_post_assessment=request.data["pre_post_assessment"],
         )
@@ -636,6 +638,7 @@ def update_live_session(request, live_session_id):
         if (
             not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
             and update_live_session.batch.project.status == "ongoing"
+            and update_live_session.batch.project.calendar_invites
         ):
             try:
                 learners = live_session.batch.learners.all()
@@ -1626,12 +1629,9 @@ def schedule_session_fixed(request):
                 meeting_location = f"{env('CAAS_APP_URL')}/call/{booking_id}"
                 # Only send email if project status is ongoing
                 if coaching_session.batch.project.status == "ongoing":
-                    create_outlook_calendar_invite(
-                        f"Meeraq - {session_type_value.capitalize()} Session",
-                        f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
-                        coach_availability.start_time,
-                        coach_availability.end_time,
-                        [
+                    attendees = None
+                    if coaching_session.batch.project.calendar_invites:
+                        attendees = [
                             {
                                 "emailAddress": {
                                     "name": coach_name,
@@ -1646,7 +1646,23 @@ def schedule_session_fixed(request):
                                 },
                                 "type": "required",
                             },
-                        ],
+                        ]
+                    else:
+                        attendees = [
+                            {
+                                "emailAddress": {
+                                    "name": coach_name,
+                                    "address": coach_availability.coach.email,
+                                },
+                                "type": "required",
+                            }
+                        ]
+                    create_outlook_calendar_invite(
+                        f"Meeraq - {session_type_value.capitalize()} Session",
+                        f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
+                        coach_availability.start_time,
+                        coach_availability.end_time,
+                        attendees,
                         env("CALENDAR_INVITATION_ORGANIZER"),
                         None,
                         scheduled_session,
@@ -1889,12 +1905,9 @@ def reschedule_session(request, session_id):
                 meeting_location = f"{env('CAAS_APP_URL')}/call/{booking_id}"
                 # Only send email if project status is ongoing
                 if coaching_session.batch.project.status == "ongoing":
-                    create_outlook_calendar_invite(
-                        f"Meeraq - {session_type_value.capitalize()} Session",
-                        f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
-                        coach_availability.start_time,
-                        coach_availability.end_time,
-                        [
+                    attendees = None
+                    if coaching_session.batch.project.calendar_invites:
+                        attendees = [
                             {
                                 "emailAddress": {
                                     "name": coach_name,
@@ -1909,7 +1922,23 @@ def reschedule_session(request, session_id):
                                 },
                                 "type": "required",
                             },
-                        ],
+                        ]
+                    else:
+                        attendees = [
+                            {
+                                "emailAddress": {
+                                    "name": coach_name,
+                                    "address": coach_availability.coach.email,
+                                },
+                                "type": "required",
+                            }
+                        ]
+                    create_outlook_calendar_invite(
+                        f"Meeraq - {session_type_value.capitalize()} Session",
+                        f"Your {session_type_value} session has been confirmed. Book your calendars for the same. Please join the session at scheduled date and time",
+                        coach_availability.start_time,
+                        coach_availability.end_time,
+                        attendees,
                         env("CALENDAR_INVITATION_ORGANIZER"),
                         None,
                         scheduled_session,
@@ -3242,7 +3271,9 @@ def edit_schedular_project(request, project_id):
                 {"error": f"HR with ID {hr_id} not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
-    project.automated_reminder = request.data.get("automated_reminder")
+    project.email_reminder = request.data.get("email_reminder")
+    project.whatsapp_reminder = request.data.get("whatsapp_reminder")
+    project.calendar_invites = request.data.get("calendar_invites")
     project.nudges = request.data.get("nudges")
     project.pre_post_assessment = request.data.get("pre_post_assessment")
     project.save()
