@@ -26,10 +26,12 @@ class SchedularProject(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
     is_project_structure_finalized = models.BooleanField(default=False)
-    automated_reminder = models.BooleanField(blank=True, default=True)
     nudges = models.BooleanField(blank=True, default=True)
     pre_post_assessment = models.BooleanField(blank=True, default=True)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
+    email_reminder = models.BooleanField(blank=True, default=True)
+    whatsapp_reminder = models.BooleanField(blank=True, default=True)
+    calendar_invites = models.BooleanField(blank=True, default=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -151,7 +153,8 @@ class LiveSession(models.Model):
         ("live_session", "Live Session"),
         ("check_in_session", "Check In Session"),
         ("in_person_session", "In Person Session"),
-        ("kickoff_session","Kickoff Session"),
+        ("kickoff_session", "Kickoff Session"),
+        ("virtual_session", "Virtual Session"),
     ]
 
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
@@ -168,7 +171,7 @@ class LiveSession(models.Model):
         PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
     )
     session_type = models.CharField(
-        max_length=50, choices=SESSION_CHOICES, default="live_session"
+        max_length=50, choices=SESSION_CHOICES, default="virtual_session"
     )
     meeting_link = models.TextField(default="", blank=True)
 
