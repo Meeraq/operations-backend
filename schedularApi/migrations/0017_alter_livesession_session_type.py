@@ -57,7 +57,7 @@ def populate_virtual_session(apps, schema_editor):
                         )
                         if formatted_lesson_name == feedback_lesson_name_should_be:
                             if (
-                                live_session_lesson.lesson.name.lower().find("live")
+                                feedback_lesson.lesson.name.lower().find("live")
                                 != -1
                             ):
                                 feedback_lesson.lesson.name = (
