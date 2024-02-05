@@ -379,9 +379,11 @@ def create_project_structure(request, project_id):
 
             return Response(
                 {
-                    "message": "Project structure edited successfully."
-                    if is_editing
-                    else "Project structure added successfully."
+                    "message": (
+                        "Project structure edited successfully."
+                        if is_editing
+                        else "Project structure added successfully."
+                    )
                 },
                 status=200,
             )
@@ -541,9 +543,9 @@ def get_batch_calendar(request, batch_id):
             coaching_sessions_result.append(
                 {
                     **coaching_session,
-                    "available_slots_count": len(result)
-                    if availabilities is not None
-                    else 0,
+                    "available_slots_count": (
+                        len(result) if availabilities is not None else 0
+                    ),
                     # if session_duration > '30'
                     # else (len(availabilities) if availabilities is not None else 0),
                     "booked_session_count": booked_session_count,
@@ -570,9 +572,9 @@ def get_batch_calendar(request, batch_id):
                 course_enrollment = CourseEnrollment.objects.get(
                     learner__id=participant["id"], course=course
                 )
-                participant[
-                    "is_certificate_allowed"
-                ] = course_enrollment.is_certificate_allowed
+                participant["is_certificate_allowed"] = (
+                    course_enrollment.is_certificate_allowed
+                )
 
         except Exception as e:
             print(str(e))
@@ -1390,17 +1392,21 @@ def schedule_session(request):
                 send_mail_templates(
                     "coach_templates/coaching_email_template.html",
                     [participant_email],
-                    "Meeraq - Laser Coaching Session Booked"
-                    if session_type == "laser_coaching_session"
-                    else "Meeraq - Mentoring Session Booked",
+                    (
+                        "Meeraq - Laser Coaching Session Booked"
+                        if session_type == "laser_coaching_session"
+                        else "Meeraq - Mentoring Session Booked"
+                    ),
                     {
                         "name": learner.name,
                         "date": date_for_mail,
                         "time": session_time,
                         "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
-                        "session_type": "Mentoring"
-                        if session_type == "mentoring_session"
-                        else "Laser Coaching",
+                        "session_type": (
+                            "Mentoring"
+                            if session_type == "mentoring_session"
+                            else "Laser Coaching"
+                        ),
                     },
                     [],
                 )
@@ -1704,17 +1710,21 @@ def schedule_session_fixed(request):
                     send_mail_templates(
                         "coach_templates/coaching_email_template.html",
                         [participant_email],
-                        "Meeraq - Laser Coaching Session Booked"
-                        if session_type == "laser_coaching_session"
-                        else "Meeraq - Mentoring Session Booked",
+                        (
+                            "Meeraq - Laser Coaching Session Booked"
+                            if session_type == "laser_coaching_session"
+                            else "Meeraq - Mentoring Session Booked"
+                        ),
                         {
                             "name": learner.name,
                             "date": date_for_mail,
                             "time": session_time,
                             "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
-                            "session_type": "Mentoring"
-                            if session_type == "mentoring_session"
-                            else "Laser Coaching",
+                            "session_type": (
+                                "Mentoring"
+                                if session_type == "mentoring_session"
+                                else "Laser Coaching"
+                            ),
                         },
                         [],
                     )
@@ -1967,17 +1977,21 @@ def reschedule_session(request, session_id):
                     send_mail_templates(
                         "coach_templates/coaching_email_template.html",
                         [learner.email],
-                        "Meeraq - Laser Coaching Session Booked"
-                        if session_type == "laser_coaching_session"
-                        else "Meeraq - Mentoring Session Booked",
+                        (
+                            "Meeraq - Laser Coaching Session Booked"
+                            if session_type == "laser_coaching_session"
+                            else "Meeraq - Mentoring Session Booked"
+                        ),
                         {
                             "name": learner.name,
                             "date": date_for_mail,
                             "time": session_time,
                             "meeting_link": f"{env('CAAS_APP_URL')}/call/{coach_availability.coach.room_id}",
-                            "session_type": "Mentoring"
-                            if session_type == "mentoring_session"
-                            else "Laser Coaching",
+                            "session_type": (
+                                "Mentoring"
+                                if session_type == "mentoring_session"
+                                else "Laser Coaching"
+                            ),
                         },
                         [],
                     )
@@ -2131,13 +2145,13 @@ def get_sessions_by_type(request, sessions_type):
     for session in sessions:
         session_detail = {
             "id": session.id,
-            "batch_name": session.coaching_session.batch.name
-            if coach_id is None
-            else None,
+            "batch_name": (
+                session.coaching_session.batch.name if coach_id is None else None
+            ),
             "project_name": session.coaching_session.batch.project.name,
-            "project_id": session.coaching_session.batch.project.id
-            if coach_id is None
-            else None,
+            "project_id": (
+                session.coaching_session.batch.project.id if coach_id is None else None
+            ),
             "coach_name": session.availibility.coach.first_name
             + " "
             + session.availibility.coach.last_name,
@@ -2148,9 +2162,11 @@ def get_sessions_by_type(request, sessions_type):
             "participant_name": session.learner.name,
             "participant_email": session.learner.email,
             "participant_phone": session.learner.phone,
-            "coaching_session_number": session.coaching_session.coaching_session_number
-            if coach_id is None
-            else None,
+            "coaching_session_number": (
+                session.coaching_session.coaching_session_number
+                if coach_id is None
+                else None
+            ),
             "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
@@ -2657,9 +2673,9 @@ def project_report_download(request, project_id):
 
     # Create an Excel file with multiple sheets
     response = HttpResponse(content_type="application/ms-excel")
-    response[
-        "Content-Disposition"
-    ] = f'attachment; filename="{project.name}_batches.xlsx"'
+    response["Content-Disposition"] = (
+        f'attachment; filename="{project.name}_batches.xlsx"'
+    )
 
     with pd.ExcelWriter(response, engine="openpyxl") as writer:
         for batch_name, df in dfs:
@@ -2700,9 +2716,9 @@ def project_report_download_session_wise(request, project_id, batch_id):
             dfs.append((session_name, df))
 
         response = HttpResponse(content_type="application/ms-excel")
-        response[
-            "Content-Disposition"
-        ] = f'attachment; filename="{batch.name}_batches.xlsx"'
+        response["Content-Disposition"] = (
+            f'attachment; filename="{batch.name}_batches.xlsx"'
+        )
 
         with pd.ExcelWriter(response, engine="openpyxl") as writer:
             for session_name, df in dfs:
@@ -2717,27 +2733,27 @@ def project_report_download_session_wise(request, project_id, batch_id):
 @permission_classes([IsAuthenticated])
 def add_facilitator(request):
     first_name = request.data.get("firstName", "")
-    print(first_name)
+
     last_name = request.data.get("lastName", "")
-    print(last_name)
+
     email = request.data.get("email", "")
-    print(email)
+
     age = request.data.get("age", "")
-    print(age)
+
     gender = request.data.get("gender", "")
-    print(gender)
+
     domain = request.data.get("domain", [])
-    print(domain)
+
     phone_country_code = request.data.get("phoneCountryCode", "")
-    print(phone_country_code)
+
     phone = request.data.get("phone", "")
-    print(phone)
+
     level = request.data.get("level", [])
-    print(level)
+
     rating = request.data.get("rating", "")
-    print(rating)
+
     area_of_expertise = request.data.get("areaOfExpertise", [])
-    print(area_of_expertise)
+
     profile_pic = request.data.get("profilePic", "")
     education = request.data.get("education", [])
     years_of_corporate_experience = request.data.get("corporateyearsOfExperience", "")
@@ -3366,9 +3382,11 @@ def get_facilitator_sessions(request, facilitator_id):
             batch_data = {
                 "batch_name": batch.name,
                 "project_name": batch.project.name if batch.project else None,
-                "organisation_name": batch.project.organisation.name
-                if (batch.project and batch.project.organisation)
-                else None,
+                "organisation_name": (
+                    batch.project.organisation.name
+                    if (batch.project and batch.project.organisation)
+                    else None
+                ),
                 "live_sessions": [],
             }
 
