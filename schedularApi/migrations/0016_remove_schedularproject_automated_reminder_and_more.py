@@ -74,10 +74,6 @@ def populate_virtual_session(apps, schema_editor):
 
             for project in projects:
                 project_structure = project.project_structure
-                project.email_reminder = project.automated_reminder
-                project.whatsapp_reminder =project.automated_reminder
-                project.calendar_invites =project.automated_reminder
-
                 for session in project_structure:
                     if session.get("session_type") == "live_session":
                         session["session_type"] = "virtual_session"
