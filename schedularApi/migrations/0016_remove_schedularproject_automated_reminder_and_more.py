@@ -74,6 +74,9 @@ def populate_virtual_session(apps, schema_editor):
 
             for project in projects:
                 project_structure = project.project_structure
+                project.email_reminder = project.automated_reminder
+                project.whatsapp_reminder =project.automated_reminder
+                project.calendar_invites =project.automated_reminder
 
                 for session in project_structure:
                     if session.get("session_type") == "live_session":
@@ -91,10 +94,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='schedularproject',
-            name='automated_reminder',
-        ),
+        
         migrations.AddField(
             model_name='schedularproject',
             name='calendar_invites',
@@ -116,4 +116,8 @@ class Migration(migrations.Migration):
             field=models.CharField(choices=[('live_session', 'Live Session'), ('check_in_session', 'Check In Session'), ('in_person_session', 'In Person Session'), ('kickoff_session', 'Kickoff Session'), ('virtual_session', 'Virtual Session')], default='virtual_session', max_length=50),
         ),
         migrations.RunPython(populate_virtual_session),
+        migrations.RemoveField(
+            model_name='schedularproject',
+            name='automated_reminder',
+        ),
     ]
