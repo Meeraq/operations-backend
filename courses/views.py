@@ -201,6 +201,21 @@ def get_feedback_lesson_name(lesson_name):
     underscored_string = "_".join(lowercased_string.split())
     return underscored_string
 
+def get_live_session_name(session_type):
+
+    session_name = None
+    if session_type == "live_session":
+        session_name = "Live Session"
+    elif session_type == "check_in_session":
+        session_name = "Check In Session"
+    elif session_type == "in_person_session":
+        session_name = "In Person Session"
+    elif session_type == "kickoff_session":
+        session_name = "Kickoff Session"
+    elif session_type == "virtual_session":
+        session_name = "Virtual Session"
+
+    return session_name
 
 def get_file_name_from_url(url):
     # Split the URL by '/' to get an array of parts
@@ -2119,15 +2134,8 @@ def get_consolidated_feedback_report(request):
                             )
 
                             if formatted_lesson_name == feedback_lesson_name_should_be:
-                                session_name = None
-                                if live_session.session_type == "live_session":
-                                    session_name = "Live Session"
-                                elif live_session.session_type == "check_in_session":
-                                    session_name = "Check In Session"
-                                elif live_session.session_type == "in_person_session":
-                                    session_name = "In Person Session"
-                                elif live_session.session_type == "kickoff_session":
-                                    session_name = "Kickoff Session"
+                                session_name = get_live_session_name(live_session.session_type)
+                                
                                 live_session_key = f"{project.name} {session_name} {live_session.live_session_number}"
                                 if live_session_key not in data:
                                     data[live_session_key] = {
@@ -2390,16 +2398,8 @@ class AssignCourseTemplateToBatch(APIView):
                 )
                 for live_session in live_sessions:
                     max_order = max_order + 1
-                    session_name = None
-                    if live_session.session_type == "live_session":
-                        session_name = "Live Session"
-                    elif live_session.session_type == "check_in_session":
-                        session_name = "Check In Session"
-                    elif live_session.session_type == "in_person_session":
-                        session_name = "In Person Session"
-                    elif live_session.session_type == "kickoff_session":
-                        session_name = "Kickoff Session"
-
+                    session_name = get_live_session_name(live_session.session_type)
+                    
                     new_lesson = Lesson.objects.create(
                         course=new_course,
                         name=f"{session_name} {live_session.live_session_number}",

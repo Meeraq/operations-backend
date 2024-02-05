@@ -143,6 +143,23 @@ def extract_number_from_name(name):
         return None
 
 
+def get_live_session_name(session_type):
+
+    session_name = None
+    if session_type == "live_session":
+        session_name = "Live Session"
+    elif session_type == "check_in_session":
+        session_name = "Check In Session"
+    elif session_type == "in_person_session":
+        session_name = "In Person Session"
+    elif session_type == "kickoff_session":
+        session_name = "Kickoff Session"
+    elif session_type == "virtual_session":
+        session_name = "Virtual Session"
+
+    return session_name
+
+
 def send_whatsapp_message_template(phone, payload):
     try:
         if not phone:
@@ -1052,6 +1069,7 @@ def add_batch(request, project_id):
                             "check_in_session",
                             "in_person_session",
                             "kickoff_session",
+                            "virtual_session",
                         ]:
                             session_number = (
                                 LiveSession.objects.filter(
@@ -3348,10 +3366,12 @@ def get_live_sessions_by_status(request):
         queryset = queryset.filter(batch__project__hr__id=hr_id)
     res = []
     for live_session in queryset:
+        session_name = get_live_session_name(live_session.session_type)
+        
         res.append(
             {
                 "id": live_session.id,
-                "name": f"Live Session {live_session.live_session_number}",
+                "name": f"{session_name} {live_session.live_session_number}",
                 "organization": live_session.batch.project.organisation.name,
                 "batch_name": live_session.batch.name,
                 "batch_id": live_session.batch.id,
@@ -3511,6 +3531,7 @@ def add_new_session_in_project_structure(request):
                     "check_in_session",
                     "in_person_session",
                     "kickoff_session",
+                    "virtual_session",
                 ]:
                     session_number = (
                         LiveSession.objects.filter(
@@ -3541,7 +3562,8 @@ def add_new_session_in_project_structure(request):
                             session_name = "In Person Session"
                         elif live_session.session_type == "kickoff_session":
                             session_name = "Kickoff Session"
-
+                        elif live_session.session_type == "virtual_session":
+                            session_name = "Virtual Session"
                         new_lesson = Lesson.objects.create(
                             course=course,
                             name=f"{session_name} {live_session.live_session_number}",
@@ -3711,6 +3733,7 @@ def delete_session_from_project_structure(request):
                     "check_in_session",
                     "in_person_session",
                     "kickoff_session",
+                    "virtual_session",
                 ]:
                     live_session = LiveSession.objects.filter(
                         batch=batch, order=order, session_type=session_type
@@ -3781,6 +3804,7 @@ def delete_session_from_project_structure(request):
                     "check_in_session",
                     "in_person_session",
                     "kickoff_session",
+                    "virtual_session",
                 ]:
                     for lesson in Lesson.objects.filter(
                         course=course, lesson_type="live_session"
