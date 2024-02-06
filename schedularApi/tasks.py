@@ -19,6 +19,7 @@ from django.utils import timezone
 from api.views import (
     send_mail_templates,
     refresh_microsoft_access_token,
+    generateManagementToken
 )
 from schedularApi.serializers import AvailabilitySerializer
 from datetime import timedelta, time, datetime
@@ -1611,3 +1612,97 @@ def send_assessment_invitation_mail_on_click(data):
                 sleep(5)
     except Exception as e:
         print(str(e))
+
+# returns start and end time of today in format - YYYY-MM-DDTHH:mm:ss.sssZ
+def get_current_date_start_and_end_time_in_string():
+    now = timezone.now()
+    current_date = now.date()
+
+    start_datetime = datetime.combine(current_date, datetime.min.time())
+    end_datetime = datetime.combine(current_date, datetime.max.time())
+
+    start_time = start_datetime.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    end_time = end_datetime.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+
+    return start_time, end_time
+
+def get_todays_100ms_sessions_of_room_id(management_token,room_id,start,end):
+    try:
+        headers = {
+            'Authorization': f'Bearer {management_token}'
+        }
+        url = f'https://api.100ms.live/v2/sessions?room_id={room_id}&after={start}&before={end}&limit=100'
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            sessions = response.json()
+            return sessions["data"]
+        else:
+            print(f"Failed to get sessions. Status code: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Failed to get sessions. Exception: {str(e)}")
+        return None
+
+
+# convert YYYY-MM-DDTHH:mm:ss.sssZ to timestamp in milliseconds
+def convert_timestr_to_timestamp(timestamp_str):
+    try:
+        timestamp_datetime = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+        timestamp_unix = int(timestamp_datetime.timestamp() * 1000)
+        return timestamp_unix
+    except ValueError:
+        # Handle invalid timestamp format
+        return None
+
+@shared_task
+def update_schedular_session_status():
+    start_timestamp, end_timestamp = get_current_date_timestamps()
+    start_time, end_time = get_current_date_start_and_end_time_in_string()
+    today_sessions = SchedularSessions.objects.filter(
+        availibility__start_time__lte=end_timestamp,
+        availibility__end_time__gte=start_timestamp,
+    )
+    memoized_100ms_sessions_today = {} # <room_id> : [] sessions array
+    for schedular_session in today_sessions: 
+        is_coach_joined = False
+        is_coachee_joined = False
+        is_both_joined_at_same_time = False
+        schedular_session_start_timestamp =  int(schedular_session.availibility.start_time)
+        schedular_session_end_timestamp = int(schedular_session.availibility.end_time)
+        coach_room_id = schedular_session.availibility.coach.room_id
+        if coach_room_id in memoized_100ms_sessions_today:
+            todays_sessions_in_100ms = memoized_100ms_sessions_today[coach_room_id]
+        else:
+            todays_sessions_in_100ms = []
+            try: 
+                management_token = generateManagementToken()
+                todays_sessions_in_100ms = get_todays_100ms_sessions_of_room_id(management_token, coach_room_id, start_time, end_time)
+            except Exception as e:
+                print("failed to get coach room 100ms sessions")
+        sessions_in_100ms_at_scheduled_time_of_schedular_session = []
+        
+        for session in todays_sessions_in_100ms:
+            created_at_in_timestamp = convert_timestr_to_timestamp(session["created_at"])
+            five_minutes_prior_schedular_start_time =  schedular_session_start_timestamp - 5 * 60 * 1000
+            if created_at_in_timestamp >= five_minutes_prior_schedular_start_time or created_at_in_timestamp < schedular_session_end_timestamp:
+                sessions_in_100ms_at_scheduled_time_of_schedular_session.append(session)
+                
+        for session in sessions_in_100ms_at_scheduled_time_of_schedular_session:
+            if len(session["peers"].keys()) == 2:
+                is_both_joined_at_same_time = True
+                break
+            for key, peer in session["peers"].items():
+                if (schedular_session.availibility.coach.first_name + " " + schedular_session.availibility.coach.last_name).lower().strip() == peer['name'].lower().strip():
+                    is_coach_joined = True
+                if schedular_session.learner.name.lower().strip() == peer['name'].lower().strip():
+                    is_coachee_joined = True
+        if is_both_joined_at_same_time:
+            schedular_session.auto_generated_status = "completed"
+        # pending because both joined at the same time 
+        elif is_coach_joined and is_coachee_joined:
+            schedular_session.auto_generated_status = "pending"
+        elif is_coachee_joined:
+            schedular_session.auto_generated_status = "coach_no_show"
+        elif is_coach_joined:
+            schedular_session.auto_generated_status = "coachee_no_show"
+        schedular_session.save()

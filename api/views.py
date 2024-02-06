@@ -4538,6 +4538,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "end_time": session.availibility.end_time,
             "session_duration": session.coaching_session.duration,
             "is_seeq_project": True,
+						"auto_generated_status" : session.auto_generated_status
         }
         session_details.append(session_detail)
 
@@ -8097,3 +8098,4 @@ def get_api_logs(request):
                 {"user_type": user_type, "activity": activity, "count": count}
             )
     return Response(output_list)
+

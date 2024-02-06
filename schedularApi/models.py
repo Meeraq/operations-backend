@@ -144,6 +144,7 @@ class SchedularSessions(models.Model):
     )
     coaching_session = models.ForeignKey(CoachingSession, on_delete=models.CASCADE)
     status = models.CharField(max_length=50, default="pending", blank=True)
+    auto_generated_status = models.CharField(max_length=50, default="pending", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
 
