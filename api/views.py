@@ -8069,7 +8069,7 @@ def get_api_logs(request):
             activity = PATH_ACTIVITY_MAPPING[matching_key]
             user_type = (
                 log.user.profile.roles.all().exclude(name="vendor").first().name.lower()
-                if log.user and log.user.profile
+                if log.user and log.user.profile and log.user.profile.roles.all().exclude(name="vendor").first()
                 else None
             )
             if (
