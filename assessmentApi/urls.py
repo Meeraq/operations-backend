@@ -297,4 +297,7 @@ urlpatterns = [
         "post-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
         PostReportDownloadForParticipant.as_view(),
     ),
+    path("renew-project-report/", views.download_renew_project_report)
 ]
+
+# http://127.0.0.1:8000/assessmentApi/renew-project-report/

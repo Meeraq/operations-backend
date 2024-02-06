@@ -3252,7 +3252,6 @@ def generate_graph_for_participant_single_correct_for_post_assessent(
             "competency"
         ).distinct():
             competency_id = competency["competency"]
-
             competency_name_for_object = Competency.objects.get(id=competency_id).name
             competency_description_for_object = Competency.objects.get(
                 id=competency_id
@@ -4609,3 +4608,192 @@ def send_mail_to_not_responded_participant(request, assessment_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Faild to send emails"}, status=400)
+
+
+
+from schedularApi.models import SchedularProject, SchedularBatch
+from assessmentApi.models import ParticipantResponse, Competency
+project = SchedularProject.objects.get(id = 2)
+batches = SchedularBatch.objects.filter(project__id=project.id).exclude(id=59)
+batches.count()
+
+all_learners = []
+unique_learners_id = []
+for batch in batches:
+    for learner in  batch.learners.all():
+        if learner.id not in unique_learners_id:
+            unique_learners_id.append(learner.id)
+            all_learners.append(learner)
+
+pre_assessment_participant_responses = ParticipantResponse.objects.filter(participant__id__in=unique_learners_id, assessment__assessment_timing="pre")
+pre_assessment_participant_responses.count()
+post_assessment_participant_responses = ParticipantResponse.objects.filter(participant__id__in=unique_learners_id, assessment__assessment_timing="post")
+post_assessment_participant_responses.count()
+
+pre_assessment_responded_learner_ids = []
+post_assessment_responded_learner_ids = []
+
+for response in pre_assessment_participant_responses:
+    if response.participant.id not in pre_assessment_responded_learner_ids:
+        pre_assessment_responded_learner_ids.append(response.participant.id)
+
+for response in post_assessment_participant_responses:
+    if response.participant.id not in post_assessment_responded_learner_ids:
+        post_assessment_responded_learner_ids.append(response.participant.id)
+
+pre_assessment_set = set(pre_assessment_responded_learner_ids)
+post_assessment_set = set(post_assessment_responded_learner_ids)
+common_ids = pre_assessment_set.intersection(post_assessment_set)
+common_ids_list = list(common_ids)
+
+
+pre_assessment_value_arrays = []
+post_assessment_value_arrays = []
+        
+
+for response in post_assessment_participant_responses:
+    participant_response = ParticipantResponse.objects.filter(participant__id=response.participant.id, assessment__id=response.assessment.id).first()
+    pre_assessment_participant_response = ParticipantResponse.objects.filter(participant__id=response.participant.id, assessment__id=response.assessment.pre_assessment.id).first() 
+    if participant_response and pre_assessment_participant_response:
+        total_for_each_comp = {}
+        competency_with_description = []
+        for competency in response.assessment.questionnaire.questions.values("competency").distinct():
+            competency_id = competency["competency"]
+            competency_name_for_object = Competency.objects.get(id=competency_id).name
+            competency_description_for_object = Competency.objects.get(id=competency_id).description
+            competency_object = {"competency_name": competency_name_for_object,"competency_description": competency_description_for_object,}
+            competency_with_description.append(competency_object)
+        for question in response.assessment.questionnaire.questions.all():
+            if question.competency.name not in total_for_each_comp:
+                total_for_each_comp[question.competency.name] = 1
+            else:
+                total_for_each_comp[question.competency.name] += 1
+        competency_object = {}
+        pre_competency_object = {}
+        for question in response.assessment.questionnaire.questions.all():
+            if question.competency.name not in competency_object:
+                competency_object[question.competency.name] = 0
+            if question.competency.name not in pre_competency_object:
+                pre_competency_object[question.competency.name] = 0
+            participant_response_value = participant_response.participant_response.get(str(question.id))
+            pre_assessment_participant_response_value = pre_assessment_participant_response.participant_response.get(str(question.id))
+            correct_answer = response.assessment.questionnaire.questions.filter(id=question.id).first().correct_answer
+            if pre_assessment_participant_response_value == int(correct_answer):
+                pre_competency_object[question.competency.name] += 1
+            if participant_response_value == int(correct_answer):
+                competency_object[question.competency.name] += 1
+        competency_percentage = {}
+        pre_competency_percentage = {}
+        for comp in total_for_each_comp:
+            competency_percentage[comp] = round((competency_object[comp] / total_for_each_comp[comp]) * 100)
+            pre_competency_percentage[comp] = round((pre_competency_object[comp] / total_for_each_comp[comp]) * 100)
+        comp_labels = list(competency_percentage.keys())
+        pre_percentage_values = list(pre_competency_percentage.values())
+        post_percentage_values = list(competency_percentage.values())
+        print(comp_labels, pre_percentage_values, post_percentage_values)
+        pre_assessment_value_arrays.append(pre_percentage_values)
+        post_assessment_value_arrays.append(post_percentage_values)
+
+
+pre_assessment_value_arrays = [[60, 40, 40, 100, 20], [60, 60, 60, 80, 100], [40, 40, 0, 20, 40], [60, 40, 40, 60, 60], [60, 20, 40, 40, 20], [100, 100, 100, 80, 100], [20, 40, 80, 0, 20], [40, 80, 80, 40, 80], [60, 80, 60, 80, 60], [40, 20, 60, 60, 40], [100, 100, 80, 80, 80], [100, 20, 80, 100, 80], [80, 60, 80, 80, 60], [60, 40, 60, 100, 80], [40, 40, 80, 0, 80], [60, 40, 100, 60, 60], [40, 40, 40, 100, 20], [80, 60, 80, 100, 60], [20, 60, 60, 40, 60], [80, 40, 40, 40, 80], [20, 60, 60, 80, 60], [60, 60, 60, 40, 40], [80, 60, 100, 60, 100], [80, 60, 80, 60, 60], [80, 20, 80, 40, 40], [60, 20, 100, 100, 60], [60, 40, 60, 40, 80], [60, 20, 80, 60, 20], [40, 40, 80, 100, 60], [60, 0, 20, 20, 60], [80, 80, 40, 100, 80], [80, 40, 80, 20, 60], [100, 60, 60, 100, 60], [100, 60, 40, 20, 40], [60, 80, 80, 80, 60], [60, 60, 40, 60, 60], [80, 40, 60, 100, 40], [60, 60, 60, 80, 40], [80, 60, 40, 60, 60], [80, 60, 80, 60, 20], [60, 40, 60, 80, 60], [40, 60, 60, 100, 80], [100, 80, 60, 80, 60], [60, 40, 60, 60, 60], [60, 60, 60, 80, 80], [40, 40, 40, 40, 80], [100, 100, 60, 80, 100], [60, 20, 20, 60, 40], [60, 60, 60, 100, 40], [20, 80, 80, 80, 60], [40, 20, 60, 60, 60], [40, 40, 20, 20, 60], [100, 60, 80, 80, 40], [60, 80, 40, 80, 60], [60, 100, 100, 100, 60], [60, 60, 80, 60, 40], [60, 80, 80, 80, 40], [60, 40, 40, 60, 40], [40, 40, 60, 60, 40], [60, 60, 80, 60, 20], [60, 40, 60, 80, 60], [60, 0, 40, 40, 40], [60, 60, 40, 80, 100], [0, 60, 0, 40, 60], [40, 40, 80, 80, 60], [80, 20, 40, 80, 80], [80, 80, 80, 60, 60], [60, 20, 20, 20, 60], [80, 100, 40, 60, 20], [60, 20, 80, 60, 80], [60, 20, 20, 40, 40], [60, 40, 80, 80, 60], [40, 100, 80, 80, 40], [80, 0, 40, 60, 0], [80, 40, 80, 60, 60], [60, 40, 0, 80, 60], [80, 80, 80, 80, 40], [80, 40, 20, 20, 40]]
+post_assessment_value_arrays = [[60, 100, 60, 80, 40], [60, 80, 100, 80, 80], [40, 80, 60, 40, 100], [40, 60, 60, 40, 40], [80, 80, 40, 60, 40], [80, 100, 100, 100, 60], [60, 60, 40, 60, 40], [80, 60, 40, 60, 40], [40, 100, 60, 60, 40], [60, 80, 80, 60, 20], [100, 100, 100, 100, 100], [40, 80, 100, 100, 60], [80, 60, 80, 100, 60], [60, 80, 100, 80, 100], [60, 80, 80, 60, 100], [100, 60, 80, 80, 80], [80, 80, 60, 80, 60], [60, 80, 80, 80, 40], [40, 60, 100, 100, 100], [60, 60, 20, 20, 60], [40, 100, 80, 100, 80], [60, 40, 100, 60, 80], [80, 100, 100, 80, 100], [60, 60, 100, 100, 60], [60, 40, 40, 20, 60], [60, 60, 60, 100, 100], [80, 60, 80, 100, 80], [60, 60, 80, 100, 40], [80, 80, 60, 80, 60], [20, 40, 0, 0, 40], [40, 60, 60, 80, 80], [100, 0, 60, 60, 0], [100, 80, 40, 80, 40], [20, 20, 40, 60, 20], [80, 40, 80, 80, 80], [80, 60, 80, 80, 100], [60, 80, 80, 100, 20], [60, 40, 80, 60, 40], [20, 80, 100, 60, 80], [80, 80, 80, 60, 80], [100, 80, 100, 80, 100], [60, 60, 60, 80, 20], [80, 60, 60, 80, 80], [40, 60, 40, 60, 60], [40, 60, 80, 60, 100], [40, 80, 80, 60, 60], [80, 100, 60, 100, 100], [60, 20, 60, 60, 40], [60, 60, 100, 80, 100], [40, 40, 40, 60, 60], [60, 40, 80, 60, 20], [60, 60, 60, 40, 80], [80, 80, 100, 80, 100], [80, 80, 60, 100, 60], [40, 80, 60, 80, 80], [60, 40, 40, 100, 40], [80, 80, 60, 80, 80], [20, 80, 80, 80, 40], [80, 80, 60, 100, 60], [80, 80, 80, 80, 100], [80, 40, 80, 60, 60], [20, 40, 40, 40, 100], [60, 80, 80, 60, 40], [40, 40, 60, 40, 60], [80, 100, 100, 80, 60], [80, 60, 80, 80, 40], [80, 80, 20, 60, 80], [100, 40, 40, 20, 20], [80, 100, 60, 80, 80], [40, 60, 60, 100, 80], [40, 60, 40, 80, 60], [80, 60, 80, 80, 60], [100, 100, 80, 80, 100], [80, 80, 80, 100, 60], [60, 80, 100, 80, 80], [40, 60, 20, 40, 60], [80, 80, 60, 100, 40], [80, 80, 40, 60, 60]]
+comp_labels = ['Area 1: Foundation', 'Area 2: Listening with empathy', 'Area 3: Asking questions with curiosity', 'Area 4: Action planning and Support', 'Area 5: Tool selection']
+competency_with_description = [{'competency_name': 'Area 1: Foundation', 'competency_description': 'Coaching involves the belief that the individual has the answers to their own problems within them. The coach is not a subject expert, but rather is focused on helping the individual to unlock their own potential. The focus is very much on the individual and what is inside their head.'}, {'competency_name': 'Area 2: Listening with empathy', 'competency_description': 'Empathic listening is a structured listening and questioning technique that allows you to develop and enhance relationships with a stronger understanding of what is being conveyed, both intellectually and emotionally.'}, {'competency_name': 'Area 3: Asking questions with curiosity', 'competency_description': 'Curiosity acts as a catalyst to discovery. Being curious when asking our questions means we are neither judgmental nor expecting a certain answer. On the contrary, we are becoming more welcoming and open to unknown space and have the questioning ability that allows us to navigate the employee’s thinking in the best possible way.'}, {'competency_name': 'Area 4: Action planning and Support', 'competency_description': 'A coaching action plan is meant to develop the employee’s skills, guide them towards a specific outcome, and complete goals faster, easier, and more efficiently. A good employee coaching plan for managers should continually serve as a guideline for the continuation of the employee’s growth even after her time with his coach is up.'}, {'competency_name': 'Area 5: Tool selection', 'competency_description': 'Coaching involves the belief that the individual has the answers to their own problems within them. The coach is not a subject expert, but rather is focused on helping the individual to unlock their own potential. The focus is very much on the individual and what is inside their head.'}]
+total_for_each_comp = {'Area 1: Foundation': 5, 'Area 2: Listening with empathy': 5, 'Area 3: Asking questions with curiosity': 5, 'Area 4: Action planning and Support': 5, 'Area 5: Tool selection': 5}
+
+
+def get_image(comp_labels,pre_percentage_values,post_percentage_values,total_for_each_comp):
+    fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 5))
+    ax = fig.add_subplot(111)
+    width = 0.4  # Width of each bar
+    bar_positions = np.arange(len(comp_labels))
+    pre_bars = ax.barh(
+            bar_positions - width / 2,
+            pre_percentage_values,
+            height=width,
+            label="Pre-Assessment",
+            color="#eb0081",
+        )
+    post_bars = ax.barh(
+            bar_positions + width / 2,
+            post_percentage_values,
+            height=width,
+            label="Post-Assessment",
+            color="#374e9c",
+        )
+    ax.set_yticks(bar_positions)
+    ax.set_yticklabels(comp_labels)
+    ax.legend()
+    ax.set_yticklabels(
+            [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
+            fontweight="bold",
+        )
+    plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
+    plt.xlabel("Percentage")
+    plt.xlim(0, 100)
+    plt.tight_layout()
+    # Add numbers on top of the pre-assessment bars
+    for index, value in enumerate(pre_percentage_values):
+        new_value = value / 100 * total_for_each_comp[comp_labels[index]]
+        ax.text(
+                value,
+                bar_positions[index] - width / 2,
+                f"{value}%",
+                ha="left",
+                va="center",
+                color="black",
+            )
+    for index, value in enumerate(post_percentage_values):
+        new_value = value / 100 * total_for_each_comp[comp_labels[index]]
+        # Add numbers on top of the post-assessment bars
+        ax.text(
+                value,
+                bar_positions[index] + width / 2,
+                f"{value}%",
+                ha="left",
+                va="center",
+                color="black",
+            )
+    image_stream = io.BytesIO()
+    plt.savefig(image_stream, format="png")
+    plt.close()
+    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
+    return encoded_image
+
+def average_arrays(arrays):
+    transposed_arrays = zip(*arrays)
+    averages = [round(sum(values) / len(values)) for values in transposed_arrays]
+    return averages
+
+pre_assessment_value_averages = average_arrays(pre_assessment_value_arrays)
+post_assessment_value_averages = average_arrays(post_assessment_value_arrays)
+
+encoded_image = get_image(comp_labels, pre_assessment_value_averages, post_assessment_value_averages, total_for_each_comp)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def download_renew_project_report(request):
+    try:
+        project_name = "Untapping People Potential"
+        org_name = "ReNew"
+        email_message = render_to_string(
+						"assessment/renew_report.html",
+						{
+								"project_name": project_name,
+                "org_name" : org_name,
+								"image_base64": encoded_image,
+								"competency_with_description": competency_with_description,
+						},
+				)
+        pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+        response = HttpResponse(pdf, content_type="application/pdf")
+        response[
+						"Content-Disposition"
+				] = f'attachment; filename={f"ReNew Assessment Report.pdf"}'
+        return response
+    except Exception as e:
+        print(str(e))
+        return Response(
+						{"error": "Failed to downlaod."},
+						status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+				)
