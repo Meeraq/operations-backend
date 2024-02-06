@@ -4538,7 +4538,6 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "end_time": session.availibility.end_time,
             "session_duration": session.coaching_session.duration,
             "is_seeq_project": True,
-						"auto_generated_status" : session.auto_generated_status
         }
         session_details.append(session_detail)
 
@@ -8099,3 +8098,22 @@ def get_api_logs(request):
             )
     return Response(output_list)
 
+
+users = [{"name" : "Abhilasha" ,"email" : "abhilasha315@gmail.com"},{"name" : "Preetha" ,"email" : "preetharaaghav@gmail.com"},{"name" : "Shripad" ,"email" : "shripad@ikigaidiscoveries.com"}]
+users_local = [{"name" : "Pankaj" ,"email" : "pankaj@meeraq.com"},{"name" : "Sreerag" ,"email" : "sreerag@meeraq.com"}]
+
+def send_vendor_emails():
+    for user_data in users:
+        try:
+            send_mail_templates(
+                "vendors/generate_invoice.html",
+                [user_data["email"]],
+                "Meeraq - Generate your invoice on one click!",
+                {"name": user_data["name"]},
+                [],
+            )
+        except Exception as e:
+            print(f"Error sending link to {user_data['email']}: {str(e)}")
+        sleep(5)
+    return Response({"message": "Reset password links sent successfully"}) 
+    
