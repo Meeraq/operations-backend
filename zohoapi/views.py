@@ -697,15 +697,6 @@ def add_invoice_data(request):
     if serializer.is_valid():
         serializer.save()
         line_items = serializer.data["line_items"]
-        # for line_item in line_items:
-        #     line_item["quantity_mul_rate"] = (
-        #         line_item["quantity_input"] * line_item["rate"]
-        #     )
-        #     line_item["quantity_mul_rate_include_tax"] = (
-        #         line_item["quantity_input"]
-        #         * line_item["rate"]
-        #         * (1 + line_item["tax_percentage"] / 100)
-        #     )
         line_items = get_line_items_for_template(serializer.data["line_items"])
         invoice_date = datetime.strptime(
             serializer.data["invoice_date"], "%Y-%m-%d"

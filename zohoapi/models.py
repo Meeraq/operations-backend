@@ -27,6 +27,8 @@ class InvoiceData(models.Model):
     vendor_phone = models.CharField(max_length=200, default=None, blank=True)
     purchase_order_id = models.CharField(max_length=200, default=None)
     purchase_order_no = models.CharField(max_length=200, default=None)
+    currency_code = models.CharField(max_length=255, default="", blank=True)
+    currency_symbol = models.CharField(max_length=255, default="", blank=True)
     invoice_number = models.CharField(max_length=200, default=None)
     line_items = models.JSONField(default=list)
     customer_name = models.CharField(max_length=200, default=None, blank=True)

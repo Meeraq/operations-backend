@@ -136,6 +136,7 @@
 							</td>
 							<td style="width: 50%; text-align: right; vertical-align: top; font-size: 13pt">
 								<div style="font-size: 18pt; margin: 0pt; padding:0pt;">TAX INVOICE</div><br />
+								<div style="font-size: 12pt;margin: 0pt; padding:0pt;">Original For Recipient</div>
 								<div style="font-size: 12pt;margin: 0pt; padding:0pt;">Invoice No.: <b>{{ invoice.invoice_number }}</b>
 								</div>
 							</td>
@@ -248,11 +249,30 @@
 								<span style="word-wrap: break-word;">{{ item.name|default:item.description|default:"Item" }}</span>
 							</td>
 							<td class="tableDataCenter">{{ item.quantity_input }}</td>
-							<td class="tableDataCenter">{{ item.rate }}</td>
-							<td class="tableDataCenter">{{ item.quantity_mul_rate }}</td>
+							<td class="tableDataCenter">
+								{% if invoice.currency_symbol %}
+									{{ invoice.currency_symbol }}{{ item.rate }}
+								{% else %}
+									{{ item.rate }}
+								{% endif %}
+							</td>
+
+							<td class="tableDataCenter">
+								{% if invoice.currency_symbol %}
+									{{ invoice.currency_symbol }}{{ item.quantity_mul_rate }}
+								{% else %}
+									{{ item.quantity_mul_rate }}
+								{% endif %}
+							</td>
 							<td class="tableDataCenter">{{ item.tax_percentage }} %</td>
 							<td class="tableDataCenter">{{ item.hsn_sac|default:"-" }}</td>
-							<td class="tableDataCenter">{{ item.quantity_mul_rate_include_tax }}</td>
+							<td class="tableDataCenter">
+								{% if invoice.currency_symbol %}
+									{{ invoice.currency_symbol }}{{ item.quantity_mul_rate_include_tax }}
+								{% else %}
+									{{ item.quantity_mul_rate_include_tax }}
+								{% endif %}
+							</td>
 						</tr>
 						{% endfor %}
 					</tbody>
@@ -260,7 +280,12 @@
 				<table style="margin-top: 10pt; border: 0px;" cellspacing="0" border="0" width="100%">
 					<tbody>
 						<tr>
-							<td id="total" style="text-align: right;font-size: 16pt; "><span style="font-weight: bold;">Total: </span>{{ invoice.total }}</td>
+							<td id="total" style="text-align: right;font-size: 16pt; "><span style="font-weight: bold;">Total: </span>
+								{% if invoice.currency_symbol %}
+									{{ invoice.currency_symbol }}{{ invoice.total }}
+								{% else %}
+									{{ invoice.total }}
+								{% endif %}</td>
 						</tr>
 					</tbody>
 				</table>
