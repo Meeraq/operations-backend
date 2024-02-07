@@ -710,6 +710,9 @@ FIELD_NAME_VALUES = {
     "domain": "Functional Domain",
     "client_companies": "Client companies",
     "educational_qualification": "Educational Qualification",
+    "city":"City",
+    "country":"Country",
+    "topic":"Topic"
 }
 
 
@@ -7091,7 +7094,7 @@ class StandardFieldAddValue(APIView):
 
                 # Return success response
                 return Response(
-                    {"message": f"Value Added to {field_name} field."},
+                    {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."},
                     status=200,
                 )
 
@@ -7125,28 +7128,28 @@ class StandardFieldEditValue(APIView):
                     # Check if the previous_value exists in the values list of the standardized_field
                     if previous_value in standardized_field.values:
                         # Update the value if it exists
-                        print(previous_value, standardized_field.values)
+                      
                         index = standardized_field.values.index(previous_value)
                         standardized_field.values[index] = new_value
                         standardized_field.save()
 
                         # Return success response
                         return Response(
-                            {"message": f"Value Updated in {field_name} field."},
+                            {"message": f"Value Updated in {FIELD_NAME_VALUES[field_name]} field."},
                             status=200,
                         )
                     else:
                         # Return error response if the previous_value does not exist
                         return Response(
                             {
-                                "message": f"{previous_value} not found in {field_name} field."
+                                "message": f"{previous_value} not found in {FIELD_NAME_VALUES[field_name]} field."
                             },
                             status=404,
                         )
                 else:
                     # Return error response if the field does not exist
                     return Response(
-                        {"message": f"{field_name} not found."},
+                        {"message": f"{FIELD_NAME_VALUES[field_name]} not found."},
                         status=404,
                     )
 
@@ -7219,7 +7222,7 @@ class StandardFieldDeleteValue(APIView):
 
                 # Return success response
                 return Response(
-                    {"message": f"Value deleted from {field_name} field."},
+                    {"message": f"Value deleted from {FIELD_NAME_VALUES[field_name]} field."},
                     status=200,
                 )
 
