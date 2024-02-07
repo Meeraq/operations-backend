@@ -6122,7 +6122,7 @@ def remove_coach_from_project(request, project_id):
 @permission_classes([IsAuthenticated])
 def standard_field_request(request, user_id):
     try:
-        value = request.data.get("value")
+        value = request.data.get("value").strip()
         userType = request.data.get("userType")
 
         field_name = request.data.get(
@@ -7076,7 +7076,7 @@ class StandardFieldAddValue(APIView):
             with transaction.atomic():
                 # Extracting data from request body
                 field_name = request.data.get("field_name")
-                option_value = request.data.get("optionValue")
+                option_value = request.data.get("optionValue").strip()
 
                 # Get or create the StandardizedField instance for the given field_name
                 standardized_field, created = StandardizedField.objects.get_or_create(
@@ -7116,7 +7116,7 @@ class StandardFieldEditValue(APIView):
                 # Extracting data from request body
                 field_name = request.data.get("field_name")
                 previous_value = request.data.get("previous_value")
-                new_value = request.data.get("new_value")
+                new_value = request.data.get("new_value").strip()
 
                 # Retrieve the StandardizedField instance corresponding to the provided field_name
                 standardized_field = StandardizedField.objects.filter(
