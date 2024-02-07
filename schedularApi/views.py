@@ -40,6 +40,7 @@ from api.models import (
     Pmo,
     Role,
     UserToken,
+    Facilitator,
 )
 from .serializers import (
     SchedularProjectSerializer,
@@ -61,10 +62,8 @@ from .serializers import (
     CoachSchedularGiveAvailibiltySerializer2,
     RequestAvailibiltySerializerDepthOne,
     RequestAvailibiltySerializer,
-    FacilitatorSerializer,
     UpdateSerializer,
     SchedularUpdateDepthOneSerializer,
-    FacilitatorBasicDetailsSerializer,
     SchedularBatchDepthSerializer,
 )
 from .models import (
@@ -77,10 +76,13 @@ from .models import (
     CoachSchedularAvailibilty,
     RequestAvailibilty,
     SchedularSessions,
-    Facilitator,
     SchedularBatch,
     SchedularUpdate,
     CalendarInvites,
+)
+from api.serializers import (
+    FacilitatorSerializer,
+    FacilitatorBasicDetailsSerializer,
 )
 
 from courses.models import (
