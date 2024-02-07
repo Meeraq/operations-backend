@@ -4436,7 +4436,7 @@ class GetAssessmentsOfHr(APIView):
                 "total_learners_count": assessment.participants_observers.count(),
                 "total_responses_count": total_responses_count,
                 "created_at": assessment.created_at,
-                "automated_reminder":assessment.automated_reminder,
+              
             }
             assessment_list.append(assessment_data)
 

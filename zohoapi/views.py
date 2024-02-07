@@ -140,6 +140,8 @@ purchase_orders_allowed = [
     "CTT/PO/23-24/004",
     "CTT/PO/23-24/0012",
     "CTT/PO/23-24/0011",
+    "CTT/PO/23-24/0014",
+    "CTT/PO/23-24/0013"
 ]
 
 
