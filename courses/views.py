@@ -201,6 +201,7 @@ def get_feedback_lesson_name(lesson_name):
     underscored_string = "_".join(lowercased_string.split())
     return underscored_string
 
+
 def get_live_session_name(session_type):
 
     session_name = None
@@ -216,6 +217,7 @@ def get_live_session_name(session_type):
         session_name = "Virtual Session"
 
     return session_name
+
 
 def get_file_name_from_url(url):
     # Split the URL by '/' to get an array of parts
@@ -1308,9 +1310,11 @@ def calculate_quiz_result(quiz_lesson, quiz_lesson_response):
     return {
         "correct_answers": correct_answers,
         "total_questions": total_questions,
-        "percentage": round((correct_answers / total_questions) * 100)
-        if total_questions > 0
-        else 0,
+        "percentage": (
+            round((correct_answers / total_questions) * 100)
+            if total_questions > 0
+            else 0
+        ),
     }
 
 
@@ -1662,7 +1666,7 @@ def create_video_lesson(request):
     if request.method == "POST":
         lesson_data = request.data.get("lesson")
         video_id = request.data.get("video")
-        content = request.data.get("content","")
+        content = request.data.get("content", "")
 
         # Create or update lesson
         lesson_serializer = LessonSerializer(data=lesson_data)
@@ -1734,7 +1738,7 @@ def update_video_lesson(request, lesson_id):
         )
 
     video_id = request.data.get("video")
-    content = request.data.get("content","")
+    content = request.data.get("content", "")
 
     try:
         video = Video.objects.get(pk=video_id)
@@ -2134,8 +2138,10 @@ def get_consolidated_feedback_report(request):
                             )
 
                             if formatted_lesson_name == feedback_lesson_name_should_be:
-                                session_name = get_live_session_name(live_session.session_type)
-                                
+                                session_name = get_live_session_name(
+                                    live_session.session_type
+                                )
+
                                 live_session_key = f"{project.name} {session_name} {live_session.live_session_number}"
                                 if live_session_key not in data:
                                     data[live_session_key] = {
@@ -2153,17 +2159,19 @@ def get_consolidated_feedback_report(request):
                                     data[live_session_key][
                                         "total_responses"
                                     ] += total_responses
-                                    data[live_session_key][
-                                        "percentage_responded"
-                                    ] = round(
-                                        (
-                                            data[live_session_key]["total_responses"]
-                                            / data[live_session_key][
-                                                "total_participant"
-                                            ]
+                                    data[live_session_key]["percentage_responded"] = (
+                                        round(
+                                            (
+                                                data[live_session_key][
+                                                    "total_responses"
+                                                ]
+                                                / data[live_session_key][
+                                                    "total_participant"
+                                                ]
+                                            )
+                                            * 100,
+                                            2,
                                         )
-                                        * 100,
-                                        2,
                                     )
 
         return Response(list(data.values()))
@@ -2399,7 +2407,7 @@ class AssignCourseTemplateToBatch(APIView):
                 for live_session in live_sessions:
                     max_order = max_order + 1
                     session_name = get_live_session_name(live_session.session_type)
-                    
+
                     new_lesson = Lesson.objects.create(
                         course=new_course,
                         name=f"{session_name} {live_session.live_session_number}",
@@ -2495,12 +2503,12 @@ def create_resource(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_pdf_lesson(request):
- 
+
     try:
         with transaction.atomic():
             lesson_data = request.data.get("lesson")
             pdf_id = request.data.get("pdf_id")
-            content = request.data.get("content","")
+            content = request.data.get("content", "")
             course_template_id = lesson_data.get("course_template", "")
             course_id = lesson_data.get("course", "")
 
@@ -2566,7 +2574,7 @@ def update_pdf_lesson(request, pk):
     # Extract data from request
     lesson_data = request.data.get("lesson", {})
     pdf_id = request.data.get("pdf_id")
-    content = request.data.get("content","")
+    content = request.data.get("content", "")
 
     try:
         lesson = Lesson.objects.get(id=lesson_data.get("id"))
@@ -3063,6 +3071,7 @@ class GetAssessmentsOfBatch(APIView):
                     "total_learners_count": assessment.participants_observers.count(),
                     "total_responses_count": total_responses_count,
                     "created_at": assessment.created_at,
+                    "automated_reminder": assessment.automated_reminder,
                 }
                 assessment_list.append(assessment_data)
 
@@ -3308,8 +3317,8 @@ def download_consolidated_project_report(request, project_id):
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-    response[
-        "Content-Disposition"
-    ] = "attachment; filename=Project_feedback_report.xlsx"
+    response["Content-Disposition"] = (
+        "attachment; filename=Project_feedback_report.xlsx"
+    )
     wb.save(response)
     return response
