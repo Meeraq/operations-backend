@@ -36,6 +36,7 @@ from .models import (
     CreateProjectActivity,
     FinalizeCoachActivity,
     SuperAdmin,
+    Facilitator,
 )
 from django.contrib.auth.models import User
 
@@ -436,3 +437,22 @@ class PmoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pmo
         fields = ["name", "email", "phone"]
+
+
+class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Facilitator
+        fields = "__all__"
+        depth = 1
+
+
+class FacilitatorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Facilitator
+        fields = "__all__"
+
+
+class FacilitatorBasicDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Coach
+        fields = ["first_name", "last_name", "email", "phone"]
