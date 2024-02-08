@@ -122,7 +122,7 @@ class Profile(models.Model):
         ("learner", "learner"),
         ("hr", "hr"),
         ("superadmin", "superadmin"),
-        ("facilitator", "facilitator")
+        ("facilitator", "facilitator"),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)
@@ -211,6 +211,44 @@ class Coach(models.Model):
     def __str__(self):
         return self.first_name + " " + self.last_name
 
+class Facilitator(models.Model):
+    user = models.OneToOneField(
+        Profile, on_delete=models.CASCADE, blank=True, default=""
+    )
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+    email = models.EmailField()
+    age = models.CharField(max_length=10, default="", blank=True)
+    gender = models.CharField(max_length=50, blank=True)
+    domain = models.JSONField(default=list, blank=True)
+    phone_country_code = models.CharField(max_length=20, default="", blank=True)
+    phone = models.CharField(max_length=25)
+    level = models.JSONField(default=list, blank=True)
+    rating = models.CharField(max_length=20, blank=True)
+    area_of_expertise = models.JSONField(default=list, blank=True)
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
+    education = models.JSONField(default=list, blank=True)
+    years_of_corporate_experience = models.CharField(max_length=20, blank=True)
+    city = models.JSONField(default=list, blank=True)
+    language = models.JSONField(default=list, blank=True)
+    job_roles = models.JSONField(default=list, blank=True)
+    city = models.JSONField(default=list, blank=True)
+    country = models.JSONField(default=list, blank=True)
+    created_at = models.DateField(auto_now_add=True)
+    edited_at = models.DateField(auto_now=True)
+    linkedin_profile_link = models.CharField(max_length=500, blank=True)
+    companies_worked_in = models.JSONField(default=list, blank=True)
+    other_certification = models.JSONField(default=list, blank=True)
+    currency = models.CharField(max_length=100, blank=True, default="")
+    client_companies = models.JSONField(default=list, blank=True)
+    educational_qualification = models.JSONField(default=list, blank=True)
+    fees_per_hour = models.CharField(max_length=20, blank=True)
+    fees_per_day = models.CharField(max_length=20, blank=True)
+    topic = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return self.first_name + " " + self.last_name
+    
 
 class Learner(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
@@ -554,6 +592,9 @@ class StandardizedField(models.Model):
         ("domain", "Functional Domain"),
         ("client_companies", "Client companies"),
         ("educational_qualification", "Educational Qualification"),
+        ("city", "City"),
+        ("country", "Country"),
+        ("topic", "Topic"),
     )
 
     field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
@@ -571,7 +612,8 @@ class StandardizedFieldRequest(models.Model):
         ("accepted", "Accepted"),
         ("rejected", "Rejected"),
     )
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True , null=True)
+    facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE, blank=True , null=True)
     standardized_field_name = models.ForeignKey(
         StandardizedField, on_delete=models.CASCADE, blank=True
     )
@@ -582,7 +624,7 @@ class StandardizedFieldRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.coach.email} - {self.standardized_field_name} - {self.status}"
+        return f" {self.standardized_field_name} - {self.status}"
 
 
 class SessionRequestedActivity(models.Model):
@@ -754,6 +796,6 @@ class APILog(models.Model):
         blank=True,
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     def __str__(self):
         return f"{self.path}"

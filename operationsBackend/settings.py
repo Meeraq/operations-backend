@@ -281,6 +281,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.update_schedular_session_status",
         "schedule": crontab(hour=16, minute=30, day_of_week="*"), # 10 PM Night
     },
+    "generate_invoice_reminder_on_first_of_month": {
+        "task": "schedularApi.tasks.generate_invoice_reminder_on_first_of_month",
+        "schedule": crontab(hour=3, minute=30, day_of_month='1'), # 10 AM IST
+    },
+    "generate_invoice_reminder_once_when_po_is_created": {
+        "task": "schedularApi.tasks.generate_invoice_reminder_once_when_po_is_created",
+        "schedule": crontab(hour=3, minute=30, day_of_month='2-31'), # 10 AM IST
+    },
 }
 
 
