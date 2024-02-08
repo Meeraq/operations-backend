@@ -1711,7 +1711,7 @@ def update_schedular_session_status():
 
 # Notify vendor by email when the po is in open status, 1st of every month (pending PO) 
 @shared_task
-def generate_invoice_reminder_on_first_of_month(request):
+def generate_invoice_reminder_on_first_of_month():
     vendors = Vendor.objects.all()
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     for vendor in vendors:
@@ -1737,7 +1737,7 @@ def generate_invoice_reminder_on_first_of_month(request):
             
 # Reminder to vendor for new PO, Checks every day if any po without reminder exist and then send the reminder
 @shared_task
-def generate_invoice_reminder_once_when_po_is_created(request):
+def generate_invoice_reminder_once_when_po_is_created():
     vendors = Vendor.objects.all()
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     for vendor in vendors:
