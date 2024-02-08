@@ -1758,3 +1758,40 @@ def generate_invoice_reminder_once_when_po_is_created(request):
         else:
             print({"error": "Access token not found. Please generate an access token first."})
 
+
+# getting vendor details
+def get_vendor(vendor_id):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
+        url = f"{base_url}/contacts/{vendor_id}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
+        vendor_response = requests.get(
+            url,
+            headers=headers,
+        )
+        if (
+            vendor_response.json()["message"] == "success"
+            and vendor_response.json()["contact"]
+        ):
+            return vendor_response.json()["contact"]
+        return None
+    else:
+        return None
+    
+
+@shared_task
+def reminder_to_pmo_bank_details_unavailable():
+    vendors = Vendor.objects.all()
+    vendors_with_no_bank_details = []
+    for vendor in vendors:
+        vendor_details = get_vendor(vendor.vendor_id)
+        if vendor_details and len(vendor_details["bank_accounts"]) == 0:
+            vendors_with_no_bank_details.append(vendor_details["contact_name"])
+    if len(vendors_with_no_bank_details) > 0:
+        send_mail_templates(
+						"vendors/reminder_to_pmo_bank_details_unavailable.html",
+						[env("FINANCE_EMAIL")],
+						"Meeraq: Action Needed - Add bank details of vendors",
+						{"count": len(vendors_with_no_bank_details), "vendors_with_no_bank_details": vendors_with_no_bank_details},
+						[env("BCC_EMAIL")],  # no bcc
+				)
