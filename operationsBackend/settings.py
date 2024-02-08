@@ -289,6 +289,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.generate_invoice_reminder_once_when_po_is_created",
         "schedule": crontab(hour=3, minute=30, day_of_month='2-31'), # 10 AM IST
     },
+    "reminder_to_pmo_bank_details_unavailable": {
+        "task": "schedularApi.tasks.reminder_to_pmo_bank_details_unavailable",
+        "schedule": crontab(hour=3, minute=30, day_of_week='mon'), # 10 AM IST Monday
+    },
 }
 
 
