@@ -3098,58 +3098,59 @@ def add_multiple_facilitator(request):
 @permission_classes([IsAuthenticated])
 def update_facilitator_profile(request, id):
     try:
-        facilitator = Facilitator.objects.get(id=id)
-        user = facilitator.user.user
-        new_email = request.data.get("email", "").strip().lower()
-        #  other user exists with the new email
-        if (
-            new_email
-            and User.objects.filter(username=new_email).exclude(id=user.id).exists()
-        ):
-            return Response(
-                {"error": "Email already exists. Please choose a different email."},
-                status=400,
-            )
+        with transaction.atomic():
+            facilitator = Facilitator.objects.get(id=id)
+            user = facilitator.user.user
+            new_email = request.data.get("email", "").strip().lower()
+            #  other user exists with the new email
+            if (
+                new_email
+                and User.objects.filter(username=new_email).exclude(id=user.id).exists()
+            ):
+                return Response(
+                    {"error": "Email already exists. Please choose a different email."},
+                    status=400,
+                )
 
-        # no other user exists with the new email
-        elif new_email and new_email != user.username:
-            user.email = new_email
-            user.username = new_email
-            user.save()
+            # no other user exists with the new email
+            elif new_email and new_email != user.username:
+                user.email = new_email
+                user.username = new_email
+                user.save()
 
-            # updating emails in all user's
-            for role in user.profile.roles.all():
-                if role.name == "pmo":
-                    pmo = Pmo.objects.get(user=user.profile)
-                    pmo.email = new_email
-                    pmo.save()
-                if role.name == "hr":
-                    hr = HR.objects.get(user=user.profile)
-                    hr.email = new_email
-                    hr.save()
-                if role.name == "learner":
-                    learner = Learner.objects.get(user=user.profile)
-                    learner.email = new_email
-                    learner.save()
-                if role.name == "vendor":
-                    vendor = Vendor.objects.get(user=user.profile)
-                    vendor.email = new_email
-                    vendor.save()
-                if role.name == "coach":
+                # updating emails in all user's
+                for role in user.profile.roles.all():
+                    if role.name == "pmo":
+                        pmo = Pmo.objects.get(user=user.profile)
+                        pmo.email = new_email
+                        pmo.save()
+                    if role.name == "hr":
+                        hr = HR.objects.get(user=user.profile)
+                        hr.email = new_email
+                        hr.save()
+                    if role.name == "learner":
+                        learner = Learner.objects.get(user=user.profile)
+                        learner.email = new_email
+                        learner.save()
+                    if role.name == "vendor":
+                        vendor = Vendor.objects.get(user=user.profile)
+                        vendor.email = new_email
+                        vendor.save()
+                    if role.name == "coach":
 
-                    coach = Coach.objects.get(user=user.profile)
-                    coach.email = new_email
+                        coach = Coach.objects.get(user=user.profile)
+                        coach.email = new_email
 
-                    coach.save()
+                        coach.save()
 
-        serializer = FacilitatorSerializer(facilitator, data=request.data, partial=True)
+            serializer = FacilitatorSerializer(facilitator, data=request.data, partial=True)
 
-        if serializer.is_valid():
-            serializer.save()
-            user_data = get_user_data(facilitator.user.user)
+            if serializer.is_valid():
+                serializer.save()
+                user_data = get_user_data(facilitator.user.user)
 
-            return Response(user_data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                return Response(user_data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         print(str(e))
         return Response(
