@@ -40,6 +40,7 @@ from api.models import (
     Pmo,
     Role,
     UserToken,
+    Facilitator,
 )
 from .serializers import (
     SchedularProjectSerializer,
@@ -61,10 +62,8 @@ from .serializers import (
     CoachSchedularGiveAvailibiltySerializer2,
     RequestAvailibiltySerializerDepthOne,
     RequestAvailibiltySerializer,
-    FacilitatorSerializer,
     UpdateSerializer,
     SchedularUpdateDepthOneSerializer,
-    FacilitatorBasicDetailsSerializer,
     SchedularBatchDepthSerializer,
 )
 from .models import (
@@ -77,10 +76,13 @@ from .models import (
     CoachSchedularAvailibilty,
     RequestAvailibilty,
     SchedularSessions,
-    Facilitator,
     SchedularBatch,
     SchedularUpdate,
     CalendarInvites,
+)
+from api.serializers import (
+    FacilitatorSerializer,
+    FacilitatorBasicDetailsSerializer,
 )
 
 from courses.models import (
@@ -120,6 +122,8 @@ from itertools import chain
 import environ
 import re
 from rest_framework.views import APIView
+from api.views import get_user_data
+from zohoapi.models import Vendor
 
 env = environ.Env()
 
@@ -3094,18 +3098,63 @@ def add_multiple_facilitator(request):
 @permission_classes([IsAuthenticated])
 def update_facilitator_profile(request, id):
     try:
-        facilitator = Facilitator.objects.get(pk=id)
-    except Facilitator.DoesNotExist:
+        facilitator = Facilitator.objects.get(id=id)
+        user = facilitator.user.user
+        new_email = request.data.get("email", "").strip().lower()
+        #  other user exists with the new email
+        if (
+            new_email
+            and User.objects.filter(username=new_email).exclude(id=user.id).exists()
+        ):
+            return Response(
+                {"error": "Email already exists. Please choose a different email."},
+                status=400,
+            )
+
+        # no other user exists with the new email
+        elif new_email and new_email != user.username:
+            user.email = new_email
+            user.username = new_email
+            user.save()
+
+            # updating emails in all user's
+            for role in user.profile.roles.all():
+                if role.name == "pmo":
+                    pmo = Pmo.objects.get(user=user.profile)
+                    pmo.email = new_email
+                    pmo.save()
+                if role.name == "hr":
+                    hr = HR.objects.get(user=user.profile)
+                    hr.email = new_email
+                    hr.save()
+                if role.name == "learner":
+                    learner = Learner.objects.get(user=user.profile)
+                    learner.email = new_email
+                    learner.save()
+                if role.name == "vendor":
+                    vendor = Vendor.objects.get(user=user.profile)
+                    vendor.email = new_email
+                    vendor.save()
+                if role.name == "coach":
+
+                    coach = Coach.objects.get(user=user.profile)
+                    coach.email = new_email
+
+                    coach.save()
+
+        serializer = FacilitatorSerializer(facilitator, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            user_data = get_user_data(facilitator.user.user)
+
+            return Response(user_data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(str(e))
         return Response(
-            {"error": "Facilitator not found"}, status=status.HTTP_404_NOT_FOUND
+            {"error": "Failed to update details."}, status=status.HTTP_404_NOT_FOUND
         )
-
-    serializer = FacilitatorSerializer(facilitator, data=request.data, partial=True)
-
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["POST"])
@@ -3367,7 +3416,7 @@ def get_live_sessions_by_status(request):
     res = []
     for live_session in queryset:
         session_name = get_live_session_name(live_session.session_type)
-        
+
         res.append(
             {
                 "id": live_session.id,
