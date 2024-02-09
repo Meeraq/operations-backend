@@ -1259,25 +1259,38 @@ def get_all_vendors(request):
         )
 
 
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_purchase_orders(request):
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_data:
-        api_url = f"{base_url}/purchaseorders/?organization_id={organization_id}"
-        auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
-        response = requests.get(api_url, headers=auth_header)
-        if response.status_code == 200:
-            purchase_orders = response.json().get("purchaseorders", [])
-            purchase_orders = filter_purchase_order_data(purchase_orders)
 
-            return Response(purchase_orders, status=status.HTTP_200_OK)
-        else:
-            return Response(
-                {"error": "Failed to fetch purchase orders"},
-                status=response.status_code,
-            )
+        all_purchase_orders = []
+        has_more_page = True
+        page = 1
+
+        while has_more_page:
+            api_url = f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}"
+            auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
+            response = requests.get(api_url, headers=auth_header)
+
+            if response.status_code == 200:
+                purchase_orders = response.json().get("purchaseorders", [])
+                purchase_orders = filter_purchase_order_data(purchase_orders)
+
+                all_purchase_orders.extend(purchase_orders)
+
+                page_context = response.json().get("page_context", {})
+                has_more_page = page_context.get("has_more_page", False)
+                page += 1
+            else:
+                return Response(
+                    {"error": "Failed to fetch purchase orders"},
+                    status=response.status_code,
+                )
+
+        # Return all purchase orders in a single response
+        return Response(all_purchase_orders, status=status.HTTP_200_OK)
     else:
         return Response(
             {"error": "Access token not found. Please generate an access token first."},
