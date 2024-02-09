@@ -1234,8 +1234,11 @@ def get_course_enrollments_of_learner(request, learner_id):
                 course_enrollment
             )
             lessons = Lesson.objects.filter(
-                course=course_enrollment.course, status="public"
+                Q(course=course_enrollment.course),
+                Q(status="public"),
+                ~Q(lesson_type="feedback"),
             )
+
             lessons_serializer = LessonSerializer(lessons, many=True)
             data = {
                 "course_enrollment": course_enrollment_serializer.data,
