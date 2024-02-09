@@ -23,7 +23,7 @@
 		}
 
 		#template-body {
-			padding: 0 0.400000in 0 0.550000in;
+			padding: 0 6pt 0 6pt;
 			min-width: 500px;
 			overflow-x: auto;
 		}
@@ -45,7 +45,7 @@
 
 		.tableDataCenter {
 			text-align: center;
-			padding: 8px;
+			padding: 4px;
 		}
 
 
@@ -115,15 +115,13 @@
 
 <body>
 	<div style="padding: 5pt;">
-		<div style="border: 2pt solid #000; margin: 5pt;">
-			<div
-				style="min-height: 700px; display: flex; flex-direction: column; justify-content: space-between; margin-top: 20pt;"
-				id="template-body" id='template-body'>
-				<table style="width: 100%; table-layout: fixed;  border: 0px;">
+		<div style="border: 1px solid #adadad; margin: 0pt;">
+			<div style="min-height: 700px;margin-top: 20pt;" id="template-body" id='template-body'>
+				<table style="width: 100%; table-layout: fixed;  border: 0px; padding: 0; margin: 0;">
 					<tbody>
 						<tr>
 							<td style="vertical-align: top; width: 50%;font-size: 13pt">
-								<div class="mt-4">
+								<div class="">
 									<div style="font-size: 18px; color: #333333;"><b>{{ invoice.vendor_name }}</b></div>
 									<div style="font-size: 15px; color: #333333;">
 										<div>{{ invoice.vendor_billing_address }}</div>
@@ -139,8 +137,8 @@
 							</td>
 							<td style="width: 50%; text-align: right; vertical-align: top; font-size: 13pt">
 								<div style="font-size: 18pt; margin: 0pt; padding:0pt;">TAX INVOICE</div><br />
-								<div style="font-size: 12pt;margin: 0pt; padding:0pt;">Original For Recipient</div>
-								<div style="font-size: 12pt;margin: 0pt; padding:0pt;">Invoice No.: <b>{{ invoice.invoice_number }}</b>
+								<div style="font-size: 12pt; margin: 0pt; padding:0pt;">Original For Recipient</div>
+								<div style="font-size: 12pt; margin: 0pt; padding:0pt;">Invoice No.: <b>{{ invoice.invoice_number }}</b>
 								</div>
 							</td>
 						</tr>
@@ -213,6 +211,11 @@
 							</td>
 							<td class="tableDataCenter">
 								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
+									Annexure
+								</div>
+							</td>
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
 									Qty
 								</div>
 							</td>
@@ -256,13 +259,15 @@
 							</td>
 						</tr>
 					</thead>
-
 					<tbody>
 						{% for item in invoice.line_items %}
 						<tr>
 							<td class="tableDataCenter">{{ forloop.counter }}</td>
 							<td class="tableDataCenter">
 								<span style="word-wrap: break-word;">{{ item.name|default:item.description|default:"Item" }}</span>
+							</td>
+							<td class="tableDataCenter">
+								<span style="word-wrap: break-word;">{{ item.annexure|default:"" }}</span>
 							</td>
 							<td class="tableDataCenter">{{ item.quantity_input }}</td>
 							<td class="tableDataCenter">
