@@ -263,11 +263,11 @@
 						{% for item in invoice.line_items %}
 						<tr>
 							<td class="tableDataCenter">{{ forloop.counter }}</td>
-							<td class="tableDataCenter">
-								<span style="word-wrap: break-word;">{{ item.name|default:item.description|default:"Item" }}</span>
+							<td style="word-break: break-all;" class="tableDataCenter">
+								{{ item.name|default:item.description|default:"Item" }}
 							</td>
-							<td class="tableDataCenter">
-								<span style="word-wrap: break-word;">{{ item.annexure|default:"" }}</span>
+							<td style="word-break: break-all;" class="tableDataCenter">
+								{{ item.annexure|default:"" }}
 							</td>
 							<td class="tableDataCenter">{{ item.quantity_input }}</td>
 							<td class="tableDataCenter">
