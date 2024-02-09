@@ -4172,35 +4172,133 @@ def get_session_pending_of_user(request, user_type, user_id):
 @permission_classes([IsAuthenticated])
 def get_all_sessions_of_user(request, user_type, user_id):
     session_requests = []
+    schedular_sessions = []
+
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
             ~Q(session_type="interview"),
             ~Q(session_type="chemistry", billable_session_number=None),
-            # ~Q(billable_session_number=None),
             is_archive=False,
         )
+        schedular_sessions = SchedularSessions.objects.all()
     elif user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
             ~Q(session_type="interview"),
             ~Q(session_type="chemistry", billable_session_number=None),
-            # ~Q(billable_session_number=None),
             is_archive=False,
             project__hr__id=user_id,
         )
-    sessions_serializer = SessionRequestCaasDepthOneSerializer(
-        session_requests, many=True
-    )
+        schedular_sessions = SchedularSessions.objects.all()
     res = []
-    for session in sessions_serializer.data:
+    for session_request in session_requests:
+        project_name = session_request.project.name
+        project = ProjectSerializer(session_request.project).data
+        project_type = "caas"
+        organisation = session_request.project.organisation.name
         engagement = Engagement.objects.filter(
-            learner__id=session["learner"]["id"], project__id=session["project"]["id"]
+            learner_id=session_request.learner.id, project_id=session_request.project.id
         )
         if len(engagement) > 0 and engagement[0].coach:
-            coach_serializer = CoachSerializer(engagement[0].coach)
-            res.append({**session, "coach": coach_serializer.data})
+            coach_name = (
+                engagement[0].coach.first_name + " " + engagement[0].coach.last_name
+            )
+            coach_email = engagement[0].coach.email
+            coach  = CoachSerializer(engagement[0].coach).data
         else:
-            res.append({**session})
-    return Response(res, status=200)
+            coach_name = None
+            coach_email = None
+        learner=LearnerSerializer(session_request.learner).data
+        learner_name = session_request.learner.name
+        learner_email = session_request.learner.email
+        session_type = session_request.session_type
+        session_number = session_request.session_number
+        billable_session_number = session_request.billable_session_number
+        status = session_request.status
+        status_updated_at = session_request.status_updated_at
+        if session_request.confirmed_availability:
+            slot_start_time = session_request.confirmed_availability.start_time
+        else:
+            slot_start_time = None
+        if session_request.confirmed_availability:
+            slot_end_time = session_request.confirmed_availability.end_time
+        else:
+            slot_end_time = None
+        session_duration = session_request.session_duration
+        is_archive=session_request.is_archive
+        invitees=session_request.invitees
+            
+        res.append(
+            {
+                "project_name": project_name,
+                "project_type": project_type,
+                "organisation": organisation,
+                "coach_name": coach_name,
+                "coach_email": coach_email,
+                "learner":learner,
+                "learner_name": learner_name,
+                "learner_email": learner_email,
+                "session_type": session_type,
+                "session_number": session_number,
+                "billable_session_number": billable_session_number,
+                "status": status,
+                "status_updated_at": status_updated_at,
+                "slot_start_time": slot_start_time,
+                "slot_end_time": slot_end_time,
+                "session_duration": session_duration,
+                "is_archive":is_archive,
+                "invitees":invitees,
+                "coach" : coach,
+                "project" : project,
+            }
+        )
+    for schedular_session in schedular_sessions:
+        project_name = schedular_session.coaching_session.batch.project.name
+        project_type = "seeq"
+        organisation = (
+            schedular_session.coaching_session.batch.project.organisation.name
+        )
+        coach_name = schedular_session.availibility.coach.first_name + " " + schedular_session.availibility.coach.last_name
+        coach_email = schedular_session.availibility.coach.email
+        learner = LearnerSerializer(schedular_session.learner).data
+        learner_name = schedular_session.learner.name
+        learner_email = schedular_session.learner.email
+        session_type = schedular_session.coaching_session.session_type
+        session_number = schedular_session.coaching_session.coaching_session_number
+        billable_session_number = None
+        status = schedular_session.status
+        status_updated_at = schedular_session.updated_at
+        slot_start_time = schedular_session.availibility.start_time
+        slot_end_time = schedular_session.availibility.end_time
+        session_duration = schedular_session.coaching_session.duration
+        coach  = CoachSerializer(schedular_session.availibility.coach).data
+        is_archive = None
+        invitees = []
+
+        res.append(
+            {
+                "project_name": project_name,
+                "project_type": project_type,
+                "organisation": organisation,
+                "coach_name": coach_name,
+                "coach_email": coach_email,
+                "learner":learner,
+                "learner_name": learner_name,
+                "learner_email": learner_email,
+                "session_type": session_type,
+                "session_number": session_number,
+                "billable_session_number": billable_session_number,
+                "status": status,
+                "status_updated_at": status_updated_at,
+                "slot_start_time": slot_start_time,
+                "slot_end_time": slot_end_time,
+                "session_duration": session_duration,
+                "is_archive":is_archive,
+                "invitees":invitees,
+                "coach": coach,
+            }
+        )
+
+    return Response({"sessions": res})
 
 
 @api_view(["GET"])
@@ -4538,7 +4636,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "end_time": session.availibility.end_time,
             "session_duration": session.coaching_session.duration,
             "is_seeq_project": True,
-						"auto_generated_status" : session.auto_generated_status
+            "auto_generated_status": session.auto_generated_status,
         }
         session_details.append(session_detail)
 
@@ -5320,15 +5418,15 @@ def get_current_session(request, user_type, room_id, user_id):
     upcoming_session = sessions.first()
     if session_modal == "CAAS" and upcoming_session:
         session_details = {
-            "session_id" : upcoming_session.id,
-						"type" : "CAAS",
+            "session_id": upcoming_session.id,
+            "type": "CAAS",
             "start_time": upcoming_session.confirmed_availability.start_time,
             "end_time": upcoming_session.confirmed_availability.end_time,
         }
     elif session_modal == "SEEQ" and upcoming_session:
         session_details = {
-            "session_id" : upcoming_session.id,
-						"type" : "SEEQ",
+            "session_id": upcoming_session.id,
+            "type": "SEEQ",
             "start_time": upcoming_session.availibility.start_time,
             "end_time": upcoming_session.availibility.end_time,
         }
@@ -8031,16 +8129,28 @@ PATH_ACTIVITY_MAPPING = {
     "/api/competency/": "Add competency",  # coach
     "/api/competency/score/": "Add score",  # coach
     "/schedular/schedule-session/": "Book slot",  # coachee
-    "/api/otp/validate/" : "Login with OTP" # for all
+    "/api/otp/validate/": "Login with OTP",  # for all
 }
 
 
 ACTIVITIES_PER_USER_TYPE = {
-    "hr": ["Login", "Finalize Coach","Login with OTP"],
-    "pmo": ["Login", "Send profile to HR", "Send booking link email manually","Login with OTP"],
-    "coach": ["Login", "Give availability", "Add competency", "Add score","Login with OTP"],
-    "learner": ["Login", "Book slot","Login with OTP"],
+    "hr": ["Login", "Finalize Coach", "Login with OTP"],
+    "pmo": [
+        "Login",
+        "Send profile to HR",
+        "Send booking link email manually",
+        "Login with OTP",
+    ],
+    "coach": [
+        "Login",
+        "Give availability",
+        "Add competency",
+        "Add score",
+        "Login with OTP",
+    ],
+    "learner": ["Login", "Book slot", "Login with OTP"],
 }
+
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
@@ -8069,7 +8179,9 @@ def get_api_logs(request):
             activity = PATH_ACTIVITY_MAPPING[matching_key]
             user_type = (
                 log.user.profile.roles.all().exclude(name="vendor").first().name.lower()
-                if log.user and log.user.profile and log.user.profile.roles.all().exclude(name="vendor").first()
+                if log.user
+                and log.user.profile
+                and log.user.profile.roles.all().exclude(name="vendor").first()
                 else None
             )
             if (
