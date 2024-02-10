@@ -35,6 +35,8 @@ from assessmentApi.models import Assessment, ParticipantResponse
 import environ
 from time import sleep
 import requests
+from zohoapi.models import Vendor,PoReminder
+from zohoapi.views import get_access_token, base_url, organization_id,filter_purchase_order_data
 
 env = environ.Env()
 environ.Env.read_env()
@@ -1706,3 +1708,90 @@ def update_schedular_session_status():
         elif is_coach_joined:
             schedular_session.auto_generated_status = "coachee_no_show"
         schedular_session.save()
+
+# Notify vendor by email when the po is in open status, 1st of every month (pending PO) 
+@shared_task
+def generate_invoice_reminder_on_first_of_month():
+    vendors = Vendor.objects.all()
+    access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    for vendor in vendors:
+        if access_token_purchase_data:
+            api_url = f"{base_url}/purchaseorders/?organization_id={organization_id}&vendor_id={vendor.vendor_id}"
+            auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
+            response = requests.get(api_url, headers=auth_header)
+            if response.status_code == 200:
+                open_purchase_order_count = 0
+                purchase_orders = response.json().get("purchaseorders", [])
+                purchase_orders = filter_purchase_order_data(purchase_orders)
+                for purchase_order in purchase_orders:
+                    if purchase_order['status'] in ["partially_billed", "open"]:
+                        open_purchase_order_count +=1
+                if open_purchase_order_count > 0:
+                    send_mail_templates("vendors/monthly_generate_invoice_reminder.html",[vendor.email if env("ENVIRONMENT") == "PRODUCTION" else "pankaj@meeraq.com"],"Meeraq - Action pending: Raise your invoice",{"name": vendor.name, "open_purchase_order_count":open_purchase_order_count},[])
+                    print('sending mail to', vendor.name, open_purchase_order_count, "open po exist")
+                    sleep(5)
+            else:
+                print({"error": "Failed to fetch purchase orders"})
+        else:
+            print({"error": "Access token not found. Please generate an access token first."})
+            
+# Reminder to vendor for new PO, Checks every day if any po without reminder exist and then send the reminder
+@shared_task
+def generate_invoice_reminder_once_when_po_is_created():
+    vendors = Vendor.objects.all()
+    access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    for vendor in vendors:
+        if access_token_purchase_data:
+            api_url = f"{base_url}/purchaseorders/?organization_id={organization_id}&vendor_id={vendor.vendor_id}"
+            auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
+            response = requests.get(api_url, headers=auth_header)
+            if response.status_code == 200:
+                purchase_orders = response.json().get("purchaseorders", [])
+                purchase_orders = filter_purchase_order_data(purchase_orders)
+                for purchase_order in purchase_orders:
+                    if purchase_order['status'] in ["partially_billed", "open"] and not PoReminder.objects.filter(purchase_order_no=purchase_order["purchaseorder_number"]).exists():
+                        send_mail_templates("vendors/new_po_reminder.html",[vendor.email if env("ENVIRONMENT") == "PRODUCTION" else "pankaj@meeraq.com"],"Meeraq - New Purchase Order",{"name": vendor.name},[])
+                        PoReminder.objects.create(vendor=vendor, purchase_order_no=purchase_order["purchaseorder_number"], purchase_order_id=purchase_order["purchaseorder_id"])
+                        sleep(5)
+            else:
+                print({"error": "Failed to fetch purchase orders"})
+        else:
+            print({"error": "Access token not found. Please generate an access token first."})
+
+
+# getting vendor details
+def get_vendor(vendor_id):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
+        url = f"{base_url}/contacts/{vendor_id}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
+        vendor_response = requests.get(
+            url,
+            headers=headers,
+        )
+        if (
+            vendor_response.json()["message"] == "success"
+            and vendor_response.json()["contact"]
+        ):
+            return vendor_response.json()["contact"]
+        return None
+    else:
+        return None
+    
+
+@shared_task
+def reminder_to_pmo_bank_details_unavailable():
+    vendors = Vendor.objects.all()
+    vendors_with_no_bank_details = []
+    for vendor in vendors:
+        vendor_details = get_vendor(vendor.vendor_id)
+        if vendor_details and len(vendor_details["bank_accounts"]) == 0:
+            vendors_with_no_bank_details.append(vendor_details["contact_name"])
+    if len(vendors_with_no_bank_details) > 0:
+        send_mail_templates(
+						"vendors/reminder_to_pmo_bank_details_unavailable.html",
+						[env("FINANCE_EMAIL")],
+						"Meeraq: Action Needed - Add bank details of vendors",
+						{"count": len(vendors_with_no_bank_details), "vendors_with_no_bank_details": vendors_with_no_bank_details},
+						[env("BCC_EMAIL")],  # no bcc
+				)

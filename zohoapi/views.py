@@ -224,7 +224,7 @@ def send_mail_templates(file_name, user_email, email_subject, content):
 
 
 def send_mail_templates_with_attachment(
-    file_name, user_email, email_subject, content, body_message
+    file_name, user_email, email_subject, content, body_message,bcc_emails
 ):
     try:
         image_url = f"{content['invoice']['signature']}"
@@ -244,6 +244,7 @@ def send_mail_templates_with_attachment(
             body=body_message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=user_email,
+            bcc=bcc_emails
         )
         # Attach the PDF to the email
         email.attach("invoice.pdf", result.getvalue(), "application/pdf")
@@ -669,16 +670,19 @@ def get_purchase_order_data_pdf(request, purchaseorder_id):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
+def get_tax(line_item, taxt_type):
+    tax_based_on_type = next((item for item in line_item.get('line_item_taxes', []) if taxt_type in item.get('tax_name', '')), None)
+    percentage = float(tax_based_on_type['tax_name'].split('(')[-1].split('%')[0]) if tax_based_on_type else 0
+    return f"{percentage}%" if percentage else ""
 
 def get_line_items_for_template(line_items):
     res = [*line_items]
     for line_item in res:
-        line_item["quantity_mul_rate"] = line_item["quantity_input"] * line_item["rate"]
-        line_item["quantity_mul_rate_include_tax"] = (
-            line_item["quantity_input"]
-            * line_item["rate"]
-            * (1 + line_item["tax_percentage"] / 100)
-        )
+        line_item["quantity_mul_rate"] = round(line_item["quantity_input"] * line_item["rate"], 2)
+        line_item["quantity_mul_rate_include_tax"] = round(line_item["quantity_input"] * line_item["rate"] * (1 + line_item["tax_percentage"] / 100), 2)
+        line_item["cgst_tax"] = get_tax(line_item,'CGST')
+        line_item["sgst_tax"] = get_tax(line_item,'SGST')
+        line_item["igst_tax"] = get_tax(line_item,'IGST')
     return res
 
 
@@ -718,6 +722,7 @@ def add_invoice_data(request):
             f"Invoice raised by a Vendor - {invoice_data['vendor_name']} ",
             {"invoice": invoice_data},
             f"A new invoice: {invoice_data['invoice_number']} is raised by the vendor: {invoice_data['vendor_name']}",
+            [env("BCC_EMAIL")] 
         )
         return Response({"message": "Invoice generated successfully"}, status=201)
     else:
@@ -740,16 +745,7 @@ def edit_invoice(request, invoice_id):
 
     if serializer.is_valid():
         serializer.save()
-        line_items = serializer.data["line_items"]
-        for line_item in line_items:
-            line_item["quantity_mul_rate"] = (
-                line_item["quantity_input"] * line_item["rate"]
-            )
-            line_item["quantity_mul_rate_include_tax"] = (
-                line_item["quantity_input"]
-                * line_item["rate"]
-                * (1 + line_item["tax_percentage"] / 100)
-            )
+        line_items = get_line_items_for_template(serializer.data["line_items"])
         invoice_serializer = InvoiceDataSerializer(invoice)
         invoice_date = datetime.strptime(
             serializer.data["invoice_date"], "%Y-%m-%d"
@@ -768,7 +764,7 @@ def edit_invoice(request, invoice_id):
             [env("FINANCE_EMAIL")],
             f"Invoice edited by a Vendor - {invoice_data['vendor_name']}",
             {"invoice": invoice_data},
-            f"Invoice: {invoice_data['invoice_number']} has been edited by the vendor: {invoice_data['vendor_name']}",
+            f"Invoice: {invoice_data['invoice_number']} has been edited by the vendor: {invoice_data['vendor_name']}",[env("BCC_EMAIL")] ,
         )
         return Response({"message": "Invoice edited successfully."}, status=201)
     else:

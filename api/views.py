@@ -67,6 +67,7 @@ from .serializers import (
     SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer,
     SuperAdminDepthOneSerializer,
     PmoSerializer,
+    FacilitatorDepthOneSerializer,
 )
 
 from rest_framework import generics
@@ -125,6 +126,7 @@ from .models import (
     CreateProjectActivity,
     FinalizeCoachActivity,
     APILog,
+    Facilitator,
 )
 
 from rest_framework.authtoken.models import Token
@@ -159,7 +161,7 @@ from schedularApi.models import (
 from schedularApi.serializers import (
     SchedularProjectSerializer,
 )
-from schedularApi.serializers import FacilitatorDepthOneSerializer
+
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
@@ -708,6 +710,9 @@ FIELD_NAME_VALUES = {
     "domain": "Functional Domain",
     "client_companies": "Client companies",
     "educational_qualification": "Educational Qualification",
+    "city":"City",
+    "country":"Country",
+    "topic":"Topic"
 }
 
 
@@ -6214,24 +6219,40 @@ def remove_coach_from_project(request, project_id):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def standard_field_request(request, user_id):
-    value = request.data.get("value")
+    try:
+        value = request.data.get("value").strip()
+        userType = request.data.get("userType")
 
-    user_instance = Coach.objects.get(id=user_id)
+        field_name = request.data.get(
+            "field_name"
+        )  # Adjust this based on your field name
+        standardized_field, created = StandardizedField.objects.get_or_create(
+            field=field_name
+        )
+        if userType == "coach":
+            user_instance = Coach.objects.get(id=user_id)
+            standardized_field_request = StandardizedFieldRequest(
+                standardized_field_name=standardized_field,
+                coach=user_instance,
+                value=value,
+                status="pending",
+            )
+            standardized_field_request.save()
 
-    field_name = request.data.get("field_name")  # Adjust this based on your field name
-    standardized_field, created = StandardizedField.objects.get_or_create(
-        field=field_name
-    )
+        elif userType == "facilitator":
+            user_instance = Facilitator.objects.get(id=user_id)
+            standardized_field_request = StandardizedFieldRequest(
+                standardized_field_name=standardized_field,
+                facilitator=user_instance,
+                value=value,
+                status="pending",
+            )
+            standardized_field_request.save()
 
-    standardized_field_request = StandardizedFieldRequest(
-        standardized_field_name=standardized_field,
-        coach=user_instance,
-        value=value,
-        status="pending",
-    )
-    standardized_field_request.save()
-
-    return Response({"message": "Request sent."}, status=200)
+        return Response({"message": "Request sent."}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to create request."}, status=500)
 
 
 @api_view(["GET"])
@@ -7149,58 +7170,93 @@ class StandardFieldAddValue(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        field_name = request.data.get("field_name")
-        option_value = request.data.get("optionValue")
+        try:
+            with transaction.atomic():
+                # Extracting data from request body
+                field_name = request.data.get("field_name")
+                option_value = request.data.get("optionValue").strip()
 
-        standardized_field, created = StandardizedField.objects.get_or_create(
-            field=field_name
-        )
+                # Get or create the StandardizedField instance for the given field_name
+                standardized_field, created = StandardizedField.objects.get_or_create(
+                    field=field_name
+                )
 
-        if option_value not in standardized_field.values:
-            standardized_field.values.append(option_value)
-            standardized_field.save()
-        else:
-            return Response({"error": "Value already present."}, status=404)
+                # Check if the option_value already exists in the values list of the standardized_field
+                if option_value not in standardized_field.values:
+                    # Add the option_value to the values list and save the instance
+                    standardized_field.values.append(option_value)
+                    standardized_field.save()
+                else:
+                    # Return error response if the option_value already exists
+                    return Response({"error": "Value already present."}, status=400)
 
-        return Response(
-            {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."},
-            status=200,
-        )
+                # Return success response
+                return Response(
+                    {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."},
+                    status=200,
+                )
+
+        except Exception as e:
+            print(str(e))
+            # Return error response if any exception occurs
+            return Response(
+                {"error": "Failed to add value."},
+                status=500,
+            )
 
 
 class StandardFieldEditValue(APIView):
     permission_classes = [IsAuthenticated]
 
     def put(self, request):
-        field_name = request.data.get("field_name")
-        previous_value = request.data.get("previous_value")
-        new_value = request.data.get("new_value")
-
         try:
-            standardized_field = StandardizedField.objects.get(field=field_name)
+            with transaction.atomic():
+                # Extracting data from request body
+                field_name = request.data.get("field_name")
+                previous_value = request.data.get("previous_value")
+                new_value = request.data.get("new_value").strip()
 
-            if previous_value in standardized_field.values:
-                index = standardized_field.values.index(previous_value)
-                standardized_field.values[index] = new_value
+                # Retrieve the StandardizedField instance corresponding to the provided field_name
+                standardized_field = StandardizedField.objects.filter(
+                    field=field_name
+                ).first()
 
-                standardized_field.save()
+                # Check if the field exists
+                if standardized_field:
+                    # Check if the previous_value exists in the values list of the standardized_field
+                    if previous_value in standardized_field.values:
+                        # Update the value if it exists
+                      
+                        index = standardized_field.values.index(previous_value)
+                        standardized_field.values[index] = new_value
+                        standardized_field.save()
 
-                return Response(
-                    {
-                        "message": f"Value Updated in {FIELD_NAME_VALUES[field_name]} field."
-                    },
-                    status=200,
-                )
-            else:
-                return Response(
-                    {
-                        "message": f"{previous_value} not found in {FIELD_NAME_VALUES[field_name]} field."
-                    },
-                    status=404,
-                )
-        except StandardizedField.DoesNotExist:
+                        # Return success response
+                        return Response(
+                            {"message": f"Value Updated in {FIELD_NAME_VALUES[field_name]} field."},
+                            status=200,
+                        )
+                    else:
+                        # Return error response if the previous_value does not exist
+                        return Response(
+                            {
+                                "message": f"{previous_value} not found in {FIELD_NAME_VALUES[field_name]} field."
+                            },
+                            status=404,
+                        )
+                else:
+                    # Return error response if the field does not exist
+                    return Response(
+                        {"message": f"{FIELD_NAME_VALUES[field_name]} not found."},
+                        status=404,
+                    )
+
+        except Exception as e:
+            print(str(e))
+            # Return error response if any exception occurs
             return Response(
-                {"error": f"{FIELD_NAME_VALUES[field_name]} not found."}, status=404
+                {"error": "Failed to update."},
+                status=500,
             )
 
 
@@ -7244,22 +7300,42 @@ class StandardFieldDeleteValue(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request):
-        field_name = request.data.get("field_name")
-        option_value = request.data.get("optionValue")
+        try:
+            with transaction.atomic():
+                # Extracting data from request body
+                field_name = request.data.get("field_name")
+                option_value = request.data.get("optionValue")
 
-        standardized_field = StandardizedField.objects.get(field=field_name)
+                # Retrieve the StandardizedField instance for the given field_name
+                standardized_field = StandardizedField.objects.get(field=field_name)
 
-        if option_value in standardized_field.values:
-            standardized_field.values.remove(option_value)
-            standardized_field.save()
-        else:
-            return Response({"error": "Value not present."}, status=404)
+                # Check if the option_value exists in the values list of the standardized_field
+                if option_value in standardized_field.values:
+                    # Remove the option_value from the values list and save the instance
+                    standardized_field.values.remove(option_value)
+                    standardized_field.save()
+                else:
+                    # Return error response if the option_value does not exist
+                    return Response({"error": "Value not present."}, status=404)
 
-        return Response(
-            {"message": f"Value deleted from {FIELD_NAME_VALUES[field_name]} field."},
-            status=200,
-        )
+                # Return success response
+                return Response(
+                    {"message": f"Value deleted from {FIELD_NAME_VALUES[field_name]} field."},
+                    status=200,
+                )
 
+        except StandardizedField.DoesNotExist:
+            # Return error response if the StandardizedField instance does not exist
+            return Response({"error": "Field not found."}, status=404)
+
+        except Exception as e:
+            print(str(e))
+            # Return error response if any other exception occurs
+            return Response(
+                {"error": "Failed to delete value."},
+                status=500,
+            )
+        
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
@@ -8210,4 +8286,3 @@ def get_api_logs(request):
                 {"user_type": user_type, "activity": activity, "count": count}
             )
     return Response(output_list)
-
