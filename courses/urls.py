@@ -334,4 +334,8 @@ urlpatterns = [
         "consolidated-feedback-download-report/<str:live_session_id>/",
         views.get_consolidated_feedback_download_report,
     ),
+    path(
+        "get-nps-project-wise/",
+        views.get_nps_project_wise,
+    ),
 ]

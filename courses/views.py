@@ -3325,3 +3325,53 @@ def download_consolidated_project_report(request, project_id):
     )
     wb.save(response)
     return response
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_nps_project_wise(request):
+    projects = SchedularProject.objects.all()
+    res = {}
+    for project in projects:
+        nps = 0
+        total_questions = 0  # Track the total number of questions
+        feedback_lessons = FeedbackLesson.objects.filter(
+            lesson__course__batch__project=project
+        )
+        for feedback_lesson in feedback_lessons:
+            feedback_lesson_reponses = FeedbackLessonResponse.objects.filter(
+                feedback_lesson=feedback_lesson
+            )
+
+            questions_serializer = QuestionSerializer(
+                feedback_lesson.questions, many=True
+            )
+            question_data = {
+                question["id"]: {**question, "descriptive_answers": [], "ratings": []}
+                for question in questions_serializer.data
+            }
+            for response in feedback_lesson_reponses:
+                for answer in response.answers.all():
+                    question_id = answer.question.id
+                    if answer.question.type.startswith("rating"):
+                        question_data[question_id]["ratings"].append(answer.rating)
+                    elif answer.question.type == "descriptive_answer":
+                        question_data[question_id]["descriptive_answers"].append(
+                            answer.text_answer
+                        )
+
+            for question_id, data in question_data.items():
+                ratings = data["ratings"]
+                if ratings:
+                    if data["type"] == "rating_0_to_10":
+
+                        nps += calculate_nps(ratings)
+                        total_questions += 1
+
+        if total_questions > 0:
+            average_nps = nps / total_questions
+        else:
+            average_nps = 0
+
+        res[project.id] = average_nps
+    return Response(res)
