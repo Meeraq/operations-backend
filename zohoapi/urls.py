@@ -61,6 +61,11 @@ urlpatterns = [
     path(
         "get-all-purchase-orders/",
         views.get_all_purchase_orders,
-        name="get_purchase_orders",
+        name="get_all_purchase_orders",
+    ),
+    path(
+        "get-all-invoices/",
+        views.get_all_invoices,
+        name="get_all_invoices",
     ),
 ]
