@@ -29,7 +29,6 @@ import pytz
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
 from courses.models import Course, Lesson, FeedbackLesson, FeedbackLessonResponse, Nudge
-from courses.views import get_file_extension
 from django.db.models import Q
 from assessmentApi.models import Assessment, ParticipantResponse
 import environ
@@ -1503,6 +1502,14 @@ def get_file_content(file_url):
     response = requests.get(file_url)
     return response.content
 
+def get_file_extension(url):
+    # Split the URL by '.' to get an array of parts
+    url_parts = url.split(".")
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+    # Extract the file extension
+    file_extension = full_file_name.split("?")[0]
+    return file_extension
 
 @shared_task
 def send_nudge(nudge_id):
