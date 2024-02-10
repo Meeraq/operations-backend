@@ -3332,24 +3332,24 @@ def get_nudges_by_project_id(request, project_id):
 
 @api_view(['POST'])
 def send_nudge_to_email(request, nudge_id):
-		email = request.data.get("email")
-		try:
-				nudge = Nudge.objects.get(id=nudge_id)
-		except Nudge.DoesNotExist:
-				return Response({'error': 'Nudge not found'}, status=404)
-                
-		subject = f"New Nudge: {nudge.name}"
-		message = nudge.content
-		email_msg = EmailMessage(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
-		if nudge.file:
-				attachment_path = nudge.file.url
-				file_content = get_file_content(nudge.file.url)
-				extension = get_file_extension(nudge.file.url)
-				file_name = f"Attachment.{extension}"
-				email_msg.attach(file_name, file_content, f"application/{extension}")				
-		email_msg.content_subtype = "html"
-		email_msg.send()				
-		return Response({'message': 'Nudge sent successfully'})
+    email = request.data.get("email")
+    try:
+            nudge = Nudge.objects.get(id=nudge_id)
+    except Nudge.DoesNotExist:
+            return Response({'error': 'Nudge not found'}, status=404)
+            
+    subject = f"New Nudge: {nudge.name}"
+    message = nudge.content
+    email_msg = EmailMessage(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
+    if nudge.file:
+            attachment_path = nudge.file.url
+            file_content = get_file_content(nudge.file.url)
+            extension = get_file_extension(nudge.file.url)
+            file_name = f"Attachment.{extension}"
+            email_msg.attach(file_name, file_content, f"application/{extension}")				
+    email_msg.content_subtype = "html"
+    email_msg.send()				
+    return Response({'message': 'Nudge sent successfully'})
 
 @api_view(['POST'])
 def duplicate_nudge(request, nudge_id, course_id):
