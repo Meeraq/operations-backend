@@ -167,7 +167,7 @@ from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
 from zohoapi.models import Vendor
 from courses.models import CourseEnrollment
-from zohoapi.serializers import VendorDepthOneSerializer
+
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
 import pdfkit
@@ -179,7 +179,6 @@ import pandas as pd
 from django.http import HttpResponse
 import environ
 from time import sleep
-from zohoapi.views import get_organization_data, get_vendor
 
 env = environ.Env()
 
@@ -711,9 +710,9 @@ FIELD_NAME_VALUES = {
     "domain": "Functional Domain",
     "client_companies": "Client companies",
     "educational_qualification": "Educational Qualification",
-    "city": "City",
-    "country": "Country",
-    "topic": "Topic",
+    "city":"City",
+    "country":"Country",
+    "topic":"Topic"
 }
 
 
@@ -7095,9 +7094,7 @@ class StandardFieldAddValue(APIView):
 
                 # Return success response
                 return Response(
-                    {
-                        "message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."
-                    },
+                    {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."},
                     status=200,
                 )
 
@@ -7131,16 +7128,14 @@ class StandardFieldEditValue(APIView):
                     # Check if the previous_value exists in the values list of the standardized_field
                     if previous_value in standardized_field.values:
                         # Update the value if it exists
-
+                      
                         index = standardized_field.values.index(previous_value)
                         standardized_field.values[index] = new_value
                         standardized_field.save()
 
                         # Return success response
                         return Response(
-                            {
-                                "message": f"Value Updated in {FIELD_NAME_VALUES[field_name]} field."
-                            },
+                            {"message": f"Value Updated in {FIELD_NAME_VALUES[field_name]} field."},
                             status=200,
                         )
                     else:
@@ -7227,9 +7222,7 @@ class StandardFieldDeleteValue(APIView):
 
                 # Return success response
                 return Response(
-                    {
-                        "message": f"Value deleted from {FIELD_NAME_VALUES[field_name]} field."
-                    },
+                    {"message": f"Value deleted from {FIELD_NAME_VALUES[field_name]} field."},
                     status=200,
                 )
 
@@ -7244,7 +7237,7 @@ class StandardFieldDeleteValue(APIView):
                 {"error": "Failed to delete value."},
                 status=500,
             )
-
+        
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
@@ -7625,7 +7618,6 @@ def change_user_role(request, user_id):
         is_seeq_allowed = SchedularBatch.objects.filter(
             coaches=user.profile.coach
         ).exists()
-
         return Response(
             {
                 **serializer.data,
@@ -7643,31 +7635,6 @@ def change_user_role(request, user_id):
         serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
     elif user_profile_role == "facilitator":
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
-
-    elif user_profile_role == "vendor":
-        serializer = VendorDepthOneSerializer(user.profile.vendor)
-        organization = get_organization_data()
-        zoho_vendor = get_vendor(serializer.data["vendor_id"])
-        login_timestamp = timezone.now()
-        UserLoginActivity.objects.create(
-            user=user, timestamp=login_timestamp, platform="caas"
-        )
-
-        return Response(
-            {
-                **serializer.data,
-                "roles": roles,
-                "user": {
-                    **serializer.data["user"],
-                    "type": user_profile_role,
-                    "last_login": user.last_login,
-                },
-                "last_login": user.last_login,
-                "organization": organization,
-                "zoho_vendor": zoho_vendor,
-                "message": f"Role changed to billing",
-            }
-        )
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
@@ -7692,14 +7659,13 @@ def change_user_role(request, user_id):
         serializer = HrDepthOneSerializer(user.profile.hr)
     else:
         return Response({"error": "Unknown user role."}, status=400)
-
     return Response(
         {
             **serializer.data,
             "roles": roles,
             "user": {**serializer.data["user"], "type": user_profile_role},
             "last_login": user.last_login,
-            "message": f"Role changed to { user_profile_role}",
+            "message": f"Role changed to {user_profile_role}",
         }
     )
 
