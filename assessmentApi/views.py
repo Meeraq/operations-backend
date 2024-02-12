@@ -3312,11 +3312,11 @@ def generate_graph_for_participant_single_correct(
             )
         if project_wise:
             return competency_percentage
-        
+
         encoded_image = generate_graph_for_pre_assessment(
             competency_percentage, total_for_each_comp
         )
-        
+
         return encoded_image, compentency_with_description
 
     if project_wise:
@@ -3493,7 +3493,7 @@ def generate_graph_for_participant_rating_type(
 
     if project_wise:
         return None
-    
+
     return None, None
 
 
@@ -4591,7 +4591,7 @@ class GetProjectWiseReport(APIView):
 
     def get(self, request, project_id, report_to_download):
         try:
-            
+
             project = SchedularProject.objects.get(id=project_id)
             batches = SchedularBatch.objects.filter(project__id=project.id)
 
@@ -4599,13 +4599,14 @@ class GetProjectWiseReport(APIView):
             post_compentency_percentages = []
 
             total_participant = 0
-            attended_both_assessments = 0
+            total_attended_both_assessments = 0
             for batch in batches:
                 total_participant = total_participant + len(batch.learners.all())
                 assessments = Assessment.objects.filter(
                     assessment_modal__lesson__course__batch=batch
                 )
-                attended_pre_post_count = 0
+                attended_both_assessments = {}
+
                 for assessment in assessments:
                     assessment_id = assessment.id
                     for (
@@ -4622,9 +4623,13 @@ class GetProjectWiseReport(APIView):
                                 )
 
                                 if compentency_precentage:
-                                    attended_pre_post_count = (
-                                        attended_pre_post_count + 1
-                                    )
+                                    if participant.id not in attended_both_assessments:
+                                        attended_both_assessments[participant.id] = 1
+                                    else:
+                                        attended_both_assessments[participant.id] = (
+                                            attended_both_assessments[participant.id]
+                                            + 1
+                                        )
                                     pre_compentency_percentages.append(
                                         compentency_precentage
                                     )
@@ -4637,9 +4642,13 @@ class GetProjectWiseReport(APIView):
                                 )
 
                                 if post_compentency_precentage:
-                                    attended_pre_post_count = (
-                                        attended_pre_post_count + 1
-                                    )
+                                    if participant.id not in attended_both_assessments:
+                                        attended_both_assessments[participant.id] = 1
+                                    else:
+                                        attended_both_assessments[participant.id] = (
+                                            attended_both_assessments[participant.id]
+                                            + 1
+                                        )
                                     post_compentency_percentages.append(
                                         post_compentency_precentage
                                     )
@@ -4654,9 +4663,13 @@ class GetProjectWiseReport(APIView):
                                 )
 
                                 if compentency_precentage:
-                                    attended_pre_post_count = (
-                                        attended_pre_post_count + 1
-                                    )
+                                    if participant.id not in attended_both_assessments:
+                                        attended_both_assessments[participant.id] = 1
+                                    else:
+                                        attended_both_assessments[participant.id] = (
+                                            attended_both_assessments[participant.id]
+                                            + 1
+                                        )
                                     pre_compentency_percentages.append(
                                         compentency_precentage
                                     )
@@ -4669,15 +4682,23 @@ class GetProjectWiseReport(APIView):
                                 )
 
                                 if post_compentency_precentage:
-                                    attended_pre_post_count = (
-                                        attended_pre_post_count + 1
-                                    )
+                                    if participant.id not in attended_both_assessments:
+                                        attended_both_assessments[participant.id] = 1
+                                    else:
+                                        attended_both_assessments[participant.id] = (
+                                            attended_both_assessments[participant.id]
+                                            + 1
+                                        )
                                     post_compentency_percentages.append(
                                         post_compentency_precentage
                                     )
-
-                if attended_pre_post_count == 2:
-                    attended_both_assessments = attended_both_assessments + 1
+           
+                participant_ids_with_value_two = [
+                    key for key, value in attended_both_assessments.items() if value > 1
+                ]
+                total_attended_both_assessments = total_attended_both_assessments + len(
+                    participant_ids_with_value_two
+                )
 
             content = {
                 "org_name": project.organisation.name,
@@ -4685,7 +4706,7 @@ class GetProjectWiseReport(APIView):
                 "total_participant": total_participant,
                 "attended_pre_participant": len(pre_compentency_percentages),
                 "attended_post_participant": len(post_compentency_percentages),
-                "attended_both_assessments": attended_both_assessments,
+                "attended_both_assessments": total_attended_both_assessments,
             }
 
             if report_to_download == "pre":
