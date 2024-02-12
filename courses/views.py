@@ -3037,6 +3037,7 @@ class GetUniqueIdParticipantFromCourse(APIView):
             )
 
         except Exception as e:
+            print(str(e))
             return Response(
                 {"error": "Failed to get unique id."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -68,6 +68,7 @@ from .views import (
     AllAssessmentInAssessmentLesson,
     PostReportDownloadForAllParticipant,
     PostReportDownloadForParticipant,
+    GetProjectWiseReport,
 )
 
 
@@ -296,5 +297,9 @@ urlpatterns = [
     path(
         "post-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
         PostReportDownloadForParticipant.as_view(),
+    ),
+    path(
+        "get-project-wise-report/<int:project_id>/<str:report_to_download>/",
+        GetProjectWiseReport.as_view(),
     ),
 ]
