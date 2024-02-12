@@ -69,7 +69,8 @@ from .serializers import (
     PmoSerializer,
     FacilitatorDepthOneSerializer,
 )
-
+from zohoapi.serializers import VendorDepthOneSerializer
+from zohoapi.views import get_organization_data, get_vendor
 from rest_framework import generics
 from django.utils.crypto import get_random_string
 import jwt
@@ -7635,6 +7636,30 @@ def change_user_role(request, user_id):
         serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
     elif user_profile_role == "facilitator":
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
+    elif user_profile_role == "vendor":
+        serializer = VendorDepthOneSerializer(user.profile.vendor)
+        organization = get_organization_data()
+        zoho_vendor = get_vendor(serializer.data["vendor_id"])
+        login_timestamp = timezone.now()
+        UserLoginActivity.objects.create(
+            user=user, timestamp=login_timestamp, platform="caas"
+        )
+
+        return Response(
+            {
+                **serializer.data,
+                "roles": roles,
+                "user": {
+                    **serializer.data["user"],
+                    "type": user_profile_role,
+                    "last_login": user.last_login,
+                },
+                "last_login": user.last_login,
+                "organization": organization,
+                "zoho_vendor": zoho_vendor,
+                "message": f"Role changed to billing",
+            }
+        )
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(

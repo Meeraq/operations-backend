@@ -58,4 +58,14 @@ urlpatterns = [
     path("download-invoice/<int:record_id>/", DownloadInvoice.as_view()),
     path("add/vendor/", views.add_vendor),
     path("view/vendors/", views.get_all_vendors),
+    path(
+        "get-all-purchase-orders/",
+        views.get_all_purchase_orders,
+        name="get_all_purchase_orders",
+    ),
+    path(
+        "get-all-invoices/",
+        views.get_all_invoices,
+        name="get_all_invoices",
+    ),
 ]
