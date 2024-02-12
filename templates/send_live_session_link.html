@@ -1,58 +1,56 @@
 {% extends "table_parent_template.html" %} {% block title %}Meeraq
 Coaching{%endblock%} {% block content %}
 <tr style="border: 0">
-  <td style="padding: 20px; background: #f8f7f8; border: 0">
-   
-    <div align="center">
-      <table
-        border="0"
-        cellpadding="0"
-        cellspacing="0"
-        style="
+	<td style="padding: 20px; background: #f8f7f8; border: 0">
+		<div align="center">
+			<table border="0" cellpadding="0" cellspacing="0" style="
           width: 100%;
           mso-cellspacing: 0cm;
           background: #f8f7f8;
           mso-yfti-tbllook: 1184;
           mso-padding-alt: 0cm 0cm 0cm 0cm;
-        "
-        width="100%"
-      >
-        <tbody>
-          <tr
-            style="
+        " width="100%">
+				<tbody>
+					<tr style="
               mso-yfti-irow: 0;
               mso-yfti-firstrow: yes;
               mso-yfti-lastrow: yes;
-            "
-          >
-            <td style="padding: 15pt 15pt 15pt 15pt">
-              <p>
-                <strong><span style="font-size: 14px">Dear&nbsp;</span></strong
-                ><b>{{participant_name}}</b><strong>,</strong>
-              </p>
-              <p
-                class="child-para"
-                style="color: #333; font-size: 18px; font-weight: bold"
-              >
-                Greetings from Meeraq!!
-              </p>
-              <p class="child-para">
-                This is the reminder to join the
-                <b>{{live_session_name}}</b> for your project
-                <b>{{project_name}}</b>. To join the live session, Simply find
-                the link in the session description.
-              </p>
-              <br />
-              <p class="child-para">{{description}}</p>
-              <p><br /></p>
-              <p>Best regards,</p>
-              <p>Team Meeraq.</p>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </td>
+            ">
+						<td style="padding: 15pt 15pt 15pt 15pt">
+							<p>
+								<strong><span
+										style="font-size: 14px">Dear&nbsp;</span></strong><b>{{participant_name}}</b><strong>,</strong>
+							</p>
+							<p class="child-para" style="color: #333; font-size: 18px; font-weight: bold">
+								Greetings from Meeraq!!
+							</p>
+							<p class="child-para">
+								This is the reminder to join the
+								<b>{{live_session_name}}</b> for your project
+								<b>{{project_name}}</b>. To join the live session, Simply find
+								the link in the session description.
+							</p>
+							<br />
+							<p class="child-para">{{description}}</p>
+							{% if meeting_link %}
+							<div class="child-para">
+								<p>
+									Please <a href="{{meeting_link}}">Click Here</a> to join the session.
+								</p>
+								<p>Or copy the below link:</p>
+								<p>
+									{{meeting_link}}
+								</p>
+							</div>
+							{% endif %}
+							<p><br /></p>
+							<p>Best regards,</p>
+							<p>Team Meeraq.</p>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</td>
 </tr>
-
 {% endblock %}

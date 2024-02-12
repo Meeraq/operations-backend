@@ -36,13 +36,27 @@ from time import sleep
 import requests
 from zohoapi.models import Vendor,PoReminder
 from zohoapi.views import get_access_token, base_url, organization_id,filter_purchase_order_data
-
 env = environ.Env()
 environ.Env.read_env()
 
 
 def timestamp_to_datetime(timestamp):
     return datetime.utcfromtimestamp(int(timestamp) / 1000.0)
+
+
+def get_live_session_name(session_type):
+    session_name = None
+    if session_type == "live_session":
+        session_name = "Live Session"
+    elif session_type == "check_in_session":
+        session_name = "Check In Session"
+    elif session_type == "in_person_session":
+        session_name = "In Person Session"
+    elif session_type == "kickoff_session":
+        session_name = "Kickoff Session"
+    elif session_type == "virtual_session":
+        session_name = "Virtual Session"
+    return session_name
 
 
 def generate_slots(start, end, duration):
@@ -743,7 +757,7 @@ def send_whatsapp_reminder_1_day_before_live_session():
                                 },
                                 {
                                     "name": "live_session_name",
-                                    "value": f"Live Session {session.live_session_number}",
+                                    "value": f"{get_live_session_name(session.session_type)} {session.live_session_number}",
                                 },
                                 {
                                     "name": "project_name",
@@ -796,7 +810,7 @@ def send_whatsapp_reminder_same_day_morning():
                                 },
                                 {
                                     "name": "description",
-                                    "value": session.description,
+                                    "value": session.description + f"Please join using this link: {session.meeting_link}"  if session.meeting_link else "",
                                 },
                                 {
                                     "name": "time",
@@ -833,11 +847,11 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
                             },
                             {
                                 "name": "live_session_name",
-                                "value": f"Live Session {live_session.live_session_number}",
+                                "value": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
                             },
                             {
                                 "name": "description",
-                                "value": live_session.description,
+                                "value": live_session.description + f"Please join using this link: {live_session.meeting_link}"  if live_session.meeting_link else "",
                             },
                         ],
                         "template_name": "reminder_coachee_live_session_30min_before",
