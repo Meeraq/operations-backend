@@ -4566,10 +4566,7 @@ def get_average_for_all_compentency(compentency_precentages):
             )
 
     for competency_name, total_percentage in average_percentage.items():
-
-        average_percentage[competency_name] = (
-            total_percentage / count_occurrences[competency_name]
-        )
+        average_percentage[competency_name] = round(total_percentage / count_occurrences[competency_name]) if count_occurrences[competency_name] != 0 else 0
     return average_percentage
 
 
