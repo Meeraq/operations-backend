@@ -810,7 +810,7 @@ def send_whatsapp_reminder_same_day_morning():
                                 },
                                 {
                                     "name": "description",
-                                    "value": session.description + f"Please join using this link: {session.meeting_link}"  if session.meeting_link else "",
+                                    "value": session.description if session.description else "" + f"Please join using this link: {session.meeting_link}"  if session.meeting_link else "",
                                 },
                                 {
                                     "name": "time",
@@ -851,7 +851,7 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
                             },
                             {
                                 "name": "description",
-                                "value": live_session.description + f"Please join using this link: {live_session.meeting_link}"  if live_session.meeting_link else "",
+                                "value": live_session.description if live_session.description else "" + f"Please join using this link: {live_session.meeting_link}"  if live_session.meeting_link else "",
                             },
                         ],
                         "template_name": "reminder_coachee_live_session_30min_before",
