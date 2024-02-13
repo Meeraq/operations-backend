@@ -8347,3 +8347,4 @@ def get_api_logs(request):
                 {"user_type": user_type, "activity": activity, "count": count}
             )
     return Response(output_list)
+

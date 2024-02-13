@@ -250,6 +250,7 @@ def send_mail_templates_with_attachment(
         )
         # Attach the PDF to the email
         email.attach("invoice.pdf", result.getvalue(), "application/pdf")
+        email.content_subtype = "html"
         email.send()
 
     except Exception as e:
@@ -738,12 +739,19 @@ def add_invoice_data(request):
             "line_items": line_items,
         }
 
+        email_body_message = render_to_string(
+            "vendors/add_invoice.html",
+            {
+                "message": f"A new invoice: {invoice_data['invoice_number']} is raised by the vendor: {invoice_data['vendor_name']} for date: {invoice_data['invoice_date']}.",
+            },
+        )
+
         send_mail_templates_with_attachment(
             "invoice_pdf.html",
             [env("FINANCE_EMAIL")],
             f"Invoice raised by a Vendor - {invoice_data['vendor_name']} ",
             {"invoice": invoice_data},
-            f"A new invoice: {invoice_data['invoice_number']} is raised by the vendor: {invoice_data['vendor_name']}",
+            email_body_message,
             [env("BCC_EMAIL")],
         )
         return Response({"message": "Invoice generated successfully"}, status=201)
@@ -781,12 +789,18 @@ def edit_invoice(request, invoice_id):
             "due_date": due_date,
             "line_items": line_items,
         }
+        email_body_message = render_to_string(
+            "vendors/edit_invoice.html",
+            {
+                "message": f"Invoice: {invoice_data['invoice_number']} has been edited by the vendor: {invoice_data['vendor_name']} for the date: {invoice_data['invoice_date']}.",
+            },
+        )
         send_mail_templates_with_attachment(
             "invoice_pdf.html",
             [env("FINANCE_EMAIL")],
             f"Invoice edited by a Vendor - {invoice_data['vendor_name']}",
             {"invoice": invoice_data},
-            f"Invoice: {invoice_data['invoice_number']} has been edited by the vendor: {invoice_data['vendor_name']}",
+            email_body_message,
             [env("BCC_EMAIL")],
         )
         return Response({"message": "Invoice edited successfully."}, status=201)
