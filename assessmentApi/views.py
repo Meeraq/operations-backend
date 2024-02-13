@@ -91,7 +91,7 @@ from courses.models import (
     QuizLessonResponse,
     CourseEnrollment,
 )
-from schedularApi.models import SchedularBatch, SchedularSessions
+from schedularApi.models import SchedularBatch, SchedularSessions, SchedularProject
 
 
 matplotlib.use("Agg")
@@ -2047,9 +2047,9 @@ class AddMultipleQuestions(APIView):
 
                 new_question, created = Question.objects.get_or_create(
                     type=question["type"],
-                    reverse_question=True
-                    if question["reverse_question"] == "Yes"
-                    else False,
+                    reverse_question=(
+                        True if question["reverse_question"] == "Yes" else False
+                    ),
                     behavior=behavior,
                     competency=competency,
                     self_question=question["self_question"],
@@ -2822,9 +2822,9 @@ class DownloadParticipantResultReport(APIView):
 
             # with open(pdf_path, "rb") as pdf_file:
             response = HttpResponse(pdf, content_type="application/pdf")
-            response[
-                "Content-Disposition"
-            ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
+            response["Content-Disposition"] = (
+                f'attachment; filename={f"{participant.name} Report.pdf"}'
+            )
             # Close the file after reading
             # pdf_file.close()
 
@@ -3036,9 +3036,9 @@ class DownloadWordReport(APIView):
             response = HttpResponse(
                 content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
-            response[
-                "Content-Disposition"
-            ] = f'attachment; filename="{participant.name} Report.docx"'
+            response["Content-Disposition"] = (
+                f'attachment; filename="{participant.name} Report.docx"'
+            )
 
             response.write(output_stream.getvalue())
 
@@ -3120,9 +3120,143 @@ def swap_positions(length):
     return swapped_dict
 
 
-def generate_graph_for_participant_single_correct(
-    participant, assessment_id, assessment
+def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp):
+    comp_labels = list(competency_percentage.keys())
+    percentage_values = list(competency_percentage.values())
+    colors1 = ["#eb0081", "#d1cdcd"]
+    colors2 = ["#b91689", "#d1cdcd"]
+    colors3 = ["#7a3191", "#d1cdcd"]
+    colors4 = ["#374e9c", "#d1cdcd"]
+
+    fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 3))
+    ax = fig.add_subplot(111)
+
+    bottom = np.zeros(len(comp_labels))
+    bar_positions = np.arange(len(comp_labels))
+    for i in range(len(comp_labels)):
+        color_index = i % 4  # Use modulo to repeat colors after every four bars
+
+        if color_index == 0:
+            color = colors1
+        elif color_index == 1:
+            color = colors2
+        elif color_index == 2:
+            color = colors3
+        else:
+            color = colors4
+
+        ax.barh(comp_labels[i], percentage_values[i], color=color, left=bottom[i])
+
+    for index, value in enumerate(percentage_values):
+        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
+        ax.text(
+            value,
+            bar_positions[index],
+            f"{value}%",
+            ha="left",
+            va="center",
+            color="black",
+        )
+    ax.set_yticks(bar_positions)
+    ax.set_yticklabels(
+        [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
+        fontweight="bold",
+        fontsize=14,
+    )
+    plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
+    plt.xlim(0, 100)
+    plt.xlabel("Percentage")
+    plt.tight_layout()
+
+    image_stream = io.BytesIO()
+    plt.savefig(image_stream, format="png")
+    plt.close()
+
+    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
+
+    return encoded_image
+
+
+def generate_graph_for_pre_post_assessment(
+    pre_competency_percentage, competency_percentage, total_for_each_comp
 ):
+    comp_labels = list(competency_percentage.keys())
+    pre_percentage_values = list(pre_competency_percentage.values())
+    post_percentage_values = list(competency_percentage.values())
+
+    fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 5))
+    ax = fig.add_subplot(111)
+
+    width = 0.4  # Width of each bar
+    bar_positions = np.arange(len(comp_labels))
+
+    # Plot pre-assessment values
+    pre_bars = ax.barh(
+        bar_positions - width / 2,
+        pre_percentage_values,
+        height=width,
+        label="Pre-Assessment",
+        color="#eb0081",
+    )
+
+    # Plot post-assessment values
+    post_bars = ax.barh(
+        bar_positions + width / 2,
+        post_percentage_values,
+        height=width,
+        label="Post-Assessment",
+        color="#374e9c",
+    )
+
+    ax.set_yticks(bar_positions)
+    ax.set_yticklabels(comp_labels)
+    ax.legend()
+    ax.set_yticklabels(
+        [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
+        fontweight="bold",
+    )
+    plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
+    plt.xlabel("Percentage")
+    plt.xlim(0, 100)
+    plt.tight_layout()
+
+    # Add numbers on top of the pre-assessment bars
+    for index, value in enumerate(pre_percentage_values):
+        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
+        ax.text(
+            value,
+            bar_positions[index] - width / 2,
+            f"{value}%",
+            ha="left",
+            va="center",
+            color="black",
+        )
+
+    # Add numbers on top of the post-assessment bars
+    for index, value in enumerate(post_percentage_values):
+        # new_value = value / 100 * total_for_each_comp[comp_labels[index]]
+        ax.text(
+            value,
+            bar_positions[index] + width / 2,
+            f"{value}%",
+            ha="left",
+            va="center",
+            color="black",
+        )
+
+    image_stream = io.BytesIO()
+    plt.savefig(image_stream, format="png")
+    plt.close()
+
+    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
+
+    return encoded_image
+
+
+def generate_graph_for_participant_single_correct(
+    participant, assessment_id, assessment, project_wise=False
+):
+
     participant_response = ParticipantResponse.objects.filter(
         participant__id=participant.id, assessment__id=assessment_id
     ).first()
@@ -3176,65 +3310,23 @@ def generate_graph_for_participant_single_correct(
             competency_percentage[comp] = round(
                 (competency_object[comp] / total_for_each_comp[comp]) * 100
             )
+        if project_wise:
+            return competency_percentage
 
-        comp_labels = list(competency_percentage.keys())
-        percentage_values = list(competency_percentage.values())
-        colors1 = ["#eb0081", "#d1cdcd"]
-        colors2 = ["#b91689", "#d1cdcd"]
-        colors3 = ["#7a3191", "#d1cdcd"]
-        colors4 = ["#374e9c", "#d1cdcd"]
-
-        fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 3))
-        ax = fig.add_subplot(111)
-
-        bottom = np.zeros(len(comp_labels))
-        bar_positions = np.arange(len(comp_labels))
-        for i in range(len(comp_labels)):
-            color_index = i % 4  # Use modulo to repeat colors after every four bars
-
-            if color_index == 0:
-                color = colors1
-            elif color_index == 1:
-                color = colors2
-            elif color_index == 2:
-                color = colors3
-            else:
-                color = colors4
-
-            ax.barh(comp_labels[i], percentage_values[i], color=color, left=bottom[i])
-
-        for index, value in enumerate(percentage_values):
-            new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-            ax.text(
-                value,
-                bar_positions[index],
-                f"{value}%",
-                ha="left",
-                va="center",
-                color="black",
-            )
-        ax.set_yticks(bar_positions)
-        ax.set_yticklabels(
-            [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
-            fontweight="bold",
-            fontsize=14,
+        encoded_image = generate_graph_for_pre_assessment(
+            competency_percentage, total_for_each_comp
         )
-        plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
-        plt.xlim(0, 100)
-        plt.xlabel("Percentage")
-        plt.tight_layout()
 
-        image_stream = io.BytesIO()
-        plt.savefig(image_stream, format="png")
-        plt.close()
-
-        encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
         return encoded_image, compentency_with_description
+
+    if project_wise:
+        return None
+
     return None, None
 
 
 def generate_graph_for_participant_single_correct_for_post_assessent(
-    participant, assessment_id, assessment
+    participant, assessment_id, assessment, project_wise=False
 ):
     participant_response = ParticipantResponse.objects.filter(
         participant__id=participant.id, assessment__id=assessment_id
@@ -3311,80 +3403,21 @@ def generate_graph_for_participant_single_correct_for_post_assessent(
                 (pre_competency_object[comp] / total_for_each_comp[comp]) * 100
             )
 
-        comp_labels = list(competency_percentage.keys())
-        pre_percentage_values = list(pre_competency_percentage.values())
-        post_percentage_values = list(competency_percentage.values())
+        if project_wise:
+            return pre_competency_percentage, competency_percentage
 
-        fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 5))
-        ax = fig.add_subplot(111)
-
-        width = 0.4  # Width of each bar
-        bar_positions = np.arange(len(comp_labels))
-
-        # Plot pre-assessment values
-        pre_bars = ax.barh(
-            bar_positions - width / 2,
-            pre_percentage_values,
-            height=width,
-            label="Pre-Assessment",
-            color="#eb0081",
+        encoded_image = generate_graph_for_pre_post_assessment(
+            pre_competency_percentage, competency_percentage, total_for_each_comp
         )
 
-        # Plot post-assessment values
-        post_bars = ax.barh(
-            bar_positions + width / 2,
-            post_percentage_values,
-            height=width,
-            label="Post-Assessment",
-            color="#374e9c",
-        )
-
-        ax.set_yticks(bar_positions)
-        ax.set_yticklabels(comp_labels)
-        ax.legend()
-        ax.set_yticklabels(
-            [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
-            fontweight="bold",
-        )
-        plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
-        plt.xlabel("Percentage")
-        plt.xlim(0, 100)
-        plt.tight_layout()
-
-        # Add numbers on top of the pre-assessment bars
-        for index, value in enumerate(pre_percentage_values):
-            new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-            ax.text(
-                value,
-                bar_positions[index] - width / 2,
-                f"{value}%",
-                ha="left",
-                va="center",
-                color="black",
-            )
-
-        # Add numbers on top of the post-assessment bars
-        for index, value in enumerate(post_percentage_values):
-            new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-            ax.text(
-                value,
-                bar_positions[index] + width / 2,
-                f"{value}%",
-                ha="left",
-                va="center",
-                color="black",
-            )
-
-        image_stream = io.BytesIO()
-        plt.savefig(image_stream, format="png")
-        plt.close()
-
-        encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
         return encoded_image, compentency_with_description
+
     return None, None
 
 
-def generate_graph_for_participant_rating_type(participant, assessment_id, assessment):
+def generate_graph_for_participant_rating_type(
+    participant, assessment_id, assessment, project_wise=False
+):
     participant_response = ParticipantResponse.objects.filter(
         participant__id=participant.id, assessment__id=assessment_id
     ).first()
@@ -3448,64 +3481,24 @@ def generate_graph_for_participant_rating_type(participant, assessment_id, asses
                 (competency_object[comp] / total_for_each_comp[comp]) * 100
             )
 
-        comp_labels = list(competency_percentage.keys())
-        percentage_values = list(competency_percentage.values())
-        colors1 = ["#eb0081", "#d1cdcd"]
-        colors2 = ["#b91689", "#d1cdcd"]
-        colors3 = ["#7a3191", "#d1cdcd"]
-        colors4 = ["#374e9c", "#d1cdcd"]
+        if project_wise:
 
-        fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 3))
-        ax = fig.add_subplot(111)
+            return competency_percentage
 
-        bottom = np.zeros(len(comp_labels))
-        bar_positions = np.arange(len(comp_labels))
-        for i in range(len(comp_labels)):
-            color_index = i % 4  # Use modulo to repeat colors after every four bars
-
-            if color_index == 0:
-                color = colors1
-            elif color_index == 1:
-                color = colors2
-            elif color_index == 2:
-                color = colors3
-            else:
-                color = colors4
-
-            ax.barh(comp_labels[i], percentage_values[i], color=color, left=bottom[i])
-
-        for index, value in enumerate(percentage_values):
-            new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-            ax.text(
-                value,
-                bar_positions[index],
-                f"{value}%",
-                ha="left",
-                va="center",
-                color="black",
-            )
-        ax.set_yticks(bar_positions)
-        ax.set_yticklabels(
-            [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
-            fontweight="bold",
-            fontsize=14,
+        encoded_image = generate_graph_for_pre_assessment(
+            competency_percentage, total_for_each_comp
         )
-        plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
-        plt.xlim(0, 100)
-        plt.xlabel("Percentage")
-        plt.tight_layout()
 
-        image_stream = io.BytesIO()
-        plt.savefig(image_stream, format="png")
-        plt.close()
-
-        encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
         return encoded_image, compentency_with_description
+
+    if project_wise:
+        return None
+
     return None, None
 
 
 def generate_graph_for_participant_rating_type_for_post_assessent(
-    participant, assessment_id, assessment
+    participant, assessment_id, assessment, project_wise=False
 ):
     participant_response = ParticipantResponse.objects.filter(
         participant__id=participant.id, assessment__id=assessment_id
@@ -3601,76 +3594,15 @@ def generate_graph_for_participant_rating_type_for_post_assessent(
                 (pre_competency_object[comp] / total_for_each_comp[comp]) * 100
             )
 
-        comp_labels = list(competency_percentage.keys())
-        pre_percentage_values = list(pre_competency_percentage.values())
-        post_percentage_values = list(competency_percentage.values())
+        if project_wise:
+            return pre_competency_percentage, competency_percentage
 
-        fig = plt.figure(figsize=(15, len(comp_labels) * 0.6 + 5))
-        ax = fig.add_subplot(111)
-
-        width = 0.4  # Width of each bar
-        bar_positions = np.arange(len(comp_labels))
-
-        # Plot pre-assessment values
-        pre_bars = ax.barh(
-            bar_positions - width / 2,
-            pre_percentage_values,
-            height=width,
-            label="Pre-Assessment",
-            color="#eb0081",
+        encoded_image = generate_graph_for_pre_post_assessment(
+            pre_competency_percentage, competency_percentage, total_for_each_comp
         )
 
-        # Plot post-assessment values
-        post_bars = ax.barh(
-            bar_positions + width / 2,
-            post_percentage_values,
-            height=width,
-            label="Post-Assessment",
-            color="#374e9c",
-        )
-
-        ax.set_yticks(bar_positions)
-        ax.set_yticklabels(comp_labels)
-        ax.legend()
-        ax.set_yticklabels(
-            [f"{comp}\n" if len(comp) > 15 else comp for comp in comp_labels],
-            fontweight="bold",
-        )
-        plt.title("Your Awareness Level", fontweight="bold", fontsize=14)
-        plt.xlabel("Percentage")
-        plt.xlim(0, 100)
-        plt.tight_layout()
-
-        # Add numbers on top of the pre-assessment bars
-        for index, value in enumerate(pre_percentage_values):
-            new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-            ax.text(
-                value,
-                bar_positions[index] - width / 2,
-                f"{value}%",
-                ha="left",
-                va="center",
-                color="black",
-            )
-
-        # Add numbers on top of the post-assessment bars
-        for index, value in enumerate(post_percentage_values):
-            new_value = value / 100 * total_for_each_comp[comp_labels[index]]
-            ax.text(
-                value,
-                bar_positions[index] + width / 2,
-                f"{value}%",
-                ha="left",
-                va="center",
-                color="black",
-            )
-
-        image_stream = io.BytesIO()
-        plt.savefig(image_stream, format="png")
-        plt.close()
-
-        encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
         return encoded_image, compentency_with_description
+
     return None, None
 
 
@@ -3712,7 +3644,9 @@ class PrePostReportDownloadForParticipant(APIView):
                         encoded_image,
                         compentency_with_description,
                     ) = generate_graph_for_participant_rating_type(
-                        participant, assessment_id, assessment
+                        participant,
+                        assessment_id,
+                        assessment,
                     )
                 elif assessment.assessment_timing == "post":
                     (
@@ -3736,9 +3670,9 @@ class PrePostReportDownloadForParticipant(APIView):
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
 
             response = HttpResponse(pdf, content_type="application/pdf")
-            response[
-                "Content-Disposition"
-            ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
+            response["Content-Disposition"] = (
+                f'attachment; filename={f"{participant.name} Report.pdf"}'
+            )
 
             return response
 
@@ -3819,9 +3753,9 @@ class PrePostReportDownloadForAllParticipant(APIView):
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
 
             response = HttpResponse(pdf, content_type="application/pdf")
-            response[
-                "Content-Disposition"
-            ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
+            response["Content-Disposition"] = (
+                f'attachment; filename={f"{participant.name} Report.pdf"}'
+            )
 
             return response
 
@@ -3879,9 +3813,9 @@ class PostReportDownloadForParticipant(APIView):
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
 
             response = HttpResponse(pdf, content_type="application/pdf")
-            response[
-                "Content-Disposition"
-            ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
+            response["Content-Disposition"] = (
+                f'attachment; filename={f"{participant.name} Report.pdf"}'
+            )
 
             return response
 
@@ -3948,9 +3882,9 @@ class PostReportDownloadForAllParticipant(APIView):
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
 
             response = HttpResponse(pdf, content_type="application/pdf")
-            response[
-                "Content-Disposition"
-            ] = f'attachment; filename={f"{participant.name} Report.pdf"}'
+            response["Content-Disposition"] = (
+                f'attachment; filename={f"{participant.name} Report.pdf"}'
+            )
 
             return response
 
@@ -4292,9 +4226,9 @@ class DownloadParticipantResponseStatusData(APIView):
                     data = {
                         "name": participant_observers.participant.name.title(),
                         "email": participant_observers.participant.email,
-                        "response_status": "Responded"
-                        if participant_responses
-                        else "Not Responded",
+                        "response_status": (
+                            "Responded" if participant_responses else "Not Responded"
+                        ),
                     }
 
                     response_data.append(data)
@@ -4318,12 +4252,16 @@ class DownloadParticipantResponseStatusData(APIView):
                     data = {
                         "name": participant_observers.participant.name.title(),
                         "email": participant_observers.participant.email,
-                        "pre_response_status": "Responded"
-                        if pre_participant_responses
-                        else "Not Responded",
-                        "post_response_status": "Responded"
-                        if post_participant_responses
-                        else "Not Responded",
+                        "pre_response_status": (
+                            "Responded"
+                            if pre_participant_responses
+                            else "Not Responded"
+                        ),
+                        "post_response_status": (
+                            "Responded"
+                            if post_participant_responses
+                            else "Not Responded"
+                        ),
                     }
 
                     response_data.append(data)
@@ -4380,9 +4318,9 @@ class GetAllAssessments(APIView):
             assessment_data = {
                 "id": assessment.id,
                 "name": assessment.name,
-                "organisation": assessment.organisation.name
-                if assessment.organisation
-                else "",
+                "organisation": (
+                    assessment.organisation.name if assessment.organisation else ""
+                ),
                 "assessment_type": assessment.assessment_type,
                 "assessment_timing": assessment.assessment_timing,
                 "assessment_start_date": assessment.assessment_start_date,
@@ -4436,7 +4374,6 @@ class GetAssessmentsOfHr(APIView):
                 "total_learners_count": assessment.participants_observers.count(),
                 "total_responses_count": total_responses_count,
                 "created_at": assessment.created_at,
-              
             }
             assessment_list.append(assessment_data)
 
@@ -4547,6 +4484,8 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
 
 
 class AssessmentInAssessmentLesson(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
@@ -4571,6 +4510,8 @@ class AssessmentInAssessmentLesson(APIView):
 
 
 class AllAssessmentInAssessmentLesson(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         try:
             assessments = Assessment.objects.all()
@@ -4609,3 +4550,220 @@ def send_mail_to_not_responded_participant(request, assessment_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Faild to send emails"}, status=400)
+
+
+def get_average_for_all_compentency(compentency_precentages):
+    average_percentage = {}
+    count_occurrences = {}
+    for compentency_precentage in compentency_precentages:
+        for competency_name, percentage in compentency_precentage.items():
+            average_percentage[competency_name] = (
+                average_percentage.get(competency_name, 0) + percentage
+            )
+
+            count_occurrences[competency_name] = (
+                count_occurrences.get(competency_name, 0) + 1
+            )
+
+    for competency_name, total_percentage in average_percentage.items():
+        average_percentage[competency_name] = round(total_percentage / count_occurrences[competency_name]) if count_occurrences[competency_name] != 0 else 0
+    return average_percentage
+
+
+def get_competency_with_description(average_percentage):
+    competency_with_description = []
+    for key, value in average_percentage.items():
+        competency = Competency.objects.filter(name=key).first()
+        competency_with_description.append(
+            {
+                "competency_name": competency.name,
+                "competency_description": competency.description,
+            }
+        )
+    return competency_with_description
+
+
+class GetProjectWiseReport(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, project_id, report_to_download):
+        try:
+
+            project = SchedularProject.objects.get(id=project_id)
+            batches = SchedularBatch.objects.filter(project__id=project.id)
+
+            pre_compentency_percentages = []
+            post_compentency_percentages = []
+
+            total_participant = 0
+            total_attended_both_assessments = 0
+            for batch in batches:
+                total_participant = total_participant + len(batch.learners.all())
+                assessments = Assessment.objects.filter(
+                    assessment_modal__lesson__course__batch=batch
+                )
+                attended_both_assessments = {}
+
+                for assessment in assessments:
+                    assessment_id = assessment.id
+                    for (
+                        participants_observer
+                    ) in assessment.participants_observers.all():
+                        participant = participants_observer.participant
+
+                        if assessment.questionnaire.questions_type == "single_correct":
+                            if assessment.assessment_timing == "pre":
+                                compentency_precentage = (
+                                    generate_graph_for_participant_single_correct(
+                                        participant, assessment_id, assessment, True
+                                    )
+                                )
+
+                                if compentency_precentage:
+                                    if participant.id not in attended_both_assessments:
+                                        attended_both_assessments[participant.id] = 1
+                                    else:
+                                        attended_both_assessments[participant.id] = (
+                                            attended_both_assessments[participant.id]
+                                            + 1
+                                        )
+                                    pre_compentency_percentages.append(
+                                        compentency_precentage
+                                    )
+                            elif assessment.assessment_timing == "post":
+                                (
+                                    pre_compentency_precentage,
+                                    post_compentency_precentage,
+                                ) = generate_graph_for_participant_single_correct_for_post_assessent(
+                                    participant, assessment_id, assessment, True
+                                )
+
+                                if post_compentency_precentage:
+                                    if participant.id not in attended_both_assessments:
+                                        attended_both_assessments[participant.id] = 1
+                                    else:
+                                        attended_both_assessments[participant.id] = (
+                                            attended_both_assessments[participant.id]
+                                            + 1
+                                        )
+                                    post_compentency_percentages.append(
+                                        post_compentency_precentage
+                                    )
+
+                        elif assessment.questionnaire.questions_type == "rating_type":
+                            if assessment.assessment_timing == "pre":
+
+                                compentency_precentage = (
+                                    generate_graph_for_participant_rating_type(
+                                        participant, assessment_id, assessment, True
+                                    )
+                                )
+
+                                if compentency_precentage:
+                                    if participant.id not in attended_both_assessments:
+                                        attended_both_assessments[participant.id] = 1
+                                    else:
+                                        attended_both_assessments[participant.id] = (
+                                            attended_both_assessments[participant.id]
+                                            + 1
+                                        )
+                                    pre_compentency_percentages.append(
+                                        compentency_precentage
+                                    )
+                            elif assessment.assessment_timing == "post":
+                                (
+                                    pre_compentency_precentage,
+                                    post_compentency_precentage,
+                                ) = generate_graph_for_participant_rating_type_for_post_assessent(
+                                    participant, assessment_id, assessment, True
+                                )
+
+                                if post_compentency_precentage:
+                                    if participant.id not in attended_both_assessments:
+                                        attended_both_assessments[participant.id] = 1
+                                    else:
+                                        attended_both_assessments[participant.id] = (
+                                            attended_both_assessments[participant.id]
+                                            + 1
+                                        )
+                                    post_compentency_percentages.append(
+                                        post_compentency_precentage
+                                    )
+           
+                participant_ids_with_value_two = [
+                    key for key, value in attended_both_assessments.items() if value > 1
+                ]
+                total_attended_both_assessments = total_attended_both_assessments + len(
+                    participant_ids_with_value_two
+                )
+
+            content = {
+                "org_name": project.organisation.name,
+                "project_name": project.name,
+                "total_participant": total_participant,
+                "attended_pre_participant": len(pre_compentency_percentages),
+                "attended_post_participant": len(post_compentency_percentages),
+                "attended_both_assessments": total_attended_both_assessments,
+            }
+
+            if report_to_download == "pre":
+
+                pre_average_percentage = get_average_for_all_compentency(
+                    pre_compentency_percentages
+                )
+
+                pre_encoded_image = generate_graph_for_pre_assessment(
+                    pre_average_percentage, None
+                )
+                content["image_base64"] = pre_encoded_image
+                content["competency_with_description"] = (
+                    get_competency_with_description(pre_average_percentage)
+                )
+
+            elif report_to_download == "post":
+
+                post_average_percentage = get_average_for_all_compentency(
+                    post_compentency_percentages
+                )
+                post_encoded_image = generate_graph_for_pre_assessment(
+                    post_average_percentage, None
+                )
+
+                content["image_base64"] = post_encoded_image
+                content["competency_with_description"] = (
+                    get_competency_with_description(post_average_percentage)
+                )
+            elif report_to_download == "both":
+
+                pre_average_percentage = get_average_for_all_compentency(
+                    pre_compentency_percentages
+                )
+
+                post_average_percentage = get_average_for_all_compentency(
+                    post_compentency_percentages
+                )
+                post_encoded_image = generate_graph_for_pre_post_assessment(
+                    pre_average_percentage, post_average_percentage, None
+                )
+
+                content["image_base64"] = post_encoded_image
+                content["competency_with_description"] = (
+                    get_competency_with_description(post_average_percentage)
+                )
+
+            email_message = render_to_string(
+                "assessment/project_wise_report.html",
+                content,
+            )
+
+            pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response["Content-Disposition"] = (
+                f'attachment; filename={f"{participant.name} Report.pdf"}'
+            )
+
+            return response
+
+        except Exception as e:
+            print(str(e))
