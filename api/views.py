@@ -3584,13 +3584,17 @@ def get_coach_field_values(request):
 def add_mulitple_coaches(request):
     # Get data from request
     coaches = request.data.get("coaches")
-
+    coaches_count_bulk_upload = 0
     # Check if coaches data is provided
     if not coaches or not isinstance(coaches, list):
         return Response(
             {"error": "Coaches data must be provided as a list."}, status=400
         )
-
+    total_coaches_in_excel = len(coaches)
+    for coach_data in coaches:
+        email = coach_data.get("email", "").strip()
+        if Coach.objects.filter(email=email).exists():
+            coaches_count_bulk_upload += 1
     try:
         for coach_data in coaches:
             with transaction.atomic():
@@ -3742,9 +3746,32 @@ def add_mulitple_coaches(request):
                 name = coach_user.first_name + " " + coach_user.last_name
                 add_contact_in_wati("coach", name, coach_user.phone)
 
-        return Response({"message": "Coaches added successfully."}, status=201)
+        return Response(
+            {
+                "message": f"{total_coaches_in_excel-coaches_count_bulk_upload} Coaches added successfully."
+            },
+            status=201,
+        )
     except IntegrityError as e:
-        print(e)
+        print(str(e))
+        if "Duplicate entry" in str(e):
+            coaches_message = (
+                f"{coaches_count_bulk_upload} coach"
+                if coaches_count_bulk_upload == 1
+                else f"{coaches_count_bulk_upload} coaches"
+            )
+            added_coaches_message = (
+                f"{total_coaches_in_excel-coaches_count_bulk_upload} coach"
+                if total_coaches_in_excel - coaches_count_bulk_upload == 1
+                else f"{total_coaches_in_excel-coaches_count_bulk_upload} coaches"
+            )
+            return Response(
+                {
+                    "message": f"{added_coaches_message} added successfully and {coaches_message} already exist."
+                },
+                status=201,
+            )
+
         return Response(
             {"error": "A coach user with this email already exists."}, status=400
         )

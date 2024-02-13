@@ -95,7 +95,11 @@ from courses.models import (
     Lesson,
 )
 from courses.models import Course, CourseEnrollment
-from courses.serializers import CourseSerializer
+from courses.serializers import (
+    CourseSerializer,
+    LessonSerializer,
+    CourseEnrollmentDepthOneSerializer,
+)
 from django.core.serializers import serialize
 from courses.views import create_or_get_learner
 from assessmentApi.models import (
@@ -1043,7 +1047,12 @@ def add_batch(request, project_id):
         with transaction.atomic():
             participants_data = request.data.get("participants", [])
             project = SchedularProject.objects.get(id=project_id)
-
+            learners_in_excel_sheet = len(participants_data)
+            learners_in_excel_which_already_exists = 0
+            for participant_data in participants_data:
+                email = participant_data.get("email", "").strip().lower()
+                if Learner.objects.filter(email=email).exists():
+                    learners_in_excel_which_already_exists += 1
             for participant_data in participants_data:
                 name = participant_data.get("name")
                 email = participant_data.get("email", "").strip().lower()
@@ -1149,9 +1158,21 @@ def add_batch(request, project_id):
                             )
                     except Exception:
                         pass
-
+            learner_message = (
+                f"{learners_in_excel_sheet-learners_in_excel_which_already_exists} learner"
+                if (learners_in_excel_sheet - learners_in_excel_which_already_exists)
+                == 1
+                else f"{learners_in_excel_sheet-learners_in_excel_which_already_exists} learners"
+            )
+            learner_msg = (
+                f"{learners_in_excel_which_already_exists} learner"
+                if (learners_in_excel_which_already_exists) == 1
+                else f"{learners_in_excel_which_already_exists} learners"
+            )
             return Response(
-                {"message": "Batch created successfully."},
+                {
+                    "message": f"{learner_message} uploaded successfully {learner_msg} already existing."
+                },
                 status=status.HTTP_201_CREATED,
             )
     except Exception as e:
@@ -3143,7 +3164,9 @@ def update_facilitator_profile(request, id):
 
                         coach.save()
 
-            serializer = FacilitatorSerializer(facilitator, data=request.data, partial=True)
+            serializer = FacilitatorSerializer(
+                facilitator, data=request.data, partial=True
+            )
 
             if serializer.is_valid():
                 serializer.save()
