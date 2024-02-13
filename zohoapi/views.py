@@ -141,7 +141,7 @@ purchase_orders_allowed = [
     "CTT/PO/23-24/0012",
     "CTT/PO/23-24/0011",
     "CTT/PO/23-24/0014",
-    "CTT/PO/23-24/0013"
+    "CTT/PO/23-24/0013",
 ]
 
 
@@ -224,7 +224,7 @@ def send_mail_templates(file_name, user_email, email_subject, content):
 
 
 def send_mail_templates_with_attachment(
-    file_name, user_email, email_subject, content, body_message,bcc_emails
+    file_name, user_email, email_subject, content, body_message, bcc_emails
 ):
     try:
         image_url = f"{content['invoice']['signature']}"
@@ -244,7 +244,7 @@ def send_mail_templates_with_attachment(
             body=body_message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=user_email,
-            bcc=bcc_emails
+            bcc=bcc_emails,
         )
         # Attach the PDF to the email
         email.attach("invoice.pdf", result.getvalue(), "application/pdf")
@@ -655,9 +655,9 @@ def get_purchase_order_data_pdf(request, purchaseorder_id):
         if response.status_code == 200:
             pdf_content = response.content
             response = HttpResponse(pdf_content, content_type="application/pdf")
-            response[
-                "Content-Disposition"
-            ] = f'attachment; filename="purchase_order.pdf"'
+            response["Content-Disposition"] = (
+                f'attachment; filename="purchase_order.pdf"'
+            )
             return response
         else:
             return Response(
@@ -670,19 +670,39 @@ def get_purchase_order_data_pdf(request, purchaseorder_id):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
+
 def get_tax(line_item, taxt_type):
-    tax_based_on_type = next((item for item in line_item.get('line_item_taxes', []) if taxt_type in item.get('tax_name', '')), None)
-    percentage = float(tax_based_on_type['tax_name'].split('(')[-1].split('%')[0]) if tax_based_on_type else 0
+    tax_based_on_type = next(
+        (
+            item
+            for item in line_item.get("line_item_taxes", [])
+            if taxt_type in item.get("tax_name", "")
+        ),
+        None,
+    )
+    percentage = (
+        float(tax_based_on_type["tax_name"].split("(")[-1].split("%")[0])
+        if tax_based_on_type
+        else 0
+    )
     return f"{percentage}%" if percentage else ""
+
 
 def get_line_items_for_template(line_items):
     res = [*line_items]
     for line_item in res:
-        line_item["quantity_mul_rate"] = round(line_item["quantity_input"] * line_item["rate"], 2)
-        line_item["quantity_mul_rate_include_tax"] = round(line_item["quantity_input"] * line_item["rate"] * (1 + line_item["tax_percentage"] / 100), 2)
-        line_item["cgst_tax"] = get_tax(line_item,'CGST')
-        line_item["sgst_tax"] = get_tax(line_item,'SGST')
-        line_item["igst_tax"] = get_tax(line_item,'IGST')
+        line_item["quantity_mul_rate"] = round(
+            line_item["quantity_input"] * line_item["rate"], 2
+        )
+        line_item["quantity_mul_rate_include_tax"] = round(
+            line_item["quantity_input"]
+            * line_item["rate"]
+            * (1 + line_item["tax_percentage"] / 100),
+            2,
+        )
+        line_item["cgst_tax"] = get_tax(line_item, "CGST")
+        line_item["sgst_tax"] = get_tax(line_item, "SGST")
+        line_item["igst_tax"] = get_tax(line_item, "IGST")
     return res
 
 
@@ -722,7 +742,7 @@ def add_invoice_data(request):
             f"Invoice raised by a Vendor - {invoice_data['vendor_name']} ",
             {"invoice": invoice_data},
             f"A new invoice: {invoice_data['invoice_number']} is raised by the vendor: {invoice_data['vendor_name']}",
-            [env("BCC_EMAIL")] 
+            [env("BCC_EMAIL")],
         )
         return Response({"message": "Invoice generated successfully"}, status=201)
     else:
@@ -764,7 +784,8 @@ def edit_invoice(request, invoice_id):
             [env("FINANCE_EMAIL")],
             f"Invoice edited by a Vendor - {invoice_data['vendor_name']}",
             {"invoice": invoice_data},
-            f"Invoice: {invoice_data['invoice_number']} has been edited by the vendor: {invoice_data['vendor_name']}",[env("BCC_EMAIL")] ,
+            f"Invoice: {invoice_data['invoice_number']} has been edited by the vendor: {invoice_data['vendor_name']}",
+            [env("BCC_EMAIL")],
         )
         return Response({"message": "Invoice edited successfully."}, status=201)
     else:
@@ -796,7 +817,7 @@ def get_purchase_order_and_invoices(request, purchase_order_id):
             purchase_order = response.json()["purchaseorder"]
 
             invoices = InvoiceData.objects.filter(purchase_order_id=purchase_order_id)
-        
+
             invoice_serializer = InvoiceDataSerializer(invoices, many=True)
             return Response(
                 {"purchase_order": purchase_order, "invoices": invoice_serializer.data},
@@ -1103,9 +1124,9 @@ class DownloadInvoice(APIView):
             )
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
             response = HttpResponse(pdf, content_type="application/pdf")
-            response[
-                "Content-Disposition"
-            ] = f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+            response["Content-Disposition"] = (
+                f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+            )
             return response
 
         except Exception as e:
@@ -1235,55 +1256,74 @@ def get_all_vendors(request):
         )
 
 
+def fetch_purchase_orders(organization_id):
+    access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if not access_token_purchase_data:
+        raise Exception(
+            "Access token not found. Please generate an access token first."
+        )
+
+    all_purchase_orders = []
+    has_more_page = True
+    page = 1
+
+    while has_more_page:
+        api_url = (
+            f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}"
+        )
+        auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
+        response = requests.get(api_url, headers=auth_header)
+
+        if response.status_code == 200:
+            purchase_orders = response.json().get("purchaseorders", [])
+            purchase_orders = filter_purchase_order_data(purchase_orders)
+            all_purchase_orders.extend(purchase_orders)
+
+            page_context = response.json().get("page_context", {})
+            has_more_page = page_context.get("has_more_page", False)
+            page += 1
+        else:
+            raise Exception("Failed to fetch purchase orders")
+
+    return all_purchase_orders
+
+
+def fetch_bills(organization_id):
+    access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if not access_token_purchase_data:
+        raise Exception(
+            "Access token not found. Please generate an access token first."
+        )
+
+    all_bills = []
+    has_more_page = True
+    page = 1
+
+    while has_more_page:
+        api_url = f"{base_url}/bills/?organization_id={organization_id}&page={page}"
+        auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
+        response = requests.get(api_url, headers=auth_header)
+
+        if response.status_code == 200:
+            bills = response.json().get("bills", [])
+            all_bills.extend(bills)
+            page_context = response.json().get("page_context", {})
+            has_more_page = page_context.get("has_more_page", False)
+            page += 1
+        else:
+            raise Exception("Failed to fetch bills")
+
+    return all_bills
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_purchase_orders(request):
-    access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-    if access_token_purchase_data:
-
-        all_purchase_orders = []
-        has_more_page = True
-        page = 1
-
-        while has_more_page:
-            api_url = f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}"
-            auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
-            response = requests.get(api_url, headers=auth_header)
-
-            if response.status_code == 200:
-                purchase_orders = response.json().get("purchaseorders", [])
-                purchase_orders = filter_purchase_order_data(purchase_orders)
-                for purchase_order in purchase_orders:
-                    vendor_id = purchase_order.get("vendor_id")
-
-                    if vendor_id:
-                        vendor = Vendor.objects.filter(vendor_id=vendor_id).first()
-
-                        if vendor:
-                            purchase_order["vendor_name"] = vendor.name
-                        else:
-                            purchase_order["vendor_name"] = "Unknown Vendor"
-                    else:
-                        purchase_order["vendor_name"] = "No Vendor ID"
-
-                    all_purchase_orders.append(purchase_order)
-
-                page_context = response.json().get("page_context", {})
-                has_more_page = page_context.get("has_more_page", False)
-                page += 1
-            else:
-                return Response(
-                    {"error": "Failed to fetch purchase orders"},
-                    status=response.status_code,
-                )
-
-        # Return all purchase orders in a single response
+    try:
+        all_purchase_orders = fetch_purchase_orders(organization_id)
         return Response(all_purchase_orders, status=status.HTTP_200_OK)
-    else:
-        return Response(
-            {"error": "Access token not found. Please generate an access token first."},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])
@@ -1292,67 +1332,22 @@ def get_all_invoices(request):
     try:
         access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
         if access_token_purchase_data:
-
-            all_purchase_orders = []
-            has_more_page = True
-            page = 1
+            all_bills = fetch_bills(organization_id)
+            invoices = InvoiceData.objects.all()
+            invoices = filter_invoice_data(invoices)
+            invoice_serializer = InvoiceDataSerializer(invoices, many=True)
             all_invoices = []
-            while has_more_page:
-                api_url = f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}"
-                auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
-                response = requests.get(api_url, headers=auth_header)
-
-                if response.status_code == 200:
-                    purchase_orders = response.json().get("purchaseorders", [])
-                    purchase_orders = filter_purchase_order_data(purchase_orders)
-
-                    all_purchase_orders.extend(purchase_orders)
-
-                    page_context = response.json().get("page_context", {})
-                    has_more_page = page_context.get("has_more_page", False)
-                    page += 1
-                else:
-                    return Response(
-                        {"error": "Failed to fetch purchase orders"},
-                        status=response.status_code,
-                    )
-            for purchase_order in all_purchase_orders:
-
-                headers = {"Authorization": f"Bearer {access_token_purchase_data}"}
-                if purchase_order["purchaseorder_id"] == "all":
-                    invoices = InvoiceData.objects.filter(
-                        vendor_id=purchase_order["vendor_id"]
-                    )
-
-                    invoices = filter_invoice_data(invoices)
-
-                    url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&vendor_id={purchase_order['vendor_id']}"
-                    bills_response = requests.get(url, headers=headers)
-                else:
-                    invoices = InvoiceData.objects.filter(
-                        purchase_order_id=purchase_order["purchaseorder_id"]
-                    )
-                    invoices = filter_invoice_data(invoices)
-                    url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&purchaseorder_id={purchase_order['purchaseorder_id']}"
-                    bills_response = requests.get(
-                        url,
-                        headers=headers,
-                    )
-                if bills_response.json()["message"] == "success":
-                    invoice_serializer = InvoiceDataSerializer(invoices, many=True)
-                    bills = bills_response.json()["bills"]
-
-                    for invoice in invoice_serializer.data:
-                        matching_bill = next(
-                            (
-                                bill
-                                for bill in bills
-                                if bill.get(env("INVOICE_FIELD_NAME"))
-                                == invoice["invoice_number"]
-                            ),
-                            None,
-                        )
-                        all_invoices.append({**invoice, "bill": matching_bill})
+            for invoice in invoice_serializer.data:
+                matching_bill = next(
+                    (
+                        bill
+                        for bill in all_bills
+                        if bill.get(env("INVOICE_FIELD_NAME"))
+                        == invoice["invoice_number"]
+                    ),
+                    None,
+                )
+                all_invoices.append({**invoice, "bill": matching_bill})
 
             return Response(all_invoices, status=status.HTTP_200_OK)
         else:
@@ -1363,4 +1358,4 @@ def get_all_invoices(request):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
     except Exception as e:
-        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
