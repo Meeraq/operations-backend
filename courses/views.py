@@ -97,7 +97,7 @@ from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 from io import BytesIO
-from schedularApi.tasks import get_file_content,get_file_extension
+from schedularApi.tasks import get_file_content,get_file_extension,get_live_session_name
 from django.core.mail import EmailMessage
 from django.conf import settings
 
@@ -205,22 +205,6 @@ def get_feedback_lesson_name(lesson_name):
     underscored_string = "_".join(lowercased_string.split())
     return underscored_string
 
-
-def get_live_session_name(session_type):
-
-    session_name = None
-    if session_type == "live_session":
-        session_name = "Live Session"
-    elif session_type == "check_in_session":
-        session_name = "Check In Session"
-    elif session_type == "in_person_session":
-        session_name = "In Person Session"
-    elif session_type == "kickoff_session":
-        session_name = "Kickoff Session"
-    elif session_type == "virtual_session":
-        session_name = "Virtual Session"
-
-    return session_name
 
 
 def get_file_name_from_url(url):
