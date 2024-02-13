@@ -1495,6 +1495,7 @@ def check_if_selected_slot_can_be_booked(coach_id, start_time, end_time):
 def schedule_session_fixed(request):
     try:
         with transaction.atomic():
+            print(request.data.get("version"))
             booking_link_id = request.data.get("booking_link_id", "")
             booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{booking_link_id}"
             participant_email = request.data.get("participant_email", "")
@@ -4117,3 +4118,36 @@ def update_project_status(request):
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+
+
+
+def extract_data():
+    grouped_data = {}
+    lessons_completed = ThinkificLessonCompleted.objects.all()
+    for entry in lessons_completed:
+        completion_data = entry.completion_data
+        user = completion_data["payload"]["user"]
+        email_domain = user["email"].split("@")[-1]
+        if not email_domain:
+            continue
+        if email_domain not in grouped_data:
+            grouped_data[email_domain] = []
+        course_name = completion_data["payload"]["course"]["name"]
+        lesson_name = completion_data["payload"]["lesson"]["name"]
+        created_at = completion_data["created_at"]
+        created_at_formatted = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%d/%m/%Y %H:%M:%S")
+        grouped_data[email_domain].append({
+            "Email": user["email"],
+            "First Name": user["first_name"],
+            "Last Name": user["last_name"],
+            "Course Name": course_name,
+            "Lesson Name": lesson_name,
+            "Created At": created_at_formatted,
+        })
+    return grouped_data
+
+
+
+
