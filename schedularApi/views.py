@@ -715,7 +715,7 @@ def update_live_session(request, live_session_id):
                         None,
                         None,
                         update_live_session,
-                        None,
+                        update_live_session.meeting_link,
                     )
                 elif not existing_date_time.strftime(
                     "%d-%m-%Y %H:%M"
@@ -737,7 +737,7 @@ def update_live_session(request, live_session_id):
                         None,
                         None,
                         update_live_session,
-                        None,
+                        update_live_session.meeting_link,
                     )
             except Exception as e:
                 print(str(e))
@@ -2608,6 +2608,7 @@ def send_live_session_link(request):
                     "live_session_name": f"Live Session {live_session.order}",
                     "project_name": live_session.batch.project.name,
                     "description": live_session.description,
+                    "meeting_link" : live_session.meeting_link
                 },
                 [],
             )
@@ -2641,7 +2642,7 @@ def send_live_session_link_whatsapp(request):
                         },
                         {
                             "name": "description",
-                            "value": live_session.description,
+                            "value": live_session.description + f" Please join using this link: {live_session.meeting_link}"  if live_session.meeting_link else "",
                         },
                     ],
                     "template_name": "instant_whatsapp_live_session",
@@ -3417,7 +3418,6 @@ def get_live_sessions_by_status(request):
     res = []
     for live_session in queryset:
         session_name = get_live_session_name(live_session.session_type)
-
         res.append(
             {
                 "id": live_session.id,
@@ -3429,6 +3429,7 @@ def get_live_sessions_by_status(request):
                 "project_id": live_session.batch.project.id,
                 "date_time": live_session.date_time,
                 "description": live_session.description,
+                "meeting_link": live_session.meeting_link,
                 "attendees": len(live_session.attendees),
                 "total_learners": live_session.batch.learners.count(),
             }
