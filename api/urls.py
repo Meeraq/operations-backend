@@ -141,6 +141,10 @@ urlpatterns = [
         views.get_all_sessions_of_user,
     ),
     path(
+        "pmo/sessions/all/<str:user_type>/<int:user_id>/",
+        views.get_all_sessions_of_user_for_pmo,
+    ),
+    path(
         "sessions/upcoming/<str:user_type>/<int:user_id>/",
         views.get_upcoming_sessions_of_user,
     ),
