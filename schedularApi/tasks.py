@@ -19,7 +19,7 @@ from django.utils import timezone
 from api.views import (
     send_mail_templates,
     refresh_microsoft_access_token,
-    generateManagementToken
+    generateManagementToken,
 )
 from schedularApi.serializers import AvailabilitySerializer
 from datetime import timedelta, time, datetime
@@ -29,14 +29,18 @@ import pytz
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
 from courses.models import Course, Lesson, FeedbackLesson, FeedbackLessonResponse, Nudge
-from courses.views import get_file_extension
 from django.db.models import Q
 from assessmentApi.models import Assessment, ParticipantResponse
 import environ
 from time import sleep
 import requests
-from zohoapi.models import Vendor,PoReminder
-from zohoapi.views import get_access_token, base_url, organization_id,filter_purchase_order_data
+from zohoapi.models import Vendor, PoReminder
+from zohoapi.views import (
+    get_access_token,
+    base_url,
+    organization_id,
+    filter_purchase_order_data,
+)
 
 env = environ.Env()
 environ.Env.read_env()
@@ -44,6 +48,21 @@ environ.Env.read_env()
 
 def timestamp_to_datetime(timestamp):
     return datetime.utcfromtimestamp(int(timestamp) / 1000.0)
+
+
+def get_live_session_name(session_type):
+    session_name = None
+    if session_type == "live_session":
+        session_name = "Live Session"
+    elif session_type == "check_in_session":
+        session_name = "Check In Session"
+    elif session_type == "in_person_session":
+        session_name = "In Person Session"
+    elif session_type == "kickoff_session":
+        session_name = "Kickoff Session"
+    elif session_type == "virtual_session":
+        session_name = "Virtual Session"
+    return session_name
 
 
 def generate_slots(start, end, duration):
@@ -744,7 +763,7 @@ def send_whatsapp_reminder_1_day_before_live_session():
                                 },
                                 {
                                     "name": "live_session_name",
-                                    "value": f"Live Session {session.live_session_number}",
+                                    "value": f"{get_live_session_name(session.session_type)} {session.live_session_number}",
                                 },
                                 {
                                     "name": "project_name",
@@ -797,7 +816,7 @@ def send_whatsapp_reminder_same_day_morning():
                                 },
                                 {
                                     "name": "description",
-                                    "value": session.description,
+                                    "value": session.description if session.description else "" + f"Please join using this link: {session.meeting_link}"  if session.meeting_link else "",
                                 },
                                 {
                                     "name": "time",
@@ -834,11 +853,11 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
                             },
                             {
                                 "name": "live_session_name",
-                                "value": f"Live Session {live_session.live_session_number}",
+                                "value": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
                             },
                             {
                                 "name": "description",
-                                "value": live_session.description,
+                                "value": live_session.description if live_session.description else "" + f"Please join using this link: {live_session.meeting_link}"  if live_session.meeting_link else "",
                             },
                         ],
                         "template_name": "reminder_coachee_live_session_30min_before",
@@ -1504,24 +1523,40 @@ def get_file_content(file_url):
     return response.content
 
 
+def get_file_extension(url):
+    # Split the URL by '.' to get an array of parts
+    url_parts = url.split(".")
+    # Get the last part of the array, which should be the full file name with extension
+    full_file_name = url_parts[-1]
+    # Extract the file extension
+    file_extension = full_file_name.split("?")[0]
+    return file_extension
+
+
 @shared_task
 def send_nudge(nudge_id):
     nudge = Nudge.objects.get(id=nudge_id)
     if (
-         nudge.course.batch.project.nudges
+        nudge.course.batch.project.nudges
         and nudge.course.batch.project.status == "ongoing"
     ):
         subject = f"New Nudge: {nudge.name}"
         if nudge.is_sent:
             return
         message = nudge.content
+        email_message = render_to_string(
+            "nudge/nudge_wrapper.html", {"message": mark_safe(message)}
+        )
         if nudge.file:
             attachment_path = nudge.file.url
             file_content = get_file_content(nudge.file.url)
 
         for learner in nudge.course.batch.learners.all():
             email = EmailMessage(
-                subject, message, settings.DEFAULT_FROM_EMAIL, [learner.email]
+                subject,
+                email_message,
+                settings.DEFAULT_FROM_EMAIL,
+                [learner.email],
             )
             if nudge.file:
                 extension = get_file_extension(nudge.file.url)
@@ -1615,6 +1650,7 @@ def send_assessment_invitation_mail_on_click(data):
     except Exception as e:
         print(str(e))
 
+
 # returns start and end time of today in format - YYYY-MM-DDTHH:mm:ss.sssZ
 def get_current_date_start_and_end_time_in_string():
     now = timezone.now()
@@ -1623,17 +1659,16 @@ def get_current_date_start_and_end_time_in_string():
     start_datetime = datetime.combine(current_date, datetime.min.time())
     end_datetime = datetime.combine(current_date, datetime.max.time())
 
-    start_time = start_datetime.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-    end_time = end_datetime.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    start_time = start_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    end_time = end_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
     return start_time, end_time
 
-def get_todays_100ms_sessions_of_room_id(management_token,room_id,start,end):
+
+def get_todays_100ms_sessions_of_room_id(management_token, room_id, start, end):
     try:
-        headers = {
-            'Authorization': f'Bearer {management_token}'
-        }
-        url = f'https://api.100ms.live/v2/sessions?room_id={room_id}&after={start}&before={end}&limit=100'
+        headers = {"Authorization": f"Bearer {management_token}"}
+        url = f"https://api.100ms.live/v2/sessions?room_id={room_id}&after={start}&before={end}&limit=100"
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             sessions = response.json()
@@ -1649,12 +1684,13 @@ def get_todays_100ms_sessions_of_room_id(management_token,room_id,start,end):
 # convert YYYY-MM-DDTHH:mm:ss.sssZ to timestamp in milliseconds
 def convert_timestr_to_timestamp(timestamp_str):
     try:
-        timestamp_datetime = datetime.strptime(timestamp_str, '%Y-%m-%dT%H:%M:%S.%fZ')
+        timestamp_datetime = datetime.strptime(timestamp_str, "%Y-%m-%dT%H:%M:%S.%fZ")
         timestamp_unix = int(timestamp_datetime.timestamp() * 1000)
         return timestamp_unix
     except ValueError:
         # Handle invalid timestamp format
         return None
+
 
 @shared_task
 def update_schedular_session_status():
@@ -1664,43 +1700,61 @@ def update_schedular_session_status():
         availibility__start_time__lte=end_timestamp,
         availibility__end_time__gte=start_timestamp,
     )
-    memoized_100ms_sessions_today = {} # <room_id> : [] sessions array
-    for schedular_session in today_sessions: 
+    memoized_100ms_sessions_today = {}  # <room_id> : [] sessions array
+    for schedular_session in today_sessions:
         is_coach_joined = False
         is_coachee_joined = False
         is_both_joined_at_same_time = False
-        schedular_session_start_timestamp =  int(schedular_session.availibility.start_time)
+        schedular_session_start_timestamp = int(
+            schedular_session.availibility.start_time
+        )
         schedular_session_end_timestamp = int(schedular_session.availibility.end_time)
         coach_room_id = schedular_session.availibility.coach.room_id
         if coach_room_id in memoized_100ms_sessions_today:
             todays_sessions_in_100ms = memoized_100ms_sessions_today[coach_room_id]
         else:
             todays_sessions_in_100ms = []
-            try: 
+            try:
                 management_token = generateManagementToken()
-                todays_sessions_in_100ms = get_todays_100ms_sessions_of_room_id(management_token, coach_room_id, start_time, end_time)
+                todays_sessions_in_100ms = get_todays_100ms_sessions_of_room_id(
+                    management_token, coach_room_id, start_time, end_time
+                )
             except Exception as e:
                 print("failed to get coach room 100ms sessions")
         sessions_in_100ms_at_scheduled_time_of_schedular_session = []
-        
+
         for session in todays_sessions_in_100ms:
-            created_at_in_timestamp = convert_timestr_to_timestamp(session["created_at"])
-            five_minutes_prior_schedular_start_time =  schedular_session_start_timestamp - 5 * 60 * 1000
-            if created_at_in_timestamp >= five_minutes_prior_schedular_start_time or created_at_in_timestamp < schedular_session_end_timestamp:
+            created_at_in_timestamp = convert_timestr_to_timestamp(
+                session["created_at"]
+            )
+            five_minutes_prior_schedular_start_time = (
+                schedular_session_start_timestamp - 5 * 60 * 1000
+            )
+            if (
+                created_at_in_timestamp >= five_minutes_prior_schedular_start_time
+                or created_at_in_timestamp < schedular_session_end_timestamp
+            ):
                 sessions_in_100ms_at_scheduled_time_of_schedular_session.append(session)
-                
+
         for session in sessions_in_100ms_at_scheduled_time_of_schedular_session:
             if len(session["peers"].keys()) == 2:
                 is_both_joined_at_same_time = True
                 break
             for key, peer in session["peers"].items():
-                if (schedular_session.availibility.coach.first_name + " " + schedular_session.availibility.coach.last_name).lower().strip() == peer['name'].lower().strip():
+                if (
+                    schedular_session.availibility.coach.first_name
+                    + " "
+                    + schedular_session.availibility.coach.last_name
+                ).lower().strip() == peer["name"].lower().strip():
                     is_coach_joined = True
-                if schedular_session.learner.name.lower().strip() == peer['name'].lower().strip():
+                if (
+                    schedular_session.learner.name.lower().strip()
+                    == peer["name"].lower().strip()
+                ):
                     is_coachee_joined = True
         if is_both_joined_at_same_time:
             schedular_session.auto_generated_status = "completed"
-        # pending because both joined at the same time 
+        # pending because both joined at the same time
         elif is_coach_joined and is_coachee_joined:
             schedular_session.auto_generated_status = "pending"
         elif is_coachee_joined:
@@ -1709,7 +1763,8 @@ def update_schedular_session_status():
             schedular_session.auto_generated_status = "coachee_no_show"
         schedular_session.save()
 
-# Notify vendor by email when the po is in open status, 1st of every month (pending PO) 
+
+# Notify vendor by email when the po is in open status, 1st of every month (pending PO)
 @shared_task
 def generate_invoice_reminder_on_first_of_month():
     vendors = Vendor.objects.all()
@@ -1724,17 +1779,42 @@ def generate_invoice_reminder_on_first_of_month():
                 purchase_orders = response.json().get("purchaseorders", [])
                 purchase_orders = filter_purchase_order_data(purchase_orders)
                 for purchase_order in purchase_orders:
-                    if purchase_order['status'] in ["partially_billed", "open"]:
-                        open_purchase_order_count +=1
+                    if purchase_order["status"] in ["partially_billed", "open"]:
+                        open_purchase_order_count += 1
                 if open_purchase_order_count > 0:
-                    send_mail_templates("vendors/monthly_generate_invoice_reminder.html",[vendor.email if env("ENVIRONMENT") == "PRODUCTION" else "pankaj@meeraq.com"],"Meeraq - Action pending: Raise your invoice",{"name": vendor.name, "open_purchase_order_count":open_purchase_order_count},[])
-                    print('sending mail to', vendor.name, open_purchase_order_count, "open po exist")
+                    send_mail_templates(
+                        "vendors/monthly_generate_invoice_reminder.html",
+                        [
+                            (
+                                vendor.email
+                                if env("ENVIRONMENT") == "PRODUCTION"
+                                else "pankaj@meeraq.com"
+                            )
+                        ],
+                        "Meeraq - Action pending: Raise your invoice",
+                        {
+                            "name": vendor.name,
+                            "open_purchase_order_count": open_purchase_order_count,
+                        },
+                        [],
+                    )
+                    print(
+                        "sending mail to",
+                        vendor.name,
+                        open_purchase_order_count,
+                        "open po exist",
+                    )
                     sleep(5)
             else:
                 print({"error": "Failed to fetch purchase orders"})
         else:
-            print({"error": "Access token not found. Please generate an access token first."})
-            
+            print(
+                {
+                    "error": "Access token not found. Please generate an access token first."
+                }
+            )
+
+
 # Reminder to vendor for new PO, Checks every day if any po without reminder exist and then send the reminder
 @shared_task
 def generate_invoice_reminder_once_when_po_is_created():
@@ -1749,14 +1829,39 @@ def generate_invoice_reminder_once_when_po_is_created():
                 purchase_orders = response.json().get("purchaseorders", [])
                 purchase_orders = filter_purchase_order_data(purchase_orders)
                 for purchase_order in purchase_orders:
-                    if purchase_order['status'] in ["partially_billed", "open"] and not PoReminder.objects.filter(purchase_order_no=purchase_order["purchaseorder_number"]).exists():
-                        send_mail_templates("vendors/new_po_reminder.html",[vendor.email if env("ENVIRONMENT") == "PRODUCTION" else "pankaj@meeraq.com"],"Meeraq - New Purchase Order",{"name": vendor.name},[])
-                        PoReminder.objects.create(vendor=vendor, purchase_order_no=purchase_order["purchaseorder_number"], purchase_order_id=purchase_order["purchaseorder_id"])
+                    if (
+                        purchase_order["status"] in ["partially_billed", "open"]
+                        and not PoReminder.objects.filter(
+                            purchase_order_no=purchase_order["purchaseorder_number"]
+                        ).exists()
+                    ):
+                        send_mail_templates(
+                            "vendors/new_po_reminder.html",
+                            [
+                                (
+                                    vendor.email
+                                    if env("ENVIRONMENT") == "PRODUCTION"
+                                    else "pankaj@meeraq.com"
+                                )
+                            ],
+                            "Meeraq - New Purchase Order",
+                            {"name": vendor.name},
+                            [],
+                        )
+                        PoReminder.objects.create(
+                            vendor=vendor,
+                            purchase_order_no=purchase_order["purchaseorder_number"],
+                            purchase_order_id=purchase_order["purchaseorder_id"],
+                        )
                         sleep(5)
             else:
                 print({"error": "Failed to fetch purchase orders"})
         else:
-            print({"error": "Access token not found. Please generate an access token first."})
+            print(
+                {
+                    "error": "Access token not found. Please generate an access token first."
+                }
+            )
 
 
 # getting vendor details
@@ -1777,7 +1882,7 @@ def get_vendor(vendor_id):
         return None
     else:
         return None
-    
+
 
 @shared_task
 def reminder_to_pmo_bank_details_unavailable():
@@ -1789,9 +1894,12 @@ def reminder_to_pmo_bank_details_unavailable():
             vendors_with_no_bank_details.append(vendor_details["contact_name"])
     if len(vendors_with_no_bank_details) > 0:
         send_mail_templates(
-						"vendors/reminder_to_pmo_bank_details_unavailable.html",
-						[env("FINANCE_EMAIL")],
-						"Meeraq: Action Needed - Add bank details of vendors",
-						{"count": len(vendors_with_no_bank_details), "vendors_with_no_bank_details": vendors_with_no_bank_details},
-						[env("BCC_EMAIL")],  # no bcc
-				)
+            "vendors/reminder_to_pmo_bank_details_unavailable.html",
+            [env("FINANCE_EMAIL")],
+            "Meeraq: Action Needed - Add bank details of vendors",
+            {
+                "count": len(vendors_with_no_bank_details),
+                "vendors_with_no_bank_details": vendors_with_no_bank_details,
+            },
+            [env("BCC_EMAIL")],  # no bcc
+        )
