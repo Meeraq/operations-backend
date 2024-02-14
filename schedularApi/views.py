@@ -95,7 +95,7 @@ from courses.models import (
     Lesson,
 )
 from courses.models import Course, CourseEnrollment
-from courses.serializers import CourseSerializer
+from courses.serializers import CourseSerializer,CourseEnrollmentDepthOneSerializer,LessonSerializer
 from django.core.serializers import serialize
 from courses.views import create_or_get_learner
 from assessmentApi.models import (
@@ -598,7 +598,22 @@ def get_batch_calendar(request, batch_id):
                 participant["is_certificate_allowed"] = (
                     course_enrollment.is_certificate_allowed
                 )
-
+                course_enrollment_serializer = CourseEnrollmentDepthOneSerializer(
+                    course_enrollment
+                )
+                participant["course_enrollment"] = course_enrollment_serializer.data
+                completed_lessons_length = len(participant.get('course_enrollment', {}).get('completed_lessons', []))
+                lessons = Lesson.objects.filter(
+                    Q(course=course_enrollment.course),
+                    Q(status="public"),
+                    ~Q(lesson_type="feedback"),
+                )
+                lessons_serializer = LessonSerializer(lessons, many=True)
+                completed_lesson_count = completed_lessons_length
+                total_lesson_count = len(lessons_serializer.data)
+                participant["progress"] = 0
+                if total_lesson_count > 0:
+                    participant["progress"] = int(round((completed_lesson_count / total_lesson_count) * 100))
         except Exception as e:
             print(str(e))
             course = None
@@ -4081,6 +4096,19 @@ def coach_inside_skill_training_or_not(request, batch_id):
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def facilitator_inside_that_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+        facilitators = batch.facilitator.all()
+        facilitator_serializer= FacilitatorSerializer(facilitators, many=True)
+        return Response({"facilitators_in_batch": facilitator_serializer.data})
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
 
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
@@ -4098,6 +4126,25 @@ def delete_coach_from_that_batch(request):
         return Response({"error": "Coach not found"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+    
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_facilitator_from_that_batch(request):
+    print("Data",request.data)
+    try:
+        batch_id = request.data.get("batch_id")
+        facilitator_id = request.data.get("facilitator_id")
+        batch = get_object_or_404(SchedularBatch, pk=batch_id)
+        facilitator = get_object_or_404(Facilitator, pk=facilitator_id)
+        batch.facilitator.remove(facilitator)
+        return Response({"message": f"Facilitator successfully removed from this batch."})
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
+    except Facilitator.DoesNotExist:
+        return Response({"error": "Facilitator not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
 
 
 @api_view(["PUT"])
