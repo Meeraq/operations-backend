@@ -702,7 +702,7 @@ def update_live_session(request, live_session_id):
                 )
                 description = (
                     f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
-                    + update_live_session.description
+                    + update_live_session.description if update_live_session.description else ""
                 )
                 if not existing_date_time:
                     create_outlook_calendar_invite(
@@ -2607,7 +2607,7 @@ def send_live_session_link(request):
                     "participant_name": learner.name,
                     "live_session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
                     "project_name": live_session.batch.project.name,
-                    "description": live_session.description,
+                    "description": live_session.description if live_session.description else "",
                     "meeting_link": live_session.meeting_link,
                 },
                 [],
@@ -2643,7 +2643,7 @@ def send_live_session_link_whatsapp(request):
                         {
                             "name": "description",
                             "value": (
-                                live_session.description
+                                live_session.description if live_session.description else ""
                                 + f" Please join using this link: {live_session.meeting_link}"
                                 if live_session.meeting_link
                                 else ""
