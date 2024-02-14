@@ -4274,6 +4274,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
             coach_email = engagement[0].coach.email
             coach  = CoachSerializer(engagement[0].coach).data
         else:
+            coach = None
             coach_name = None
             coach_email = None
         learner=LearnerSerializer(session_request.learner).data
