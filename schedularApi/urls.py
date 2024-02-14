@@ -204,8 +204,16 @@ urlpatterns = [
         views.coach_inside_skill_training_or_not,
     ),
     path(
+        "facilitator-inside-that-batch/<str:batch_id>/",
+        views.facilitator_inside_that_batch,
+    ),
+    path(
         "delete-coach-from-that-batch/",
         views.delete_coach_from_that_batch,
+    ),
+    path(
+        "delete-facilitator-from-that-batch/",
+        views.delete_facilitator_from_that_batch,
     ),
     path(
         "update-project-status/",
