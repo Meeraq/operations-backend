@@ -97,10 +97,13 @@ from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 from io import BytesIO
-from schedularApi.tasks import get_file_content,get_file_extension,get_live_session_name
+from schedularApi.tasks import (
+    get_file_content,
+    get_file_extension,
+    get_live_session_name,
+)
 from django.core.mail import EmailMessage
 from django.conf import settings
-
 
 
 env = environ.Env()
@@ -113,6 +116,76 @@ from schedularApi.models import CoachingSession, SchedularSessions
 wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
+default_feedback_questions = [
+        {
+            "text": "How would you rate today’s session on overall effectiveness?",
+            "options": [],
+            "type": "rating_1_to_5"
+        },
+        {
+            "text": "How would you rate today’s session on the training content?",
+            "options": [],
+            "type": "rating_1_to_5"
+        },
+        {
+            "text": "How would you rate today’s session on the effectiveness of the trainer?",
+            "options": [],
+            "type": "rating_1_to_5"
+        },
+        {
+            "text": "How would you rate today’s session on the knowledge of the trainer?",
+            "options": [],
+            "type": "rating_1_to_5"
+        },
+        {
+            "text": "Please share any other thoughts you may have about the program.",
+            "options": [],
+            "type": "descriptive_answer"
+        }
+    ]
+
+
+nps_default_feed_questions = [
+        {
+            "text": "How likely are you to recommend this program to a colleague?",
+            "options": [],
+            "type": "rating_0_to_10"
+        },
+        {
+            "text": "How would you rate your Facilitator?",
+            "options": [],
+            "type": "rating_1_to_5"
+        },
+        {
+            "text": "Which topics covered in the training did you find most valuable?",
+            "options": [],
+            "type": "descriptive_answer"
+        },
+        {
+            "text": "Kindly share 2 key take aways / actions from the program.",
+            "options": [],
+            "type": "descriptive_answer"
+        },
+        {
+            "text": "Kindly share suggestions on how we can enhance the program to add more value.",
+            "options": [],
+            "type": "descriptive_answer"
+        },
+        {
+            "text": "How would you rate your overall experience about the program?",
+            "options": [],
+            "type": "rating_1_to_5"
+        }
+    ]
+
+def add_question_to_feedback_lesson(feedback_lesson, questions):
+    for question_data in questions:
+        question_serializer = QuestionSerializer(data=question_data)
+        if question_serializer.is_valid():
+            question = question_serializer.save()
+            feedback_lesson.questions.add(question)
+    feedback_lesson.save()
 
 
 def create_learner(learner_name, learner_email, learner_phone=None):
@@ -206,7 +279,6 @@ def get_feedback_lesson_name(lesson_name):
     return underscored_string
 
 
-
 def get_file_name_from_url(url):
     # Split the URL by '/' to get an array of parts
     url_parts = url.split("/")
@@ -218,7 +290,6 @@ def get_file_name_from_url(url):
     file_name = full_file_name.split("?")[0]
 
     return file_name
-
 
 
 def download_file_response(file_url):
@@ -2379,6 +2450,14 @@ class AssignCourseTemplateToBatch(APIView):
                             learner=learner, course=new_course, enrollment_date=datetime
                         )
                 live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch_id)
+                training_class_sessions = LiveSession.objects.filter(
+                    session_type__in=["in_person_session", "virtual_session"]
+                )
+                max_order_of_training_class_sessions = (
+                    training_class_sessions.aggregate(Max("order"))[
+                        "order__max"
+                    ]
+                )
                 coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
                 max_order = (
                     Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
@@ -2415,8 +2494,14 @@ class AssignCourseTemplateToBatch(APIView):
                     )
                     unique_id = uuid.uuid4()
                     feedback_lesson = FeedbackLesson.objects.create(
-                        lesson=new_feedback_lesson, unique_id=unique_id
+                        lesson=new_feedback_lesson, unique_id=unique_id, live_session=live_session
                     )
+                    if live_session.session_type in ["in_person_session", "virtual_session"]:        
+                        if int(max_order_of_training_class_sessions) == int(live_session.order):
+                            add_question_to_feedback_lesson(feedback_lesson, nps_default_feed_questions)
+                        else:
+                            add_question_to_feedback_lesson(feedback_lesson, default_feedback_questions)
+
                 for coaching_session in coaching_sessions:
                     max_order = max_order + 1
                     session_name = None
@@ -3071,43 +3156,27 @@ class GetAssessmentsOfBatch(APIView):
 def get_all_feedbacks_download_report(request, feedback_id):
     try:
         feedback_lesson = FeedbackLesson.objects.get(id=feedback_id)
-
-        # Get all participants associated with the batch of the course related to the feedback lesson
-        participants = Learner.objects.filter(
-            schedularbatch__id=feedback_lesson.lesson.course.batch.id
-        )
-
-        # Create a list of dictionaries to store the data
         data = []
-
         # Populate the list of dictionaries with data from FeedbackLesson and FeedbackLessonResponse
-        for participant in participants:
-            participant_name = participant.name
-            participant_email = participant.email
-
-            # Check if the participant provided feedback
-            response = FeedbackLessonResponse.objects.filter(
-                feedback_lesson=feedback_lesson, learner=participant
-            ).first()
-
+        for response in FeedbackLessonResponse.objects.filter(
+                feedback_lesson=feedback_lesson):
+            participant_name = response.learner.name
+            participant_email = response.learner.email
             temp_data = {
                 "Participant": participant_name,
                 "Participant Email": participant_email,
             }
-
             if response:
                 for answer in response.answers.all():
                     question_text = answer.question.text
                     answer_value = (
                         answer.text_answer if answer.text_answer else answer.rating
                     )
-
                     temp_data[question_text] = answer_value
             else:
                 # If participant did not provide feedback, populate with empty values
                 for question in feedback_lesson.questions.all():
                     temp_data[question.text] = "-"
-
             data.append(temp_data)
 
         # Create a DataFrame from the list of dictionaries
@@ -3307,7 +3376,7 @@ def download_consolidated_project_report(request, project_id):
     return response
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 def get_nudges_by_project_id(request, project_id):
     # Retrieve nudges filtered by project_id
     nudges = Nudge.objects.filter(course__batch__project__id=project_id)
@@ -3315,30 +3384,31 @@ def get_nudges_by_project_id(request, project_id):
     return Response(serializer.data)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 def send_nudge_to_email(request, nudge_id):
     email = request.data.get("email")
     try:
-            nudge = Nudge.objects.get(id=nudge_id)
+        nudge = Nudge.objects.get(id=nudge_id)
     except Nudge.DoesNotExist:
-            return Response({'error': 'Nudge not found'}, status=404)
-            
+        return Response({"error": "Nudge not found"}, status=404)
+
     subject = f"New Nudge: {nudge.name}"
     message = nudge.content
     email_msg = EmailMessage(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
     if nudge.file:
-            attachment_path = nudge.file.url
-            file_content = get_file_content(nudge.file.url)
-            extension = get_file_extension(nudge.file.url)
-            file_name = f"Attachment.{extension}"
-            email_msg.attach(file_name, file_content, f"application/{extension}")				
+        attachment_path = nudge.file.url
+        file_content = get_file_content(nudge.file.url)
+        extension = get_file_extension(nudge.file.url)
+        file_name = f"Attachment.{extension}"
+        email_msg.attach(file_name, file_content, f"application/{extension}")
     email_msg.content_subtype = "html"
-    email_msg.send()				
-    return Response({'message': 'Nudge sent successfully'})
+    email_msg.send()
+    return Response({"message": "Nudge sent successfully"})
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 def duplicate_nudge(request, nudge_id, course_id):
-    order = request.data.get('order')
+    order = request.data.get("order")
     try:
         original_nudge = Nudge.objects.get(id=nudge_id)
         course = Course.objects.get(id=course_id)  # Fetch the course instance
@@ -3348,14 +3418,13 @@ def duplicate_nudge(request, nudge_id, course_id):
             file=original_nudge.file,
             order=order,
             course=course,  # Use the fetched course instance
-            is_sent=False  # Assuming the duplicated nudge is not sent yet
+            is_sent=False,  # Assuming the duplicated nudge is not sent yet
         )
-        return Response({"message" : "Nudge duplicated successfully."})
+        return Response({"message": "Nudge duplicated successfully."})
     except Nudge.DoesNotExist:
-        return Response({'error': 'Nudge not found'}, status=404)
+        return Response({"error": "Nudge not found"}, status=404)
     except Course.DoesNotExist:
-        return Response({'error': 'Course not found'}, status=404)
-    
+        return Response({"error": "Course not found"}, status=404)
 
 
 @api_view(["GET"])

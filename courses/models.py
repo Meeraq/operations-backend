@@ -97,6 +97,9 @@ class QuizLesson(models.Model):
 
 class FeedbackLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    live_session = models.ForeignKey(
+        LiveSession, on_delete=models.CASCADE, null=True, blank=True, default=None
+    )
     questions = models.ManyToManyField(Question)
     unique_id = models.CharField(
         max_length=225,

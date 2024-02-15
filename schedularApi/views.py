@@ -101,7 +101,7 @@ from courses.serializers import (
     CourseEnrollmentDepthOneSerializer,
 )
 from django.core.serializers import serialize
-from courses.views import create_or_get_learner
+from courses.views import create_or_get_learner,add_question_to_feedback_lesson,nps_default_feed_questions
 from assessmentApi.models import (
     Assessment,
     ParticipantUniqueId,
@@ -3698,8 +3698,10 @@ def add_new_session_in_project_structure(request):
                         )
                         unique_id = uuid.uuid4()
                         feedback_lesson = FeedbackLesson.objects.create(
-                            lesson=new_feedback_lesson, unique_id=unique_id
+                            lesson=new_feedback_lesson, unique_id=unique_id, live_session=live_session
                         )
+                        if live_session.session_type in ["in_person_session", "virtual_session"]:        
+                            add_question_to_feedback_lesson(feedback_lesson, nps_default_feed_questions)
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     coaching_session_number = (
                         CoachingSession.objects.filter(
