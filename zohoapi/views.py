@@ -703,6 +703,15 @@ def get_line_items_for_template(line_items):
             * (1 + line_item["tax_percentage"] / 100),
             2,
         )
+        line_item["tax_amount"] = round(
+            (
+                line_item["quantity_input"]
+                * line_item["rate"]
+                * line_item["tax_percentage"]
+            )
+            / 100,
+            2,
+        )
         line_item["cgst_tax"] = get_tax(line_item, "CGST")
         line_item["sgst_tax"] = get_tax(line_item, "SGST")
         line_item["igst_tax"] = get_tax(line_item, "IGST")
