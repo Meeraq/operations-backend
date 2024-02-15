@@ -4779,37 +4779,43 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
 
     def get(self, request, project_id):
         try:
-          
-            schedular_project = SchedularProject.objects.get(id=project_id)
-            batches = SchedularBatch.objects.filter(project=schedular_project)
+            schedular_projects = []
             assessment_list = []
-            for batch in batches:
-                assessments = Assessment.objects.filter(
-                    assessment_modal__lesson__course__batch=batch
-                )
+            if project_id == "all":
+                schedular_projects = SchedularProject.objects.all()
+            else:
+                schedular_projects = SchedularProject.objects.filter(id=int(project_id))
+            for schedular_project in schedular_projects:
+                batches = SchedularBatch.objects.filter(project=schedular_project)
 
-                for assessment in assessments:
-                    total_responses_count = ParticipantResponse.objects.filter(
-                        assessment=assessment
-                    ).count()
-                    assessment_data = {
-                        "id": assessment.id,
-                        "name": assessment.name,
-                        "organisation": (
-                            assessment.organisation.name
-                            if assessment.organisation
-                            else ""
-                        ),
-                        "assessment_type": assessment.assessment_type,
-                        "assessment_timing": assessment.assessment_timing,
-                        "assessment_start_date": assessment.assessment_start_date,
-                        "assessment_end_date": assessment.assessment_end_date,
-                        "status": assessment.status,
-                        "total_learners_count": assessment.participants_observers.count(),
-                        "total_responses_count": total_responses_count,
-                        "created_at": assessment.created_at,
-                    }
-                    assessment_list.append(assessment_data)
+                for batch in batches:
+                    assessments = Assessment.objects.filter(
+                        assessment_modal__lesson__course__batch=batch
+                    )
+
+                    for assessment in assessments:
+                
+                        total_responses_count = ParticipantResponse.objects.filter(
+                            assessment=assessment
+                        ).count()
+                        assessment_data = {
+                            "id": assessment.id,
+                            "name": assessment.name,
+                            "organisation": (
+                                assessment.organisation.name
+                                if assessment.organisation
+                                else ""
+                            ),
+                            "assessment_type": assessment.assessment_type,
+                            "assessment_timing": assessment.assessment_timing,
+                            "assessment_start_date": assessment.assessment_start_date,
+                            "assessment_end_date": assessment.assessment_end_date,
+                            "status": assessment.status,
+                            "total_learners_count": assessment.participants_observers.count(),
+                            "total_responses_count": total_responses_count,
+                            "created_at": assessment.created_at,
+                        }
+                        assessment_list.append(assessment_data)
 
             return Response(assessment_list)
         except Exception as e:

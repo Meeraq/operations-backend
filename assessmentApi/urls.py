@@ -304,7 +304,7 @@ urlpatterns = [
         GetProjectWiseReport.as_view(),
     ),
     path(
-        "get-all-assessments-of-schedular-project/<int:project_id>/",
+        "get-all-assessments-of-schedular-project/<str:project_id>/",
         GetAllAssessmentsOfSchedularProjects.as_view(),
     ),
 ]

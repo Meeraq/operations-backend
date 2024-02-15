@@ -351,7 +351,7 @@ urlpatterns = [
         views.get_nps_project_wise,
     ),
     path(
-        "get-all-nudges-of-schedular-project/<int:project_id>/",
+        "get-all-nudges-of-schedular-project/<str:project_id>/",
         GetAllNudgesOfSchedularProjects.as_view(),
     ),
 ]

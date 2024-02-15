@@ -3414,9 +3414,13 @@ class GetAllNudgesOfSchedularProjects(APIView):
 
     def get(self, request, project_id):
         try:
-
+            
             data = []
-            courses = Course.objects.filter(batch__project__id=project_id)
+            courses = None
+            if project_id == "all":
+                courses = Course.objects.all()
+            else:
+                courses = Course.objects.filter(batch__project__id=int(project_id))
             for course in courses:
 
                 nudges = Nudge.objects.filter(course__id=course.id).order_by("order")
