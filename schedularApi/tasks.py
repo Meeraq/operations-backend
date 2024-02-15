@@ -28,7 +28,14 @@ import pytz
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
-from courses.models import Course, Lesson, FeedbackLesson, FeedbackLessonResponse, Nudge
+from courses.models import (
+    Course,
+    Lesson,
+    FeedbackLesson,
+    FeedbackLessonResponse,
+    Nudge,
+    Assessment as AssessmentLesson,
+)
 from django.db.models import Q
 from assessmentApi.models import Assessment, ParticipantResponse
 import environ
@@ -698,6 +705,15 @@ def update_assessment_status():
         # Update assessment status based on conditions
         if current_date == start_date:
             assessment.status = "ongoing"
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+            if assessment_lesson:
+                assessment_lesson.lesson.status = "public"
+
+                assessment_lesson.lesson.save()
+                assessment_lesson.save()
+
         elif current_date > end_date:
             assessment.status = "completed"
         # Save the updated assessment
@@ -816,7 +832,16 @@ def send_whatsapp_reminder_same_day_morning():
                                 },
                                 {
                                     "name": "description",
-                                    "value": session.description if session.description else "" + f"Please join using this link: {session.meeting_link}"  if session.meeting_link else "",
+                                    "value": (
+                                        session.description
+                                        if session.description
+                                        else (
+                                            ""
+                                            + f"Please join using this link: {session.meeting_link}"
+                                            if session.meeting_link
+                                            else ""
+                                        )
+                                    ),
                                 },
                                 {
                                     "name": "time",
@@ -857,7 +882,16 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
                             },
                             {
                                 "name": "description",
-                                "value": live_session.description if live_session.description else "" + f"Please join using this link: {live_session.meeting_link}"  if live_session.meeting_link else "",
+                                "value": (
+                                    live_session.description
+                                    if live_session.description
+                                    else (
+                                        ""
+                                        + f"Please join using this link: {live_session.meeting_link}"
+                                        if live_session.meeting_link
+                                        else ""
+                                    )
+                                ),
                             },
                         ],
                         "template_name": "reminder_coachee_live_session_30min_before",
