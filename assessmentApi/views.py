@@ -4330,6 +4330,7 @@ class GetAllAssessments(APIView):
                 "total_responses_count": total_responses_count,
                 "created_at": assessment.created_at,
             }
+
             assessment_list.append(assessment_data)
 
         return Response(assessment_list)
@@ -4566,7 +4567,11 @@ def get_average_for_all_compentency(compentency_precentages):
             )
 
     for competency_name, total_percentage in average_percentage.items():
-        average_percentage[competency_name] = round(total_percentage / count_occurrences[competency_name]) if count_occurrences[competency_name] != 0 else 0
+        average_percentage[competency_name] = (
+            round(total_percentage / count_occurrences[competency_name])
+            if count_occurrences[competency_name] != 0
+            else 0
+        )
     return average_percentage
 
 
@@ -4689,7 +4694,7 @@ class GetProjectWiseReport(APIView):
                                     post_compentency_percentages.append(
                                         post_compentency_precentage
                                     )
-           
+
                 participant_ids_with_value_two = [
                     key for key, value in attended_both_assessments.items() if value > 1
                 ]
@@ -4767,3 +4772,46 @@ class GetProjectWiseReport(APIView):
 
         except Exception as e:
             print(str(e))
+
+
+class GetAllAssessmentsOfSchedularProjects(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_id):
+        try:
+          
+            schedular_project = SchedularProject.objects.get(id=project_id)
+            batches = SchedularBatch.objects.filter(project=schedular_project)
+            assessment_list = []
+            for batch in batches:
+                assessments = Assessment.objects.filter(
+                    assessment_modal__lesson__course__batch=batch
+                )
+
+                for assessment in assessments:
+                    total_responses_count = ParticipantResponse.objects.filter(
+                        assessment=assessment
+                    ).count()
+                    assessment_data = {
+                        "id": assessment.id,
+                        "name": assessment.name,
+                        "organisation": (
+                            assessment.organisation.name
+                            if assessment.organisation
+                            else ""
+                        ),
+                        "assessment_type": assessment.assessment_type,
+                        "assessment_timing": assessment.assessment_timing,
+                        "assessment_start_date": assessment.assessment_start_date,
+                        "assessment_end_date": assessment.assessment_end_date,
+                        "status": assessment.status,
+                        "total_learners_count": assessment.participants_observers.count(),
+                        "total_responses_count": total_responses_count,
+                        "created_at": assessment.created_at,
+                    }
+                    assessment_list.append(assessment_data)
+
+            return Response(assessment_list)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": "Failed to get data"}, status=500)

@@ -97,10 +97,13 @@ from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 from io import BytesIO
-from schedularApi.tasks import get_file_content,get_file_extension,get_live_session_name
+from schedularApi.tasks import (
+    get_file_content,
+    get_file_extension,
+    get_live_session_name,
+)
 from django.core.mail import EmailMessage
 from django.conf import settings
-
 
 
 env = environ.Env()
@@ -206,7 +209,6 @@ def get_feedback_lesson_name(lesson_name):
     return underscored_string
 
 
-
 def get_file_name_from_url(url):
     # Split the URL by '/' to get an array of parts
     url_parts = url.split("/")
@@ -218,7 +220,6 @@ def get_file_name_from_url(url):
     file_name = full_file_name.split("?")[0]
 
     return file_name
-
 
 
 def download_file_response(file_url):
@@ -3307,7 +3308,7 @@ def download_consolidated_project_report(request, project_id):
     return response
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 def get_nudges_by_project_id(request, project_id):
     # Retrieve nudges filtered by project_id
     nudges = Nudge.objects.filter(course__batch__project__id=project_id)
@@ -3315,30 +3316,31 @@ def get_nudges_by_project_id(request, project_id):
     return Response(serializer.data)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 def send_nudge_to_email(request, nudge_id):
     email = request.data.get("email")
     try:
-            nudge = Nudge.objects.get(id=nudge_id)
+        nudge = Nudge.objects.get(id=nudge_id)
     except Nudge.DoesNotExist:
-            return Response({'error': 'Nudge not found'}, status=404)
-            
+        return Response({"error": "Nudge not found"}, status=404)
+
     subject = f"New Nudge: {nudge.name}"
     message = nudge.content
     email_msg = EmailMessage(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
     if nudge.file:
-            attachment_path = nudge.file.url
-            file_content = get_file_content(nudge.file.url)
-            extension = get_file_extension(nudge.file.url)
-            file_name = f"Attachment.{extension}"
-            email_msg.attach(file_name, file_content, f"application/{extension}")				
+        attachment_path = nudge.file.url
+        file_content = get_file_content(nudge.file.url)
+        extension = get_file_extension(nudge.file.url)
+        file_name = f"Attachment.{extension}"
+        email_msg.attach(file_name, file_content, f"application/{extension}")
     email_msg.content_subtype = "html"
-    email_msg.send()				
-    return Response({'message': 'Nudge sent successfully'})
+    email_msg.send()
+    return Response({"message": "Nudge sent successfully"})
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 def duplicate_nudge(request, nudge_id, course_id):
-    order = request.data.get('order')
+    order = request.data.get("order")
     try:
         original_nudge = Nudge.objects.get(id=nudge_id)
         course = Course.objects.get(id=course_id)  # Fetch the course instance
@@ -3348,14 +3350,13 @@ def duplicate_nudge(request, nudge_id, course_id):
             file=original_nudge.file,
             order=order,
             course=course,  # Use the fetched course instance
-            is_sent=False  # Assuming the duplicated nudge is not sent yet
+            is_sent=False,  # Assuming the duplicated nudge is not sent yet
         )
-        return Response({"message" : "Nudge duplicated successfully."})
+        return Response({"message": "Nudge duplicated successfully."})
     except Nudge.DoesNotExist:
-        return Response({'error': 'Nudge not found'}, status=404)
+        return Response({"error": "Nudge not found"}, status=404)
     except Course.DoesNotExist:
-        return Response({'error': 'Course not found'}, status=404)
-    
+        return Response({"error": "Course not found"}, status=404)
 
 
 @api_view(["GET"])
@@ -3406,3 +3407,41 @@ def get_nps_project_wise(request):
 
         res[project.id] = average_nps
     return Response(res)
+
+
+class GetAllNudgesOfSchedularProjects(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_id):
+        try:
+
+            data = []
+            courses = Course.objects.filter(batch__project__id=project_id)
+            for course in courses:
+
+                nudges = Nudge.objects.filter(course__id=course.id).order_by("order")
+
+                desired_time = time(8, 30)
+                if course.nudge_start_date:
+                    nudge_scheduled_for = datetime.combine(
+                        course.nudge_start_date, desired_time
+                    )
+
+                    for nudge in nudges:
+                        temp = {
+                            "is_sent": nudge.is_sent,
+                            "name": nudge.name,
+                            "learner_count": nudge.course.batch.learners.count(),
+                            "batch_name": nudge.course.batch.name,
+                            "nudge_scheduled_for": nudge_scheduled_for,
+                        }
+
+                        data.append(temp)
+                        nudge_scheduled_for = nudge_scheduled_for + timedelta(
+                            int(course.nudge_frequency)
+                        )
+
+            return Response(data)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": "Failed to get data"}, status=500)

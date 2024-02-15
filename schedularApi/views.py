@@ -115,7 +115,10 @@ from django.db.models import Max
 import io
 from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
-from schedularApi.tasks import celery_send_unbooked_coaching_session_mail
+from schedularApi.tasks import (
+    celery_send_unbooked_coaching_session_mail,
+    get_current_date_timestamps,
+)
 
 # Create your views here.
 from itertools import chain
@@ -702,7 +705,9 @@ def update_live_session(request, live_session_id):
                 )
                 description = (
                     f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
-                    + update_live_session.description if update_live_session.description else ""
+                    + update_live_session.description
+                    if update_live_session.description
+                    else ""
                 )
                 if not existing_date_time:
                     create_outlook_calendar_invite(
@@ -2607,7 +2612,9 @@ def send_live_session_link(request):
                     "participant_name": learner.name,
                     "live_session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
                     "project_name": live_session.batch.project.name,
-                    "description": live_session.description if live_session.description else "",
+                    "description": (
+                        live_session.description if live_session.description else ""
+                    ),
                     "meeting_link": live_session.meeting_link,
                 },
                 [],
@@ -2643,10 +2650,14 @@ def send_live_session_link_whatsapp(request):
                         {
                             "name": "description",
                             "value": (
-                                live_session.description if live_session.description else ""
-                                + f" Please join using this link: {live_session.meeting_link}"
-                                if live_session.meeting_link
-                                else ""
+                                live_session.description
+                                if live_session.description
+                                else (
+                                    ""
+                                    + f" Please join using this link: {live_session.meeting_link}"
+                                    if live_session.meeting_link
+                                    else ""
+                                )
                             ),
                         },
                     ],
@@ -4122,6 +4133,43 @@ def update_project_status(request):
         return Response(
             {
                 "error": "Failed to Update Status.",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_skill_dashboard_card_data(request):
+    try:
+        start_timestamp, end_timestamp = get_current_date_timestamps()
+        # schedular sessions scheduled today
+        today_sessions = SchedularSessions.objects.filter(
+            availibility__start_time__lte=end_timestamp,
+            availibility__end_time__gte=start_timestamp,
+        )
+
+        today = timezone.now().date()
+        today_live_sessions = LiveSession.objects.filter(date_time__date=today)
+
+        ongoing_assessment = Assessment.objects.filter(status="ongoing")
+
+        completed_assessments = Assessment.objects.filter(status="completed")
+
+        return Response(
+            {
+                "today_coaching_sessions": len(today_sessions),
+                "today_live_sessions": len(today_live_sessions),
+                "ongoing_assessments": len(ongoing_assessment),
+                "completed_assessments": len(completed_assessments),
+            },
+            status=200,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {
+                "error": "Failed to get data",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
