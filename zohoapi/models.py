@@ -24,6 +24,7 @@ class InvoiceData(models.Model):
     vendor_email = models.CharField(max_length=200, default=None, blank=True)
     vendor_billing_address = models.TextField(default=None, blank=True)
     vendor_gst = models.CharField(max_length=200, default=None, blank=True)
+    vendor_pan = models.CharField(max_length=255, default="", blank=True)
     vendor_phone = models.CharField(max_length=200, default=None, blank=True)
     purchase_order_id = models.CharField(max_length=200, default=None)
     purchase_order_no = models.CharField(max_length=200, default=None)
@@ -69,6 +70,7 @@ class AccessToken(models.Model):
 
     def __str__(self):
         return self.access_token
+
 
 class PoReminder(models.Model):
     vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE)

@@ -124,14 +124,15 @@
 								<div class="">
 									<div style="font-size: 18px; color: #333333;"><b>{{ invoice.vendor_name }}</b></div>
 									<div style="font-size: 15px; color: #333333;">
+										<div>{{ invoice.vendor_email }}</div>
+										<div>{{ invoice.vendor_phone }}</div>
 										<div>{{ invoice.vendor_billing_address }}</div>
-										{% if invoice.is_oversea %}
+										{% if invoice.is_oversea_account %}
 										<div></div>
 										{% else %}
 										<div>GSTIN: {{ invoice.vendor_gst }}</div>
+										<div>PAN: {{ invoice.vendor_pan }}</div>
 										{% endif %}
-										<div>{{ invoice.email }}</div>
-										<div>{{ invoice.phone }}</div>
 									</div>
 								</div>
 							</td>
@@ -246,6 +247,11 @@
 									IGST
 								</div>
 							</td>
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
+									Tax
+								</div>
+							</td>
 							{% endif %}
 							<td class="tableDataCenter">
 								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
@@ -290,6 +296,12 @@
 							<td class="tableDataCenter">{{ item.cgst_tax }}</td>
 							<td class="tableDataCenter">{{ item.sgst_tax }}</td>
 							<td class="tableDataCenter">{{ item.igst_tax }}</td>
+							<td class="tableDataCenter">	
+								{% if invoice.currency_symbol %}
+								{{ invoice.currency_symbol }}{{ item.tax_amount }}
+								{% else %}
+								{{ item.tax_amount }}
+								{% endif %}</td>
 							{% endif %}
 							<td class="tableDataCenter">{{ item.hsn_sac|default:"-" }}</td>
 							<td class="tableDataCenter">
