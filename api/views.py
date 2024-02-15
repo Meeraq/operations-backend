@@ -1686,6 +1686,30 @@ def get_user_data(user):
             "roles": roles,
             "user": {**serializer.data["user"], "type": user_profile_role},
         }
+    elif user_profile_role == "vendor":
+        serializer = VendorDepthOneSerializer(user.profile.vendor)
+        organization = get_organization_data()
+        zoho_vendor = get_vendor(serializer.data["vendor_id"])
+        login_timestamp = timezone.now()
+        UserLoginActivity.objects.create(
+            user=user, timestamp=login_timestamp, platform="caas"
+        )
+
+        return Response(
+            {
+                **serializer.data,
+                "roles": roles,
+                "user": {
+                    **serializer.data["user"],
+                    "type": user_profile_role,
+                    "last_login": user.last_login,
+                },
+                "last_login": user.last_login,
+                "organization": organization,
+                "zoho_vendor": zoho_vendor,
+                "message": f"Role changed to billing",
+            }
+        )
     elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "superadmin":
