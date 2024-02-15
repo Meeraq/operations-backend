@@ -355,9 +355,9 @@ urlpatterns = [
     ),
     path("logs/", views.get_api_logs, name="get_api_logs"),
     path(
-        "get-skill-training-project-reminders-status/",
-        views.get_skill_training_project_reminders_status,
-        name="get_skill_training_project_reminders_status",
+        "get-skill-training-projects/",
+        views.get_skill_training_projects,
+        name="get_skill_training_projects",
     ),
     path(
         "update-reminders-of-project/",

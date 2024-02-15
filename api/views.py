@@ -8361,7 +8361,7 @@ def get_api_logs(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def get_skill_training_project_reminders_status(request):
+def get_skill_training_projects(request):
     projects = SchedularProject.objects.all()
     project_serializer = SchedularProjectSerializer(projects, many=True)
 
@@ -8394,6 +8394,8 @@ def update_reminders_of_project(request):
         schedular_project.save()
         return Response({"message": "Reminders updated successfully"})
     except SchedularProject.DoesNotExist:
-        return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+        )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
