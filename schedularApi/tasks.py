@@ -816,7 +816,18 @@ def send_whatsapp_reminder_same_day_morning():
                                 },
                                 {
                                     "name": "description",
-                                    "value": session.description if session.description else "" + f"Please join using this link: {session.meeting_link}"  if session.meeting_link else "",
+                                    "value": (
+                                        (
+                                            session.description
+                                            if session.description
+                                            else ""
+                                        )
+                                        + (
+                                            f"Please join using this link: {session.meeting_link}"
+                                            if session.meeting_link
+                                            else ""
+                                        )
+                                    ),
                                 },
                                 {
                                     "name": "time",
@@ -857,7 +868,18 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
                             },
                             {
                                 "name": "description",
-                                "value": live_session.description if live_session.description else "" + f"Please join using this link: {live_session.meeting_link}"  if live_session.meeting_link else "",
+                                "value": (
+                                    (
+                                        live_session.description
+                                        if live_session.description
+                                        else ""
+                                    )
+                                    + (
+                                        f"Please join using this link: {live_session.meeting_link}"
+                                        if live_session.meeting_link
+                                        else ""
+                                    )
+                                ),
                             },
                         ],
                         "template_name": "reminder_coachee_live_session_30min_before",
@@ -895,63 +917,52 @@ def send_feedback_lesson_reminders():
                     # Now, you can access the associated Course through the SchedularBatch
                     course = Course.objects.filter(batch=schedular_batch).first()
                     if course:
-                        feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
-                        feedback_lessons = FeedbackLesson.objects.filter(
-                            lesson__course=course
-                        )
-                        for feedback_lesson in feedback_lessons:
-                            try:
-                                current_lesson_name = feedback_lesson.lesson.name
-                                formatted_lesson_name = get_feedback_lesson_name(
-                                    current_lesson_name
-                                )
-                                if (
-                                    formatted_lesson_name
-                                    == feedback_lesson_name_should_be
-                                ):
-                                    for (
-                                        learner
-                                    ) in (
-                                        feedback_lesson.lesson.course.batch.learners.all()
-                                    ):
-                                        try:
-                                            feedback_lesson_response_exists = (
-                                                FeedbackLessonResponse.objects.filter(
-                                                    feedback_lesson=feedback_lesson,
-                                                    learner=learner,
-                                                ).exists()
+                        feedback_lesson = FeedbackLesson.objects.filter(
+                            lesson__course=course,
+                            live_session__session_type=live_session.session_type,
+                            live_session__live_session_number=live_session.live_session_number,
+                        ).first()
+                        try:
+                            if feedback_lesson:
+                                for (
+                                    learner
+                                ) in feedback_lesson.lesson.course.batch.learners.all():
+                                    try:
+                                        feedback_lesson_response_exists = (
+                                            FeedbackLessonResponse.objects.filter(
+                                                feedback_lesson=feedback_lesson,
+                                                learner=learner,
+                                            ).exists()
+                                        )
+                                        if not feedback_lesson_response_exists:
+                                            send_whatsapp_message_template(
+                                                learner.phone,
+                                                {
+                                                    "broadcast_name": "Feedback Reminder",
+                                                    "parameters": [
+                                                        {
+                                                            "name": "name",
+                                                            "value": learner.name,
+                                                        },
+                                                        {
+                                                            "name": "live_session_name",
+                                                            "value": f"Live Session {live_session.live_session_number}",
+                                                        },
+                                                        {
+                                                            "name": "feedback_lesson_id",
+                                                            "value": feedback_lesson.unique_id,
+                                                        },
+                                                    ],
+                                                    "template_name": "one_time_reminder_feedback_form_live_session",
+                                                },
                                             )
-                                            if not feedback_lesson_response_exists:
-                                                send_whatsapp_message_template(
-                                                    learner.phone,
-                                                    {
-                                                        "broadcast_name": "Feedback Reminder",
-                                                        "parameters": [
-                                                            {
-                                                                "name": "name",
-                                                                "value": learner.name,
-                                                            },
-                                                            {
-                                                                "name": "live_session_name",
-                                                                "value": f"Live Session {live_session.live_session_number}",
-                                                            },
-                                                            {
-                                                                "name": "feedback_lesson_id",
-                                                                "value": feedback_lesson.unique_id,
-                                                            },
-                                                        ],
-                                                        "template_name": "one_time_reminder_feedback_form_live_session",
-                                                    },
-                                                )
-                                        except Exception as e:
-                                            print(
-                                                f"error sending whatsapp message to {learner}: {str(e)}"
-                                            )
-                                    # send whatsapp message to all participants
-                            except Exception as e_inner:
-                                print(
-                                    f"Error processing feedback lesson: {str(e_inner)}"
-                                )
+                                    except Exception as e:
+                                        print(
+                                            f"error sending whatsapp message to {learner}: {str(e)}"
+                                        )
+                                # send whatsapp message to all participants
+                        except Exception as e_inner:
+                            print(f"Error processing feedback lesson: {str(e_inner)}")
                     else:
                         print(
                             f"Live Session {live_session.id} is associated with a batch but not with any Course"
