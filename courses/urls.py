@@ -15,7 +15,7 @@ from .views import (
     AssignCoursesToCertificate,
     DeleteCourseFromCertificate,
     LessonMarkAsCompleteAndNotComplete,
-    DownlaodLessonCertificate,
+    DownloadLessonCertificate,
     GetCertificateForCourse,
     GetLaserCoachingTime,
     AssignCourseTemplateToBatch,
@@ -25,6 +25,13 @@ from .views import (
     update_file,
     DownloadableLessonUpdateView,
     DownloadableLessonCreateView,
+    FeedbackEmailValidation,
+    GetFeedbackForm,
+    EditAllowedFeedbackLesson,
+    DuplicateLesson,
+    LessonCompletedWebhook,
+    GetUniqueIdParticipantFromCourse,
+    GetAssessmentsOfBatch,
     CreateAssignmentLesson,
     UpdateAssignmentLesson,
     GetAllAssignmentsResponses,
@@ -70,6 +77,11 @@ urlpatterns = [
         views.UpdateLessonOrder.as_view(),
         name="update_lesson_order",
     ),
+    path(
+        "nudges/update_nudges_order/",
+        views.UpdateNudgesOrder.as_view(),
+        name="update_lesson_order",
+    ),
     path("text-lessons/", TextLessonCreateView.as_view(), name="text-lesson-create"),
     path(
         "text-lessons/<int:pk>/", TextLessonEditView.as_view(), name="text-lesson-edit"
@@ -81,6 +93,18 @@ urlpatterns = [
     # ),
     path(
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
+    ),
+    path(
+        "courses/<int:course_id>/nudges/",
+        views.get_nudges_and_course,
+        name="lesson-list",
+    ),
+    path("nudges/create", views.create_new_nudge),
+    path("nudges/<int:nudge_id>/update/", views.update_nudge),
+    path("nudges/<int:nudge_id>/file/download/", views.download_nudge_file),
+    path(
+        "courses/<int:course_id>/update-nudge-date-frequency/",
+        views.add_nudges_date_frequency_to_course,
     ),
     path(
         "course-templates/<int:course_template_id>/lessons/",
@@ -182,7 +206,7 @@ urlpatterns = [
     path("lesson-mark-as-complete/", LessonMarkAsCompleteAndNotComplete.as_view()),
     path(
         "download-lesson-certificate/<int:lesson_id>/<int:learner_id>/",
-        DownlaodLessonCertificate.as_view(),
+        DownloadLessonCertificate.as_view(),
     ),
     path(
         "get-certificate-for-course/<int:course_id>/", GetCertificateForCourse.as_view()
@@ -213,6 +237,13 @@ urlpatterns = [
     path("quizes/report/all/", views.get_all_quizes_report),
     path("quizes/<int:quiz_id>/report/", views.get_quiz_report),
     path("quizes/<int:quiz_id>/report/download/", views.quiz_report_download),
+    path("feedbacks/report/all/", views.get_all_feedbacks_report),
+    path("consolidated-feedback-report/", views.get_consolidated_feedback_report),
+    path("feedbacks/<int:feedback_id>/report/", views.get_feedback_report),
+    path(
+        "get-consolidated-feedback-report-response/<int:lesson_id>/report/",
+        views.get_consolidated_feedback_report_response,
+    ),
     path(
         "get-laser-coaching-time/<int:laser_coaching_id>/<str:participant_email>/",
         GetLaserCoachingTime.as_view(),
@@ -264,7 +295,59 @@ urlpatterns = [
         DownloadableLessonUpdateView.as_view(),
         name="update-downloadable-lesson",
     ),
-    path("create_assignment_lesson/", CreateAssignmentLesson.as_view()),
+    path(
+        "feedback-email-validation/",
+        FeedbackEmailValidation.as_view(),
+        name="update-downloadable-lesson",
+    ),
+    path(
+        "get-feedback-form/<str:unique_id>/",
+        GetFeedbackForm.as_view(),
+    ),
+    path(
+        "feedback-lesson-edit-allowed/<str:feedback_lesson_id>/",
+        EditAllowedFeedbackLesson.as_view(),
+    ),
+    path(
+        "duplicate-lesson/",
+        DuplicateLesson.as_view(),
+    ),
+    path(
+        "lesson-completed-webhook/",
+        LessonCompletedWebhook.as_view(),
+    ),
+    path(
+        "get/uniqueId/participant-from-course/<int:user_id>/<int:assessment_id>/",
+        GetUniqueIdParticipantFromCourse.as_view(),
+    ),
+    path(
+        "get-assessments-of-batch/<int:batch_id>/",
+        GetAssessmentsOfBatch.as_view(),
+    ),
+    path(
+        "feedback-report-download/<str:feedback_id>/",
+        views.get_all_feedbacks_download_report,
+    ),
+    path(
+        "feedback/reports/project/consolidated/download/<int:project_id>/",
+        views.download_consolidated_project_report,
+    ),
+    path(
+        "feedback/reports/project/consolidated/",
+        views.feedback_reports_project_wise_consolidated,
+    ),
+    path(
+        "consolidated-feedback-download-report/<str:live_session_id>/",
+        views.get_consolidated_feedback_download_report,
+    ),
+    path('projects/<int:project_id>/nudges/', views.get_nudges_by_project_id, name='get_nudges_by_project_id'),
+    path("send-test-nudge/<int:nudge_id>/", views.send_nudge_to_email),
+    path('nudges/<int:nudge_id>/duplicate/<int:course_id>/', views.duplicate_nudge, name='duplicate_nudge'),
+    path(
+        "get-nps-project-wise/",
+        views.get_nps_project_wise,
+    ),
+     path("create_assignment_lesson/", CreateAssignmentLesson.as_view()),
     path(
         "update_assignment_lessons/<int:assignment_id>/",
         UpdateAssignmentLesson.as_view(),
@@ -274,5 +357,6 @@ urlpatterns = [
         "create_assignment_lesson_response/", CreateAssignmentLessonResponse.as_view()
     ),
     path("get_assignments_responses/<int:assignment_id>/<int:learner_id>/", GetAssignmentsResponses.as_view()),
-    path("downlaod_assignment_lesson_file/<int:assignment_response_id>/", DownlaodAssignmentLessonFile.as_view()),
 ]
+
+

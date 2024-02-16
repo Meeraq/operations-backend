@@ -1,5 +1,5 @@
 from django.urls import path, include
-from . import views 
+from . import views
 from .views import DownloadInvoice
 import environ
 
@@ -56,4 +56,16 @@ urlpatterns = [
     path("import-invoices/", views.import_invoices_from_zoho),
     path("export-invoice-data/", views.export_invoice_data),
     path("download-invoice/<int:record_id>/", DownloadInvoice.as_view()),
+    path("add/vendor/", views.add_vendor),
+    path("view/vendors/", views.get_all_vendors),
+    path(
+        "get-all-purchase-orders/",
+        views.get_all_purchase_orders,
+        name="get_all_purchase_orders",
+    ),
+    path(
+        "get-all-invoices/",
+        views.get_all_invoices,
+        name="get_all_invoices",
+    ),
 ]

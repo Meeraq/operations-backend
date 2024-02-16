@@ -20,6 +20,7 @@ from .models import (
     PdfLesson,
     File,
     DownloadableLesson,
+    Nudge,
     AssignmentLesson,
     AssignmentLessonResponse,
 )
@@ -40,6 +41,12 @@ class CourseTemplateSerializer(serializers.ModelSerializer):
 class LessonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lesson
+        fields = "__all__"
+
+
+class NudgeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Nudge
         fields = "__all__"
 
 
