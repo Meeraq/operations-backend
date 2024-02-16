@@ -66,7 +66,7 @@ from .serializers import (
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 from rest_framework.views import APIView
-from api.models import User, Learner, Profile, Role
+from api.models import User, Learner, Profile, Role, Coach
 from schedularApi.models import (
     LiveSession,
     SchedularBatch,
@@ -3482,8 +3482,21 @@ class UpdateAssignmentLesson(APIView):
 class GetAllAssignmentsResponses(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        assignments = AssignmentLessonResponse.objects.all()
+    def get(self, request, user_type, user_id):
+
+        assignments = None
+
+        if user_type == "pmo":
+            assignments = AssignmentLessonResponse.objects.all()
+        elif user_type == "learner":
+            learner = Learner.objects.get(id=user_id)
+            assignments = AssignmentLessonResponse.objects.filter(learner=learner)
+        elif user_type == "coach":
+            coach = Coach.objects.get(id=user_id)
+            assignments = AssignmentLessonResponse.objects.filter(
+                assignment_lesson__lesson__course__batch__coaches=coach
+            )
+
         data = []
         for assignment in assignments:
             serializer = AssignmentResponseSerializer(assignment)
@@ -3494,6 +3507,7 @@ class GetAllAssignmentsResponses(APIView):
                 "batch_name": assignment.assignment_lesson.lesson.course.batch.name,
                 "project_name": assignment.assignment_lesson.lesson.course.batch.project.name,
                 "file": serializer.data["file"],
+                "org_name": assignment.assignment_lesson.lesson.course.batch.project.organisation.name,
                 "created_at": assignment.created_at,
                 "edited_at": assignment.edited_at,
             }
@@ -3550,14 +3564,24 @@ class GetAssignmentsResponses(APIView):
             )
 
 
-class DownlaodAssignmentLessonFile(APIView):
-    permission_classes = [AllowAny]
+class UpdateAssignmentLessonFile(APIView):
+    permission_classes = [IsAuthenticated]
 
-    def get(self, request, assignment_response_id):
+    def put(self, request):
+        try:
+            file = request.data.get("file", None)
+            assignment_response_id = request.data.get("assignment_response_id", None)
+            assignment_response = AssignmentLessonResponse.objects.get(
+                id=int(assignment_response_id)
+            )
+            assignment_response.file = file
+            assignment_response.save()
 
-        assignment_response = get_object_or_404(
-            AssignmentLessonResponse, id=assignment_response_id
-        )
-        serializer = AssignmentResponseSerializer(assignment_response)
+            return Response({"message": "File updated sucessfully."}, status=200)
 
-        return download_file_response(serializer.data["file"])
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"message": f"Failed to update file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

@@ -37,7 +37,7 @@ from .views import (
     GetAllAssignmentsResponses,
     CreateAssignmentLessonResponse,
     GetAssignmentsResponses,
-    DownlaodAssignmentLessonFile,
+    UpdateAssignmentLessonFile,
 )
 import environ
 
@@ -360,7 +360,10 @@ urlpatterns = [
         "update_assignment_lessons/<int:assignment_id>/",
         UpdateAssignmentLesson.as_view(),
     ),
-    path("get_all_assignments_responses/", GetAllAssignmentsResponses.as_view()),
+    path(
+        "get_all_assignments_responses/<str:user_type>/<int:user_id>",
+        GetAllAssignmentsResponses.as_view(),
+    ),
     path(
         "create_assignment_lesson_response/", CreateAssignmentLessonResponse.as_view()
     ),
@@ -369,7 +372,7 @@ urlpatterns = [
         GetAssignmentsResponses.as_view(),
     ),
     path(
-        "downlaod_assignment_lesson_file/<int:assignment_response_id>/",
-        DownlaodAssignmentLessonFile.as_view(),
+        "update_assignments_responses/",
+        UpdateAssignmentLessonFile.as_view(),
     ),
 ]
