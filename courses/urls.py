@@ -340,14 +340,22 @@ urlpatterns = [
         "consolidated-feedback-download-report/<str:live_session_id>/",
         views.get_consolidated_feedback_download_report,
     ),
-    path('projects/<int:project_id>/nudges/', views.get_nudges_by_project_id, name='get_nudges_by_project_id'),
+    path(
+        "projects/<int:project_id>/nudges/",
+        views.get_nudges_by_project_id,
+        name="get_nudges_by_project_id",
+    ),
     path("send-test-nudge/<int:nudge_id>/", views.send_nudge_to_email),
-    path('nudges/<int:nudge_id>/duplicate/<int:course_id>/', views.duplicate_nudge, name='duplicate_nudge'),
+    path(
+        "nudges/<int:nudge_id>/duplicate/<int:course_id>/",
+        views.duplicate_nudge,
+        name="duplicate_nudge",
+    ),
     path(
         "get-nps-project-wise/",
         views.get_nps_project_wise,
     ),
-     path("create_assignment_lesson/", CreateAssignmentLesson.as_view()),
+    path("create_assignment_lesson/", CreateAssignmentLesson.as_view()),
     path(
         "update_assignment_lessons/<int:assignment_id>/",
         UpdateAssignmentLesson.as_view(),
@@ -356,7 +364,12 @@ urlpatterns = [
     path(
         "create_assignment_lesson_response/", CreateAssignmentLessonResponse.as_view()
     ),
-    path("get_assignments_responses/<int:assignment_id>/<int:learner_id>/", GetAssignmentsResponses.as_view()),
+    path(
+        "get_assignments_responses/<int:assignment_id>/<int:learner_id>/",
+        GetAssignmentsResponses.as_view(),
+    ),
+    path(
+        "downlaod_assignment_lesson_file/<int:assignment_response_id>/",
+        DownlaodAssignmentLessonFile.as_view(),
+    ),
 ]
-
-

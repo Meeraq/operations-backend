@@ -268,3 +268,8 @@ class AssignmentResponseSerializerDepthSix(serializers.ModelSerializer):
         model = AssignmentLessonResponse
         fields = "__all__"
         depth = 6
+
+class AssignmentResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssignmentLessonResponse
+        fields = "__all__"

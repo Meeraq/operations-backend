@@ -61,6 +61,7 @@ from .serializers import (
     NudgeSerializer,
     AssignmentSerializerDepthOne,
     AssignmentResponseSerializerDepthSix,
+    AssignmentResponseSerializer,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
@@ -101,10 +102,13 @@ from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 from io import BytesIO
-from schedularApi.tasks import get_file_content,get_file_extension,get_live_session_name
+from schedularApi.tasks import (
+    get_file_content,
+    get_file_extension,
+    get_live_session_name,
+)
 from django.core.mail import EmailMessage
 from django.conf import settings
-
 
 
 env = environ.Env()
@@ -210,7 +214,6 @@ def get_feedback_lesson_name(lesson_name):
     return underscored_string
 
 
-
 def get_file_name_from_url(url):
     # Split the URL by '/' to get an array of parts
     url_parts = url.split("/")
@@ -222,7 +225,6 @@ def get_file_name_from_url(url):
     file_name = full_file_name.split("?")[0]
 
     return file_name
-
 
 
 def download_file_response(file_url):
@@ -3087,7 +3089,8 @@ def get_all_feedbacks_download_report(request, feedback_id):
         data = []
         # Populate the list of dictionaries with data from FeedbackLesson and FeedbackLessonResponse
         for response in FeedbackLessonResponse.objects.filter(
-                feedback_lesson=feedback_lesson):
+            feedback_lesson=feedback_lesson
+        ):
             participant_name = response.learner.name
             participant_email = response.learner.email
             temp_data = {
@@ -3304,7 +3307,7 @@ def download_consolidated_project_report(request, project_id):
     return response
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 def get_nudges_by_project_id(request, project_id):
     # Retrieve nudges filtered by project_id
     nudges = Nudge.objects.filter(course__batch__project__id=project_id)
@@ -3312,30 +3315,31 @@ def get_nudges_by_project_id(request, project_id):
     return Response(serializer.data)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 def send_nudge_to_email(request, nudge_id):
     email = request.data.get("email")
     try:
-            nudge = Nudge.objects.get(id=nudge_id)
+        nudge = Nudge.objects.get(id=nudge_id)
     except Nudge.DoesNotExist:
-            return Response({'error': 'Nudge not found'}, status=404)
-            
+        return Response({"error": "Nudge not found"}, status=404)
+
     subject = f"New Nudge: {nudge.name}"
     message = nudge.content
     email_msg = EmailMessage(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
     if nudge.file:
-            attachment_path = nudge.file.url
-            file_content = get_file_content(nudge.file.url)
-            extension = get_file_extension(nudge.file.url)
-            file_name = f"Attachment.{extension}"
-            email_msg.attach(file_name, file_content, f"application/{extension}")				
+        attachment_path = nudge.file.url
+        file_content = get_file_content(nudge.file.url)
+        extension = get_file_extension(nudge.file.url)
+        file_name = f"Attachment.{extension}"
+        email_msg.attach(file_name, file_content, f"application/{extension}")
     email_msg.content_subtype = "html"
-    email_msg.send()				
-    return Response({'message': 'Nudge sent successfully'})
+    email_msg.send()
+    return Response({"message": "Nudge sent successfully"})
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 def duplicate_nudge(request, nudge_id, course_id):
-    order = request.data.get('order')
+    order = request.data.get("order")
     try:
         original_nudge = Nudge.objects.get(id=nudge_id)
         course = Course.objects.get(id=course_id)  # Fetch the course instance
@@ -3345,14 +3349,13 @@ def duplicate_nudge(request, nudge_id, course_id):
             file=original_nudge.file,
             order=order,
             course=course,  # Use the fetched course instance
-            is_sent=False  # Assuming the duplicated nudge is not sent yet
+            is_sent=False,  # Assuming the duplicated nudge is not sent yet
         )
-        return Response({"message" : "Nudge duplicated successfully."})
+        return Response({"message": "Nudge duplicated successfully."})
     except Nudge.DoesNotExist:
-        return Response({'error': 'Nudge not found'}, status=404)
+        return Response({"error": "Nudge not found"}, status=404)
     except Course.DoesNotExist:
-        return Response({'error': 'Course not found'}, status=404)
-    
+        return Response({"error": "Course not found"}, status=404)
 
 
 @api_view(["GET"])
@@ -3404,64 +3407,65 @@ def get_nps_project_wise(request):
         res[project.id] = average_nps
     return Response(res)
 
+
 class CreateAssignmentLesson(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         try:
-            course_template = CourseTemplate.objects.get(
-                id=int(request.data["course_template"])
-            )
-            lesson, created = Lesson.objects.get_or_create(
-                course_template=course_template,
-                name=request.data["name"],
-                status=request.data["status"],
-                lesson_type="assignment",
-                order=int(request.data["order"]),
-            )
+            course_template_id = request.data.get("course_template", "")
+            course_id = request.data.get("course", "")
+            lesson = None
 
-            lesson.save()
+            if course_template_id != "null":
+                course_template = CourseTemplate.objects.get(id=int(course_template_id))
+                lesson = Lesson.objects.create(
+                    course_template=course_template,
+                    name=request.data["name"],
+                    status=request.data["status"],
+                    lesson_type="assignment",
+                    order=int(request.data["order"]),
+                )
+            elif course_id != "null":
+                course = Course.objects.get(id=int(course_id))
+                lesson = Lesson.objects.create(
+                    course=course,
+                    name=request.data["name"],
+                    status=request.data["status"],
+                    lesson_type="assignment",
+                    order=int(request.data["order"]),
+                )
 
-            assignment_lesson, created1 = AssignmentLesson.objects.get_or_create(
+            assignment_lesson = AssignmentLesson.objects.create(
                 lesson=lesson,
                 name=request.data["name"],
                 description=request.data["description"],
             )
-            assignment_lesson.save()
+
             return Response(
-                {"message": f"Assignment Lesson Created."}, status=status.HTTP_200_OK
+                {"message": "Assignment Lesson Created."}, status=status.HTTP_200_OK
             )
         except Exception as e:
             print(str(e))
             return Response(
-                {"message": f"Failed to create assignment."},
+                {"message": "Failed to create assignment."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
 class UpdateAssignmentLesson(APIView):
     def put(self, request, assignment_id):
+        permission_classes = [IsAuthenticated]
         try:
-  
-            course_template = CourseTemplate.objects.get(
-                id=int(request.data["course_template"])
-            )
-         
-            # lesson = Lesson.objects.get(
-            #     course_template=course_template,
-            #     name=request.data["name"],
-            #     status=request.data["status"],
-            #     lesson_type="assignment",
-            #     # order=int(request.data["order"]),
-            # )
 
             assignment_lesson = AssignmentLesson.objects.get(
                 id=assignment_id,
             )
-            # assignment_lesson.lesson = lesson
             assignment_lesson.name = request.data["name"]
             assignment_lesson.description = request.data["description"]
 
             assignment_lesson.save()
-            lesson = Lesson.objects.get(id =assignment_lesson.lesson.id )
+            lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
             lesson.name = request.data["name"]
             lesson.save()
             return Response(
@@ -3476,13 +3480,31 @@ class UpdateAssignmentLesson(APIView):
 
 
 class GetAllAssignmentsResponses(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         assignments = AssignmentLessonResponse.objects.all()
-        serializer = AssignmentResponseSerializerDepthSix(assignments, many=True)
-        return Response(serializer.data)
+        data = []
+        for assignment in assignments:
+            serializer = AssignmentResponseSerializer(assignment)
+            temp = {
+                "id": assignment.id,
+                "name": assignment.assignment_lesson.name,
+                "learner_name": assignment.learner.name,
+                "batch_name": assignment.assignment_lesson.lesson.course.batch.name,
+                "project_name": assignment.assignment_lesson.lesson.course.batch.project.name,
+                "file": serializer.data["file"],
+                "created_at": assignment.created_at,
+                "edited_at": assignment.edited_at,
+            }
+            data.append(temp)
+
+        return Response(data)
 
 
 class CreateAssignmentLessonResponse(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         try:
             file = request.data["file"]
@@ -3510,11 +3532,14 @@ class CreateAssignmentLessonResponse(APIView):
 
 
 class GetAssignmentsResponses(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, assignment_id, learner_id):
         try:
             assignment_response = AssignmentLessonResponse.objects.get(
                 assignment_lesson__id=assignment_id, learner__id=learner_id
             )
+
             serializer = AssignmentResponseSerializerDepthSix(assignment_response)
             return Response(serializer.data)
         except Exception as e:
@@ -3526,20 +3551,13 @@ class GetAssignmentsResponses(APIView):
 
 
 class DownlaodAssignmentLessonFile(APIView):
-    def get(self, request, assignment_response_id):
-        try:
-            assignment_response = AssignmentLessonResponse.objects.get(
-                id=assignment_response_id
-            )
-            response = HttpResponse(
-                assignment_response.file, content_type="application/pdf"
-            )
-            response["Content-Disposition"] = 'attachment; filename="Assignment.pdf"'
-            return response
+    permission_classes = [AllowAny]
 
-        except Exception as e:
-            print(str(e))
-            return Response(
-                {"error": "Failed to downlaod file."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+    def get(self, request, assignment_response_id):
+
+        assignment_response = get_object_or_404(
+            AssignmentLessonResponse, id=assignment_response_id
+        )
+        serializer = AssignmentResponseSerializer(assignment_response)
+
+        return download_file_response(serializer.data["file"])
