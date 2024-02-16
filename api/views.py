@@ -4707,6 +4707,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "session_duration": session.coaching_session.duration,
             "is_seeq_project": True,
             "auto_generated_status": session.auto_generated_status,
+            "coaching_session_id": session.coaching_session.id,
         }
         session_details.append(session_detail)
 
