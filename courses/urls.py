@@ -80,11 +80,6 @@ urlpatterns = [
     path(
         "text-lessons/<int:pk>/", TextLessonEditView.as_view(), name="text-lesson-edit"
     ),
-    # path(
-    #     "downloadable-file-lessons/",
-    #     DownloadableFileLessonCreateView.as_view(),
-    #     name="downloadable-file-lesson-create",
-    # ),
     path(
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
     ),
@@ -350,13 +345,3 @@ urlpatterns = [
         views.get_nps_project_wise,
     ),
 ]
-
-
-# consolidated-feedback-report
-# get-consolidated-feedback-report-response/4/report
-# consolidated-feedback-download-report/4/
-
-
-# feedback/reports/project/consolidated
-# get-nps-project-wise/
-# feedback/reports/project/consolidated/download

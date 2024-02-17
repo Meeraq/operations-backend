@@ -3186,66 +3186,71 @@ def get_all_feedbacks_download_report(request, feedback_id):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def get_consolidated_feedback_download_report(request, live_session_id):
-    try:
-        live_session = LiveSession.objects.get(id=live_session_id)
-        project = live_session.batch.project
-        batches = SchedularBatch.objects.filter(project=project)
-        # Create a dictionary to store participant data
-        data_dict = defaultdict(dict)
-        for batch in batches:
-            feedback_lesson = FeedbackLesson.objects.filter(
-                lesson__course__batch=batch,
-                live_session__session_type=live_session.session_type,
-                live_session__live_session_number=live_session.live_session_number,
-            ).first()
-            # Populate the dictionary with data from FeedbackLesson and FeedbackLessonResponse
-            if feedback_lesson:
-                for participant in batch.learners.all():
-                    if participant.id not in data_dict:
-                        data_dict[participant.id]["Participant"] = participant.name
-                        data_dict[participant.id][
-                            "Participant Email"
-                        ] = participant.email
-                        data_dict[participant.id]["Batch Name"] = batch.name
-                    # Check if the participant provided feedback
-                    response = FeedbackLessonResponse.objects.filter(
-                        feedback_lesson=feedback_lesson, learner=participant
-                    ).first()
+    # Create a new workbook and add a worksheet
+    live_session = LiveSession.objects.get(id=live_session_id)
+    wb = Workbook()
+    ws = wb.active
+    # Write headers to the worksheet
+    headers = set()
+    feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+        feedback_lesson__lesson__course__batch__project__id=live_session.batch.project.id,
+        feedback_lesson__live_session__live_session_number=live_session.live_session_number,
+        feedback_lesson__live_session__session_type=live_session.session_type,
+    )
+    total_participants_in_project = Learner.objects.filter(
+        schedularbatch__project__id=live_session.batch.project.id
+    ).distinct()
+    participants_who_responsded = set()
+    for feedback_lesson_response in feedback_lesson_responses:
+        participants_who_responsded.add(feedback_lesson_response.learner.id)
+        for answer in feedback_lesson_response.answers.all():
+            headers.add(answer.question.text)
+    headers_list = list(headers)
+    headers_list.insert(0, "Participant Name")
+    headers_list.insert(1, "Feedback Batch")
 
-                    if response:
-                        for answer in response.answers.all():
-                            question_text = answer.question.text
-                            answer_value = (
-                                answer.text_answer
-                                if answer.text_answer
-                                else answer.rating
-                            )
+    for col_num, header in enumerate(headers_list, 1):
+        ws.cell(row=1, column=col_num, value=header)
 
-                            data_dict[participant.id][question_text] = answer_value
-
-                    else:
-                        # If participant did not provide feedback, populate with empty values
-                        for question in feedback_lesson.questions.all():
-                            data_dict[participant.id][question.text] = "-"
-
-        # Create DataFrame from the dictionary
-        df = pd.DataFrame(list(data_dict.values()))
-
-        excel_data = BytesIO()
-        df.to_excel(excel_data, index=False)
-        excel_data.seek(0)
-
-        response = HttpResponse(
-            excel_data.read(),
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    for feedback_lesson_response in feedback_lesson_responses:
+        data = ["-" for _ in headers_list]
+        participant_index = headers_list.index("Participant Name")
+        feedback_batch_index = headers_list.index("Feedback Batch")
+        data[participant_index] = feedback_lesson_response.learner.name
+        data[feedback_batch_index] = (
+            feedback_lesson_response.feedback_lesson.lesson.course.batch.name
         )
-        response["Content-Disposition"] = f"attachment; filename=Feedback_Report.xlsx"
+        for answer in feedback_lesson_response.answers.all():
+            question_index_in_headers = headers_list.index(answer.question.text)
+            if answer.question.type == "descriptive_answer":
+                data[question_index_in_headers] = answer.text_answer
+            elif (
+                answer.question.type == "rating_1_to_5"
+                or answer.question.type == "rating_1_to_10"
+                or answer.question.type == "rating_0_to_10"
+            ):
+                data[question_index_in_headers] = answer.rating
+        ws.append(data)
+    participants_who_responsded_list = list(participants_who_responsded)
+    participants_not_responded = total_participants_in_project.exclude(
+        id__in=participants_who_responsded_list
+    )
 
-        return response
+    for learner in participants_not_responded:
+        data = ["-" for _ in headers_list]
+        participant_index = headers_list.index("Participant Name")
+        data[participant_index] = learner.name
+        ws.append(data)
 
-    except Exception as e:
-        print(str(e))
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    # Create a response with the Excel file
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = (
+        "attachment; filename=Project_feedback_report.xlsx"
+    )
+    wb.save(response)
+    return response
 
 
 @api_view(["GET"])
