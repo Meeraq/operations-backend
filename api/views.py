@@ -845,9 +845,7 @@ def update_coach_profile(request, id):
     try:
         coach = Coach.objects.get(id=id)
         mutable_data = request.data.copy()
-        if "coach_id" not in mutable_data or not mutable_data["coach_id"]:
-            mutable_data["coach_id"] = coach.coach_id
-
+     
     except Coach.DoesNotExist:
         return Response(status=404)
 
@@ -901,16 +899,6 @@ def update_coach_profile(request, id):
         timestamp=timezone.now(),
     )
     serializer = CoachSerializer(coach, data=mutable_data, partial=True)
-
-    coach_id = request.data.get("coach_id")
-
-    # Check if coach_id exists in request.data
-    if coach_id is not None:
-        # Check if any other coach already has this coach_id
-        existing_coach = Coach.objects.exclude(id=id).filter(coach_id=coach_id).first()
-
-        if existing_coach:
-            return Response({"error": "Coach ID must be unique"}, status=400)
 
     name = coach.first_name + " " + coach.last_name
     add_contact_in_wati("coach", name, coach.phone)
@@ -1316,7 +1304,7 @@ def coach_session_list(request, coach_id):
     project_serializer = ProjectDepthTwoSerializer(projects, many=True)
 
     # Fetch sessions related to the coach
-    sessions = SessionRequestCaas.objects.filter(coach_id=coach_id)
+    sessions = SessionRequestCaas.objects.filter(coach__id=coach_id)
     session_serializer = SessionRequestCaasSerializer(sessions, many=True)
 
     # Group sessions by project ID
@@ -1339,15 +1327,13 @@ def coach_session_list(request, coach_id):
     return Response({"projects": project_serializer.data})
 
 
-def coach_exists(coach_id):
-    return Coach.objects.filter(coach_id=coach_id).exists()
+
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_coach(request):
     # Get data from request
-    coach_id = request.data.get("coach_id")
     first_name = request.data.get("first_name")
     last_name = request.data.get("last_name")
     email = request.data.get("email", "").strip().lower()
@@ -1392,7 +1378,7 @@ def add_coach(request):
     # Check if required data is provided
     if not all(
         [
-            coach_id,
+          
             first_name,
             last_name,
             email,
@@ -1441,7 +1427,6 @@ def add_coach(request):
             # Create the Coach User using the Profile
             coach_user = Coach.objects.create(
                 user=profile,
-                coach_id=coach_id,
                 room_id=room_id,
                 first_name=first_name,
                 last_name=last_name,
@@ -2921,7 +2906,7 @@ def accept_coach_caas_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     coaches_selected_count = 0
     for coach in project.coaches_status.all():
-        if coach.coach_id == request.data.get("coach_id"):
+        if coach.id == request.data.get("coach_id"):
             if (
                 coach.status["consent"]["status"] == "select"
                 and coach.status["hr"]["status"] == "sent"
@@ -3600,7 +3585,6 @@ def add_mulitple_coaches(request):
         for coach_data in coaches:
             with transaction.atomic():
                 # Extract coach details from the coach_data dictionary
-                coach_id = coach_data.get("coach_id")
                 first_name = coach_data.get("first_name")
                 last_name = coach_data.get("last_name")
                 age = coach_data.get("age", "")
@@ -3641,7 +3625,6 @@ def add_mulitple_coaches(request):
                 # Perform validation on required fields
                 if not all(
                     [
-                        coach_id,
                         first_name,
                         last_name,
                         gender,
@@ -3658,12 +3641,7 @@ def add_mulitple_coaches(request):
                         status=400,
                     )
 
-                # Create the Django User
-                if coach_exists(coach_id):
-                    return Response(
-                        {"error": f"Coach with ID {coach_id} already exists."},
-                        status=400,
-                    )
+               
                 user = User.objects.filter(email=email).first()
                 if not user:
                     temp_password = "".join(
@@ -3709,7 +3687,6 @@ def add_mulitple_coaches(request):
                 # Create the Coach User using the Profile
                 coach_user = Coach.objects.create(
                     user=profile,
-                    coach_id=coach_id,
                     first_name=first_name,
                     last_name=last_name,
                     age=age,
@@ -7148,11 +7125,11 @@ def create_coach_profile_template(request):
     try:
         # Fetch the existing CoachProfileTemplate object based on coach and project IDs
         template = CoachProfileTemplate.objects.get(
-            coach_id=coach_id, project_id=project_id
+            coach__id=coach_id, project__id=project_id
         )
     except CoachProfileTemplate.DoesNotExist:
         # If the object doesn't exist, create a new one
-        template = CoachProfileTemplate(coach_id=coach_id, project_id=project_id)
+        template = CoachProfileTemplate(coach__id=coach_id, project__id=project_id)
 
     # Get the existing templates data
     existing_templates = template.templates
@@ -7568,7 +7545,7 @@ class UpdateCoachContract(APIView):
         coach_id = request.data.get("coach")
         project_id = request.data.get("project")
         try:
-            contract = CoachContract.objects.get(coach=coach_id, project=project_id)
+            contract = CoachContract.objects.get(coach__id=coach_id, project__id=project_id)
         except CoachContract.DoesNotExist:
             return Response(
                 {"error": "Coach Contract not found."}, status=status.HTTP_404_NOT_FOUND
@@ -7677,7 +7654,7 @@ class ApprovedCoachContract(APIView):
     def get(self, request, project_id, coach_id, format=None):
         try:
             coach_contract = CoachContract.objects.get(
-                project=project_id, coach=coach_id, status="approved"
+                project__id=project_id, coach__id=coach_id, status="approved"
             )
         except CoachContract.DoesNotExist:
             return Response(
