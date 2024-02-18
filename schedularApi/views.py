@@ -2688,15 +2688,7 @@ def send_live_session_link_whatsapp(request):
                         },
                         {
                             "name": "description",
-                            "value": (
-                                live_session.description
-                                if live_session.description
-                                else (
-                                    ""
-                                    + f" Please join using this link: {live_session.meeting_link}"
-                                    if live_session.meeting_link
-                                    else ""
-                                )
+                            "value": ((live_session.description if live_session.description else "") + (f" Please join using this link: {live_session.meeting_link}" if live_session.meeting_link else "")
                             ),
                         },
                     ],
