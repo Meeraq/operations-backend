@@ -95,7 +95,11 @@ from courses.models import (
     Lesson,
 )
 from courses.models import Course, CourseEnrollment
-from courses.serializers import CourseSerializer
+from courses.serializers import (
+    CourseSerializer,
+    LessonSerializer,
+    CourseEnrollmentDepthOneSerializer,
+)
 from django.core.serializers import serialize
 from courses.views import create_or_get_learner
 from assessmentApi.models import (
@@ -598,7 +602,28 @@ def get_batch_calendar(request, batch_id):
                 participant["is_certificate_allowed"] = (
                     course_enrollment.is_certificate_allowed
                 )
-
+                course_enrollment_serializer = CourseEnrollmentDepthOneSerializer(
+                    course_enrollment
+                )
+                participant["course_enrollment"] = course_enrollment_serializer.data
+                completed_lessons_length = len(
+                    participant.get("course_enrollment", {}).get(
+                        "completed_lessons", []
+                    )
+                )
+                lessons = Lesson.objects.filter(
+                    Q(course=course_enrollment.course),
+                    Q(status="public"),
+                    ~Q(lesson_type="feedback"),
+                )
+                lessons_serializer = LessonSerializer(lessons, many=True)
+                completed_lesson_count = completed_lessons_length
+                total_lesson_count = len(lessons_serializer.data)
+                participant["progress"] = 0
+                if total_lesson_count > 0:
+                    participant["progress"] = int(
+                        round((completed_lesson_count / total_lesson_count) * 100)
+                    )
         except Exception as e:
             print(str(e))
             course = None
@@ -702,7 +727,9 @@ def update_live_session(request, live_session_id):
                 )
                 description = (
                     f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
-                    + update_live_session.description if update_live_session.description else ""
+                    + update_live_session.description
+                    if update_live_session.description
+                    else ""
                 )
                 if not existing_date_time:
                     create_outlook_calendar_invite(
@@ -1043,7 +1070,12 @@ def add_batch(request, project_id):
         with transaction.atomic():
             participants_data = request.data.get("participants", [])
             project = SchedularProject.objects.get(id=project_id)
-
+            learners_in_excel_sheet = len(participants_data)
+            learners_in_excel_which_already_exists = 0
+            for participant_data in participants_data:
+                email = participant_data.get("email", "").strip().lower()
+                if Learner.objects.filter(email=email).exists():
+                    learners_in_excel_which_already_exists += 1
             for participant_data in participants_data:
                 name = participant_data.get("name")
                 email = participant_data.get("email", "").strip().lower()
@@ -1149,9 +1181,21 @@ def add_batch(request, project_id):
                             )
                     except Exception:
                         pass
-
+            learner_message = (
+                f"{learners_in_excel_sheet-learners_in_excel_which_already_exists} learner"
+                if (learners_in_excel_sheet - learners_in_excel_which_already_exists)
+                == 1
+                else f"{learners_in_excel_sheet-learners_in_excel_which_already_exists} learners"
+            )
+            learner_msg = (
+                f"{learners_in_excel_which_already_exists} learner"
+                if (learners_in_excel_which_already_exists) == 1
+                else f"{learners_in_excel_which_already_exists} learners"
+            )
             return Response(
-                {"message": "Batch created successfully."},
+                {
+                    "message": f"{learner_message} uploaded successfully {learner_msg} already existing."
+                },
                 status=status.HTTP_201_CREATED,
             )
     except Exception as e:
@@ -2607,7 +2651,9 @@ def send_live_session_link(request):
                     "participant_name": learner.name,
                     "live_session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
                     "project_name": live_session.batch.project.name,
-                    "description": live_session.description if live_session.description else "",
+                    "description": (
+                        live_session.description if live_session.description else ""
+                    ),
                     "meeting_link": live_session.meeting_link,
                 },
                 [],
@@ -2642,11 +2688,7 @@ def send_live_session_link_whatsapp(request):
                         },
                         {
                             "name": "description",
-                            "value": (
-                                live_session.description if live_session.description else ""
-                                + f" Please join using this link: {live_session.meeting_link}"
-                                if live_session.meeting_link
-                                else ""
+                            "value": ((live_session.description if live_session.description else "") + (f" Please join using this link: {live_session.meeting_link}" if live_session.meeting_link else "")
                             ),
                         },
                     ],
@@ -4082,6 +4124,20 @@ def coach_inside_skill_training_or_not(request, batch_id):
         return Response({"error": str(e)}, status=500)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def facilitator_inside_that_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+        facilitators = batch.facilitator.all()
+        facilitator_serializer = FacilitatorSerializer(facilitators, many=True)
+        return Response({"facilitators_in_batch": facilitator_serializer.data})
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_coach_from_that_batch(request):
@@ -4096,6 +4152,27 @@ def delete_coach_from_that_batch(request):
         return Response({"error": "Batch not found"}, status=404)
     except Coach.DoesNotExist:
         return Response({"error": "Coach not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_facilitator_from_that_batch(request):
+    print("Data", request.data)
+    try:
+        batch_id = request.data.get("batch_id")
+        facilitator_id = request.data.get("facilitator_id")
+        batch = get_object_or_404(SchedularBatch, pk=batch_id)
+        facilitator = get_object_or_404(Facilitator, pk=facilitator_id)
+        batch.facilitator.remove(facilitator)
+        return Response(
+            {"message": f"Facilitator successfully removed from this batch."}
+        )
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
+    except Facilitator.DoesNotExist:
+        return Response({"error": "Facilitator not found"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
