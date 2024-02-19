@@ -3065,7 +3065,16 @@ class GetAssessmentsOfBatch(APIView):
                         "created_at": assessment.created_at,
                         "automated_reminder": assessment.automated_reminder,
                         "batch_name": batch.name,
+                        "questionnaire": assessment.questionnaire.id,
+                        "organisation": assessment.organisation.id,
+                        "hr": list(assessment.hr.all().values_list("id", flat=True)),
+                        "pre_assessment": (
+                            assessment.pre_assessment.id
+                            if assessment.assessment_timing == "post"
+                            else None
+                        ),
                     }
+
                     assessment_list.append(assessment_data)
 
             return Response(assessment_list)
