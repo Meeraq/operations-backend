@@ -216,5 +216,20 @@ urlpatterns = [
         "get-skill-dashboard-card-data/",
         views.get_skill_dashboard_card_data,
     ),
-
+    path(
+        "get-past-live-session-dashboard-data/<str:project_id>/",
+        views.get_past_live_session_dashboard_data,
+    ),
+    path(
+        "get-upcoming-live-session-dashboard-data/<str:project_id>/",
+        views.get_upcoming_live_session_dashboard_data,
+    ),
+    path(
+        "get-upcoming-coaching-session-dashboard-data/<str:project_id>/",
+        views.get_upcoming_coaching_session_dashboard_data,
+    ),
+    path(
+        "get-past-coaching-session-dashboard-data/<str:project_id>/",
+        views.get_past_coaching_session_dashboard_data,
+    ),
 ]

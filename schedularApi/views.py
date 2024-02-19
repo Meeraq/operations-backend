@@ -83,6 +83,7 @@ from .models import (
 from api.serializers import (
     FacilitatorSerializer,
     FacilitatorBasicDetailsSerializer,
+    CoachSerializer,
 )
 
 from courses.models import (
@@ -4173,3 +4174,150 @@ def get_skill_dashboard_card_data(request):
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_coaching_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+        if project_id == "all":
+            schedular_session = SchedularSessions.objects.all()
+        else:
+            schedular_session = SchedularSessions.objects.filter(coaching_session__batch__project__id=int(project_id))
+        upcoming_schedular_sessions = schedular_session.filter(
+            availibility__end_time__gt=timestamp_milliseconds
+        )
+        upcoming_schedular_session_data = []
+        for session in upcoming_schedular_sessions:
+            temp = {
+                "date_time":session.availibility.start_time,
+                "coach":session.availibility.coach.first_name + " " + session.availibility.coach.last_name,
+                "batch_name":session.coaching_session.batch.name,
+                "learner":session.learner.name,
+                "project_name":session.coaching_session.batch.project.name,
+            }
+            upcoming_schedular_session_data.append(temp)
+        return Response(upcoming_schedular_session_data, status=status.HTTP_200_OK)
+
+    except SchedularSessions.DoesNotExist:
+        return Response(
+            {"error": f"SchedularSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_past_coaching_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+        if project_id == "all":
+            schedular_session = SchedularSessions.objects.all()
+        else:
+            schedular_session = SchedularSessions.objects.filter(coaching_session__batch__project__id=int(project_id))
+        past_schedular_sessions = schedular_session.filter(
+            availibility__end_time__lt=timestamp_milliseconds
+        )
+        past_schedular_session_data = []
+        for session in past_schedular_sessions:
+            temp = {
+                "date_time":session.availibility.start_time,
+                "coach":session.availibility.coach.first_name + " " + session.availibility.coach.last_name,
+                "batch_name":session.coaching_session.batch.name,
+                "learner":session.learner.name,
+                "project_name":session.coaching_session.batch.project.name,
+            }
+            past_schedular_session_data.append(temp)
+        return Response(past_schedular_session_data, status=status.HTTP_200_OK)
+
+    except SchedularSessions.DoesNotExist:
+        return Response(
+            {"error": f"SchedularSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_live_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        if project_id == "all":
+            live_sessions = LiveSession.objects.all()
+        else:
+            live_sessions = LiveSession.objects.filter(batch__project__id=int(project_id))
+        upcoming_live_sessions = live_sessions.filter(date_time__gt=current_time_seeq)
+
+        upcoming_live_session_data = []
+
+        for live_session in upcoming_live_sessions:
+            facilitator_names = [f"{facilitator.first_name} {facilitator.last_name}" for facilitator in live_session.batch.facilitator.all()]
+            coach_names = [f"{coach.first_name} {coach.last_name}" for coach in live_session.batch.coaches.all()]
+            temp = {
+                "date_time": live_session.date_time,
+                "facilitator_names": facilitator_names,
+                "session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                "batch_name": live_session.batch.name,
+                "project_name": live_session.batch.project.name,
+                "coach_names": coach_names
+            }
+
+            upcoming_live_session_data.append(temp)
+        return Response(upcoming_live_session_data, status=status.HTTP_200_OK)
+
+    except LiveSession.DoesNotExist:
+        return Response(
+            {"error": f"LiveSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_past_live_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        if project_id == "all":
+            live_sessions = LiveSession.objects.all()
+        else:
+            live_sessions = LiveSession.objects.filter(batch__project__id=int(project_id))
+        past_live_sessions = live_sessions.filter(date_time__lt=current_time_seeq)
+
+        past_live_session_data = []
+
+        for live_session in past_live_sessions:
+            facilitator_names = [f"{facilitator.first_name} {facilitator.last_name}" for facilitator in live_session.batch.facilitator.all()]
+            coach_names = [f"{coach.first_name} {coach.last_name}" for coach in live_session.batch.coaches.all()]
+
+            temp = {
+                "date_time": live_session.date_time,
+                "facilitator_names": facilitator_names,
+                "session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                "batch_name": live_session.batch.name,
+                "project_name": live_session.batch.project.name,
+                "coach_names": coach_names
+            }
+
+            past_live_session_data.append(temp)
+
+        return Response(past_live_session_data, status=status.HTTP_200_OK)
+
+    except LiveSession.DoesNotExist:
+        return Response(
+            {"error": f"LiveSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
