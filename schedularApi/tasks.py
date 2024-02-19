@@ -36,9 +36,6 @@ from time import sleep
 import requests
 from zohoapi.models import Vendor, PoReminder
 from zohoapi.views import (
-    get_access_token,
-    base_url,
-    organization_id,
     filter_purchase_order_data,
 )
 
