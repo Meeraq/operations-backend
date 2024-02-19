@@ -97,10 +97,13 @@ from rest_framework.response import Response
 from rest_framework import status
 import pandas as pd
 from io import BytesIO
-from schedularApi.tasks import get_file_content,get_file_extension,get_live_session_name
+from schedularApi.tasks import (
+    get_file_content,
+    get_file_extension,
+    get_live_session_name,
+)
 from django.core.mail import EmailMessage
 from django.conf import settings
-
 
 
 env = environ.Env()
@@ -206,7 +209,6 @@ def get_feedback_lesson_name(lesson_name):
     return underscored_string
 
 
-
 def get_file_name_from_url(url):
     # Split the URL by '/' to get an array of parts
     url_parts = url.split("/")
@@ -218,7 +220,6 @@ def get_file_name_from_url(url):
     file_name = full_file_name.split("?")[0]
 
     return file_name
-
 
 
 def download_file_response(file_url):
@@ -3031,32 +3032,41 @@ class GetUniqueIdParticipantFromCourse(APIView):
 class GetAssessmentsOfBatch(APIView):
     permission_classes = [AllowAny]
 
-    def get(self, request, batch_id):
+    def get(self, request, project_or_batch, id):
         try:
-            batch = SchedularBatch.objects.get(id=batch_id)
-            assessments = AssessmentModal.objects.filter(
-                assessment_modal__lesson__course__batch=batch
-            )
+            batches = None
+            if project_or_batch == "project":
+                batches = SchedularBatch.objects.filter(project__id=id)
+            else:
+                batches = SchedularBatch.objects.filter(id=id)
+
             assessment_list = []
-            for assessment in assessments:
-                total_responses_count = ParticipantResponse.objects.filter(
-                    assessment=assessment
-                ).count()
-                assessment_data = {
-                    "id": assessment.id,
-                    "name": assessment.name,
-                    "participant_view_name": assessment.participant_view_name,
-                    "assessment_type": assessment.assessment_type,
-                    "assessment_timing": assessment.assessment_timing,
-                    "assessment_start_date": assessment.assessment_start_date,
-                    "assessment_end_date": assessment.assessment_end_date,
-                    "status": assessment.status,
-                    "total_learners_count": assessment.participants_observers.count(),
-                    "total_responses_count": total_responses_count,
-                    "created_at": assessment.created_at,
-                    "automated_reminder": assessment.automated_reminder,
-                }
-                assessment_list.append(assessment_data)
+
+            for batch in batches:
+                assessments = AssessmentModal.objects.filter(
+                    assessment_modal__lesson__course__batch=batch
+                )
+
+                for assessment in assessments:
+                    total_responses_count = ParticipantResponse.objects.filter(
+                        assessment=assessment
+                    ).count()
+                    assessment_data = {
+                        "id": assessment.id,
+                        "name": assessment.name,
+                        "participant_view_name": assessment.participant_view_name,
+                        "assessment_type": assessment.assessment_type,
+                        "assessment_timing": assessment.assessment_timing,
+                        "assessment_start_date": assessment.assessment_start_date,
+                        "assessment_end_date": assessment.assessment_end_date,
+                        "status": assessment.status,
+                        "total_learners_count": assessment.participants_observers.count(),
+                        "total_responses_count": total_responses_count,
+                        "created_at": assessment.created_at,
+                        "automated_reminder": assessment.automated_reminder,
+                        "batch_name": batch.name,
+                    }
+                    assessment_list.append(assessment_data)
 
             return Response(assessment_list)
 
@@ -3074,7 +3084,8 @@ def get_all_feedbacks_download_report(request, feedback_id):
         data = []
         # Populate the list of dictionaries with data from FeedbackLesson and FeedbackLessonResponse
         for response in FeedbackLessonResponse.objects.filter(
-                feedback_lesson=feedback_lesson):
+            feedback_lesson=feedback_lesson
+        ):
             participant_name = response.learner.name
             participant_email = response.learner.email
             temp_data = {
@@ -3291,7 +3302,7 @@ def download_consolidated_project_report(request, project_id):
     return response
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 def get_nudges_by_project_id(request, project_id):
     # Retrieve nudges filtered by project_id
     nudges = Nudge.objects.filter(course__batch__project__id=project_id)
@@ -3299,30 +3310,31 @@ def get_nudges_by_project_id(request, project_id):
     return Response(serializer.data)
 
 
-@api_view(['POST'])
+@api_view(["POST"])
 def send_nudge_to_email(request, nudge_id):
     email = request.data.get("email")
     try:
-            nudge = Nudge.objects.get(id=nudge_id)
+        nudge = Nudge.objects.get(id=nudge_id)
     except Nudge.DoesNotExist:
-            return Response({'error': 'Nudge not found'}, status=404)
-            
+        return Response({"error": "Nudge not found"}, status=404)
+
     subject = f"New Nudge: {nudge.name}"
     message = nudge.content
     email_msg = EmailMessage(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
     if nudge.file:
-            attachment_path = nudge.file.url
-            file_content = get_file_content(nudge.file.url)
-            extension = get_file_extension(nudge.file.url)
-            file_name = f"Attachment.{extension}"
-            email_msg.attach(file_name, file_content, f"application/{extension}")				
+        attachment_path = nudge.file.url
+        file_content = get_file_content(nudge.file.url)
+        extension = get_file_extension(nudge.file.url)
+        file_name = f"Attachment.{extension}"
+        email_msg.attach(file_name, file_content, f"application/{extension}")
     email_msg.content_subtype = "html"
-    email_msg.send()				
-    return Response({'message': 'Nudge sent successfully'})
+    email_msg.send()
+    return Response({"message": "Nudge sent successfully"})
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 def duplicate_nudge(request, nudge_id, course_id):
-    order = request.data.get('order')
+    order = request.data.get("order")
     try:
         original_nudge = Nudge.objects.get(id=nudge_id)
         course = Course.objects.get(id=course_id)  # Fetch the course instance
@@ -3332,14 +3344,13 @@ def duplicate_nudge(request, nudge_id, course_id):
             file=original_nudge.file,
             order=order,
             course=course,  # Use the fetched course instance
-            is_sent=False  # Assuming the duplicated nudge is not sent yet
+            is_sent=False,  # Assuming the duplicated nudge is not sent yet
         )
-        return Response({"message" : "Nudge duplicated successfully."})
+        return Response({"message": "Nudge duplicated successfully."})
     except Nudge.DoesNotExist:
-        return Response({'error': 'Nudge not found'}, status=404)
+        return Response({"error": "Nudge not found"}, status=404)
     except Course.DoesNotExist:
-        return Response({'error': 'Course not found'}, status=404)
-    
+        return Response({"error": "Course not found"}, status=404)
 
 
 @api_view(["GET"])

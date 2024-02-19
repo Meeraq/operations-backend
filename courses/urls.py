@@ -315,7 +315,7 @@ urlpatterns = [
         GetUniqueIdParticipantFromCourse.as_view(),
     ),
     path(
-        "get-assessments-of-batch/<int:batch_id>/",
+        "get-assessments-of-batch/<str:project_or_batch>/<int:id>/",
         GetAssessmentsOfBatch.as_view(),
     ),
     path(
@@ -334,13 +334,19 @@ urlpatterns = [
         "consolidated-feedback-download-report/<str:live_session_id>/",
         views.get_consolidated_feedback_download_report,
     ),
-    path('projects/<int:project_id>/nudges/', views.get_nudges_by_project_id, name='get_nudges_by_project_id'),
+    path(
+        "projects/<int:project_id>/nudges/",
+        views.get_nudges_by_project_id,
+        name="get_nudges_by_project_id",
+    ),
     path("send-test-nudge/<int:nudge_id>/", views.send_nudge_to_email),
-    path('nudges/<int:nudge_id>/duplicate/<int:course_id>/', views.duplicate_nudge, name='duplicate_nudge'),
+    path(
+        "nudges/<int:nudge_id>/duplicate/<int:course_id>/",
+        views.duplicate_nudge,
+        name="duplicate_nudge",
+    ),
     path(
         "get-nps-project-wise/",
         views.get_nps_project_wise,
     ),
 ]
-
-
