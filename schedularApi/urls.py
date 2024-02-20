@@ -121,13 +121,18 @@ urlpatterns = [
         name="update_session_status",
     ),
     path(
-        "project-report-download/<int:project_id>/",
-        views.project_report_download,
-        name="project_report_download",
+        "project-batch-wise-report-download/<int:project_id>/<str:session_to_download>/",
+        views.project_batch_wise_report_download,
+        name="project_batch_wise_report_download",
     ),
     path(
-        "project-report-download-session-wise/<int:project_id>/<int:batch_id>/",
-        views.project_report_download_session_wise,
+        "project-report-download-live-session-wise/<int:project_id>/<str:batch_id>/",
+        views.project_report_download_live_session_wise,
+        name="project_report_download_session_wise",
+    ),
+    path(
+        "project-report-download-coaching-session-wise/<int:project_id>/<str:batch_id>/",
+        views.project_report_download_coaching_session_wise,
         name="project_report_download_session_wise",
     ),
     path(
