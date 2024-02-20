@@ -28,7 +28,14 @@ import pytz
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
-from courses.models import Course, Lesson, FeedbackLesson, FeedbackLessonResponse, Nudge
+from courses.models import (
+    Course,
+    Lesson,
+    FeedbackLesson,
+    FeedbackLessonResponse,
+    Nudge,
+    Assessment as AssessmentLesson,
+)
 from django.db.models import Q
 from assessmentApi.models import Assessment, ParticipantResponse
 import environ
@@ -36,9 +43,6 @@ from time import sleep
 import requests
 from zohoapi.models import Vendor, PoReminder
 from zohoapi.views import (
-    get_access_token,
-    base_url,
-    organization_id,
     filter_purchase_order_data,
 )
 
@@ -696,6 +700,15 @@ def update_assessment_status():
         # Update assessment status based on conditions
         if current_date == start_date:
             assessment.status = "ongoing"
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+            if assessment_lesson:
+                assessment_lesson.lesson.status = "public"
+
+                assessment_lesson.lesson.save()
+                assessment_lesson.save()
+
         elif current_date > end_date:
             assessment.status = "completed"
         # Save the updated assessment

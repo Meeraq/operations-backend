@@ -2299,6 +2299,19 @@ class AssignCourseTemplateToBatch(APIView):
                 original_lessons = Lesson.objects.filter(
                     course_template=course_template
                 )
+                assessment_creation = False
+                if not original_lessons.filter(lesson_type="assessment").exists():
+                    if batch.project.pre_post_assessment:
+                        assessment_creation =  True
+                        lesson1 = Lesson.objects.create(
+                                course=new_course,
+                                name="Pre Assessment",
+                                status="draft",
+                                lesson_type="assessment",
+                                # Duplicate specific lesson types
+                                order=1,
+                            )
+                        assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
                 for original_lesson in original_lessons:
                     new_lesson = None
                     # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
@@ -2306,13 +2319,16 @@ class AssignCourseTemplateToBatch(APIView):
                         "live_session",
                         "laser_coaching",
                     ]:
+                        updated_order = original_lesson.order
+                        if assessment_creation:
+                            updated_order = original_lesson.order + 1
                         new_lesson = Lesson.objects.create(
                             course=new_course,
                             name=original_lesson.name,
                             status=original_lesson.status,
                             lesson_type=original_lesson.lesson_type,
                             # Duplicate specific lesson types
-                            order=original_lesson.order,
+                            order=updated_order,
                         )
                         if original_lesson.lesson_type == "text":
                             TextLesson.objects.create(
@@ -2435,6 +2451,26 @@ class AssignCourseTemplateToBatch(APIView):
                     LaserCoachingSession.objects.create(
                         lesson=new_lesson, coaching_session=coaching_session
                     )
+
+                if assessment_creation:
+                    max_order = (
+                        Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
+                            "order__max"
+                        ]
+                        or 0
+                    )
+                    
+                    lesson2 = Lesson.objects.create(
+                        course=new_course,
+                        name="Post Assessment",
+                        status="draft",
+                        lesson_type="assessment",
+                        # Duplicate specific lesson types
+                        order=max_order+1,
+                    )
+
+                    assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
+                    
             return Response(
                 {
                     "message": "Course assigned successfully.",
