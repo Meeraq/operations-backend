@@ -2906,7 +2906,7 @@ def accept_coach_caas_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     coaches_selected_count = 0
     for coach in project.coaches_status.all():
-        if coach.id == request.data.get("coach_id"):
+        if coach.coach_id == request.data.get("coach_id"):
             if (
                 coach.status["consent"]["status"] == "select"
                 and coach.status["hr"]["status"] == "sent"
