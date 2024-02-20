@@ -835,12 +835,12 @@ def send_whatsapp_reminder_same_day_morning():
                                     "value": (
                                         session.description
                                         if session.description
-                                        else (
-                                            ""
-                                            + f"Please join using this link: {session.meeting_link}"
-                                            if session.meeting_link
-                                            else ""
-                                        )
+                                        else ""
+                                    )
+                                    + (
+                                        f"Please join using this link: {session.meeting_link}"
+                                        if session.meeting_link
+                                        else ""
                                     ),
                                 },
                                 {
@@ -885,12 +885,12 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
                                 "value": (
                                     live_session.description
                                     if live_session.description
-                                    else (
-                                        ""
-                                        + f"Please join using this link: {live_session.meeting_link}"
-                                        if live_session.meeting_link
-                                        else ""
-                                    )
+                                    else ""
+                                )
+                                + (
+                                    f"Please join using this link: {live_session.meeting_link}"
+                                    if live_session.meeting_link
+                                    else ""
                                 ),
                             },
                         ],

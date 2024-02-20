@@ -2690,17 +2690,14 @@ def send_live_session_link_whatsapp(request):
                             "name": "description",
                             "value": (
                                 (
-                                live_session.description
-                               
-                                if live_session.description
-                                else (
-                                    ""
-                                    + f" Please join using this link: {live_session.meeting_link}"
-                              
-                                    if live_session.meeting_link
-                               
+                                    live_session.description
+                                    if live_session.description
                                     else ""
-                            )
+                                )
+                                + (
+                                    f" Please join using this link: {live_session.meeting_link}"
+                                    if live_session.meeting_link
+                                    else ""
                                 )
                             ),
                         },
@@ -4221,11 +4218,11 @@ def update_project_status(request):
 @permission_classes([IsAuthenticated])
 def pre_post_assessment_or_nudge_update_in_project(request):
     try:
- 
+
         operation = request.data.get("operation")
         nudge_or_assessment = request.data.get("nudgeOrAssessment")
         project_id = request.data.get("projectId")
-    
+
         project = SchedularProject.objects.get(id=project_id)
 
         if nudge_or_assessment == "nudge" and operation == "delete":
