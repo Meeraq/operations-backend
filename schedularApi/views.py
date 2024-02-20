@@ -101,7 +101,7 @@ from courses.serializers import (
     CourseEnrollmentDepthOneSerializer,
 )
 from django.core.serializers import serialize
-from courses.views import create_or_get_learner
+from courses.views import create_or_get_learner,add_question_to_feedback_lesson,nps_default_feed_questions
 from assessmentApi.models import (
     Assessment,
     ParticipantUniqueId,
@@ -2689,11 +2689,13 @@ def send_live_session_link_whatsapp(request):
                         {
                             "name": "description",
                             "value": (
-                                live_session.description
-                                if live_session.description
-                                else (
-                                    ""
-                                    + f" Please join using this link: {live_session.meeting_link}"
+                                (
+                                    live_session.description
+                                    if live_session.description
+                                    else ""
+                                )
+                                + (
+                                    f" Please join using this link: {live_session.meeting_link}"
                                     if live_session.meeting_link
                                     else ""
                                 )
@@ -3698,8 +3700,10 @@ def add_new_session_in_project_structure(request):
                         )
                         unique_id = uuid.uuid4()
                         feedback_lesson = FeedbackLesson.objects.create(
-                            lesson=new_feedback_lesson, unique_id=unique_id
+                            lesson=new_feedback_lesson, unique_id=unique_id, live_session=live_session
                         )
+                        if live_session.session_type in ["in_person_session", "virtual_session"]:        
+                            add_question_to_feedback_lesson(feedback_lesson, nps_default_feed_questions)
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     coaching_session_number = (
                         CoachingSession.objects.filter(
@@ -4207,6 +4211,39 @@ def update_project_status(request):
         return Response(
             {
                 "error": "Failed to Update Status.",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def pre_post_assessment_or_nudge_update_in_project(request):
+    try:
+
+        operation = request.data.get("operation")
+        nudge_or_assessment = request.data.get("nudgeOrAssessment")
+        project_id = request.data.get("projectId")
+
+        project = SchedularProject.objects.get(id=project_id)
+
+        if nudge_or_assessment == "nudge" and operation == "delete":
+            project.nudges = False
+        elif nudge_or_assessment == "nudge" and operation == "add":
+            project.nudges = True
+        elif nudge_or_assessment == "assessment" and operation == "delete":
+            project.pre_post_assessment = False
+        elif nudge_or_assessment == "assessment" and operation == "add":
+            project.pre_post_assessment = True
+
+        project.save()
+
+        return Response(status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {
+                "error": "Failed to perform operation.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
