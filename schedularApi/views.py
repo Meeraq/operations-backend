@@ -96,7 +96,11 @@ from courses.models import (
     Lesson,
 )
 from courses.models import Course, CourseEnrollment
-from courses.serializers import CourseSerializer
+from courses.serializers import (
+    CourseSerializer,
+    LessonSerializer,
+    CourseEnrollmentDepthOneSerializer,
+)
 from django.core.serializers import serialize
 from courses.views import create_or_get_learner
 from assessmentApi.models import (
@@ -602,7 +606,28 @@ def get_batch_calendar(request, batch_id):
                 participant["is_certificate_allowed"] = (
                     course_enrollment.is_certificate_allowed
                 )
-
+                course_enrollment_serializer = CourseEnrollmentDepthOneSerializer(
+                    course_enrollment
+                )
+                participant["course_enrollment"] = course_enrollment_serializer.data
+                completed_lessons_length = len(
+                    participant.get("course_enrollment", {}).get(
+                        "completed_lessons", []
+                    )
+                )
+                lessons = Lesson.objects.filter(
+                    Q(course=course_enrollment.course),
+                    Q(status="public"),
+                    ~Q(lesson_type="feedback"),
+                )
+                lessons_serializer = LessonSerializer(lessons, many=True)
+                completed_lesson_count = completed_lessons_length
+                total_lesson_count = len(lessons_serializer.data)
+                participant["progress"] = 0
+                if total_lesson_count > 0:
+                    participant["progress"] = int(
+                        round((completed_lesson_count / total_lesson_count) * 100)
+                    )
         except Exception as e:
             print(str(e))
             course = None
@@ -708,7 +733,11 @@ def update_live_session(request, live_session_id):
                     f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
                     + update_live_session.description
                     if update_live_session.description
-                    else ""
+                    else (
+                        "" + update_live_session.description
+                        if update_live_session.description
+                        else ""
+                    )
                 )
                 if not existing_date_time:
                     create_outlook_calendar_invite(
@@ -1049,7 +1078,12 @@ def add_batch(request, project_id):
         with transaction.atomic():
             participants_data = request.data.get("participants", [])
             project = SchedularProject.objects.get(id=project_id)
-
+            learners_in_excel_sheet = len(participants_data)
+            learners_in_excel_which_already_exists = 0
+            for participant_data in participants_data:
+                email = participant_data.get("email", "").strip().lower()
+                if Learner.objects.filter(email=email).exists():
+                    learners_in_excel_which_already_exists += 1
             for participant_data in participants_data:
                 name = participant_data.get("name")
                 email = participant_data.get("email", "").strip().lower()
@@ -1155,9 +1189,21 @@ def add_batch(request, project_id):
                             )
                     except Exception:
                         pass
-
+            learner_message = (
+                f"{learners_in_excel_sheet-learners_in_excel_which_already_exists} learner"
+                if (learners_in_excel_sheet - learners_in_excel_which_already_exists)
+                == 1
+                else f"{learners_in_excel_sheet-learners_in_excel_which_already_exists} learners"
+            )
+            learner_msg = (
+                f"{learners_in_excel_which_already_exists} learner"
+                if (learners_in_excel_which_already_exists) == 1
+                else f"{learners_in_excel_which_already_exists} learners"
+            )
             return Response(
-                {"message": "Batch created successfully."},
+                {
+                    "message": f"{learner_message} uploaded successfully {learner_msg} already existing."
+                },
                 status=status.HTTP_201_CREATED,
             )
     except Exception as e:
@@ -2651,11 +2697,13 @@ def send_live_session_link_whatsapp(request):
                         {
                             "name": "description",
                             "value": (
-                                live_session.description
-                                if live_session.description
-                                else (
-                                    ""
-                                    + f" Please join using this link: {live_session.meeting_link}"
+                                (
+                                    live_session.description
+                                    if live_session.description
+                                    else ""
+                                )
+                                + (
+                                    f" Please join using this link: {live_session.meeting_link}"
                                     if live_session.meeting_link
                                     else ""
                                 )
@@ -4094,6 +4142,20 @@ def coach_inside_skill_training_or_not(request, batch_id):
         return Response({"error": str(e)}, status=500)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def facilitator_inside_that_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+        facilitators = batch.facilitator.all()
+        facilitator_serializer = FacilitatorSerializer(facilitators, many=True)
+        return Response({"facilitators_in_batch": facilitator_serializer.data})
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_coach_from_that_batch(request):
@@ -4108,6 +4170,27 @@ def delete_coach_from_that_batch(request):
         return Response({"error": "Batch not found"}, status=404)
     except Coach.DoesNotExist:
         return Response({"error": "Coach not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_facilitator_from_that_batch(request):
+    print("Data", request.data)
+    try:
+        batch_id = request.data.get("batch_id")
+        facilitator_id = request.data.get("facilitator_id")
+        batch = get_object_or_404(SchedularBatch, pk=batch_id)
+        facilitator = get_object_or_404(Facilitator, pk=facilitator_id)
+        batch.facilitator.remove(facilitator)
+        return Response(
+            {"message": f"Facilitator successfully removed from this batch."}
+        )
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
+    except Facilitator.DoesNotExist:
+        return Response({"error": "Facilitator not found"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
@@ -4185,18 +4268,22 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
         if project_id == "all":
             schedular_session = SchedularSessions.objects.all()
         else:
-            schedular_session = SchedularSessions.objects.filter(coaching_session__batch__project__id=int(project_id))
+            schedular_session = SchedularSessions.objects.filter(
+                coaching_session__batch__project__id=int(project_id)
+            )
         upcoming_schedular_sessions = schedular_session.filter(
             availibility__end_time__gt=timestamp_milliseconds
         )
         upcoming_schedular_session_data = []
         for session in upcoming_schedular_sessions:
             temp = {
-                "date_time":session.availibility.start_time,
-                "coach":session.availibility.coach.first_name + " " + session.availibility.coach.last_name,
-                "batch_name":session.coaching_session.batch.name,
-                "learner":session.learner.name,
-                "project_name":session.coaching_session.batch.project.name,
+                "date_time": session.availibility.start_time,
+                "coach": session.availibility.coach.first_name
+                + " "
+                + session.availibility.coach.last_name,
+                "batch_name": session.coaching_session.batch.name,
+                "learner": session.learner.name,
+                "project_name": session.coaching_session.batch.project.name,
             }
             upcoming_schedular_session_data.append(temp)
         return Response(upcoming_schedular_session_data, status=status.HTTP_200_OK)
@@ -4220,18 +4307,22 @@ def get_past_coaching_session_dashboard_data(request, project_id):
         if project_id == "all":
             schedular_session = SchedularSessions.objects.all()
         else:
-            schedular_session = SchedularSessions.objects.filter(coaching_session__batch__project__id=int(project_id))
+            schedular_session = SchedularSessions.objects.filter(
+                coaching_session__batch__project__id=int(project_id)
+            )
         past_schedular_sessions = schedular_session.filter(
             availibility__end_time__lt=timestamp_milliseconds
         )
         past_schedular_session_data = []
         for session in past_schedular_sessions:
             temp = {
-                "date_time":session.availibility.start_time,
-                "coach":session.availibility.coach.first_name + " " + session.availibility.coach.last_name,
-                "batch_name":session.coaching_session.batch.name,
-                "learner":session.learner.name,
-                "project_name":session.coaching_session.batch.project.name,
+                "date_time": session.availibility.start_time,
+                "coach": session.availibility.coach.first_name
+                + " "
+                + session.availibility.coach.last_name,
+                "batch_name": session.coaching_session.batch.name,
+                "learner": session.learner.name,
+                "project_name": session.coaching_session.batch.project.name,
             }
             past_schedular_session_data.append(temp)
         return Response(past_schedular_session_data, status=status.HTTP_200_OK)
@@ -4254,21 +4345,29 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
         if project_id == "all":
             live_sessions = LiveSession.objects.all()
         else:
-            live_sessions = LiveSession.objects.filter(batch__project__id=int(project_id))
+            live_sessions = LiveSession.objects.filter(
+                batch__project__id=int(project_id)
+            )
         upcoming_live_sessions = live_sessions.filter(date_time__gt=current_time_seeq)
 
         upcoming_live_session_data = []
 
         for live_session in upcoming_live_sessions:
-            facilitator_names = [f"{facilitator.first_name} {facilitator.last_name}" for facilitator in live_session.batch.facilitator.all()]
-            coach_names = [f"{coach.first_name} {coach.last_name}" for coach in live_session.batch.coaches.all()]
+            facilitator_names = [
+                f"{facilitator.first_name} {facilitator.last_name}"
+                for facilitator in live_session.batch.facilitator.all()
+            ]
+            coach_names = [
+                f"{coach.first_name} {coach.last_name}"
+                for coach in live_session.batch.coaches.all()
+            ]
             temp = {
                 "date_time": live_session.date_time,
                 "facilitator_names": facilitator_names,
                 "session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
                 "batch_name": live_session.batch.name,
                 "project_name": live_session.batch.project.name,
-                "coach_names": coach_names
+                "coach_names": coach_names,
             }
 
             upcoming_live_session_data.append(temp)
@@ -4283,6 +4382,7 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_past_live_session_dashboard_data(request, project_id):
@@ -4291,14 +4391,22 @@ def get_past_live_session_dashboard_data(request, project_id):
         if project_id == "all":
             live_sessions = LiveSession.objects.all()
         else:
-            live_sessions = LiveSession.objects.filter(batch__project__id=int(project_id))
+            live_sessions = LiveSession.objects.filter(
+                batch__project__id=int(project_id)
+            )
         past_live_sessions = live_sessions.filter(date_time__lt=current_time_seeq)
 
         past_live_session_data = []
 
         for live_session in past_live_sessions:
-            facilitator_names = [f"{facilitator.first_name} {facilitator.last_name}" for facilitator in live_session.batch.facilitator.all()]
-            coach_names = [f"{coach.first_name} {coach.last_name}" for coach in live_session.batch.coaches.all()]
+            facilitator_names = [
+                f"{facilitator.first_name} {facilitator.last_name}"
+                for facilitator in live_session.batch.facilitator.all()
+            ]
+            coach_names = [
+                f"{coach.first_name} {coach.last_name}"
+                for coach in live_session.batch.coaches.all()
+            ]
 
             temp = {
                 "date_time": live_session.date_time,
@@ -4306,7 +4414,7 @@ def get_past_live_session_dashboard_data(request, project_id):
                 "session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
                 "batch_name": live_session.batch.name,
                 "project_name": live_session.batch.project.name,
-                "coach_names": coach_names
+                "coach_names": coach_names,
             }
 
             past_live_session_data.append(temp)
