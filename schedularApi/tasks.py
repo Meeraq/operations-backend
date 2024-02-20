@@ -28,7 +28,14 @@ import pytz
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
-from courses.models import Course, Lesson, FeedbackLesson, FeedbackLessonResponse, Nudge
+from courses.models import (
+    Course,
+    Lesson,
+    FeedbackLesson,
+    FeedbackLessonResponse,
+    Nudge,
+    Assessment as AssessmentLesson,
+)
 from django.db.models import Q
 from assessmentApi.models import Assessment, ParticipantResponse
 import environ
@@ -36,9 +43,6 @@ from time import sleep
 import requests
 from zohoapi.models import Vendor, PoReminder
 from zohoapi.views import (
-    get_access_token,
-    base_url,
-    organization_id,
     filter_purchase_order_data,
 )
 
@@ -684,9 +688,7 @@ def send_whatsapp_message_to_participants_for_assessment_at_7PM():
 
 @shared_task
 def update_assessment_status():
-    assessments = Assessment.objects.filter(
-        Q(automated_reminder=True), ~Q(assessment_timing="none")
-    )
+    assessments = Assessment.objects.filter(~Q(assessment_timing="none"))
     for assessment in assessments:
         # Parse start and end dates to datetime objects
         start_date = datetime.strptime(
@@ -698,6 +700,15 @@ def update_assessment_status():
         # Update assessment status based on conditions
         if current_date == start_date:
             assessment.status = "ongoing"
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+            if assessment_lesson:
+                assessment_lesson.lesson.status = "public"
+
+                assessment_lesson.lesson.save()
+                assessment_lesson.save()
+
         elif current_date > end_date:
             assessment.status = "completed"
         # Save the updated assessment
@@ -817,16 +828,14 @@ def send_whatsapp_reminder_same_day_morning():
                                 {
                                     "name": "description",
                                     "value": (
-                                        (
-                                            session.description
-                                            if session.description
-                                            else ""
-                                        )
-                                        + (
-                                            f"Please join using this link: {session.meeting_link}"
-                                            if session.meeting_link
-                                            else ""
-                                        )
+                                        session.description
+                                        if session.description
+                                        else ""
+                                    )
+                                    + (
+                                        f"Please join using this link: {session.meeting_link}"
+                                        if session.meeting_link
+                                        else ""
                                     ),
                                 },
                                 {
@@ -869,16 +878,14 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
                             {
                                 "name": "description",
                                 "value": (
-                                    (
-                                        live_session.description
-                                        if live_session.description
-                                        else ""
-                                    )
-                                    + (
-                                        f"Please join using this link: {live_session.meeting_link}"
-                                        if live_session.meeting_link
-                                        else ""
-                                    )
+                                    live_session.description
+                                    if live_session.description
+                                    else ""
+                                )
+                                + (
+                                    f"Please join using this link: {live_session.meeting_link}"
+                                    if live_session.meeting_link
+                                    else ""
                                 ),
                             },
                         ],

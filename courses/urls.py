@@ -310,7 +310,7 @@ urlpatterns = [
         GetUniqueIdParticipantFromCourse.as_view(),
     ),
     path(
-        "get-assessments-of-batch/<int:batch_id>/",
+        "get-assessments-of-batch/<str:project_or_batch>/<int:id>/",
         GetAssessmentsOfBatch.as_view(),
     ),
     path(

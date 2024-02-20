@@ -2689,11 +2689,13 @@ def send_live_session_link_whatsapp(request):
                         {
                             "name": "description",
                             "value": (
-                                live_session.description
-                                if live_session.description
-                                else (
-                                    ""
-                                    + f" Please join using this link: {live_session.meeting_link}"
+                                (
+                                    live_session.description
+                                    if live_session.description
+                                    else ""
+                                )
+                                + (
+                                    f" Please join using this link: {live_session.meeting_link}"
                                     if live_session.meeting_link
                                     else ""
                                 )
@@ -4209,6 +4211,39 @@ def update_project_status(request):
         return Response(
             {
                 "error": "Failed to Update Status.",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def pre_post_assessment_or_nudge_update_in_project(request):
+    try:
+
+        operation = request.data.get("operation")
+        nudge_or_assessment = request.data.get("nudgeOrAssessment")
+        project_id = request.data.get("projectId")
+
+        project = SchedularProject.objects.get(id=project_id)
+
+        if nudge_or_assessment == "nudge" and operation == "delete":
+            project.nudges = False
+        elif nudge_or_assessment == "nudge" and operation == "add":
+            project.nudges = True
+        elif nudge_or_assessment == "assessment" and operation == "delete":
+            project.pre_post_assessment = False
+        elif nudge_or_assessment == "assessment" and operation == "add":
+            project.pre_post_assessment = True
+
+        project.save()
+
+        return Response(status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {
+                "error": "Failed to perform operation.",
             },
             status=status.HTTP_400_BAD_REQUEST,
         )

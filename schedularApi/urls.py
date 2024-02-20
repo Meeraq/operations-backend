@@ -219,4 +219,8 @@ urlpatterns = [
         "update-project-status/",
         views.update_project_status,
     ),
+     path(
+        "pre-post-assessment-or-nudge-update-in-project/",
+        views.pre_post_assessment_or_nudge_update_in_project,
+    ),
 ]

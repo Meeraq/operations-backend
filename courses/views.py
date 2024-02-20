@@ -2338,6 +2338,19 @@ class AssignCourseTemplateToBatch(APIView):
                 original_lessons = Lesson.objects.filter(
                     course_template=course_template
                 )
+                assessment_creation = False
+                if not original_lessons.filter(lesson_type="assessment").exists():
+                    if batch.project.pre_post_assessment:
+                        assessment_creation =  True
+                        lesson1 = Lesson.objects.create(
+                                course=new_course,
+                                name="Pre Assessment",
+                                status="draft",
+                                lesson_type="assessment",
+                                # Duplicate specific lesson types
+                                order=1,
+                            )
+                        assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
                 for original_lesson in original_lessons:
                     new_lesson = None
                     # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
@@ -2345,13 +2358,16 @@ class AssignCourseTemplateToBatch(APIView):
                         "live_session",
                         "laser_coaching",
                     ]:
+                        updated_order = original_lesson.order
+                        if assessment_creation:
+                            updated_order = original_lesson.order + 1
                         new_lesson = Lesson.objects.create(
                             course=new_course,
                             name=original_lesson.name,
                             status=original_lesson.status,
                             lesson_type=original_lesson.lesson_type,
                             # Duplicate specific lesson types
-                            order=original_lesson.order,
+                            order=updated_order,
                         )
                         if original_lesson.lesson_type == "text":
                             TextLesson.objects.create(
@@ -2497,6 +2513,26 @@ class AssignCourseTemplateToBatch(APIView):
                     LaserCoachingSession.objects.create(
                         lesson=new_lesson, coaching_session=coaching_session
                     )
+
+                if assessment_creation:
+                    max_order = (
+                        Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
+                            "order__max"
+                        ]
+                        or 0
+                    )
+                    
+                    lesson2 = Lesson.objects.create(
+                        course=new_course,
+                        name="Post Assessment",
+                        status="draft",
+                        lesson_type="assessment",
+                        # Duplicate specific lesson types
+                        order=max_order+1,
+                    )
+
+                    assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
+                    
             return Response(
                 {
                     "message": "Course assigned successfully.",
@@ -3094,32 +3130,50 @@ class GetUniqueIdParticipantFromCourse(APIView):
 class GetAssessmentsOfBatch(APIView):
     permission_classes = [AllowAny]
 
-    def get(self, request, batch_id):
+    def get(self, request, project_or_batch, id):
         try:
-            batch = SchedularBatch.objects.get(id=batch_id)
-            assessments = AssessmentModal.objects.filter(
-                assessment_modal__lesson__course__batch=batch
-            )
+            batches = None
+            if project_or_batch == "project":
+                batches = SchedularBatch.objects.filter(project__id=id)
+            else:
+                batches = SchedularBatch.objects.filter(id=id)
+
             assessment_list = []
-            for assessment in assessments:
-                total_responses_count = ParticipantResponse.objects.filter(
-                    assessment=assessment
-                ).count()
-                assessment_data = {
-                    "id": assessment.id,
-                    "name": assessment.name,
-                    "participant_view_name": assessment.participant_view_name,
-                    "assessment_type": assessment.assessment_type,
-                    "assessment_timing": assessment.assessment_timing,
-                    "assessment_start_date": assessment.assessment_start_date,
-                    "assessment_end_date": assessment.assessment_end_date,
-                    "status": assessment.status,
-                    "total_learners_count": assessment.participants_observers.count(),
-                    "total_responses_count": total_responses_count,
-                    "created_at": assessment.created_at,
-                    "automated_reminder": assessment.automated_reminder,
-                }
-                assessment_list.append(assessment_data)
+
+            for batch in batches:
+                assessments = AssessmentModal.objects.filter(
+                    assessment_modal__lesson__course__batch=batch
+                )
+
+                for assessment in assessments:
+                    total_responses_count = ParticipantResponse.objects.filter(
+                        assessment=assessment
+                    ).count()
+                    assessment_data = {
+                        "id": assessment.id,
+                        "name": assessment.name,
+                        "participant_view_name": assessment.participant_view_name,
+                        "assessment_type": assessment.assessment_type,
+                        "assessment_timing": assessment.assessment_timing,
+                        "assessment_start_date": assessment.assessment_start_date,
+                        "assessment_end_date": assessment.assessment_end_date,
+                        "status": assessment.status,
+                        "total_learners_count": assessment.participants_observers.count(),
+                        "total_responses_count": total_responses_count,
+                        "created_at": assessment.created_at,
+                        "automated_reminder": assessment.automated_reminder,
+                        "batch_name": batch.name,
+                        "questionnaire": assessment.questionnaire.id,
+                        "organisation": assessment.organisation.id,
+                        "hr": list(assessment.hr.all().values_list("id", flat=True)),
+                        "pre_assessment": (
+                            assessment.pre_assessment.id
+                            if assessment.assessment_timing == "post"
+                            else None
+                        ),
+                    }
+
+                    assessment_list.append(assessment_data)
 
             return Response(assessment_list)
 
