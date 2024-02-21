@@ -4236,9 +4236,9 @@ def get_skill_dashboard_card_data(request):
         today = timezone.now().date()
         today_live_sessions = LiveSession.objects.filter(date_time__date=today)
 
-        ongoing_assessment = Assessment.objects.filter(status="ongoing")
+        ongoing_assessment = Assessment.objects.filter(assessment_modal__isnull=False,status="ongoing")
 
-        completed_assessments = Assessment.objects.filter(status="completed")
+        completed_assessments = Assessment.objects.filter(assessment_modal__isnull=False,status="completed")
 
         return Response(
             {
