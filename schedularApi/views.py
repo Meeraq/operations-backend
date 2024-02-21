@@ -2783,7 +2783,11 @@ def project_batch_wise_report_download(request, project_id,session_to_download):
                 attendance = ""
                 date = ""
             total_participants = batch.learners.count()
-            percentage = str(int((attendance / total_participants) * 100)) + " %"
+            percentage = None
+            if not total_participants:
+                percentage ="0%"
+            else:
+                percentage = str(int((attendance / total_participants) * 100)) + " %"
             data["Session name"].append(session_name)
             data["Attendance"].append(attendance)
             data["Total Participants"].append(total_participants)
