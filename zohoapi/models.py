@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from api.models import Profile
+from django.contrib.auth.models import User
 
 
 # Create your models here.
@@ -18,6 +19,11 @@ class Vendor(models.Model):
 
 
 class InvoiceData(models.Model):
+    INVOICE_STATUS_CHOICES = (
+        ("in_review", "In Review"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    )
     type_of_code_choices = [("IBAN", "iban"), ("SWIFT_CODE", "swift_code")]
     vendor_id = models.CharField(max_length=200, default=None)
     vendor_name = models.CharField(max_length=200, default=None, blank=True)
@@ -49,6 +55,10 @@ class InvoiceData(models.Model):
     account_number = models.CharField(max_length=255, default="")
     ifsc_code = models.CharField(max_length=11, default="")
     signature = models.ImageField(upload_to="vendors-signature", default="", blank=True)
+    status = models.CharField(
+        max_length=50, choices=INVOICE_STATUS_CHOICES, default="in_review"
+    )
+    approver_email = models.EmailField(default="", blank=True)
 
     def __str__(self):
         return f"{self.invoice_number}"
@@ -80,3 +90,18 @@ class PoReminder(models.Model):
 
     def __str__(self):
         return f"{self.vendor.name} for {self.purchase_order_no}"
+
+
+class InvoiceStatusUpdate(models.Model):
+    invoice = models.ForeignKey(
+        InvoiceData, related_name="approvals", on_delete=models.CASCADE
+    )
+    status = models.CharField(
+        max_length=50, choices=InvoiceData.INVOICE_STATUS_CHOICES, default="in_review"
+    )
+    comment = models.TextField(blank=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.invoice.invoice_number} - {self.status} by {self.user.username}"

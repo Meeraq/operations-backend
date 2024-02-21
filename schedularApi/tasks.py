@@ -1921,3 +1921,8 @@ def reminder_to_pmo_bank_details_unavailable():
             },
             [env("BCC_EMAIL")],  # no bcc
         )
+
+
+@shared_task
+def weekly_invoice_approval_reminder():
+    return

@@ -68,4 +68,13 @@ urlpatterns = [
         views.get_all_invoices,
         name="get_all_invoices",
     ),
+    path(
+        "invoices/<int:invoice_id>/update_status/",
+        views.update_invoice_status,
+    ),
+    path(
+        "invoices/<int:invoice_id>/updates/",
+        views.get_invoice_updates,
+        name="get_invoice_updates",
+    ),
 ]
