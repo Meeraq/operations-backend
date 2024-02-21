@@ -32,6 +32,7 @@ from .views import (
     LessonCompletedWebhook,
     GetUniqueIdParticipantFromCourse,
     GetAssessmentsOfBatch,
+    GetAllNudgesOfSchedularProjects,
 )
 import environ
 
@@ -343,5 +344,9 @@ urlpatterns = [
     path(
         "get-nps-project-wise/",
         views.get_nps_project_wise,
+    ),
+    path(
+        "get-all-nudges-of-schedular-project/<str:project_id>/",
+        GetAllNudgesOfSchedularProjects.as_view(),
     ),
 ]

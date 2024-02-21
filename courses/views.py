@@ -102,6 +102,7 @@ from schedularApi.tasks import (
     get_file_extension,
     get_live_session_name,
 )
+
 from django.core.mail import EmailMessage
 from django.conf import settings
 
@@ -3503,3 +3504,46 @@ def get_nps_project_wise(request):
 
         res[project.id] = average_nps
     return Response(res)
+
+
+class GetAllNudgesOfSchedularProjects(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_id):
+        try:
+            
+            data = []
+            courses = None
+            if project_id == "all":
+                courses = Course.objects.all()
+            else:
+                courses = Course.objects.filter(batch__project__id=int(project_id))
+            for course in courses:
+
+                nudges = Nudge.objects.filter(course__id=course.id).order_by("order")
+
+                desired_time = time(8, 30)
+                if course.nudge_start_date:
+                    nudge_scheduled_for = datetime.combine(
+                        course.nudge_start_date, desired_time
+                    )
+
+                    for nudge in nudges:
+                        temp = {
+                            "is_sent": nudge.is_sent,
+                            "name": nudge.name,
+                            "learner_count": nudge.course.batch.learners.count(),
+                            "batch_name": nudge.course.batch.name,
+                            "nudge_scheduled_for": nudge_scheduled_for,
+                        }
+
+                        data.append(temp)
+                        nudge_scheduled_for = nudge_scheduled_for + timedelta(
+                            int(course.nudge_frequency)
+                        )
+
+            return Response(data)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": "Failed to get data"}, status=500)
+
