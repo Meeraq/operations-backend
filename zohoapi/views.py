@@ -226,8 +226,16 @@ def send_mail_templates_with_attachment(
             to=user_email,
             bcc=bcc_emails,
         )
+        datetime_obj = datetime.strptime(
+            content["invoice"]["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
+        formatted_date = datetime_obj.strftime("%d-%m-%Y")
         # Attach the PDF to the email
-        email.attach("invoice.pdf", result.getvalue(), "application/pdf")
+        email.attach(
+            f"{content['invoice']['vendor_name']}_{formatted_date}.pdf",
+            result.getvalue(),
+            "application/pdf",
+        )
         email.content_subtype = "html"
         email.send()
 
