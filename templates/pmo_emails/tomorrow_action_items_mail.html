@@ -1,0 +1,178 @@
+{% extends "table_parent_template.html" %} {% block title %}{% endblock %} {% block content %}
+<tr style="border: 0">
+  <td style="padding: 20px; background: #f8f7f8; border: 0">
+    <div align="center">
+      <table
+        border="0"
+        cellpadding="0"
+        cellspacing="0"
+        style="
+          width: 100%;
+          mso-cellspacing: 0cm;
+          background: #f8f7f8;
+          mso-yfti-tbllook: 1184;
+          mso-padding-alt: 0cm 0cm 0cm 0cm;
+        "
+        width="100%"
+      >
+        <tbody>
+          <tr
+            style="
+              mso-yfti-irow: 0;
+              mso-yfti-firstrow: yes;
+              mso-yfti-lastrow: yes;
+            "
+          >
+            <td style="padding: 15pt 15pt 15pt 15pt">
+              <p>
+                We hope this message finds you well. As part of our commitment
+                to keeping you informed about ongoing projects and initiatives,
+                We wanted to share with you a brief overview of tomorrow's
+                activities and updates.
+              </p>
+
+              {% for project_name, project_data in projects_data.items %} 
+              {% if  project_data.live_sessions or project_data.laser_coaching_sessions or project_data.mentoring_sessions or project_data.nudges or project_data.assessments %}
+              <br/>
+               <br/>
+              <h3>Project Name: {{ project_name }}</h3>
+              {% endif %} {% if project_data.live_sessions %}
+              <h4>Live Sessions</h4>
+              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+                <thead>
+                  <tr>
+                    <th>Session Name</th>
+                    <th>Time</th>
+                    <th>Batch Name</th>
+                    <th>Duration</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for session in project_data.live_sessions %}
+                  <tr>
+                    <td>{{ session.session_name }}</td>
+                    <td>{{ session.date_time }}</td>
+                    <td>{{ session.batch_name }}</td>
+                    <td>{{ session.duration }}</td>
+                    <td>{{ session.description }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% endif %} {% if project_data.laser_coaching_sessions %}
+              <h4>Laser Coaching sessions</h4>
+              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Coach Name</th>
+                    <th>Coach Phone Number</th>
+                    <th>Coachee Name</th>
+                    <th>Coachee Phone Number</th>
+                    <th>Batch Name</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for session in project_data.laser_coaching_sessions %}
+                  <tr>
+                    <td>{{ session.date_time }}</td>
+                    <td>{{ session.coach }}</td>
+                    <td>{{ session.coach_phone_number }}</td>
+                    <td>{{ session.learner }}</td>
+                    <td>{{ session.learner_phone_number }}</td>
+                    <td>{{ session.batch_name }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+
+              {% endif %} {% if project_data.mentoring_sessions %}
+              <h4>Mentoring sessions</h4>
+              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Coach Name</th>
+                    <th>Coach Phone Number</th>
+                    <th>Coachee Name</th>
+                    <th>Coachee Phone Number</th>
+                    <th>Batch Name</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for session in project_data.mentoring_sessions %}
+                  <tr>
+                    <td>{{ session.date_time }}</td>
+                    <td>{{ session.coach }}</td>
+                    <td>{{ session.coach_phone_number }}</td>
+                    <td>{{ session.learner }}</td>
+                    <td>{{ session.learner_phone_number }}</td>
+                    <td>{{ session.batch_name }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+
+              {% endif %} {% if project_data.nudges %}
+              <h4>Nudges</h4>
+              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Date Time</th>
+                    <th>Batch</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for session in project_data.nudges %}
+                  <tr>
+                    <td>{{ session.name }}</td>
+                    <td>{{ session.nudge_scheduled_for }}</td>
+                    <td>{{ session.batch_name }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+
+              {% endif %} {% if project_data.assessments %}
+              <h4>Assessments</h4>
+              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Response Status</th>
+                    <th>Batch Name</th>
+                    <th>Reminder</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for assessment in project_data.assessments %}
+                  <tr>
+                    <td>{{ assessment.name }}</td>
+                    <td>{{ assessment.response_status }}</td>
+                    <td>{{ assessment.batch_name }}</td>
+                    <td>{{ assessment.reminder }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+
+              {% endif %} {% endfor %}
+              <br/>
+               <br/>
+              <p>
+                <a href="https://caas.meeraq.com">Click here</a> to login to
+                Meeraq platform.
+              </p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </td>
+</tr>
+
+{% endblock %}

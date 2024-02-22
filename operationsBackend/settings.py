@@ -293,6 +293,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.reminder_to_pmo_bank_details_unavailable",
         "schedule": crontab(hour=3, minute=30, day_of_week='mon'), # 10 AM IST Monday
     },
+    "send_tomorrow_action_items_data": {
+        "task": "schedularApi.tasks.send_tomorrow_action_items_data",
+        "schedule": crontab(hour=12, minute=30, day_of_week="*"),
+    },
 }
 
 

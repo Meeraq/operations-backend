@@ -123,6 +123,8 @@ from assessmentApi.views import delete_participant_from_assessments
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
     get_current_date_timestamps,
+    get_coaching_session_according_to_time,
+    get_live_session_according_to_time,
 )
 
 # Create your views here.
@@ -4273,8 +4275,8 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
             schedular_session = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=int(project_id)
             )
-        upcoming_schedular_sessions = schedular_session.filter(
-            availibility__end_time__gt=timestamp_milliseconds
+        upcoming_schedular_sessions = get_coaching_session_according_to_time(
+            schedular_session, "upcoming"
         )
         upcoming_schedular_session_data = []
         for session in upcoming_schedular_sessions:
@@ -4312,9 +4314,11 @@ def get_past_coaching_session_dashboard_data(request, project_id):
             schedular_session = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=int(project_id)
             )
-        past_schedular_sessions = schedular_session.filter(
-            availibility__end_time__lt=timestamp_milliseconds
+
+        past_schedular_sessions = get_coaching_session_according_to_time(
+            schedular_session, "past"
         )
+
         past_schedular_session_data = []
         for session in past_schedular_sessions:
             temp = {
