@@ -2062,7 +2062,7 @@ def reminder_to_pmo_bank_details_unavailable():
 
 
 @shared_task
-def send_tomorrow_action_items_data(request):
+def send_tomorrow_action_items_data():
     try:
         current_date_time = timezone.now()
         schedular_projects = SchedularProject.objects.all()
@@ -2092,7 +2092,7 @@ def send_tomorrow_action_items_data(request):
                     "date_time": get_date_time(
                         int(schedular_session.availibility.start_time)
                     ),
-                    "coach": schedular_session.availibility.coach.get_full_name(),
+                    "coach": schedular_session.availibility.coach.first_name + " " + schedular_session.availibility.coach.last_name,
                     "coach_phone_number": schedular_session.availibility.coach.phone,
                     "batch_name": schedular_session.coaching_session.batch.name,
                     "learner": schedular_session.learner.name,
