@@ -2866,7 +2866,7 @@ def add_facilitator(request):
     language = json.loads(request.data["language"])
     job_roles = json.loads(request.data["job_roles"])
     city = json.loads(request.data["city"])
-    country = request.data.get("country", [])
+    country = json.loads(request.data["country"])
     linkedin_profile_link = request.data.get("linkedin_profile_link", "")
     companies_worked_in = json.loads(request.data["companies_worked_in"])
     other_certification = json.loads(request.data["other_certification"])
