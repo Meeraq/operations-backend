@@ -227,6 +227,8 @@ class Facilitator(models.Model):
     area_of_expertise = models.JSONField(default=list, blank=True)
     profile_pic = models.ImageField(upload_to="post_images", blank=True)
     education = models.JSONField(default=list, blank=True)
+    corporate_experience = models.TextField(blank=True)
+    coaching_experience = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
     city = models.JSONField(default=list, blank=True)
     language = models.JSONField(default=list, blank=True)
@@ -240,6 +242,11 @@ class Facilitator(models.Model):
     other_certification = models.JSONField(default=list, blank=True)
     currency = models.CharField(max_length=100, blank=True, default="")
     client_companies = models.JSONField(default=list, blank=True)
+    education_pic = models.ImageField(upload_to="post_images", blank=True)
+    # education_upload_file = models.ImageField(upload_to="post_images", blank=True)
+    education_upload_file = models.FileField(
+        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+    )
     educational_qualification = models.JSONField(default=list, blank=True)
     fees_per_hour = models.CharField(max_length=20, blank=True)
     fees_per_day = models.CharField(max_length=20, blank=True)
