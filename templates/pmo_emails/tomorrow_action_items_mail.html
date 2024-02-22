@@ -25,6 +25,9 @@
           >
             <td style="padding: 15pt 15pt 15pt 15pt">
               <p>
+								<strong><span style="font-size: 14px">Dear&nbsp;</span></strong><b>Pmo</b><strong>,</strong>
+							</p>
+              <p>
                 We hope this message finds you well. As part of our commitment
                 to keeping you informed about ongoing projects and initiatives,
                 We wanted to share with you a brief overview of tomorrow's
@@ -36,6 +39,9 @@
               <br/>
                <br/>
               <h3>Project Name: {{ project_name }}</h3>
+              <p style="font-size: 10pt;">Email Reminder: {{project_data.email_reminder}}</p>
+              <p style="font-size: 10pt;">Whatsapp Reminder: {{project_data.whatsapp_reminder}}</p>
+              <p style="font-size: 10pt;">Calendar Invites: {{project_data.calendar_invites}}</p>
               {% endif %} {% if project_data.live_sessions %}
               <h4>Live Sessions</h4>
               <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">

@@ -2075,6 +2075,9 @@ def send_tomorrow_action_items_data(request):
                 "live_sessions": [],
                 "assessments": [],
                 "nudges": [],
+                "email_reminder": "ON" if project.email_reminder else "OFF",
+                "whatsapp_reminder": "ON" if project.whatsapp_reminder else "OFF",
+                "calendar_invites": "ON" if project.calendar_invites else "OFF",
             }
 
             schedular_sessions = get_coaching_session_according_to_time(
