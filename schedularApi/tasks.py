@@ -207,21 +207,22 @@ def get_coaching_session_according_to_time(
     current_time = timezone.now()
 
     if time_period == "upcoming":
-        filter_criteria = {"availibility__end_time__gt": current_time}
+        filter_criteria = {"availibility__end_time__gt": current_time.timestamp() * 1000}
     elif time_period == "past":
-        filter_criteria = {"availibility__end_time__lt": current_time}
+        filter_criteria = {"availibility__end_time__lt": current_time.timestamp() * 1000}
     elif time_period == "today":
-        start_of_day = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_day = current_time.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000
+
         end_of_day = current_time.replace(
             hour=23, minute=59, second=59, microsecond=999999
-        )
+        ).timestamp() * 1000
         filter_criteria = {"availibility__end_time__range": (start_of_day, end_of_day)}
     elif time_period == "tomorrow":
         tomorrow = current_time + timedelta(days=1)
-        start_of_tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000
         end_of_tomorrow = tomorrow.replace(
             hour=23, minute=59, second=59, microsecond=999999
-        )
+        ).timestamp() * 1000
         filter_criteria = {
             "availibility__end_time__range": (start_of_tomorrow, end_of_tomorrow)
         }
@@ -229,10 +230,10 @@ def get_coaching_session_according_to_time(
         yesterday = current_time - timedelta(days=1)
         start_of_yesterday = yesterday.replace(
             hour=0, minute=0, second=0, microsecond=0
-        )
+        ).timestamp() * 1000
         end_of_yesterday = yesterday.replace(
             hour=23, minute=59, second=59, microsecond=999999
-        )
+        ).timestamp() * 1000
         filter_criteria = {
             "availibility__end_time__range": (start_of_yesterday, end_of_yesterday)
         }
