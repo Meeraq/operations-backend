@@ -84,6 +84,7 @@ from api.serializers import (
     FacilitatorSerializer,
     FacilitatorBasicDetailsSerializer,
     CoachSerializer,
+    FacilitatorDepthOneSerializer
 )
 
 from courses.models import (
@@ -3213,9 +3214,17 @@ def update_facilitator_profile(request, id):
 
             if serializer.is_valid():
                 serializer.save()
-                user_data = get_user_data(facilitator.user.user)
-
-                return Response(user_data)
+                roles = []
+                for role in user.profile.roles.all():
+                    roles.append(role.name)
+                serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
+                return Response({
+                    **serializer.data,
+                    "roles": roles,
+                    "user": {**serializer.data["user"], "type": "facilitator"},
+                })
+                # user_data = get_user_data(facilitator.user.user)
+                # return Response(user_data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         print(str(e))
