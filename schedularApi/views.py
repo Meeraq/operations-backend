@@ -4226,22 +4226,52 @@ def update_project_status(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_skill_dashboard_card_data(request):
+def get_skill_dashboard_card_data(request, project_id):
     try:
-        start_timestamp, end_timestamp = get_current_date_timestamps()
-        # schedular sessions scheduled today
-        today_sessions = SchedularSessions.objects.filter(
-            availibility__start_time__lte=end_timestamp,
-            availibility__end_time__gte=start_timestamp,
-        )
+        if project_id == "all":
 
-        today = timezone.now().date()
-        today_live_sessions = LiveSession.objects.filter(date_time__date=today)
+            start_timestamp, end_timestamp = get_current_date_timestamps()
+            # schedular sessions scheduled today
+            today_sessions = SchedularSessions.objects.filter(
+                availibility__start_time__lte=end_timestamp,
+                availibility__end_time__gte=start_timestamp,
+            )
 
-        ongoing_assessment = Assessment.objects.filter(assessment_modal__isnull=False,status="ongoing")
+            today = timezone.now().date()
+            today_live_sessions = LiveSession.objects.filter(date_time__date=today)
 
-        completed_assessments = Assessment.objects.filter(assessment_modal__isnull=False,status="completed")
+            ongoing_assessment = Assessment.objects.filter(
+                assessment_modal__isnull=False, status="ongoing"
+            )
+           
+            completed_assessments = Assessment.objects.filter(
+                assessment_modal__isnull=False, status="completed"
+            )
+        else:
+            start_timestamp, end_timestamp = get_current_date_timestamps()
+            # schedular sessions scheduled today
+            today_sessions = SchedularSessions.objects.filter(
+                availibility__start_time__lte=end_timestamp,
+                availibility__end_time__gte=start_timestamp,
+                coaching_session__batch__project__id=int(project_id),
+            )
 
+            today = timezone.now().date()
+            today_live_sessions = LiveSession.objects.filter(
+                date_time__date=today, batch__project__id=int(project_id)
+            )
+
+            ongoing_assessment = Assessment.objects.filter(
+                assessment_modal__isnull=False,
+                status="ongoing",
+                assessment_modal__lesson__course__batch__project__id=int(project_id),
+            )
+
+            completed_assessments = Assessment.objects.filter(
+                assessment_modal__isnull=False,
+                status="completed",
+                assessment_modal__lesson__course__batch__project__id=int(project_id),
+            )
         return Response(
             {
                 "today_coaching_sessions": len(today_sessions),

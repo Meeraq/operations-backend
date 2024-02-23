@@ -221,7 +221,7 @@ urlpatterns = [
     ),
 
       path(
-        "get-skill-dashboard-card-data/",
+        "get-skill-dashboard-card-data/<str:project_id>/", 
         views.get_skill_dashboard_card_data,
     ),
     path(
