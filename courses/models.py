@@ -56,6 +56,7 @@ class Lesson(models.Model):
         ("video", "Video"),
         ("ppt", "PPT"),
         ("downloadable_file", "Downloadable File"),
+        ("assignment", "Assignment"),
     )
     STATUS_CHOICES = (
         ("draft", "Draft"),
@@ -160,6 +161,15 @@ class File(models.Model):
     def __str__(self):
         return self.name
 
+    
+class AssignmentLesson(models.Model):
+    lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
+    description = models.TextField(default="", blank=True)
+
+    def __str__(self):
+        return self.name
+
 
 class DownloadableLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
@@ -215,6 +225,13 @@ class QuizLessonResponse(models.Model):
 class FeedbackLessonResponse(models.Model):
     feedback_lesson = models.ForeignKey(FeedbackLesson, on_delete=models.CASCADE)
     answers = models.ManyToManyField(Answer)
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
+
+class AssignmentLessonResponse(models.Model):
+    assignment_lesson = models.ForeignKey(AssignmentLesson, on_delete=models.CASCADE)
+    file = models.FileField(upload_to="assignment-files/")
     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(auto_now=True)

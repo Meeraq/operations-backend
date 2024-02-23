@@ -33,6 +33,12 @@ from .views import (
     GetUniqueIdParticipantFromCourse,
     GetAssessmentsOfBatch,
     GetAllNudgesOfSchedularProjects,
+    CreateAssignmentLesson,
+    UpdateAssignmentLesson,
+    GetAllAssignmentsResponses,
+    CreateAssignmentLessonResponse,
+    GetAssignmentsResponses,
+    UpdateAssignmentLessonFile,
 )
 import environ
 
@@ -348,5 +354,25 @@ urlpatterns = [
     path(
         "get-all-nudges-of-schedular-project/<str:project_id>/",
         GetAllNudgesOfSchedularProjects.as_view(),
+    ),
+    path("create_assignment_lesson/", CreateAssignmentLesson.as_view()),
+    path(
+        "update_assignment_lessons/<int:assignment_id>/",
+        UpdateAssignmentLesson.as_view(),
+    ),
+    path(
+        "get_all_assignments_responses/<str:user_type>/<int:user_id>",
+        GetAllAssignmentsResponses.as_view(),
+    ),
+    path(
+        "create_assignment_lesson_response/", CreateAssignmentLessonResponse.as_view()
+    ),
+    path(
+        "get_assignments_responses/<int:assignment_id>/<int:learner_id>/",
+        GetAssignmentsResponses.as_view(),
+    ),
+    path(
+        "update_assignments_responses/",
+        UpdateAssignmentLessonFile.as_view(),
     ),
 ]
