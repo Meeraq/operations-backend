@@ -32,6 +32,7 @@ from .views import (
     LessonCompletedWebhook,
     GetUniqueIdParticipantFromCourse,
     GetAssessmentsOfBatch,
+    GetAllNudgesOfSchedularProjects,
     CreateAssignmentLesson,
     UpdateAssignmentLesson,
     GetAllAssignmentsResponses,
@@ -86,11 +87,6 @@ urlpatterns = [
     path(
         "text-lessons/<int:pk>/", TextLessonEditView.as_view(), name="text-lesson-edit"
     ),
-    # path(
-    #     "downloadable-file-lessons/",
-    #     DownloadableFileLessonCreateView.as_view(),
-    #     name="downloadable-file-lesson-create",
-    # ),
     path(
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
     ),
@@ -321,7 +317,7 @@ urlpatterns = [
         GetUniqueIdParticipantFromCourse.as_view(),
     ),
     path(
-        "get-assessments-of-batch/<int:batch_id>/",
+        "get-assessments-of-batch/<str:project_or_batch>/<int:id>/",
         GetAssessmentsOfBatch.as_view(),
     ),
     path(
@@ -354,6 +350,10 @@ urlpatterns = [
     path(
         "get-nps-project-wise/",
         views.get_nps_project_wise,
+    ),
+    path(
+        "get-all-nudges-of-schedular-project/<str:project_id>/",
+        GetAllNudgesOfSchedularProjects.as_view(),
     ),
     path("create_assignment_lesson/", CreateAssignmentLesson.as_view()),
     path(

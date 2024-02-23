@@ -107,6 +107,7 @@ from schedularApi.tasks import (
     get_file_extension,
     get_live_session_name,
 )
+
 from django.core.mail import EmailMessage
 from django.conf import settings
 
@@ -121,6 +122,77 @@ from schedularApi.models import CoachingSession, SchedularSessions
 wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
+default_feedback_questions = [
+    {
+        "text": "How would you rate today’s session on overall effectiveness?",
+        "options": [],
+        "type": "rating_1_to_5",
+    },
+    {
+        "text": "How would you rate today’s session on the training content?",
+        "options": [],
+        "type": "rating_1_to_5",
+    },
+    {
+        "text": "How would you rate today’s session on the effectiveness of the trainer?",
+        "options": [],
+        "type": "rating_1_to_5",
+    },
+    {
+        "text": "How would you rate today’s session on the knowledge of the trainer?",
+        "options": [],
+        "type": "rating_1_to_5",
+    },
+    {
+        "text": "Please share any other thoughts you may have about the program.",
+        "options": [],
+        "type": "descriptive_answer",
+    },
+]
+
+
+nps_default_feed_questions = [
+    {
+        "text": "How likely are you to recommend this program to a colleague?",
+        "options": [],
+        "type": "rating_0_to_10",
+    },
+    {
+        "text": "How would you rate your Facilitator?",
+        "options": [],
+        "type": "rating_1_to_5",
+    },
+    {
+        "text": "Which topics covered in the training did you find most valuable?",
+        "options": [],
+        "type": "descriptive_answer",
+    },
+    {
+        "text": "Kindly share 2 key take aways / actions from the program.",
+        "options": [],
+        "type": "descriptive_answer",
+    },
+    {
+        "text": "Kindly share suggestions on how we can enhance the program to add more value.",
+        "options": [],
+        "type": "descriptive_answer",
+    },
+    {
+        "text": "How would you rate your overall experience about the program?",
+        "options": [],
+        "type": "rating_1_to_5",
+    },
+]
+
+
+def add_question_to_feedback_lesson(feedback_lesson, questions):
+    for question_data in questions:
+        question_serializer = QuestionSerializer(data=question_data)
+        if question_serializer.is_valid():
+            question = question_serializer.save()
+            feedback_lesson.questions.add(question)
+    feedback_lesson.save()
 
 
 def create_learner(learner_name, learner_email, learner_phone=None):
@@ -2091,79 +2163,53 @@ def get_consolidated_feedback_report(request):
             total_participant_count = 0
             for batch in all_batches:
                 total_participant_count += batch.learners.count()
-
             for batch in all_batches:
                 # Get live sessions for the current batch
                 live_sessions = LiveSession.objects.filter(batch=batch)
-
                 for live_session in live_sessions:
                     # Now, you can access the associated Course through the SchedularBatch
                     course = Course.objects.filter(batch=batch).first()
                     if course:
-                        feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
-                        feedback_lessons = FeedbackLesson.objects.filter(
-                            lesson__course=course
-                        )
-
-                        for feedback_lesson in feedback_lessons:
-                            current_lesson_name = feedback_lesson.lesson.name
-                            formatted_lesson_name = get_feedback_lesson_name(
-                                current_lesson_name
-                            )
-                            total_participant = total_participant_count
-                            total_responses = 0
-
-                            for participant in batch.learners.all():
-                                feedback_response = (
-                                    FeedbackLessonResponse.objects.filter(
-                                        feedback_lesson=feedback_lesson,
-                                        learner=participant,
-                                    ).first()
-                                )
-                                if feedback_response:
-                                    total_responses += 1
+                        feedback_lesson = FeedbackLesson.objects.filter(
+                            lesson__course=course, live_session=live_session
+                        ).first()
+                        if feedback_lesson:
+                            total_responses = FeedbackLessonResponse.objects.filter(
+                                feedback_lesson=feedback_lesson
+                            ).count()
                             percentage_responded = (
-                                round((total_responses / total_participant) * 100, 2)
-                                if total_participant
+                                round(
+                                    (total_responses / total_participant_count) * 100,
+                                    2,
+                                )
+                                if total_participant_count
                                 else 0
                             )
-
-                            if formatted_lesson_name == feedback_lesson_name_should_be:
-                                session_name = get_live_session_name(
-                                    live_session.session_type
-                                )
-
-                                live_session_key = f"{project.name} {session_name} {live_session.live_session_number}"
-                                if live_session_key not in data:
-                                    data[live_session_key] = {
-                                        "live_session_id": live_session.id,
-                                        "project_name": project.name,
-                                        "session_name": f"{session_name} {live_session.live_session_number}",
-                                        "total_participant": total_participant,
-                                        "total_responses": total_responses,
-                                        "percentage_responded": percentage_responded,
-                                    }
-
-                                else:
-                                    # Merge data for the same live session number
-                                    # data[live_session_key]["total_participant"] += len(total_participant)
-                                    data[live_session_key][
-                                        "total_responses"
-                                    ] += total_responses
-                                    data[live_session_key]["percentage_responded"] = (
-                                        round(
-                                            (
-                                                data[live_session_key][
-                                                    "total_responses"
-                                                ]
-                                                / data[live_session_key][
-                                                    "total_participant"
-                                                ]
-                                            )
-                                            * 100,
-                                            2,
-                                        )
+                            session_name = get_live_session_name(
+                                live_session.session_type
+                            )
+                            live_session_key = f"{project.name} {session_name} {live_session.live_session_number}"
+                            if live_session_key not in data:
+                                data[live_session_key] = {
+                                    "live_session_id": live_session.id,
+                                    "project_name": project.name,
+                                    "session_name": f"{session_name} {live_session.live_session_number}",
+                                    "total_participant": total_participant_count,
+                                    "total_responses": total_responses,
+                                    "percentage_responded": percentage_responded,
+                                }
+                            else:
+                                data[live_session_key][
+                                    "total_responses"
+                                ] += total_responses
+                                data[live_session_key]["percentage_responded"] = round(
+                                    (
+                                        data[live_session_key]["total_responses"]
+                                        / data[live_session_key]["total_participant"]
                                     )
+                                    * 100,
+                                    2,
+                                )
 
         return Response(list(data.values()))
     except Exception as e:
@@ -2224,38 +2270,32 @@ def get_feedback_report(request, feedback_id):
 def get_consolidated_feedback_report_response(request, lesson_id):
     try:
         live_session = LiveSession.objects.get(id=lesson_id)
-        project = live_session.batch.project
-        batches = SchedularBatch.objects.filter(project=project)
-
         # Dictionary to store aggregated feedback data for each question
         question_data = {}
+        feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+            feedback_lesson__lesson__course__batch__project=live_session.batch.project,
+            feedback_lesson__live_session__session_type=live_session.session_type,
+            feedback_lesson__live_session__live_session_number=live_session.live_session_number,
+        )
+        for response in feedback_lesson_responses:
+            for answer in response.answers.all():
+                question_text = answer.question.text
 
-        for batch in batches:
-            print(batch)
-            feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
-                feedback_lesson__lesson__course__batch=batch,
-                # feedback_lesson__lesson__order=live_session.order,
-            )
-            print(feedback_lesson_responses)
-            for response in feedback_lesson_responses:
-                for answer in response.answers.all():
-                    question_text = answer.question.text
+                if question_text not in question_data:
+                    question_data[question_text] = {
+                        **QuestionSerializer(answer.question).data,
+                        "descriptive_answers": [],
+                        "ratings": [],
+                        "average_rating": 0,
+                        "nps": 0,
+                    }
 
-                    if question_text not in question_data:
-                        question_data[question_text] = {
-                            **QuestionSerializer(answer.question).data,
-                            "descriptive_answers": [],
-                            "ratings": [],
-                            "average_rating": 0,
-                            "nps": 0,
-                        }
-
-                    if answer.question.type.startswith("rating"):
-                        question_data[question_text]["ratings"].append(answer.rating)
-                    elif answer.question.type == "descriptive_answer":
-                        question_data[question_text]["descriptive_answers"].append(
-                            answer.text_answer
-                        )
+                if answer.question.type.startswith("rating"):
+                    question_data[question_text]["ratings"].append(answer.rating)
+                elif answer.question.type == "descriptive_answer":
+                    question_data[question_text]["descriptive_answers"].append(
+                        answer.text_answer
+                    )
 
         for question_text, data in question_data.items():
             # Calculate average rating for each question
@@ -2307,6 +2347,19 @@ class AssignCourseTemplateToBatch(APIView):
                 original_lessons = Lesson.objects.filter(
                     course_template=course_template
                 )
+                assessment_creation = False
+                if not original_lessons.filter(lesson_type="assessment").exists():
+                    if batch.project.pre_post_assessment:
+                        assessment_creation =  True
+                        lesson1 = Lesson.objects.create(
+                                course=new_course,
+                                name="Pre Assessment",
+                                status="draft",
+                                lesson_type="assessment",
+                                # Duplicate specific lesson types
+                                order=1,
+                            )
+                        assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
                 for original_lesson in original_lessons:
                     new_lesson = None
                     # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
@@ -2314,13 +2367,16 @@ class AssignCourseTemplateToBatch(APIView):
                         "live_session",
                         "laser_coaching",
                     ]:
+                        updated_order = original_lesson.order
+                        if assessment_creation:
+                            updated_order = original_lesson.order + 1
                         new_lesson = Lesson.objects.create(
                             course=new_course,
                             name=original_lesson.name,
                             status=original_lesson.status,
                             lesson_type=original_lesson.lesson_type,
                             # Duplicate specific lesson types
-                            order=original_lesson.order,
+                            order=updated_order,
                         )
                         if original_lesson.lesson_type == "text":
                             TextLesson.objects.create(
@@ -2394,6 +2450,12 @@ class AssignCourseTemplateToBatch(APIView):
                             learner=learner, course=new_course, enrollment_date=datetime
                         )
                 live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch_id)
+                training_class_sessions = LiveSession.objects.filter(
+                    session_type__in=["in_person_session", "virtual_session"]
+                )
+                max_order_of_training_class_sessions = (
+                    training_class_sessions.aggregate(Max("order"))["order__max"]
+                )
                 coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
                 max_order = (
                     Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
@@ -2430,8 +2492,25 @@ class AssignCourseTemplateToBatch(APIView):
                     )
                     unique_id = uuid.uuid4()
                     feedback_lesson = FeedbackLesson.objects.create(
-                        lesson=new_feedback_lesson, unique_id=unique_id
+                        lesson=new_feedback_lesson,
+                        unique_id=unique_id,
+                        live_session=live_session,
                     )
+                    if live_session.session_type in [
+                        "in_person_session",
+                        "virtual_session",
+                    ]:
+                        if int(max_order_of_training_class_sessions) == int(
+                            live_session.order
+                        ):
+                            add_question_to_feedback_lesson(
+                                feedback_lesson, nps_default_feed_questions
+                            )
+                        else:
+                            add_question_to_feedback_lesson(
+                                feedback_lesson, default_feedback_questions
+                            )
+
                 for coaching_session in coaching_sessions:
                     max_order = max_order + 1
                     session_name = None
@@ -2449,6 +2528,26 @@ class AssignCourseTemplateToBatch(APIView):
                     LaserCoachingSession.objects.create(
                         lesson=new_lesson, coaching_session=coaching_session
                     )
+
+                if assessment_creation:
+                    max_order = (
+                        Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
+                            "order__max"
+                        ]
+                        or 0
+                    )
+                    
+                    lesson2 = Lesson.objects.create(
+                        course=new_course,
+                        name="Post Assessment",
+                        status="draft",
+                        lesson_type="assessment",
+                        # Duplicate specific lesson types
+                        order=max_order+1,
+                    )
+
+                    assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
+                    
             return Response(
                 {
                     "message": "Course assigned successfully.",
@@ -3046,32 +3145,50 @@ class GetUniqueIdParticipantFromCourse(APIView):
 class GetAssessmentsOfBatch(APIView):
     permission_classes = [AllowAny]
 
-    def get(self, request, batch_id):
+    def get(self, request, project_or_batch, id):
         try:
-            batch = SchedularBatch.objects.get(id=batch_id)
-            assessments = AssessmentModal.objects.filter(
-                assessment_modal__lesson__course__batch=batch
-            )
+            batches = None
+            if project_or_batch == "project":
+                batches = SchedularBatch.objects.filter(project__id=id)
+            else:
+                batches = SchedularBatch.objects.filter(id=id)
+
             assessment_list = []
-            for assessment in assessments:
-                total_responses_count = ParticipantResponse.objects.filter(
-                    assessment=assessment
-                ).count()
-                assessment_data = {
-                    "id": assessment.id,
-                    "name": assessment.name,
-                    "participant_view_name": assessment.participant_view_name,
-                    "assessment_type": assessment.assessment_type,
-                    "assessment_timing": assessment.assessment_timing,
-                    "assessment_start_date": assessment.assessment_start_date,
-                    "assessment_end_date": assessment.assessment_end_date,
-                    "status": assessment.status,
-                    "total_learners_count": assessment.participants_observers.count(),
-                    "total_responses_count": total_responses_count,
-                    "created_at": assessment.created_at,
-                    "automated_reminder": assessment.automated_reminder,
-                }
-                assessment_list.append(assessment_data)
+
+            for batch in batches:
+                assessments = AssessmentModal.objects.filter(
+                    assessment_modal__lesson__course__batch=batch
+                )
+
+                for assessment in assessments:
+                    total_responses_count = ParticipantResponse.objects.filter(
+                        assessment=assessment
+                    ).count()
+                    assessment_data = {
+                        "id": assessment.id,
+                        "name": assessment.name,
+                        "participant_view_name": assessment.participant_view_name,
+                        "assessment_type": assessment.assessment_type,
+                        "assessment_timing": assessment.assessment_timing,
+                        "assessment_start_date": assessment.assessment_start_date,
+                        "assessment_end_date": assessment.assessment_end_date,
+                        "status": assessment.status,
+                        "total_learners_count": assessment.participants_observers.count(),
+                        "total_responses_count": total_responses_count,
+                        "created_at": assessment.created_at,
+                        "automated_reminder": assessment.automated_reminder,
+                        "batch_name": batch.name,
+                        "questionnaire": assessment.questionnaire.id,
+                        "organisation": assessment.organisation.id,
+                        "hr": list(assessment.hr.all().values_list("id", flat=True)),
+                        "pre_assessment": (
+                            assessment.pre_assessment.id
+                            if assessment.assessment_timing == "post"
+                            else None
+                        ),
+                    }
+
+                    assessment_list.append(assessment_data)
 
             return Response(assessment_list)
 
@@ -3138,76 +3255,71 @@ def get_all_feedbacks_download_report(request, feedback_id):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def get_consolidated_feedback_download_report(request, live_session_id):
-    try:
-        live_session = LiveSession.objects.get(id=live_session_id)
-        project = live_session.batch.project
-        batches = SchedularBatch.objects.filter(project=project)
+    # Create a new workbook and add a worksheet
+    live_session = LiveSession.objects.get(id=live_session_id)
+    wb = Workbook()
+    ws = wb.active
+    # Write headers to the worksheet
+    headers = set()
+    feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
+        feedback_lesson__lesson__course__batch__project__id=live_session.batch.project.id,
+        feedback_lesson__live_session__live_session_number=live_session.live_session_number,
+        feedback_lesson__live_session__session_type=live_session.session_type,
+    )
+    total_participants_in_project = Learner.objects.filter(
+        schedularbatch__project__id=live_session.batch.project.id
+    ).distinct()
+    participants_who_responsded = set()
+    for feedback_lesson_response in feedback_lesson_responses:
+        participants_who_responsded.add(feedback_lesson_response.learner.id)
+        for answer in feedback_lesson_response.answers.all():
+            headers.add(answer.question.text)
+    headers_list = list(headers)
+    headers_list.insert(0, "Participant Name")
+    headers_list.insert(1, "Feedback Batch")
 
-        # Create a dictionary to store participant data
-        data_dict = defaultdict(dict)
+    for col_num, header in enumerate(headers_list, 1):
+        ws.cell(row=1, column=col_num, value=header)
 
-        for batch in batches:
-            course = Course.objects.filter(batch=batch).first()
-            feedback_lesson_name_should_be = f"feedback_for_{live_session.session_type}_{live_session.live_session_number}"
-            feedback_lessons = FeedbackLesson.objects.filter(lesson__course=course)
-            current_feedback_lesson = None
-
-            for feedback_lesson in feedback_lessons:
-                current_lesson_name = feedback_lesson.lesson.name
-                formatted_lesson_name = get_feedback_lesson_name(current_lesson_name)
-
-                if formatted_lesson_name == feedback_lesson_name_should_be:
-                    current_feedback_lesson = feedback_lesson
-
-            # Populate the dictionary with data from FeedbackLesson and FeedbackLessonResponse
-            if current_feedback_lesson:
-                for participant in batch.learners.all():
-                    if participant.id not in data_dict:
-                        data_dict[participant.id]["Participant"] = participant.name
-                        data_dict[participant.id][
-                            "Participant Email"
-                        ] = participant.email
-                        data_dict[participant.id]["Batch Name"] = batch.name
-
-                    # Check if the participant provided feedback
-                    response = FeedbackLessonResponse.objects.filter(
-                        feedback_lesson=current_feedback_lesson, learner=participant
-                    ).first()
-
-                    if response:
-                        for answer in response.answers.all():
-                            question_text = answer.question.text
-                            answer_value = (
-                                answer.text_answer
-                                if answer.text_answer
-                                else answer.rating
-                            )
-
-                            data_dict[participant.id][question_text] = answer_value
-
-                    else:
-                        # If participant did not provide feedback, populate with empty values
-                        for question in current_feedback_lesson.questions.all():
-                            data_dict[participant.id][question.text] = "-"
-
-        # Create DataFrame from the dictionary
-        df = pd.DataFrame(list(data_dict.values()))
-
-        excel_data = BytesIO()
-        df.to_excel(excel_data, index=False)
-        excel_data.seek(0)
-
-        response = HttpResponse(
-            excel_data.read(),
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    for feedback_lesson_response in feedback_lesson_responses:
+        data = ["-" for _ in headers_list]
+        participant_index = headers_list.index("Participant Name")
+        feedback_batch_index = headers_list.index("Feedback Batch")
+        data[participant_index] = feedback_lesson_response.learner.name
+        data[feedback_batch_index] = (
+            feedback_lesson_response.feedback_lesson.lesson.course.batch.name
         )
-        response["Content-Disposition"] = f"attachment; filename=Feedback_Report.xlsx"
+        for answer in feedback_lesson_response.answers.all():
+            question_index_in_headers = headers_list.index(answer.question.text)
+            if answer.question.type == "descriptive_answer":
+                data[question_index_in_headers] = answer.text_answer
+            elif (
+                answer.question.type == "rating_1_to_5"
+                or answer.question.type == "rating_1_to_10"
+                or answer.question.type == "rating_0_to_10"
+            ):
+                data[question_index_in_headers] = answer.rating
+        ws.append(data)
+    participants_who_responsded_list = list(participants_who_responsded)
+    participants_not_responded = total_participants_in_project.exclude(
+        id__in=participants_who_responsded_list
+    )
 
-        return response
+    for learner in participants_not_responded:
+        data = ["-" for _ in headers_list]
+        participant_index = headers_list.index("Participant Name")
+        data[participant_index] = learner.name
+        ws.append(data)
 
-    except Exception as e:
-        print(str(e))
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    # Create a response with the Excel file
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    response["Content-Disposition"] = (
+        "attachment; filename=Project_feedback_report.xlsx"
+    )
+    wb.save(response)
+    return response
 
 
 @api_view(["GET"])
@@ -3406,6 +3518,50 @@ def get_nps_project_wise(request):
 
         res[project.id] = average_nps
     return Response(res)
+
+
+class GetAllNudgesOfSchedularProjects(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, project_id):
+        try:
+            
+            data = []
+            courses = None
+            if project_id == "all":
+                courses = Course.objects.all()
+            else:
+                courses = Course.objects.filter(batch__project__id=int(project_id))
+            for course in courses:
+
+                nudges = Nudge.objects.filter(course__id=course.id).order_by("order")
+
+                desired_time = time(8, 30)
+                if course.nudge_start_date:
+                    nudge_scheduled_for = datetime.combine(
+                        course.nudge_start_date, desired_time
+                    )
+
+                    for nudge in nudges:
+                        temp = {
+                            "is_sent": nudge.is_sent,
+                            "name": nudge.name,
+                            "learner_count": nudge.course.batch.learners.count(),
+                            "batch_name": nudge.course.batch.name,
+                            "nudge_scheduled_for": nudge_scheduled_for,
+                        }
+
+                        data.append(temp)
+                        nudge_scheduled_for = nudge_scheduled_for + timedelta(
+                            int(course.nudge_frequency)
+                        )
+
+            return Response(data)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": "Failed to get data"}, status=500)
+
+
 
 
 class CreateAssignmentLesson(APIView):
