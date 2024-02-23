@@ -49,6 +49,7 @@ import io
 import pdfkit
 from django.middleware.csrf import get_token
 from django.db import transaction
+from time import sleep
 
 
 env = environ.Env()
@@ -1297,3 +1298,39 @@ def get_all_invoices(request):
             )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+contacts = [
+    {"name": "Chalamala Suma Chandana Reddy", "email": "chandana@meeraq.com"},
+    {"name": "Ms. Kanchan Khatana", "email": "kanchan@kanchankhatanaandassociates.com"},
+    {"name": "Manas Madhukar", "email": "manash@meeraq.com"},
+    {"name": "Coditas Solutions LLP", "email": "jatish.advani@coditas.com"},
+    {"name": "Rahul Yadav", "email": "onesolutionweb01@gmail.com"},
+    {"name": "Naveen C Tom", "email": "naveen@meeraq.com"},
+    {"name": "WebKow", "email": "neeraj@growthfoundation.in"},
+    {"name": "Heena L Devnani", "email": "techspacebackend@gmail.com"},
+    {"name": "Tushaar Talwar", "email": "tushaartalwar@gmail.com"},
+    {"name": "Ekansh Technology Solutions LLP", "email": "rahul@ekanshtech.com"},
+    {"name": "ROUND DOT CONSULTANCY LLP", "email": "office@thetaxplanners.in"},
+    {"name": "Charishma Tirumale", "email": "charishmatelkar@gmail.com"},
+    {"name": "Gorentla Maqbul Basha", "email": "gmaqbulbasha@gmail.com"},
+    {"name": "Vaidehi Modale", "email": "vaidehi@meeraq.com"},
+    {"name": "Mili Singh Rawal", "email": "millixsr@gmail.com"},
+]
+
+
+meeraq_users = [
+    {"name": "Naveen C Tom", "email": "naveenctom514@gmail.com"},
+    {"name": "Naveen C Tom", "email": "naveen@meeraq.com"},
+]
+
+
+def sending_mail_to_outside_vendors(users):
+    for user in users:
+        send_mail_templates(
+            "vendors/outside_vendor.html",
+            [user["email"]],
+            "Effortless Invoicing with Meeraq!",
+            {"name": user["name"]},
+        )
+        sleep(5)
