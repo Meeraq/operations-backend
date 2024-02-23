@@ -102,7 +102,11 @@ from courses.serializers import (
     CourseEnrollmentDepthOneSerializer,
 )
 from django.core.serializers import serialize
-from courses.views import create_or_get_learner,add_question_to_feedback_lesson,nps_default_feed_questions
+from courses.views import (
+    create_or_get_learner,
+    add_question_to_feedback_lesson,
+    nps_default_feed_questions,
+)
 from assessmentApi.models import (
     Assessment,
     ParticipantUniqueId,
@@ -430,10 +434,13 @@ def create_project_structure(request, project_id):
 def get_schedular_batches(request):
     try:
         project_id = request.GET.get("project_id")
+        facilitator_id = request.GET.get("facilitator_id")
         if not project_id:
             batches = SchedularBatch.objects.all()
         else:
             batches = SchedularBatch.objects.filter(project__id=project_id)
+        if facilitator_id:
+            batches = batches.filter(livesession__facilitator__id=facilitator_id).distinct()
         serializer = SchedularBatchSerializer(batches, many=True)
         return Response(serializer.data)
     except SchedularBatch.DoesNotExist:
@@ -589,11 +596,14 @@ def get_batch_calendar(request, batch_id):
         participants = Learner.objects.filter(schedularbatch__id=batch_id)
         participants_serializer = LearnerSerializer(participants, many=True)
         coaches = Coach.objects.filter(schedularbatch__id=batch_id)
-        facilitator = Facilitator.objects.filter(schedularbatch__id=batch_id)
+        facilitator = Facilitator.objects.filter(
+            livesession__batch__id=batch_id
+        ).distinct()
         coaches_serializer = CoachBasicDetailsSerializer(coaches, many=True)
         facilitator_serializer = FacilitatorBasicDetailsSerializer(
             facilitator, many=True
         )
+
         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
         try:
@@ -2696,7 +2706,7 @@ def send_live_session_link_whatsapp(request):
                         },
                         {
                             "name": "description",
-                            "value": ( 
+                            "value": (
                                 (
                                     live_session.description
                                     if live_session.description
@@ -2706,7 +2716,7 @@ def send_live_session_link_whatsapp(request):
                                     f" Please join using this link: {live_session.meeting_link}"
                                     if live_session.meeting_link
                                     else ""
-                                )    
+                                )
                             ),
                         },
                     ],
@@ -3482,6 +3492,12 @@ def get_live_sessions_by_status(request):
     hr_id = request.query_params.get("hr", None)
     if hr_id:
         queryset = queryset.filter(batch__project__hr__id=hr_id)
+
+    facilitator_id = request.query_params.get("facilitator_id", None)
+    if facilitator_id:
+        batches = SchedularBatch.objects.filter(livesession__facilitator__id = facilitator_id)
+        queryset = queryset.filter(batch__in = batches)
+
     res = []
     for live_session in queryset:
         session_name = get_live_session_name(live_session.session_type)
@@ -3527,11 +3543,10 @@ def live_session_detail_view(request, pk):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def facilitator_projects(request, facilitator_id):
-    print(facilitator_id)
     try:
         projects = SchedularProject.objects.filter(
-            schedularbatch__facilitator__id=facilitator_id
-        )
+            schedularbatch__livesession__facilitator__id=facilitator_id
+        ).distinct()
         serializer = SchedularProjectSerializer(projects, many=True)
         return Response(serializer.data)
     except Facilitator.DoesNotExist:
@@ -3708,10 +3723,17 @@ def add_new_session_in_project_structure(request):
                         )
                         unique_id = uuid.uuid4()
                         feedback_lesson = FeedbackLesson.objects.create(
-                            lesson=new_feedback_lesson, unique_id=unique_id, live_session=live_session
+                            lesson=new_feedback_lesson,
+                            unique_id=unique_id,
+                            live_session=live_session,
                         )
-                        if live_session.session_type in ["in_person_session", "virtual_session"]:        
-                            add_question_to_feedback_lesson(feedback_lesson, nps_default_feed_questions)
+                        if live_session.session_type in [
+                            "in_person_session",
+                            "virtual_session",
+                        ]:
+                            add_question_to_feedback_lesson(
+                                feedback_lesson, nps_default_feed_questions
+                            )
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     coaching_session_number = (
                         CoachingSession.objects.filter(
@@ -4045,7 +4067,7 @@ class GetAllBatchesCoachDetails(APIView):
                         "phone": coach.phone,
                     }
                     all_coaches.append(coach_data)
-                for facilitator in batch.facilitator.all():
+                for facilitator in Facilitator.objects.filter(livesession__batch=batch):
                     facilitator_data = {
                         "id": facilitator.id,
                         "first_name": facilitator.first_name,
@@ -4185,7 +4207,10 @@ def delete_facilitator_from_that_batch(request):
         facilitator_id = request.data.get("facilitator_id")
         batch = get_object_or_404(SchedularBatch, pk=batch_id)
         facilitator = get_object_or_404(Facilitator, pk=facilitator_id)
-        batch.facilitator.remove(facilitator)
+        live_sessions = LiveSession.objects.filter(batch=batch, facilitator=facilitator)
+        for live_session in live_sessions:
+            live_session.facilitator = None
+            live_session.save()
         return Response(
             {"message": f"Facilitator successfully removed from this batch."}
         )
@@ -4238,9 +4263,13 @@ def get_skill_dashboard_card_data(request):
         today = timezone.now().date()
         today_live_sessions = LiveSession.objects.filter(date_time__date=today)
 
-        ongoing_assessment = Assessment.objects.filter(assessment_modal__isnull=False,status="ongoing")
+        ongoing_assessment = Assessment.objects.filter(
+            assessment_modal__isnull=False, status="ongoing"
+        )
 
-        completed_assessments = Assessment.objects.filter(assessment_modal__isnull=False,status="completed")
+        completed_assessments = Assessment.objects.filter(
+            assessment_modal__isnull=False, status="completed"
+        )
 
         return Response(
             {
@@ -4464,3 +4493,22 @@ def pre_post_assessment_or_nudge_update_in_project(request):
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def add_facilitator_to_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"detail": "Batch not found"}, status=404)
+    try:
+        facilitator_id = request.data.get("facilitator_id", "")
+        facilitator = Facilitator.objects.get(id=facilitator_id)
+    except Facilitator.DoesNotExist:
+        return Response({"detail": "Facilitator not found"}, status=404)
+    live_sessions = LiveSession.objects.filter(batch=batch)
+    for live_session in live_sessions:
+        live_session.facilitator = facilitator
+        live_session.save()
+    return Response({"message": "Facilitator added successfully."}, status=201)
