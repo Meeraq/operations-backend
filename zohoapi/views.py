@@ -1128,6 +1128,8 @@ def add_vendor(request):
                     )
 
                 vendor_role, created = Role.objects.get_or_create(name="vendor")
+                user_profile.roles.add(vendor_role)
+                user_profile.save()
                 vendor = Vendor.objects.create(
                     user=user_profile,
                     name=name,

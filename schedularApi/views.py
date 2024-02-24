@@ -631,6 +631,7 @@ def get_batch_calendar(request, batch_id):
         except Exception as e:
             print(str(e))
             course = None
+        batch_for_response = SchedularBatch.objects.filter(id=batch_id).first()
         return Response(
             {
                 "sessions": sorted_sessions,
@@ -639,7 +640,8 @@ def get_batch_calendar(request, batch_id):
                 "course": course_serailizer.data if course else None,
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
-                "batch_name": SchedularBatch.objects.filter(id=batch_id).first().name,
+                "batch_name": batch_for_response.name,
+                "project_id":batch_for_response.project.id,
             }
         )
     except SchedularProject.DoesNotExist:

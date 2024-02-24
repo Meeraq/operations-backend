@@ -3038,6 +3038,12 @@ class DuplicateLesson(APIView):
                             file=lesson.downloadablelesson.file,
                             description=lesson.downloadablelesson.description,
                         )
+                    elif lesson.lesson_type == "assignment":
+                        AssignmentLesson.objects.create(
+                            lesson=new_lesson,
+                            name=lesson.assignmentlesson.name,
+                            description=lesson.assignmentlesson.description,
+                        )
                     elif lesson.lesson_type == "assessment":
                         Assessment.objects.create(lesson=new_lesson)
                     elif lesson.lesson_type == "quiz":
