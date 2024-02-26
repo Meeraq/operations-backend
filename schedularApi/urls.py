@@ -244,7 +244,7 @@ urlpatterns = [
         views.pre_post_assessment_or_nudge_update_in_project,
     ),
     path(
-        "get-all-coach-of-project-or-batch/<int:project_id>/<str:batch_id>/",
+        "get-all-coach-of-project-or-batch/<str:project_id>/<str:batch_id>/",
         views.get_all_coach_of_project_or_batch,
     ),
     path(

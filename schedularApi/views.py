@@ -305,7 +305,14 @@ def create_project_schedular(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_Schedular_Projects(request):
-    projects = SchedularProject.objects.all()
+    status = request.query_params.get("status")
+
+    if status:
+
+        projects = SchedularProject.objects.exclude(status="completed")
+    else:
+        projects = SchedularProject.objects.all()
+
     serializer = SchedularProjectSerializer(projects, many=True)
     for project_data in serializer.data:
         latest_update = (
@@ -4513,16 +4520,24 @@ def pre_post_assessment_or_nudge_update_in_project(request):
 @permission_classes([IsAuthenticated])
 def get_all_coach_of_project_or_batch(request, project_id, batch_id):
     try:
-        if batch_id == "all":
-            batches = SchedularBatch.objects.filter(project__id=project_id)
-        else:
-            batches = SchedularBatch.objects.filter(id=int(batch_id))
-        all_coach = []
-        for batch in batches:
-            for coach in batch.coaches.all():
-                all_coach.append(coach)
 
-        serialize = CoachSerializer(all_coach, many=True)
+        if project_id == "all":
+            projects = SchedularProject.objects.exclude(status="completed")
+        else:
+            projects = SchedularProject.objects.filter(id=int(project_id))
+        all_coach = set()
+
+        for project in projects:
+            if project_id == "all" or batch_id == "all":
+                batches = SchedularBatch.objects.filter(project__id=project.id)
+            else:
+                batches = SchedularBatch.objects.filter(id=int(batch_id))
+
+            for batch in batches:
+                for coach in batch.coaches.all():
+                    all_coach.add(coach)
+
+        serialize = CoachSerializer(list(all_coach), many=True)
         return Response(serialize.data)
     except Exception as e:
         print(str(e))
@@ -4590,7 +4605,16 @@ def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_
 
         data = []
         if project_id == "all":
-            projects = SchedularProject.objects.all()
+            projects = SchedularProject.objects.exclude(status="completed")
+            for project in projects:
+                temp = {
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "coaches_batches_slots": {},
+                }
+                data.append(temp)
+            return Response(data)
+
         else:
             projects = SchedularProject.objects.filter(id=int(project_id))
 
@@ -4622,7 +4646,7 @@ def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_
                         + timedelta(days=1)
                         - timedelta(milliseconds=1)
                     )
-                  
+
                     start_timestamp = str(int(start_date.timestamp() * 1000))
                     end_timestamp = str(int(end_date.timestamp() * 1000))
                     start_timestamp = str(
