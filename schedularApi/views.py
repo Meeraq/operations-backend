@@ -4600,6 +4600,10 @@ def get_merged_date_of_coaching_session_for_a_batches(batches):
 @permission_classes([IsAuthenticated])
 def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_id):
     try:
+        range_start_date = request.query_params.get("start_date")
+        range_end_date = request.query_params.get("end_date")
+ 
+        
         current_time = timezone.now()
         timestamp_milliseconds = current_time.timestamp() * 1000
 
@@ -4649,9 +4653,16 @@ def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_
 
                     start_timestamp = str(int(start_date.timestamp() * 1000))
                     end_timestamp = str(int(end_date.timestamp() * 1000))
-                    start_timestamp = str(
-                        max((int(start_timestamp)), timestamp_milliseconds)
-                    )
+                    if range_start_date and range_end_date:
+                        start_timestamp = str(
+                            max((int(start_timestamp)), int(range_start_date))
+                        )
+                        end_timestamp = str(min((int(end_timestamp)), int(range_end_date)))
+                    else:
+
+                        start_timestamp = str(
+                            max((int(start_timestamp)), timestamp_milliseconds)
+                        )
                     if coach_id == "all":
                         availabilities = CoachSchedularAvailibilty.objects.filter(
                             coach__in=coaches,
