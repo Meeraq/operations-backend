@@ -582,6 +582,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
             bills = bills_response.json()["bills"]
             invoice_res = []
             for invoice in invoice_serializer.data:
+                hsn_or_sac=Vendor.objects.get(vendor_id=invoice["vendor_id"]).hsn_or_sac
                 matching_bill = next(
                     (
                         bill
@@ -591,7 +592,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
                     ),
                     None,
                 )
-                invoice_res.append({**invoice, "bill": matching_bill})
+                invoice_res.append({**invoice, "bill": matching_bill,"hsn_or_sac":hsn_or_sac})
             return Response(invoice_res)
         else:
             return Response({}, status=400)
@@ -614,13 +615,19 @@ def get_purchase_order_data(request, purchaseorder_id):
             invoices = InvoiceData.objects.filter(
                 purchase_order_no=purchase_order.get("purchaseorder_number")
             )
-
             line_item_details = get_line_items_details(invoices)
             for line_item in purchase_order["line_items"]:
                 if line_item["line_item_id"] in line_item_details:
                     line_item["total_invoiced_quantity"] = line_item_details[
                         line_item["line_item_id"]
                     ]
+                    vendor_id = purchase_order.get("vendor_id")
+                    if vendor_id:
+                        vendor = Vendor.objects.filter(vendor_id=vendor_id).first()
+                        hsn_or_sac = vendor.hsn_or_sac if vendor else None
+                        line_item["hsn_sac_vendor_modal"] = hsn_or_sac
+                    else:
+                        line_item["hsn_sac_vendor_modal"] = None
             return Response(purchase_order, status=status.HTTP_200_OK)
         else:
             return Response(
@@ -678,6 +685,14 @@ def get_tax(line_item, taxt_type):
     )
     return f"{percentage}%" if percentage else ""
 
+def get_subtotal_excluding_tax(line_items):
+    res=0
+    for line_item in line_items:
+        res+= round(
+            line_item["quantity_input"] * line_item["rate"]
+        )
+    return res
+
 
 def get_line_items_for_template(line_items):
     res = [*line_items]
@@ -713,6 +728,13 @@ def add_invoice_data(request):
         vendor_id=request.data["vendor_id"],
         invoice_number=request.data["invoice_number"],
     )
+    hsn_or_sac=request.data["hsn_or_sac"]
+    try:
+        vendor = Vendor.objects.get(vendor_id=request.data["vendor_id"])
+        vendor.hsn_or_sac = hsn_or_sac
+        vendor.save()
+    except Exception as e:
+        return Response({"error": "Vendor not found."}, status=400)
 
     if invoices.count() > 0:
         return Response({"error": "Invoice number should be unique."}, status=400)
@@ -722,6 +744,7 @@ def add_invoice_data(request):
         serializer.save()
         line_items = serializer.data["line_items"]
         line_items = get_line_items_for_template(serializer.data["line_items"])
+        sub_total_excluding_tax=get_subtotal_excluding_tax(serializer.data["line_items"])
         invoice_date = datetime.strptime(
             serializer.data["invoice_date"], "%Y-%m-%d"
         ).strftime("%d-%m-%Y")
@@ -734,6 +757,7 @@ def add_invoice_data(request):
             "invoice_date": invoice_date,
             "due_date": due_date,
             "line_items": line_items,
+            "sub_total_excluding_tax":sub_total_excluding_tax,
         }
 
         email_body_message = render_to_string(
@@ -773,6 +797,7 @@ def edit_invoice(request, invoice_id):
     if serializer.is_valid():
         serializer.save()
         line_items = get_line_items_for_template(serializer.data["line_items"])
+        sub_total_excluding_tax=get_subtotal_excluding_tax(serializer.data["line_items"])
         invoice_serializer = InvoiceDataSerializer(invoice)
         invoice_date = datetime.strptime(
             serializer.data["invoice_date"], "%Y-%m-%d"
@@ -785,6 +810,7 @@ def edit_invoice(request, invoice_id):
             "invoice_date": invoice_date,
             "due_date": due_date,
             "line_items": line_items,
+            "sub_total_excluding_tax":sub_total_excluding_tax,
         }
         email_body_message = render_to_string(
             "vendors/edit_invoice.html",
@@ -1032,17 +1058,26 @@ class DownloadInvoice(APIView):
             invoice = get_object_or_404(InvoiceData, id=record_id)
             serializer = InvoiceDataSerializer(invoice)
             line_items = get_line_items_for_template(serializer.data["line_items"])
+            sub_total_excluding_tax=get_subtotal_excluding_tax(serializer.data["line_items"])
             invoice_date = datetime.strptime(
                 serializer.data["invoice_date"], "%Y-%m-%d"
             ).strftime("%d-%m-%Y")
             due_date = datetime.strptime(
                 add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
             ).strftime("%d-%m-%Y")
+            try:
+                hsn_or_sac = Vendor.objects.get(vendor_id=invoice.vendor_id).hsn_or_sac
+            except Vendor.DoesNotExist:
+                hsn_or_sac = None
+            except Exception as e:
+                hsn_or_sac = None
             invoice_data = {
                 **serializer.data,
                 "invoice_date": invoice_date,
                 "due_date": due_date,
                 "line_items": line_items,
+                "sub_total_excluding_tax":sub_total_excluding_tax,
+                "hsn_or_sac":hsn_or_sac,
             }
             image_base64 = None
             try:
