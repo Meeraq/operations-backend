@@ -219,9 +219,8 @@ urlpatterns = [
         "update-project-status/",
         views.update_project_status,
     ),
-
-      path(
-        "get-skill-dashboard-card-data/<str:project_id>/", 
+    path(
+        "get-skill-dashboard-card-data/<str:project_id>/",
         views.get_skill_dashboard_card_data,
     ),
     path(
@@ -245,4 +244,12 @@ urlpatterns = [
         views.pre_post_assessment_or_nudge_update_in_project,
     ),
     path("batch/add-facilitator/<int:batch_id>/", views.add_facilitator_to_batch),
+    path(
+        "get-sessions-pricing-for-a-coach/<int:coach_id>/<int:project_id>/",
+        views.get_sessions_pricing_for_a_coach,
+    ),
+    path(
+        "get-sessions-pricing-for-a-facilitator/<int:facilitator_id>/<int:project_id>/",
+        views.get_sessions_pricing_for_a_facilitator,
+    ),
 ]

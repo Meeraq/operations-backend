@@ -237,8 +237,9 @@ class FacilitatorPricing(models.Model):
     session_type = models.CharField(
         max_length=50, choices=SESSION_CHOICES, default="virtual_session"
     )
+    duration = models.CharField(max_length=50, default=None)
     live_session_number = models.IntegerField(blank=True, default=None, null=True)
     order = models.IntegerField(blank=True, default=None, null=True)
 
     def __str__(self):
-        return f"{self.session_type} in {self.project.name} for {self.facilitator.first_name} {self.facilitator.last_name}"
+        return f"{self.session_type} {self.live_session_number} in {self.project.name} for {self.facilitator.first_name} {self.facilitator.last_name}"

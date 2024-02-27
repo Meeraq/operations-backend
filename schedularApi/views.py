@@ -65,6 +65,8 @@ from .serializers import (
     UpdateSerializer,
     SchedularUpdateDepthOneSerializer,
     SchedularBatchDepthSerializer,
+    FacilitatorPricingSerializer,
+    CoachPricingSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -79,6 +81,8 @@ from .models import (
     SchedularBatch,
     SchedularUpdate,
     CalendarInvites,
+    CoachPricing,
+    FacilitatorPricing,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -317,6 +321,63 @@ def get_all_Schedular_Projects(request):
     return Response(serializer.data, status=200)
 
 
+def create_facilitator_pricing(batch, facilitator):
+    project_structure = batch.project.project_structure
+
+    for session in project_structure:
+
+        if session["session_type"] in [
+            "check_in_session",
+            "in_person_session",
+            "kickoff_session",
+            "virtual_session",
+            "live_session",
+        ]:
+            live_session = LiveSession.objects.filter(
+                batch=batch,
+                order=session["order"],
+                session_type=session["session_type"],
+            ).first()
+
+            facilitator_pricing = FacilitatorPricing.objects.create(
+                project=batch.project,
+                facilitator=facilitator,
+                session_type=live_session.session_type,
+                live_session_number=live_session.live_session_number,
+                order=live_session.order,
+                price=session["price"],
+                duration = live_session.duration
+            )
+
+
+def delete_facilitator_pricing(batch, facilitator):
+    project_structure = batch.project.project_structure
+
+    for session in project_structure:
+
+        if session["session_type"] in [
+            "check_in_session",
+            "in_person_session",
+            "kickoff_session",
+            "virtual_session",
+            "live_session",
+        ]:
+            live_session = LiveSession.objects.filter(
+                batch=batch,
+                order=session["order"],
+                session_type=session["session_type"],
+            ).first()
+
+            facilitator_pricing = FacilitatorPricing.objects.filter(
+                project=batch.project,
+                facilitator=facilitator,
+                session_type=live_session.session_type,
+                live_session_number=live_session.live_session_number,
+                order=live_session.order,
+                price=session["price"],
+            ).delete()
+
+
 # @api_view(["POST"])
 # def save_live_session(request):
 #     data = request.data
@@ -440,7 +501,9 @@ def get_schedular_batches(request):
         else:
             batches = SchedularBatch.objects.filter(project__id=project_id)
         if facilitator_id:
-            batches = batches.filter(livesession__facilitator__id=facilitator_id).distinct()
+            batches = batches.filter(
+                livesession__facilitator__id=facilitator_id
+            ).distinct()
         serializer = SchedularBatchSerializer(batches, many=True)
         return Response(serializer.data)
     except SchedularBatch.DoesNotExist:
@@ -651,7 +714,7 @@ def get_batch_calendar(request, batch_id):
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
                 "batch_name": batch_for_response.name,
-                "project_id":batch_for_response.project.id,
+                "project_id": batch_for_response.project.id,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -664,133 +727,160 @@ def get_batch_calendar(request, batch_id):
 @permission_classes([IsAuthenticated])
 def update_live_session(request, live_session_id):
     try:
-        live_session = LiveSession.objects.get(id=live_session_id)
-    except LiveSession.DoesNotExist:
+        with transaction.atomic():
+            live_session = LiveSession.objects.get(id=live_session_id)
+
+            facilitator_for_check = Facilitator.objects.filter(
+                id=request.data.get("facilitator")
+            ).first()
+            prev_facilitator = live_session.facilitator
+            if facilitator_for_check != prev_facilitator:
+                facilitator_pricing = FacilitatorPricing.objects.filter(
+                    project=live_session.batch.project,
+                    facilitator=prev_facilitator,
+                    session_type=live_session.session_type,
+                    live_session_number=live_session.live_session_number,
+                    order=live_session.order,
+                ).first()
+
+                facilitator_pricing.facilitator = facilitator_for_check
+                facilitator_pricing.save()
+
+            existing_date_time = live_session.date_time
+            serializer = LiveSessionSerializer(
+                live_session, data=request.data, partial=True
+            )
+            if serializer.is_valid():
+                update_live_session = serializer.save()
+                current_time = timezone.now()
+                if update_live_session.date_time > current_time:
+                    try:
+                        scheduled_for = update_live_session.date_time - timedelta(
+                            minutes=30
+                        )
+                        clocked = ClockedSchedule.objects.create(
+                            clocked_time=scheduled_for
+                        )
+                        # time is utc one here
+                        periodic_task = PeriodicTask.objects.create(
+                            name=f"send_whatsapp_reminder_30_min_before_live_session_{uuid.uuid1()}",
+                            task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
+                            args=[update_live_session.id],
+                            clocked=clocked,
+                            one_off=True,
+                        )
+                        periodic_task.save()
+                        if update_live_session.pt_30_min_before:
+                            update_live_session.pt_30_min_before.enabled = False
+                            update_live_session.pt_30_min_before.save()
+                        live_session.pt_30_min_before = periodic_task
+                        live_session.save()
+                    except Exception as e:
+                        # Handle any exceptions that may occur during task creation
+                        print(str(e))
+                        pass
+                AIR_INDIA_PROJECT_ID = 3
+                if (
+                    not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
+                    and update_live_session.batch.project.status == "ongoing"
+                    and update_live_session.batch.project.calendar_invites
+                ):
+                    try:
+                        learners = live_session.batch.learners.all()
+                        facilitators = [live_session.facilitator]
+                        attendees = []
+
+                        # Adding learners to attendees list
+                        for learner in learners:
+                            attendee = {
+                                "emailAddress": {
+                                    "name": learner.name,
+                                    "address": learner.email,
+                                },
+                                "type": "required",
+                            }
+                            attendees.append(attendee)
+
+                        # Adding facilitators to attendees list
+                        for facilitator in facilitators:
+                            attendee = {
+                                "emailAddress": {
+                                    "name": facilitator.first_name
+                                    + " "
+                                    + facilitator.last_name,
+                                    "address": facilitator.email,
+                                },
+                                "type": "required",
+                            }
+                            attendees.append(attendee)
+
+                        start_time_stamp = (
+                            update_live_session.date_time.timestamp() * 1000
+                        )
+                        end_time_stamp = (
+                            start_time_stamp + int(update_live_session.duration) * 60000
+                        )
+                        start_datetime_obj = datetime.fromtimestamp(
+                            int(start_time_stamp) / 1000
+                        ) + timedelta(hours=5, minutes=30)
+                        start_datetime_str = (
+                            start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
+                        )
+                        description = (
+                            f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
+                            + update_live_session.description
+                            if update_live_session.description
+                            else (
+                                "" + update_live_session.description
+                                if update_live_session.description
+                                else ""
+                            )
+                        )
+                        if not existing_date_time:
+                            create_outlook_calendar_invite(
+                                "Meeraq - Live Session",
+                                description,
+                                start_time_stamp,
+                                end_time_stamp,
+                                attendees,
+                                env("CALENDAR_INVITATION_ORGANIZER"),
+                                None,
+                                None,
+                                update_live_session,
+                                update_live_session.meeting_link,
+                            )
+                        elif not existing_date_time.strftime(
+                            "%d-%m-%Y %H:%M"
+                        ) == update_live_session.date_time.strftime("%d-%m-%Y %H:%M"):
+                            existing_calendar_invite = CalendarInvites.objects.filter(
+                                live_session=live_session
+                            ).first()
+                            # delete the current one
+                            if existing_calendar_invite:
+                                delete_outlook_calendar_invite(existing_calendar_invite)
+                            # create the new one
+                            create_outlook_calendar_invite(
+                                "Meeraq - Live Session",
+                                description,
+                                start_time_stamp,
+                                end_time_stamp,
+                                attendees,
+                                env("CALENDAR_INVITATION_ORGANIZER"),
+                                None,
+                                None,
+                                update_live_session,
+                                update_live_session.meeting_link,
+                            )
+                    except Exception as e:
+                        print(str(e))
+                        pass
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(str(e))
         return Response(
-            {"error": "LiveSession not found"}, status=status.HTTP_404_NOT_FOUND
+            {"error": "Failed to update session"}, status=status.HTTP_400_BAD_REQUEST
         )
-    existing_date_time = live_session.date_time
-    serializer = LiveSessionSerializer(live_session, data=request.data, partial=True)
-    if serializer.is_valid():
-        update_live_session = serializer.save()
-        current_time = timezone.now()
-        if update_live_session.date_time > current_time:
-            try:
-                scheduled_for = update_live_session.date_time - timedelta(minutes=30)
-                clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
-                # time is utc one here
-                periodic_task = PeriodicTask.objects.create(
-                    name=f"send_whatsapp_reminder_30_min_before_live_session_{uuid.uuid1()}",
-                    task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
-                    args=[update_live_session.id],
-                    clocked=clocked,
-                    one_off=True,
-                )
-                periodic_task.save()
-                if update_live_session.pt_30_min_before:
-                    update_live_session.pt_30_min_before.enabled = False
-                    update_live_session.pt_30_min_before.save()
-                live_session.pt_30_min_before = periodic_task
-                live_session.save()
-            except Exception as e:
-                # Handle any exceptions that may occur during task creation
-                print(str(e))
-                pass
-        AIR_INDIA_PROJECT_ID = 3
-        if (
-            not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
-            and update_live_session.batch.project.status == "ongoing"
-            and update_live_session.batch.project.calendar_invites
-        ):
-            try:
-                learners = live_session.batch.learners.all()
-                facilitators = live_session.batch.facilitator.all()
-                attendees = []
-
-                # Adding learners to attendees list
-                for learner in learners:
-                    attendee = {
-                        "emailAddress": {
-                            "name": learner.name,
-                            "address": learner.email,
-                        },
-                        "type": "required",
-                    }
-                    attendees.append(attendee)
-
-                # Adding facilitators to attendees list
-                for facilitator in facilitators:
-                    attendee = {
-                        "emailAddress": {
-                            "name": facilitator.first_name
-                            + " "
-                            + facilitator.last_name,
-                            "address": facilitator.email,
-                        },
-                        "type": "required",
-                    }
-                    attendees.append(attendee)
-
-                start_time_stamp = update_live_session.date_time.timestamp() * 1000
-                end_time_stamp = (
-                    start_time_stamp + int(update_live_session.duration) * 60000
-                )
-                start_datetime_obj = datetime.fromtimestamp(
-                    int(start_time_stamp) / 1000
-                ) + timedelta(hours=5, minutes=30)
-                start_datetime_str = (
-                    start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
-                )
-                description = (
-                    f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
-                    + update_live_session.description
-                    if update_live_session.description
-                    else (
-                        "" + update_live_session.description
-                        if update_live_session.description
-                        else ""
-                    )
-                )
-                if not existing_date_time:
-                    create_outlook_calendar_invite(
-                        "Meeraq - Live Session",
-                        description,
-                        start_time_stamp,
-                        end_time_stamp,
-                        attendees,
-                        env("CALENDAR_INVITATION_ORGANIZER"),
-                        None,
-                        None,
-                        update_live_session,
-                        update_live_session.meeting_link,
-                    )
-                elif not existing_date_time.strftime(
-                    "%d-%m-%Y %H:%M"
-                ) == update_live_session.date_time.strftime("%d-%m-%Y %H:%M"):
-                    existing_calendar_invite = CalendarInvites.objects.filter(
-                        live_session=live_session
-                    ).first()
-                    # delete the current one
-                    if existing_calendar_invite:
-                        delete_outlook_calendar_invite(existing_calendar_invite)
-                    # create the new one
-                    create_outlook_calendar_invite(
-                        "Meeraq - Live Session",
-                        description,
-                        start_time_stamp,
-                        end_time_stamp,
-                        attendees,
-                        env("CALENDAR_INVITATION_ORGANIZER"),
-                        None,
-                        None,
-                        update_live_session,
-                        update_live_session.meeting_link,
-                    )
-            except Exception as e:
-                print(str(e))
-                pass
-        return Response(serializer.data)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["PUT"])
@@ -1233,18 +1323,52 @@ def get_coaches(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_batch(request, batch_id):
-    print(request.data)
-    print(batch_id)
-    try:
-        batch = SchedularBatch.objects.get(id=batch_id)
-    except SchedularBatch.DoesNotExist:
-        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
-    serializer = SchedularBatchSerializer(batch, data=request.data, partial=True)
+    existing_coaches = None
+    coaches = request.data.get("coaches")
 
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        with transaction.atomic():
+            batch = SchedularBatch.objects.get(id=batch_id)
+            existing_coaches = batch.coaches.all()
+            for coach_id in coaches:
+                coach = Coach.objects.get(id=coach_id)
+                if coach not in existing_coaches:
+                    project_structure = batch.project.project_structure
+
+                    for session in project_structure:
+
+                        if session["session_type"] in [
+                            "laser_coaching_session",
+                            "mentoring_session",
+                        ]:
+                            coaching_session = CoachingSession.objects.filter(
+                                batch=batch,
+                                order=session["order"],
+                                session_type=session["session_type"],
+                            ).first()
+                            coach_pricing = CoachPricing.objects.create(
+                                project=batch.project,
+                                coach=coach,
+                                session_type=coaching_session.session_type,
+                                coaching_session_number=coaching_session.coaching_session_number,
+                                order=coaching_session.order,
+                                price=session["price"],
+                            )
+
+            serializer = SchedularBatchSerializer(
+                batch, data=request.data, partial=True
+            )
+
+            if serializer.is_valid():
+                serializer.save()
+
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
+        )
 
 
 @api_view(["GET"])
@@ -3497,8 +3621,10 @@ def get_live_sessions_by_status(request):
 
     facilitator_id = request.query_params.get("facilitator_id", None)
     if facilitator_id:
-        batches = SchedularBatch.objects.filter(livesession__facilitator__id = facilitator_id)
-        queryset = queryset.filter(batch__in = batches)
+        batches = SchedularBatch.objects.filter(
+            livesession__facilitator__id=facilitator_id
+        )
+        queryset = queryset.filter(batch__in=batches)
 
     res = []
     for live_session in queryset:
@@ -4186,12 +4312,32 @@ def facilitator_inside_that_batch(request, batch_id):
 @permission_classes([IsAuthenticated])
 def delete_coach_from_that_batch(request):
     try:
-        batch_id = request.data.get("batch_id")
-        coach_id = request.data.get("coach_id")
-        batch = get_object_or_404(SchedularBatch, pk=batch_id)
-        coach = get_object_or_404(Coach, pk=coach_id)
-        batch.coaches.remove(coach)
-        return Response({"message": f"Coach successfully removed from this batch."})
+        with transaction.atomic():
+            batch_id = request.data.get("batch_id")
+            coach_id = request.data.get("coach_id")
+            batch = get_object_or_404(SchedularBatch, pk=batch_id)
+            coach = get_object_or_404(Coach, pk=coach_id)
+            batch.coaches.remove(coach)
+            for session in batch.project.project_structure:
+                if session["session_type"] in [
+                    "laser_coaching_session",
+                    "mentoring_session",
+                ]:
+                    coaching_session = CoachingSession.objects.filter(
+                        batch=batch,
+                        order=session["order"],
+                        session_type=session["session_type"],
+                    ).first()
+                    coach_pricing = CoachPricing.objects.filter(
+                        project=batch.project,
+                        coach=coach,
+                        session_type=coaching_session.session_type,
+                        coaching_session_number=coaching_session.coaching_session_number,
+                        order=coaching_session.order,
+                        price=session["price"],
+                    ).delete()
+
+            return Response({"message": f"Coach successfully removed from this batch."})
     except SchedularBatch.DoesNotExist:
         return Response({"error": "Batch not found"}, status=404)
     except Coach.DoesNotExist:
@@ -4203,7 +4349,7 @@ def delete_coach_from_that_batch(request):
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_facilitator_from_that_batch(request):
-    print("Data", request.data)
+
     try:
         batch_id = request.data.get("batch_id")
         facilitator_id = request.data.get("facilitator_id")
@@ -4213,6 +4359,7 @@ def delete_facilitator_from_that_batch(request):
         for live_session in live_sessions:
             live_session.facilitator = None
             live_session.save()
+        delete_facilitator_pricing(batch, facilitator)
         return Response(
             {"message": f"Facilitator successfully removed from this batch."}
         )
@@ -4270,7 +4417,7 @@ def get_skill_dashboard_card_data(request, project_id):
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="ongoing"
             )
-           
+
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )
@@ -4528,15 +4675,42 @@ def pre_post_assessment_or_nudge_update_in_project(request):
 def add_facilitator_to_batch(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
-    except SchedularBatch.DoesNotExist:
-        return Response({"detail": "Batch not found"}, status=404)
-    try:
+
         facilitator_id = request.data.get("facilitator_id", "")
         facilitator = Facilitator.objects.get(id=facilitator_id)
-    except Facilitator.DoesNotExist:
-        return Response({"detail": "Facilitator not found"}, status=404)
-    live_sessions = LiveSession.objects.filter(batch=batch)
-    for live_session in live_sessions:
-        live_session.facilitator = facilitator
-        live_session.save()
-    return Response({"message": "Facilitator added successfully."}, status=201)
+
+        live_sessions = LiveSession.objects.filter(batch=batch)
+        for live_session in live_sessions:
+            live_session.facilitator = facilitator
+            live_session.save()
+
+        create_facilitator_pricing(batch, facilitator)
+
+        return Response({"message": "Facilitator added successfully."}, status=201)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to add facilitator."}, status=201)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sessions_pricing_for_a_coach(request, coach_id,project_id):
+    try:
+        coach_pricing = CoachPricing.objects.filter(project__id = project_id  , coach__id=coach_id).first()
+        serialize = CoachPricing(coach_pricing,many=True)
+        return Response(serialize.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data."}, status=201)
+    
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sessions_pricing_for_a_facilitator(request, facilitator_id,project_id):
+    try:
+        facilitator_picing = FacilitatorPricing.objects.filter(project__id = project_id  , facilitator__id=facilitator_id)
+        serialize = FacilitatorPricingSerializer(facilitator_picing,many=True)
+        return Response(serialize.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data."}, status=201)
