@@ -252,4 +252,16 @@ urlpatterns = [
         "get-sessions-pricing-for-a-facilitator/<int:facilitator_id>/<int:project_id>/",
         views.get_sessions_pricing_for_a_facilitator,
     ),
+    path(
+        "update-facilitator-price/<int:facilitator_price_id>/",
+        views.update_facilitator_price,
+    ),
+    path(
+        "update-coach-price/<int:coach_price_id>/",
+        views.update_coach_price,
+    ),
+      path(
+        "update-price-in-project-structure/",
+        views.update_price_in_project_structure,
+    ),
 ]

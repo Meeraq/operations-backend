@@ -346,7 +346,7 @@ def create_facilitator_pricing(batch, facilitator):
                 live_session_number=live_session.live_session_number,
                 order=live_session.order,
                 price=session["price"],
-                duration = live_session.duration
+                duration=live_session.duration,
             )
 
 
@@ -4695,22 +4695,73 @@ def add_facilitator_to_batch(request, batch_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_sessions_pricing_for_a_coach(request, coach_id,project_id):
+def get_sessions_pricing_for_a_coach(request, coach_id, project_id):
     try:
-        coach_pricing = CoachPricing.objects.filter(project__id = project_id  , coach__id=coach_id).first()
-        serialize = CoachPricing(coach_pricing,many=True)
+        coach_pricing = CoachPricing.objects.filter(
+            project__id=project_id, coach__id=coach_id
+        ).first()
+        serialize = CoachPricing(coach_pricing, many=True)
         return Response(serialize.data)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data."}, status=201)
-    
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_sessions_pricing_for_a_facilitator(request, facilitator_id,project_id):
+def get_sessions_pricing_for_a_facilitator(request, facilitator_id, project_id):
     try:
-        facilitator_picing = FacilitatorPricing.objects.filter(project__id = project_id  , facilitator__id=facilitator_id)
-        serialize = FacilitatorPricingSerializer(facilitator_picing,many=True)
+        facilitator_picing = FacilitatorPricing.objects.filter(
+            project__id=project_id, facilitator__id=facilitator_id
+        )
+        serialize = FacilitatorPricingSerializer(facilitator_picing, many=True)
         return Response(serialize.data)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data."}, status=201)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_facilitator_price(request, facilitator_price_id):
+    try:
+        price = request.data.get("price")
+        facilitator_price = FacilitatorPricing.objects.get(id=facilitator_price_id)
+        facilitator_price.price = price
+
+        facilitator_price.save()
+
+        return Response({"message": "Facilitator price updated."}, status=201)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update price."}, status=201)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_coach_price(request, coach_price_id):
+    try:
+        price = request.data.get("price")
+        coach_price = CoachPricing.objects.get(id=coach_price_id)
+
+        coach_price.price = price
+        coach_price.save()
+
+        return Response({"message": "Coach price updated."}, status=201)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update price."}, status=201)
+    
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_price_in_project_structure(request):
+    try:
+        pass
+        return Response({"message": "Price updated successfully."}, status=201)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update price."}, status=201)
