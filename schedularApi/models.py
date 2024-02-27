@@ -206,7 +206,7 @@ class CoachPricing(models.Model):
     ]
 
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
-    coach = models.OneToOneField(Coach, on_delete=models.CASCADE)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     session_type = models.CharField(
         max_length=50, choices=SESSION_CHOICES, default="laser_coaching_session"
@@ -216,6 +216,8 @@ class CoachPricing(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return f"{self.session_type} {self.coaching_session_number}  in {self.project.name} for {self.coach.first_name} {self.coach.last_name}"
 
 class FacilitatorPricing(models.Model):
 
@@ -228,7 +230,7 @@ class FacilitatorPricing(models.Model):
     ]
 
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
-    facilitator = models.OneToOneField(Facilitator, on_delete=models.CASCADE)
+    facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -237,3 +239,6 @@ class FacilitatorPricing(models.Model):
     )
     live_session_number = models.IntegerField(blank=True, default=None, null=True)
     order = models.IntegerField(blank=True, default=None, null=True)
+
+    def __str__(self):
+        return f"{self.session_type} in {self.project.name} for {self.facilitator.first_name} {self.facilitator.last_name}"
