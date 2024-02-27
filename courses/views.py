@@ -28,6 +28,8 @@ from .models import (
     DownloadableLesson,
     ThinkificLessonCompleted,
     Nudge,
+    AssignmentLesson,
+    AssignmentLessonResponse,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -57,11 +59,14 @@ from .serializers import (
     FileSerializer,
     DownloadableLessonSerializer,
     NudgeSerializer,
+    AssignmentSerializerDepthOne,
+    AssignmentResponseSerializerDepthSix,
+    AssignmentResponseSerializer,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 from rest_framework.views import APIView
-from api.models import User, Learner, Profile, Role
+from api.models import User, Learner, Profile, Role, Coach
 from schedularApi.models import (
     LiveSession,
     SchedularBatch,
@@ -662,6 +667,9 @@ class LessonDetailView(generics.RetrieveAPIView):
         elif lesson_type == "downloadable_file":
             downloadable_file_lesson = DownloadableLesson.objects.get(lesson=lesson)
             serializer = DownloadableLessonSerializer(downloadable_file_lesson)
+        elif lesson_type == "assignment":
+            assignment_lesson = AssignmentLesson.objects.get(lesson=lesson)
+            serializer = AssignmentSerializerDepthOne(assignment_lesson)
         else:
             return Response({"error": f"Failed to get the lessons"}, status=400)
 
@@ -2393,6 +2401,12 @@ class AssignCourseTemplateToBatch(APIView):
                                 file=original_lesson.downloadablelesson.file,
                                 description=original_lesson.downloadablelesson.description,
                             )
+                        elif original_lesson.lesson_type == "assignment":
+                            AssignmentLesson.objects.create(
+                                lesson=new_lesson,
+                                name=original_lesson.assignmentlesson.name,
+                                description=original_lesson.assignmentlesson.description,
+                            )
                         elif original_lesson.lesson_type == "assessment":
                             assessment = Assessment.objects.filter(
                                 lesson=original_lesson
@@ -3024,6 +3038,12 @@ class DuplicateLesson(APIView):
                             file=lesson.downloadablelesson.file,
                             description=lesson.downloadablelesson.description,
                         )
+                    elif lesson.lesson_type == "assignment":
+                        AssignmentLesson.objects.create(
+                            lesson=new_lesson,
+                            name=lesson.assignmentlesson.name,
+                            description=lesson.assignmentlesson.description,
+                        )
                     elif lesson.lesson_type == "assessment":
                         Assessment.objects.create(lesson=new_lesson)
                     elif lesson.lesson_type == "quiz":
@@ -3547,3 +3567,183 @@ class GetAllNudgesOfSchedularProjects(APIView):
             print(str(e))
             return Response({"error": "Failed to get data"}, status=500)
 
+
+
+
+class CreateAssignmentLesson(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            course_template_id = request.data.get("course_template", "")
+            course_id = request.data.get("course", "")
+            lesson = None
+
+            if course_template_id != "null":
+                course_template = CourseTemplate.objects.get(id=int(course_template_id))
+                lesson = Lesson.objects.create(
+                    course_template=course_template,
+                    name=request.data["name"],
+                    status=request.data["status"],
+                    lesson_type="assignment",
+                    order=int(request.data["order"]),
+                )
+            elif course_id != "null":
+                course = Course.objects.get(id=int(course_id))
+                lesson = Lesson.objects.create(
+                    course=course,
+                    name=request.data["name"],
+                    status=request.data["status"],
+                    lesson_type="assignment",
+                    order=int(request.data["order"]),
+                )
+
+            assignment_lesson = AssignmentLesson.objects.create(
+                lesson=lesson,
+                name=request.data["name"],
+                description=request.data["description"],
+            )
+
+            return Response(
+                {"message": "Assignment Lesson Created."}, status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"message": "Failed to create assignment."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class UpdateAssignmentLesson(APIView):
+    def put(self, request, assignment_id):
+        permission_classes = [IsAuthenticated]
+        try:
+
+            assignment_lesson = AssignmentLesson.objects.get(
+                id=assignment_id,
+            )
+            assignment_lesson.name = request.data["name"]
+            assignment_lesson.description = request.data["description"]
+
+            assignment_lesson.save()
+            lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
+            lesson.name = request.data["name"]
+            lesson.save()
+            return Response(
+                {"message": f"Assignment Lesson Updated."}, status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"message": f"Failed to update assignment."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetAllAssignmentsResponses(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_type, user_id):
+
+        assignments = None
+
+        if user_type == "pmo":
+            assignments = AssignmentLessonResponse.objects.all()
+        elif user_type == "learner":
+            learner = Learner.objects.get(id=user_id)
+            assignments = AssignmentLessonResponse.objects.filter(learner=learner)
+        elif user_type == "coach":
+            coach = Coach.objects.get(id=user_id)
+            assignments = AssignmentLessonResponse.objects.filter(
+                assignment_lesson__lesson__course__batch__coaches=coach
+            )
+
+        data = []
+        for assignment in assignments:
+            serializer = AssignmentResponseSerializer(assignment)
+            temp = {
+                "id": assignment.id,
+                "name": assignment.assignment_lesson.name,
+                "learner_name": assignment.learner.name,
+                "batch_name": assignment.assignment_lesson.lesson.course.batch.name,
+                "project_name": assignment.assignment_lesson.lesson.course.batch.project.name,
+                "file": serializer.data["file"],
+                "org_name": assignment.assignment_lesson.lesson.course.batch.project.organisation.name,
+                "created_at": assignment.created_at,
+                "edited_at": assignment.edited_at,
+            }
+            data.append(temp)
+
+        return Response(data)
+
+
+class CreateAssignmentLessonResponse(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            file = request.data["file"]
+            assignment_id = request.data["assignment_id"]
+            learner_id = request.data["learner_id"]
+
+            assignment = AssignmentLesson.objects.get(id=assignment_id)
+
+            learner = Learner.objects.get(id=learner_id)
+
+            assignment_response = AssignmentLessonResponse.objects.create(
+                assignment_lesson=assignment, file=file, learner=learner
+            )
+
+            return Response(
+                {"message": f"File Uploaded Sucessfully."}, status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"message": f"Failed to upload file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetAssignmentsResponses(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, assignment_id, learner_id):
+        try:
+            assignment_response = AssignmentLessonResponse.objects.get(
+                assignment_lesson__id=assignment_id, learner__id=learner_id
+            )
+
+            serializer = AssignmentResponseSerializerDepthSix(assignment_response)
+            return Response(serializer.data)
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"message": f"Failed to get data."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class UpdateAssignmentLessonFile(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request):
+        try:
+            file = request.data.get("file", None)
+            assignment_response_id = request.data.get("assignment_response_id", None)
+            assignment_response = AssignmentLessonResponse.objects.get(
+                id=int(assignment_response_id)
+            )
+            assignment_response.file = file
+            assignment_response.save()
+
+            return Response({"message": "File updated sucessfully."}, status=200)
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"message": f"Failed to update file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )

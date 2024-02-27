@@ -146,6 +146,8 @@ purchase_orders_allowed = [
     "CTT/PO/23-24/0013",
     "Meeraq/PO/CaaS/23-24/0077",
     "Meeraq/PO/22-23/0041",
+    "CTT/PO/2022-23/060",
+    "CTT/PO/2022-23/061",
 ]
 
 
@@ -1126,6 +1128,8 @@ def add_vendor(request):
                     )
 
                 vendor_role, created = Role.objects.get_or_create(name="vendor")
+                user_profile.roles.add(vendor_role)
+                user_profile.save()
                 vendor = Vendor.objects.create(
                     user=user_profile,
                     name=name,

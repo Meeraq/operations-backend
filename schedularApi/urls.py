@@ -219,8 +219,9 @@ urlpatterns = [
         "update-project-status/",
         views.update_project_status,
     ),
-    path(
-        "get-skill-dashboard-card-data/",
+
+      path(
+        "get-skill-dashboard-card-data/<str:project_id>/", 
         views.get_skill_dashboard_card_data,
     ),
     path(
