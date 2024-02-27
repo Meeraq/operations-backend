@@ -147,8 +147,13 @@ purchase_orders_allowed = [
     "CTT/PO/23-24/0013",
     "Meeraq/PO/CaaS/23-24/0077",
     "Meeraq/PO/22-23/0041",
-    "CTT/PO/2022-23/060",
-    "CTT/PO/2022-23/061",
+    "CTT/PO/22-23/058",
+    "CTT/PO/22-23/059",
+    "CTT/PO/22-23/060",
+    "CTT/PO/22-23/061",
+    "CTT/PO/22-23/065",
+    "CTT/PO/22-23/066",
+    "CTT/PO/22-23/067",
 ]
 
 
@@ -229,21 +234,16 @@ def send_mail_templates_with_attachment(
             bcc=bcc_emails,
         )
         if is_send_attatched_invoice:
-            print("hello")
-            print(content["invoice"]["attatched_invoice"])
+
             attachment_url = content["invoice"]["attatched_invoice"]
             # attachment_file_name = attachment_url.split('/')[-1].split('?')[0]
             attachment_response = requests.get(attachment_url)
-            print(
-                "attachment_response",
-                attachment_response.status_code,
-                attachment_response,
-            )
+
             if attachment_response.status_code == 200:
-                print("hello3")
+
                 email.attach(pdf_name, attachment_response.content, "application/pdf")
             else:
-                print("hello2")
+
                 pass
         else:
             image_url = f"{content['invoice']['signature']}"
