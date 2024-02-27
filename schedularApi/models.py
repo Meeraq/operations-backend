@@ -197,3 +197,43 @@ class SchedularUpdate(models.Model):
 
     def __str__(self):
         return f"{self.project.name} update by {self.pmo.name}"
+
+
+class CoachPricing(models.Model):
+    SESSION_CHOICES = [
+        ("laser_coaching_session", "Laser Coaching Session"),
+        ("mentoring_session", "Mentoring Session"),
+    ]
+
+    project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
+    coach = models.OneToOneField(Coach, on_delete=models.CASCADE)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    session_type = models.CharField(
+        max_length=50, choices=SESSION_CHOICES, default="laser_coaching_session"
+    )
+    coaching_session_number = models.IntegerField(blank=True, default=None, null=True)
+    order = models.IntegerField(blank=True, default=None, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class FacilitatorPricing(models.Model):
+
+    SESSION_CHOICES = [
+        ("live_session", "Live Session"),
+        ("check_in_session", "Check In Session"),
+        ("in_person_session", "In Person Session"),
+        ("kickoff_session", "Kickoff Session"),
+        ("virtual_session", "Virtual Session"),
+    ]
+
+    project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
+    facilitator = models.OneToOneField(Facilitator, on_delete=models.CASCADE)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    session_type = models.CharField(
+        max_length=50, choices=SESSION_CHOICES, default="virtual_session"
+    )
+    live_session_number = models.IntegerField(blank=True, default=None, null=True)
+    order = models.IntegerField(blank=True, default=None, null=True)
