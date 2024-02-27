@@ -28,6 +28,7 @@ from .serializers import (
     InvoiceDataSerializer,
     VendorDepthOneSerializer,
     VendorSerializer,
+    VendorEditSerializer,
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -206,21 +207,20 @@ def send_mail_templates(file_name, user_email, email_subject, content):
 
 
 def send_mail_templates_with_attachment(
-    file_name, user_email, email_subject, content, body_message, bcc_emails
+    file_name,
+    user_email,
+    email_subject,
+    content,
+    body_message,
+    bcc_emails,
+    is_send_attatched_invoice,
 ):
     try:
-        image_url = f"{content['invoice']['signature']}"
-
-        # Attempt to send the email
-        image_response = requests.get(image_url)
-        image_response.raise_for_status()
-
-        # Convert the downloaded image to base64
-        image_base64 = base64.b64encode(image_response.content).decode("utf-8")
-        content["image_base64"] = image_base64
-        email_message = render_to_string(file_name, content)
-        pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
-        result = BytesIO(pdf)
+        datetime_obj = datetime.strptime(
+            content["invoice"]["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
+        formatted_date = datetime_obj.strftime("%d-%m-%Y")
+        pdf_name = f"{content['invoice']['vendor_name']}_{formatted_date}.pdf"
         email = EmailMessage(
             subject=f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
             body=body_message,
@@ -228,16 +228,40 @@ def send_mail_templates_with_attachment(
             to=user_email,
             bcc=bcc_emails,
         )
-        datetime_obj = datetime.strptime(
-            content["invoice"]["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
-        )
-        formatted_date = datetime_obj.strftime("%d-%m-%Y")
+        if is_send_attatched_invoice:
+            print("hello")
+            print(content["invoice"]["attatched_invoice"])
+            attachment_url = content["invoice"]["attatched_invoice"]
+            # attachment_file_name = attachment_url.split('/')[-1].split('?')[0]
+            attachment_response = requests.get(attachment_url)
+            print(
+                "attachment_response",
+                attachment_response.status_code,
+                attachment_response,
+            )
+            if attachment_response.status_code == 200:
+                print("hello3")
+                email.attach(pdf_name, attachment_response.content, "application/pdf")
+            else:
+                print("hello2")
+                pass
+        else:
+            image_url = f"{content['invoice']['signature']}"
+            image_response = requests.get(image_url)
+            image_response.raise_for_status()
+            image_base64 = base64.b64encode(image_response.content).decode("utf-8")
+            content["image_base64"] = image_base64
+            email_message = render_to_string(file_name, content)
+            pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+            result = BytesIO(pdf)
+            email.attach(
+                pdf_name,
+                result.getvalue(),
+                "application/pdf",
+            )
+
+        # Convert the downloaded image to base64
         # Attach the PDF to the email
-        email.attach(
-            f"{content['invoice']['vendor_name']}_{formatted_date}.pdf",
-            result.getvalue(),
-            "application/pdf",
-        )
         email.content_subtype = "html"
         email.send()
 
@@ -717,6 +741,8 @@ def add_invoice_data(request):
     if invoices.count() > 0:
         return Response({"error": "Invoice number should be unique."}, status=400)
 
+    vendor = Vendor.objects.get(vendor_id=request.data["vendor_id"])
+
     serializer = InvoiceDataSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save()
@@ -750,9 +776,11 @@ def add_invoice_data(request):
             {"invoice": invoice_data},
             email_body_message,
             [env("BCC_EMAIL")],
+            vendor.is_upload_invoice_allowed,
         )
         return Response({"message": "Invoice generated successfully"}, status=201)
     else:
+        print(serializer.errors)
         return Response(serializer.errors, status=400)
 
 
@@ -769,6 +797,7 @@ def edit_invoice(request, invoice_id):
     ):
         return Response({"error": "Invoice already exists with the invoice number"})
     serializer = InvoiceDataEditSerializer(data=request.data, instance=invoice)
+    vendor = Vendor.objects.get(vendor_id=request.data["vendor_id"])
 
     if serializer.is_valid():
         serializer.save()
@@ -799,6 +828,7 @@ def edit_invoice(request, invoice_id):
             {"invoice": invoice_data},
             email_body_message,
             [env("BCC_EMAIL")],
+            vendor.is_upload_invoice_allowed,
         )
         return Response({"message": "Invoice edited successfully."}, status=201)
     else:
@@ -1077,6 +1107,35 @@ class DownloadInvoice(APIView):
             )
 
 
+class DownloadAttatchedInvoice(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, record_id):
+        try:
+            invoice = get_object_or_404(InvoiceData, id=record_id)
+            serializer = InvoiceDataSerializer(invoice)
+            response = requests.get(serializer.data["attatched_invoice"])
+            if response.status_code == 200:
+                file_content = response.content
+                content_type = response.headers.get("Content-Type", f"application/pdf")
+                file_response = HttpResponse(file_content, content_type=content_type)
+                file_response["Content-Disposition"] = (
+                    f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+                )
+                return file_response
+            else:
+                return HttpResponse(
+                    "Failed to download the file", status=response.status_code
+                )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download invoice."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_vendor(request):
@@ -1301,3 +1360,18 @@ def get_all_invoices(request):
             )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PUT"])
+def edit_vendor(request, vendor_id):
+    try:
+        vendor = Vendor.objects.get(id=vendor_id)
+    except Vendor.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "PUT":
+        serializer = VendorEditSerializer(vendor, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

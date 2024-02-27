@@ -5,6 +5,7 @@ from .models import (
     Profile,
     Project,
     HR,
+    Finance,
     Organisation,
     Learner,
     SessionRequestCaas,
@@ -57,6 +58,13 @@ class PmoDepthOneSerializer(serializers.ModelSerializer):
 class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = SuperAdmin
+        fields = "__all__"
+        depth = 1
+
+
+class FinanceDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Finance
         fields = "__all__"
         depth = 1
 
@@ -455,4 +463,4 @@ class FacilitatorSerializer(serializers.ModelSerializer):
 class FacilitatorBasicDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coach
-        fields = ["id","first_name", "last_name", "email", "phone"]
+        fields = ["id", "first_name", "last_name", "email", "phone"]
