@@ -25,6 +25,7 @@ class InvoiceDataEditSerializer(serializers.ModelSerializer):
             "type_of_code",
             "iban",
             "swift_code",
+            "attatched_invoice",
         ]
 
 
@@ -39,3 +40,9 @@ class VendorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vendor
         fields = "__all__"
+
+
+class VendorEditSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vendor
+        fields = ["name", "phone", "is_upload_invoice_allowed"]
