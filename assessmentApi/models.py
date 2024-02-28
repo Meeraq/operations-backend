@@ -41,7 +41,7 @@ class Question(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     label = models.JSONField(blank=True, null=True)
-    correct_answer = models.CharField(max_length=255, blank=True, null=True)
+    correct_answer = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return self.self_question
@@ -53,14 +53,14 @@ class Questionnaire(models.Model):
         ("360", "360"),
     ]
     QUESTIONS_TYPE = [
-        ("single_correct", " Single Correct"),
+        ("correct_answer_type", " Correct Answer Type"),
         ("rating_type", "Rating Type"),
     ]
     name = models.CharField(max_length=255, blank=True, null=True)
     type = models.CharField(max_length=10, choices=QUESTIONNAIRE_TYPES, blank=True)
     questions = models.ManyToManyField(Question, blank=True)
     questions_type = models.CharField(
-        max_length=255, choices=QUESTIONS_TYPE, default="single_correct"
+        max_length=255, choices=QUESTIONS_TYPE, default="correct_answer_type"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

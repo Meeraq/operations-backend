@@ -3253,7 +3253,7 @@ def generate_graph_for_pre_post_assessment(
     return encoded_image
 
 
-def generate_graph_for_participant_single_correct(
+def generate_graph_for_participant_correct_answer_type(
     participant, assessment_id, assessment, project_wise=False
 ):
 
@@ -3300,7 +3300,7 @@ def generate_graph_for_participant_single_correct(
                 .correct_answer
             )
 
-            if participant_response_value == int(correct_answer):
+            if str(participant_response_value) in correct_answer:
                 competency_object[question.competency.name] = (
                     competency_object[question.competency.name] + 1
                 )
@@ -3325,7 +3325,7 @@ def generate_graph_for_participant_single_correct(
     return None, None
 
 
-def generate_graph_for_participant_single_correct_for_post_assessent(
+def generate_graph_for_participant_correct_answer_type_for_post_assessent(
     participant, assessment_id, assessment, project_wise=False
 ):
     participant_response = ParticipantResponse.objects.filter(
@@ -3383,7 +3383,7 @@ def generate_graph_for_participant_single_correct_for_post_assessent(
                 .correct_answer
             )
 
-            if pre_assessment_participant_response_value == int(correct_answer):
+            if str(pre_assessment_participant_response_value) in correct_answer:
                 pre_competency_object[question.competency.name] = (
                     pre_competency_object[question.competency.name] + 1
                 )
@@ -3623,19 +3623,19 @@ class PrePostReportDownloadForParticipant(APIView):
             participant = Learner.objects.get(id=participant_id)
             encoded_image = None
             compentency_with_description = None
-            if assessment.questionnaire.questions_type == "single_correct":
+            if assessment.questionnaire.questions_type == "correct_answer_type":
                 if assessment.assessment_timing == "pre":
                     (
                         encoded_image,
                         compentency_with_description,
-                    ) = generate_graph_for_participant_single_correct(
+                    ) = generate_graph_for_participant_correct_answer_type(
                         participant, assessment_id, assessment
                     )
                 elif assessment.assessment_timing == "post":
                     (
                         encoded_image,
                         compentency_with_description,
-                    ) = generate_graph_for_participant_single_correct_for_post_assessent(
+                    ) = generate_graph_for_participant_correct_answer_type_for_post_assessent(
                         participant, assessment_id, assessment
                     )
             elif assessment.questionnaire.questions_type == "rating_type":
@@ -3703,19 +3703,19 @@ class PrePostReportDownloadForAllParticipant(APIView):
                 participant = participant_observer.participant
                 encoded_image = None
                 compentency_with_description = None
-                if assessment.questionnaire.questions_type == "single_correct":
+                if assessment.questionnaire.questions_type == "correct_answer_type":
                     if assessment.assessment_timing == "pre":
                         (
                             encoded_image,
                             compentency_with_description,
-                        ) = generate_graph_for_participant_single_correct(
+                        ) = generate_graph_for_participant_correct_answer_type(
                             participant, assessment_id, assessment
                         )
                     elif assessment.assessment_timing == "post":
                         (
                             encoded_image,
                             compentency_with_description,
-                        ) = generate_graph_for_participant_single_correct_for_post_assessent(
+                        ) = generate_graph_for_participant_correct_answer_type_for_post_assessent(
                             participant, assessment_id, assessment
                         )
                 elif assessment.questionnaire.questions_type == "rating_type":
@@ -3784,11 +3784,11 @@ class PostReportDownloadForParticipant(APIView):
             participant = Learner.objects.get(id=participant_id)
             encoded_image = None
             compentency_with_description = None
-            if assessment.questionnaire.questions_type == "single_correct":
+            if assessment.questionnaire.questions_type == "correct_answer_type":
                 (
                     encoded_image,
                     compentency_with_description,
-                ) = generate_graph_for_participant_single_correct(
+                ) = generate_graph_for_participant_correct_answer_type(
                     participant, assessment_id, assessment
                 )
             elif assessment.questionnaire.questions_type == "rating_type":
@@ -3846,11 +3846,11 @@ class PostReportDownloadForAllParticipant(APIView):
                 participant = participant_observer.participant
                 encoded_image = None
                 compentency_with_description = None
-                if assessment.questionnaire.questions_type == "single_correct":
+                if assessment.questionnaire.questions_type == "correct_answer_type":
                     (
                         encoded_image,
                         compentency_with_description,
-                    ) = generate_graph_for_participant_single_correct(
+                    ) = generate_graph_for_participant_correct_answer_type(
                         participant, assessment_id, assessment
                     )
 
@@ -3949,19 +3949,19 @@ class ReleaseResults(APIView):
                     for participant in participant_with_not_released_results:
                         encoded_image = None
                         compentency_with_description = None
-                        if assessment.questionnaire.questions_type == "single_correct":
+                        if assessment.questionnaire.questions_type == "correct_answer_type":
                             if assessment.assessment_timing == "pre":
                                 (
                                     encoded_image,
                                     compentency_with_description,
-                                ) = generate_graph_for_participant_single_correct(
+                                ) = generate_graph_for_participant_correct_answer_type(
                                     participant, assessment_id, assessment
                                 )
                             elif assessment.assessment_timing == "post":
                                 (
                                     encoded_image,
                                     compentency_with_description,
-                                ) = generate_graph_for_participant_single_correct_for_post_assessent(
+                                ) = generate_graph_for_participant_correct_answer_type_for_post_assessent(
                                     participant, assessment_id, assessment
                                 )
                         elif assessment.questionnaire.questions_type == "rating_type":
@@ -4616,10 +4616,10 @@ class GetProjectWiseReport(APIView):
                     ) in assessment.participants_observers.all():
                         participant = participants_observer.participant
 
-                        if assessment.questionnaire.questions_type == "single_correct":
+                        if assessment.questionnaire.questions_type == "correct_answer_type":
                             if assessment.assessment_timing == "pre":
                                 compentency_precentage = (
-                                    generate_graph_for_participant_single_correct(
+                                    generate_graph_for_participant_correct_answer_type(
                                         participant, assessment_id, assessment, True
                                     )
                                 )
@@ -4639,7 +4639,7 @@ class GetProjectWiseReport(APIView):
                                 (
                                     pre_compentency_precentage,
                                     post_compentency_precentage,
-                                ) = generate_graph_for_participant_single_correct_for_post_assessent(
+                                ) = generate_graph_for_participant_correct_answer_type_for_post_assessent(
                                     participant, assessment_id, assessment, True
                                 )
 
