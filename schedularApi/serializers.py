@@ -28,6 +28,7 @@ class SessionItemSerializer(serializers.Serializer):
     duration = serializers.IntegerField()
     order = serializers.IntegerField(required=False, allow_null=True)
     description = serializers.CharField(required=False)
+    price = serializers.DecimalField(max_digits=10, decimal_places=2)
 
 
 class SchedularBatchSerializer(serializers.ModelSerializer):

@@ -4695,14 +4695,13 @@ def add_facilitator_to_batch(request, batch_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_sessions_pricing_for_a_coach(request, coach_id, project_id, batch_id):
+def get_sessions_pricing_for_a_coach(request, coach_id, project_id):
     try:
         project = SchedularProject.objects.get(id=project_id)
         coach_pricing = CoachPricing.objects.filter(
             project__id=project_id, coach__id=coach_id
-        ).first()
-        # for i in range(0, len(coach_pricing)/ len(project.project_structure))
-        serialize = CoachPricing(coach_pricing, many=True)
+        )
+        serialize = CoachPricingSerializer(coach_pricing, many=True)
         return Response(serialize.data)
     except Exception as e:
         print(str(e))
