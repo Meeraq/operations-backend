@@ -66,7 +66,7 @@ from .serializers import (
     SessionDataSerializer,
     SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer,
 )
-
+from .permissions import IsInRoles,IsPmoAndCoach
 from rest_framework import generics
 from django.utils.crypto import get_random_string
 import jwt
@@ -123,7 +123,6 @@ from .models import (
     CreateProjectActivity,
     FinalizeCoachActivity,
 )
-
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
@@ -160,12 +159,10 @@ from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
 from zohoapi.models import Vendor
 from courses.models import CourseEnrollment
-
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
 import pdfkit
 import os
-
 # Create your views here.
 from collections import defaultdict
 import pandas as pd
@@ -922,8 +919,9 @@ def update_coach_profile(request, id):
     return Response(serializer.errors, status=400)
 
 
+
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated,IsPmoAndCoach ])
 def get_coaches(request):
     try:
         # Get all the Coach objects
