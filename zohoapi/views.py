@@ -28,6 +28,7 @@ from .serializers import (
     InvoiceDataSerializer,
     VendorDepthOneSerializer,
     VendorSerializer,
+    InvoiceStatusUpdateGetSerializer,
     VendorEditSerializer,
 )
 from .tasks import (
@@ -36,8 +37,12 @@ from .tasks import (
     base_url,
     organization_id,
     import_invoices_for_vendor_from_zoho,
+    fetch_bills,
+    purchase_orders_allowed,
+    filter_invoice_data,
+    send_mail_templates,
 )
-from .models import InvoiceData, AccessToken, Vendor
+from .models import InvoiceData, AccessToken, Vendor, InvoiceStatusUpdate
 import base64
 from django.core.mail import EmailMessage
 from io import BytesIO
@@ -60,103 +65,6 @@ wkhtmltopdf_path = os.environ.get(
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
-purchase_orders_allowed = [
-    "Meeraq/PO/CaaS/23-24/0024",
-    "Meeraq/PO/CaaS/23-24/0025",
-    "Meeraq/PO/CaaS/23-24/0026",
-    "Meeraq/PO/CaaS/23-24/0067",
-    "Meeraq/PO/CaaS/23-24/0068",
-    "Meeraq/PO/CaaS/23-24/0069",
-    "Meeraq/PO/CaaS/23-24/0070",
-    "Meeraq/PO/CaaS/23-24/0061",
-    "Meeraq/PO/CaaS/23-24/0062",
-    "Meeraq/PO/CaaS/23-24/0063",
-    "Meeraq/PO/CaaS/23-24/0084",
-    "Meeraq/PO/CaaS/23-24/0085",
-    "Meeraq/PO/CaaS/23-24/0086",
-    "Meeraq/PO/CaaS/23-24/0087",
-    "Meeraq/PO/CaaS/23-24/0088",
-    "Meeraq/PO/CaaS/23-24/0042",
-    "Meeraq/PO/CaaS/23-24/0043",
-    "Meeraq/PO/CaaS/23-24/0044",
-    "Meeraq/PO/CaaS/23-24/0045",
-    "Meeraq/PO/CaaS/23-24/0046",
-    "Meeraq/PO/CaaS/23-24/0047",
-    "Meeraq/PO/CaaS/23-24/0048",
-    "Meeraq/PO/CaaS/23-24/0049",
-    "Meeraq/PO/CaaS/23-24/0050",
-    "Meeraq/PO/CaaS/23-24/0051",
-    "Meeraq/PO/CaaS/23-24/0052",
-    "Meeraq/PO/CaaS/23-24/0053",
-    "Meeraq/PO/CaaS/23-24/0054",
-    "Meeraq/PO/CaaS/23-24/0055",
-    "Meeraq/PO/CaaS/23-24/0056",
-    "Meeraq/PO/CaaS/23-24/0057",
-    "Meeraq/PO/CaaS/23-24/0058",
-    "Meeraq/PO/CaaS/23-24/0064",
-    "Meeraq/PO/CaaS/23-24/0096",
-    "Meeraq/PO/CaaS/23-24/0097",
-    "Meeraq/PO/CaaS/23-24/0098",
-    "Meeraq/PO/CaaS/23-24/0099",
-    "Meeraq/PO/23-24/T/0030",
-    "Meeraq/PO/23-24/T/0039",
-    "Meeraq/PO/23-24/T/0023",
-    "Meeraq/PO/23-24/T/0024",
-    "Meeraq/PO/23-24/T/0033",
-    "Meeraq/PO/23-24/T/0034",
-    "Meeraq/PO/23-24/T/0035",
-    "Meeraq/PO/23-24/T/0036",
-    "Meeraq/PO/23-24/T/0038",
-    "Meeraq/PO/23-24/T/0013",
-    "Meeraq/PO/23-24/T/0032",
-    "Meeraq/PO/23-24/T/0005",
-    "Meeraq/PO/23-24/T/0007",
-    "Meeraq/PO/23-24/T/0008",
-    "Meeraq/PO/23-24/T/0009",
-    "Meeraq/PO/23-24/T/0002",
-    "Meeraq/PO/23-24/T/0006",
-    "Meeraq/PO/23-24/T/0001",
-    "Meeraq/PO/23-24/T/0003",
-    "Meeraq/PO/23-24/T/0004",
-    "Meeraq/PO/23-24/T/0010",
-    "Meeraq/PO/23-24/T/0031",
-    "Meeraq/PO/23-24/T/0012",
-    "Meeraq/PO/23-24/T/0029",
-    "Meeraq/PO/23-24/T/0015",
-    "Meeraq/PO/23-24/T/0014",
-    "Meeraq/PO/23-24/T/0028",
-    "Meeraq/PO/23-24/T/0037",
-    "Meeraq/PO/23-24/T/0021",
-    "Meeraq/PO/23-24/T/0016",
-    "Meeraq/PO/23-24/T/0017",
-    "Meeraq/PO/23-24/T/0018",
-    "Meeraq/PO/23-24/T/0022",
-    "Meeraq/PO/23-24/T/0019",
-    "Meeraq/PO/23-24/T/0020",
-    "CTT/PO/23-24/008",
-    "CTT/PO/23-24/006",
-    "CTT/PO/23-24/0018",
-    "CTT/PO/23-24/0017",
-    "CTT/PO/23-24/0016",
-    "CTT/PO/23-24/0015",
-    "CTT/PO/23-24/005",
-    "CTT/PO/23-24/004",
-    "CTT/PO/23-24/0012",
-    "CTT/PO/23-24/0011",
-    "CTT/PO/23-24/0014",
-    "CTT/PO/23-24/0013",
-    "Meeraq/PO/CaaS/23-24/0077",
-    "Meeraq/PO/22-23/0041",
-    "CTT/PO/22-23/058",
-    "CTT/PO/22-23/059",
-    "CTT/PO/22-23/060",
-    "CTT/PO/22-23/061",
-    "CTT/PO/22-23/065",
-    "CTT/PO/22-23/066",
-    "CTT/PO/22-23/067",
-]
-
-
 def get_line_items_details(invoices):
     res = {}
     for invoice in invoices:
@@ -166,6 +74,24 @@ def get_line_items_details(invoices):
             else:
                 res[line_item["line_item_id"]] = line_item["quantity_input"]
     return res
+
+
+def get_invoice_data_for_pdf(invoice):
+    serializer = InvoiceDataSerializer(invoice)
+    line_items = get_line_items_for_template(serializer.data["line_items"])
+    invoice_date = datetime.strptime(
+        serializer.data["invoice_date"], "%Y-%m-%d"
+    ).strftime("%d-%m-%Y")
+    due_date = datetime.strptime(
+        add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
+    ).strftime("%d-%m-%Y")
+    invoice_data = {
+        **serializer.data,
+        "invoice_date": invoice_date,
+        "due_date": due_date,
+        "line_items": line_items,
+    }
+    return invoice_data
 
 
 def generate_access_token_from_refresh_token(refresh_token):
@@ -187,28 +113,6 @@ def generate_access_token_from_refresh_token(refresh_token):
         return token_data["access_token"]
     else:
         return None
-
-
-def send_mail_templates(file_name, user_email, email_subject, content):
-    try:
-        email_message = render_to_string(file_name, content)
-
-        # Attempt to send the email
-        send_mail_result = send_mail(
-            f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
-            email_message,
-            settings.DEFAULT_FROM_EMAIL,
-            user_email,
-            fail_silently=False,
-            html_message=email_message,
-        )
-
-        if not send_mail_result:
-            print(
-                "send_mail function returned False. There may be an issue with sending the email."
-            )
-    except Exception as e:
-        print(f"Error occurred while sending emails: {str(e)}")
 
 
 def send_mail_templates_with_attachment(
@@ -234,16 +138,12 @@ def send_mail_templates_with_attachment(
             bcc=bcc_emails,
         )
         if is_send_attatched_invoice:
-
             attachment_url = content["invoice"]["attatched_invoice"]
             # attachment_file_name = attachment_url.split('/')[-1].split('?')[0]
             attachment_response = requests.get(attachment_url)
-
             if attachment_response.status_code == 200:
-
                 email.attach(pdf_name, attachment_response.content, "application/pdf")
             else:
-
                 pass
         else:
             image_url = f"{content['invoice']['signature']}"
@@ -354,6 +254,7 @@ def generate_otp(request):
                 [user],
                 subject,
                 {"name": name, "otp": created_otp.otp},
+                [],
             )
             return Response({"message": f"OTP has been sent to {user.username}!"})
         else:
@@ -395,6 +296,7 @@ def generate_otp_send_mail_fixed(request, email):
                 ["pankaj@meeraq.com"],
                 subject,
                 {"name": name, "otp": created_otp.otp},
+                [],
             )
             return Response({"message": f"OTP has been sent to {user.username}!"})
         else:
@@ -565,21 +467,6 @@ def get_purchase_orders(request, vendor_id):
         )
 
 
-def filter_invoice_data(invoices):
-    try:
-        filtered_invoices = []
-        for invoice in invoices:
-            if (
-                invoice.created_at.year >= 2024
-                or invoice.purchase_order_no.strip() in purchase_orders_allowed
-            ):
-                filtered_invoices.append(invoice)
-        return filtered_invoices
-    except Exception as e:
-        print(str(e))
-        return None
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_invoices_with_status(request, vendor_id, purchase_order_id):
@@ -745,38 +632,21 @@ def add_invoice_data(request):
 
     serializer = InvoiceDataSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
-        line_items = serializer.data["line_items"]
-        line_items = get_line_items_for_template(serializer.data["line_items"])
-        invoice_date = datetime.strptime(
-            serializer.data["invoice_date"], "%Y-%m-%d"
-        ).strftime("%d-%m-%Y")
-        due_date = datetime.strptime(
-            add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
-        ).strftime("%d-%m-%Y")
-
-        invoice_data = {
-            **serializer.data,
-            "invoice_date": invoice_date,
-            "due_date": due_date,
-            "line_items": line_items,
-        }
-
-        email_body_message = render_to_string(
+        invoice_instance = serializer.save()
+        approver_email = serializer.data["approver_email"]
+        invoice_data = get_invoice_data_for_pdf(invoice_instance)
+        send_mail_templates(
             "vendors/add_invoice.html",
-            {
-                "message": f"A new invoice: {invoice_data['invoice_number']} is raised by the vendor: {invoice_data['vendor_name']} for date: {invoice_data['invoice_date']}.",
-            },
-        )
-
-        send_mail_templates_with_attachment(
-            "invoice_pdf.html",
-            [env("FINANCE_EMAIL")],
-            f"Invoice raised by a Vendor - {invoice_data['vendor_name']} ",
-            {"invoice": invoice_data},
-            email_body_message,
-            [env("BCC_EMAIL")],
-            vendor.is_upload_invoice_allowed,
+            [
+                (
+                    approver_email
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else "tech@meeraq.com"
+                )
+            ],
+            f"Action Needed: Approval Required for Invoice - {invoice_data['vendor_name']}  + {invoice_data['invoice_number']}",
+            {**invoice_data, "link": env("CAAS_APP_URL")},
+            [],
         )
         return Response({"message": "Invoice generated successfully"}, status=201)
     else:
@@ -801,34 +671,22 @@ def edit_invoice(request, invoice_id):
 
     if serializer.is_valid():
         serializer.save()
-        line_items = get_line_items_for_template(serializer.data["line_items"])
-        invoice_serializer = InvoiceDataSerializer(invoice)
-        invoice_date = datetime.strptime(
-            serializer.data["invoice_date"], "%Y-%m-%d"
-        ).strftime("%d-%m-%Y")
-        due_date = datetime.strptime(
-            add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
-        ).strftime("%d-%m-%Y")
-        invoice_data = {
-            **invoice_serializer.data,
-            "invoice_date": invoice_date,
-            "due_date": due_date,
-            "line_items": line_items,
-        }
-        email_body_message = render_to_string(
+        invoice.status = "in_review"
+        invoice.save()
+        approver_email = invoice.approver_email
+        invoice_data = get_invoice_data_for_pdf(invoice)
+        send_mail_templates(
             "vendors/edit_invoice.html",
-            {
-                "message": f"Invoice: {invoice_data['invoice_number']} has been edited by the vendor: {invoice_data['vendor_name']} for the date: {invoice_data['invoice_date']}.",
-            },
-        )
-        send_mail_templates_with_attachment(
-            "invoice_pdf.html",
-            [env("FINANCE_EMAIL")],
-            f"Invoice edited by a Vendor - {invoice_data['vendor_name']}",
-            {"invoice": invoice_data},
-            email_body_message,
-            [env("BCC_EMAIL")],
-            vendor.is_upload_invoice_allowed,
+            [
+                (
+                    approver_email
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else "tech@meeraq.com"
+                )
+            ],
+            f"Action Needed: Re-Approval Required for Invoice - {invoice_data['vendor_name']}  + {invoice_data['invoice_number']}",
+            {**invoice_data, "link": env("CAAS_APP_URL")},
+            [],
         )
         return Response({"message": "Invoice edited successfully."}, status=201)
     else:
@@ -1060,34 +918,17 @@ class DownloadInvoice(APIView):
     def get(self, request, record_id):
         try:
             invoice = get_object_or_404(InvoiceData, id=record_id)
-            serializer = InvoiceDataSerializer(invoice)
-            line_items = get_line_items_for_template(serializer.data["line_items"])
-            invoice_date = datetime.strptime(
-                serializer.data["invoice_date"], "%Y-%m-%d"
-            ).strftime("%d-%m-%Y")
-            due_date = datetime.strptime(
-                add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
-            ).strftime("%d-%m-%Y")
-            invoice_data = {
-                **serializer.data,
-                "invoice_date": invoice_date,
-                "due_date": due_date,
-                "line_items": line_items,
-            }
+            invoice_data = get_invoice_data_for_pdf(invoice)
             image_base64 = None
             try:
                 image_url = f"{invoice_data['signature']}"
-
                 # Attempt to send the email
                 image_response = requests.get(image_url)
-
                 image_response.raise_for_status()
-
                 # Convert the downloaded image to base64
                 image_base64 = base64.b64encode(image_response.content).decode("utf-8")
             except Exception as e:
                 pass
-
             email_message = render_to_string(
                 "invoice_pdf.html",
                 {"invoice": invoice_data, "image_base64": image_base64},
@@ -1098,6 +939,34 @@ class DownloadInvoice(APIView):
                 f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
             )
             return response
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download invoice."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class DownloadAttatchedInvoice(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, record_id):
+        try:
+            invoice = get_object_or_404(InvoiceData, id=record_id)
+            serializer = InvoiceDataSerializer(invoice)
+            response = requests.get(serializer.data["attatched_invoice"])
+            if response.status_code == 200:
+                file_content = response.content
+                content_type = response.headers.get("Content-Type", f"application/pdf")
+                file_response = HttpResponse(file_content, content_type=content_type)
+                file_response["Content-Disposition"] = (
+                    f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+                )
+                return file_response
+            else:
+                return HttpResponse(
+                    "Failed to download the file", status=response.status_code
+                )
 
         except Exception as e:
             print(str(e))
@@ -1289,34 +1158,6 @@ def fetch_purchase_orders(organization_id):
     return all_purchase_orders
 
 
-def fetch_bills(organization_id):
-    access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-    if not access_token_purchase_data:
-        raise Exception(
-            "Access token not found. Please generate an access token first."
-        )
-
-    all_bills = []
-    has_more_page = True
-    page = 1
-
-    while has_more_page:
-        api_url = f"{base_url}/bills/?organization_id={organization_id}&page={page}"
-        auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
-        response = requests.get(api_url, headers=auth_header)
-
-        if response.status_code == 200:
-            bills = response.json().get("bills", [])
-            all_bills.extend(bills)
-            page_context = response.json().get("page_context", {})
-            has_more_page = page_context.get("has_more_page", False)
-            page += 1
-        else:
-            raise Exception("Failed to fetch bills")
-
-    return all_bills
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_purchase_orders(request):
@@ -1375,3 +1216,68 @@ def edit_vendor(request, vendor_id):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_invoice_status(request, invoice_id):
+    try:
+        invoice = InvoiceData.objects.get(pk=invoice_id)
+    except InvoiceData.DoesNotExist:
+        return Response({"error": "Invoice does not exist"}, status=404)
+    new_status = request.data.get("status")
+    if new_status not in ["rejected", "approved"]:
+        return Response({"error": "Invalid status"}, status=400)
+    vendor = Vendor.objects.get(vendor_id=invoice.vendor_id)
+    invoice.status = new_status
+    invoice.save()
+    comment = request.data.get("comment", "")
+    approval = InvoiceStatusUpdate.objects.create(
+        invoice=invoice,
+        status=new_status,
+        comment=comment,
+        user=request.user,
+    )
+    approval.save()
+    invoice_data = get_invoice_data_for_pdf(invoice)
+    if new_status == "approved":
+        email_body_message = render_to_string(
+            "vendors/approve_invoice.html",
+            {**invoice_data, "comment": comment, "approved_by": request.user.username},
+        )
+        send_mail_templates_with_attachment(
+            "invoice_pdf.html",
+            [env("FINANCE_EMAIL")],
+            f"Meeraq | Invoice Approved - {invoice_data['purchase_order_no']} + {invoice_data['vendor_name']} ",
+            {"invoice": invoice_data},
+            email_body_message,
+            [env("BCC_EMAIL")],
+            vendor.is_upload_invoice_allowed,
+        )
+    else:
+        send_mail_to = (
+            invoice.vendor_email
+            if env("ENVIRONMENT") == "PRODUCTION"
+            else "tech@meeraq.com"
+        )
+        send_mail_templates(
+            "vendors/reject_invoice.html",
+            [send_mail_to],
+            "Meeraq - Invoice Rejected",
+            {"vendor_name": invoice.vendor_name, "comment": comment},
+            [],
+        )
+    return Response({"message": f"Invoice {invoice.invoice_number} {new_status}."})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_invoice_updates(request, invoice_id):
+    try:
+        updates = InvoiceStatusUpdate.objects.filter(invoice_id=invoice_id).order_by(
+            "-created_at"
+        )
+        serializer = InvoiceStatusUpdateGetSerializer(updates, many=True)
+        return Response(serializer.data)
+    except InvoiceStatusUpdate.DoesNotExist:
+        return Response(status=404)
