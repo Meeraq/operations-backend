@@ -15,7 +15,6 @@ base_url = os.environ.get("ZOHO_API_BASE_URL")
 organization_id = os.environ.get("ZOHO_ORGANIZATION_ID")
 env = environ.Env()
 
-
 purchase_orders_allowed = [
     "Meeraq/PO/CaaS/23-24/0024",
     "Meeraq/PO/CaaS/23-24/0025",
@@ -103,6 +102,14 @@ purchase_orders_allowed = [
     "CTT/PO/23-24/0013",
     "Meeraq/PO/CaaS/23-24/0077",
     "Meeraq/PO/22-23/0041",
+    "CTT/PO/22-23/058",
+    "CTT/PO/22-23/059",
+    "CTT/PO/22-23/060",
+    "CTT/PO/22-23/061",
+    "CTT/PO/22-23/065",
+    "CTT/PO/22-23/066",
+    "CTT/PO/22-23/067",
+    "Meeraq/PO/CaaS/23-24/0066",
 ]
 
 

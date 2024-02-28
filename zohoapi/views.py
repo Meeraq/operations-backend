@@ -65,103 +65,6 @@ wkhtmltopdf_path = os.environ.get(
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
-purchase_orders_allowed = [
-    "Meeraq/PO/CaaS/23-24/0024",
-    "Meeraq/PO/CaaS/23-24/0025",
-    "Meeraq/PO/CaaS/23-24/0026",
-    "Meeraq/PO/CaaS/23-24/0067",
-    "Meeraq/PO/CaaS/23-24/0068",
-    "Meeraq/PO/CaaS/23-24/0069",
-    "Meeraq/PO/CaaS/23-24/0070",
-    "Meeraq/PO/CaaS/23-24/0061",
-    "Meeraq/PO/CaaS/23-24/0062",
-    "Meeraq/PO/CaaS/23-24/0063",
-    "Meeraq/PO/CaaS/23-24/0084",
-    "Meeraq/PO/CaaS/23-24/0085",
-    "Meeraq/PO/CaaS/23-24/0086",
-    "Meeraq/PO/CaaS/23-24/0087",
-    "Meeraq/PO/CaaS/23-24/0088",
-    "Meeraq/PO/CaaS/23-24/0042",
-    "Meeraq/PO/CaaS/23-24/0043",
-    "Meeraq/PO/CaaS/23-24/0044",
-    "Meeraq/PO/CaaS/23-24/0045",
-    "Meeraq/PO/CaaS/23-24/0046",
-    "Meeraq/PO/CaaS/23-24/0047",
-    "Meeraq/PO/CaaS/23-24/0048",
-    "Meeraq/PO/CaaS/23-24/0049",
-    "Meeraq/PO/CaaS/23-24/0050",
-    "Meeraq/PO/CaaS/23-24/0051",
-    "Meeraq/PO/CaaS/23-24/0052",
-    "Meeraq/PO/CaaS/23-24/0053",
-    "Meeraq/PO/CaaS/23-24/0054",
-    "Meeraq/PO/CaaS/23-24/0055",
-    "Meeraq/PO/CaaS/23-24/0056",
-    "Meeraq/PO/CaaS/23-24/0057",
-    "Meeraq/PO/CaaS/23-24/0058",
-    "Meeraq/PO/CaaS/23-24/0064",
-    "Meeraq/PO/CaaS/23-24/0096",
-    "Meeraq/PO/CaaS/23-24/0097",
-    "Meeraq/PO/CaaS/23-24/0098",
-    "Meeraq/PO/CaaS/23-24/0099",
-    "Meeraq/PO/23-24/T/0030",
-    "Meeraq/PO/23-24/T/0039",
-    "Meeraq/PO/23-24/T/0023",
-    "Meeraq/PO/23-24/T/0024",
-    "Meeraq/PO/23-24/T/0033",
-    "Meeraq/PO/23-24/T/0034",
-    "Meeraq/PO/23-24/T/0035",
-    "Meeraq/PO/23-24/T/0036",
-    "Meeraq/PO/23-24/T/0038",
-    "Meeraq/PO/23-24/T/0013",
-    "Meeraq/PO/23-24/T/0032",
-    "Meeraq/PO/23-24/T/0005",
-    "Meeraq/PO/23-24/T/0007",
-    "Meeraq/PO/23-24/T/0008",
-    "Meeraq/PO/23-24/T/0009",
-    "Meeraq/PO/23-24/T/0002",
-    "Meeraq/PO/23-24/T/0006",
-    "Meeraq/PO/23-24/T/0001",
-    "Meeraq/PO/23-24/T/0003",
-    "Meeraq/PO/23-24/T/0004",
-    "Meeraq/PO/23-24/T/0010",
-    "Meeraq/PO/23-24/T/0031",
-    "Meeraq/PO/23-24/T/0012",
-    "Meeraq/PO/23-24/T/0029",
-    "Meeraq/PO/23-24/T/0015",
-    "Meeraq/PO/23-24/T/0014",
-    "Meeraq/PO/23-24/T/0028",
-    "Meeraq/PO/23-24/T/0037",
-    "Meeraq/PO/23-24/T/0021",
-    "Meeraq/PO/23-24/T/0016",
-    "Meeraq/PO/23-24/T/0017",
-    "Meeraq/PO/23-24/T/0018",
-    "Meeraq/PO/23-24/T/0022",
-    "Meeraq/PO/23-24/T/0019",
-    "Meeraq/PO/23-24/T/0020",
-    "CTT/PO/23-24/008",
-    "CTT/PO/23-24/006",
-    "CTT/PO/23-24/0018",
-    "CTT/PO/23-24/0017",
-    "CTT/PO/23-24/0016",
-    "CTT/PO/23-24/0015",
-    "CTT/PO/23-24/005",
-    "CTT/PO/23-24/004",
-    "CTT/PO/23-24/0012",
-    "CTT/PO/23-24/0011",
-    "CTT/PO/23-24/0014",
-    "CTT/PO/23-24/0013",
-    "Meeraq/PO/CaaS/23-24/0077",
-    "Meeraq/PO/22-23/0041",
-    "CTT/PO/22-23/058",
-    "CTT/PO/22-23/059",
-    "CTT/PO/22-23/060",
-    "CTT/PO/22-23/061",
-    "CTT/PO/22-23/065",
-    "CTT/PO/22-23/066",
-    "CTT/PO/22-23/067",
-]
-
-
 def get_line_items_details(invoices):
     res = {}
     for invoice in invoices:
@@ -235,16 +138,12 @@ def send_mail_templates_with_attachment(
             bcc=bcc_emails,
         )
         if is_send_attatched_invoice:
-
             attachment_url = content["invoice"]["attatched_invoice"]
             # attachment_file_name = attachment_url.split('/')[-1].split('?')[0]
             attachment_response = requests.get(attachment_url)
-
             if attachment_response.status_code == 200:
-
                 email.attach(pdf_name, attachment_response.content, "application/pdf")
             else:
-
                 pass
         else:
             image_url = f"{content['invoice']['signature']}"
@@ -778,7 +677,13 @@ def edit_invoice(request, invoice_id):
         invoice_data = get_invoice_data_for_pdf(invoice)
         send_mail_templates(
             "vendors/edit_invoice.html",
-            [approver_email],
+            [
+                (
+                    approver_email
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else "tech@meeraq.com"
+                )
+            ],
             f"Action Needed: Re-Approval Required for Invoice - {invoice_data['vendor_name']}  + {invoice_data['invoice_number']}",
             {**invoice_data, "link": env("CAAS_APP_URL")},
             [],
@@ -1323,6 +1228,7 @@ def update_invoice_status(request, invoice_id):
     new_status = request.data.get("status")
     if new_status not in ["rejected", "approved"]:
         return Response({"error": "Invalid status"}, status=400)
+    vendor = Vendor.objects.get(vendor_id=invoice.vendor_id)
     invoice.status = new_status
     invoice.save()
     comment = request.data.get("comment", "")
@@ -1346,6 +1252,7 @@ def update_invoice_status(request, invoice_id):
             {"invoice": invoice_data},
             email_body_message,
             [env("BCC_EMAIL")],
+            vendor.is_upload_invoice_allowed,
         )
     else:
         send_mail_to = (
@@ -1374,26 +1281,3 @@ def get_invoice_updates(request, invoice_id):
         return Response(serializer.data)
     except InvoiceStatusUpdate.DoesNotExist:
         return Response(status=404)
-
-
-# cf_invoice_approver_s_email
-
-# Final Task
-# Add new option in zoho to add Email of the person who will approve the invoice against the PO. -> Done
-# Then Invoice is Generated by vendor
-# Disable email to finance -> Done
-# Send the email to Approvers email, given in zoho -> Done
-# In pmo view  → Only for nisha@meeraq.com  and madhuri@meeraq.com show the options to approve and reject + the approvers email. (Usually they approve)
-# Billing → Invoice tab
-# New status → In Review for the unapproved invoices
-# Approve and Reject buttons for each invoice in In Review status
-# Onclick Approve → show a pop up with some commenting feild or feild to add description
-# Once confirmed → Finance gets a email with the approved invoice with the description included by the pmo (Ask naveen for email content)
-# Once Rejected → show the pop up to enter comment which “will be shared to the vendor”
-# Email to vendor , with the comment and the invoice file (Email content connect with naveen)
-# Every week , a email to pmocoaching regarding the invoices pending (email content connect with naveen)
-# cc rajat and sujata
-# invoices to approve
-# approvers name
-# Invoice generated date
-# Link to caas to approve → click here to login to caas inn the email
