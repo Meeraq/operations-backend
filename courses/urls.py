@@ -30,6 +30,15 @@ from .views import (
     EditAllowedFeedbackLesson,
     DuplicateLesson,
     LessonCompletedWebhook,
+    GetUniqueIdParticipantFromCourse,
+    GetAssessmentsOfBatch,
+    GetAllNudgesOfSchedularProjects,
+    CreateAssignmentLesson,
+    UpdateAssignmentLesson,
+    GetAllAssignmentsResponses,
+    CreateAssignmentLessonResponse,
+    GetAssignmentsResponses,
+    UpdateAssignmentLessonFile,
 )
 import environ
 
@@ -69,17 +78,29 @@ urlpatterns = [
         views.UpdateLessonOrder.as_view(),
         name="update_lesson_order",
     ),
+    path(
+        "nudges/update_nudges_order/",
+        views.UpdateNudgesOrder.as_view(),
+        name="update_lesson_order",
+    ),
     path("text-lessons/", TextLessonCreateView.as_view(), name="text-lesson-create"),
     path(
         "text-lessons/<int:pk>/", TextLessonEditView.as_view(), name="text-lesson-edit"
     ),
-    # path(
-    #     "downloadable-file-lessons/",
-    #     DownloadableFileLessonCreateView.as_view(),
-    #     name="downloadable-file-lesson-create",
-    # ),
     path(
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
+    ),
+    path(
+        "courses/<int:course_id>/nudges/",
+        views.get_nudges_and_course,
+        name="lesson-list",
+    ),
+    path("nudges/create", views.create_new_nudge),
+    path("nudges/<int:nudge_id>/update/", views.update_nudge),
+    path("nudges/<int:nudge_id>/file/download/", views.download_nudge_file),
+    path(
+        "courses/<int:course_id>/update-nudge-date-frequency/",
+        views.add_nudges_date_frequency_to_course,
     ),
     path(
         "course-templates/<int:course_template_id>/lessons/",
@@ -213,7 +234,12 @@ urlpatterns = [
     path("quizes/<int:quiz_id>/report/", views.get_quiz_report),
     path("quizes/<int:quiz_id>/report/download/", views.quiz_report_download),
     path("feedbacks/report/all/", views.get_all_feedbacks_report),
+    path("consolidated-feedback-report/", views.get_consolidated_feedback_report),
     path("feedbacks/<int:feedback_id>/report/", views.get_feedback_report),
+    path(
+        "get-consolidated-feedback-report-response/<int:lesson_id>/report/",
+        views.get_consolidated_feedback_report_response,
+    ),
     path(
         "get-laser-coaching-time/<int:laser_coaching_id>/<str:participant_email>/",
         GetLaserCoachingTime.as_view(),
@@ -285,5 +311,68 @@ urlpatterns = [
     path(
         "lesson-completed-webhook/",
         LessonCompletedWebhook.as_view(),
+    ),
+    path(
+        "get/uniqueId/participant-from-course/<int:user_id>/<int:assessment_id>/",
+        GetUniqueIdParticipantFromCourse.as_view(),
+    ),
+    path(
+        "get-assessments-of-batch/<str:project_or_batch>/<int:id>/",
+        GetAssessmentsOfBatch.as_view(),
+    ),
+    path(
+        "feedback-report-download/<str:feedback_id>/",
+        views.get_all_feedbacks_download_report,
+    ),
+    path(
+        "feedback/reports/project/consolidated/download/<int:project_id>/",
+        views.download_consolidated_project_report,
+    ),
+    path(
+        "feedback/reports/project/consolidated/",
+        views.feedback_reports_project_wise_consolidated,
+    ),
+    path(
+        "consolidated-feedback-download-report/<str:live_session_id>/",
+        views.get_consolidated_feedback_download_report,
+    ),
+    path(
+        "projects/<int:project_id>/nudges/",
+        views.get_nudges_by_project_id,
+        name="get_nudges_by_project_id",
+    ),
+    path("send-test-nudge/<int:nudge_id>/", views.send_nudge_to_email),
+    path(
+        "nudges/<int:nudge_id>/duplicate/<int:course_id>/",
+        views.duplicate_nudge,
+        name="duplicate_nudge",
+    ),
+    path(
+        "get-nps-project-wise/",
+        views.get_nps_project_wise,
+    ),
+    path(
+        "get-all-nudges-of-schedular-project/<str:project_id>/",
+        GetAllNudgesOfSchedularProjects.as_view(),
+    ),
+    path("create_assignment_lesson/", CreateAssignmentLesson.as_view()),
+    path(
+        "update_assignment_lessons/<int:assignment_id>/",
+        UpdateAssignmentLesson.as_view(),
+    ),
+    path(
+        "get_all_assignments_responses/<str:user_type>/<int:user_id>",
+        GetAllAssignmentsResponses.as_view(),
+    ),
+    path(
+        "create_assignment_lesson_response/", CreateAssignmentLessonResponse.as_view()
+    ),
+    path(
+        "get_assignments_responses/<int:assignment_id>/<int:learner_id>/",
+        GetAssignmentsResponses.as_view(),
+    ),
+    path(
+        "update_assignments_responses/",
+        UpdateAssignmentLessonFile.as_view(),
     ),
 ]

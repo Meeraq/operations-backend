@@ -20,6 +20,9 @@ from .models import (
     PdfLesson,
     File,
     DownloadableLesson,
+    Nudge,
+    AssignmentLesson,
+    AssignmentLessonResponse,
 )
 
 
@@ -38,6 +41,12 @@ class CourseTemplateSerializer(serializers.ModelSerializer):
 class LessonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lesson
+        fields = "__all__"
+
+
+class NudgeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Nudge
         fields = "__all__"
 
 
@@ -246,3 +255,21 @@ class DownloadableLessonSerializer(serializers.ModelSerializer):
         instance.file = validated_data.get("file", instance.file)
         instance.save()
         return instance
+
+
+class AssignmentSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = AssignmentLesson
+        fields = "__all__"
+        depth = 1
+
+class AssignmentResponseSerializerDepthSix(serializers.ModelSerializer):
+    class Meta:
+        model = AssignmentLessonResponse
+        fields = "__all__"
+        depth = 6
+
+class AssignmentResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssignmentLessonResponse
+        fields = "__all__"

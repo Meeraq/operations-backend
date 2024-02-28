@@ -141,6 +141,10 @@ urlpatterns = [
         views.get_all_sessions_of_user,
     ),
     path(
+        "pmo/sessions/all/<str:user_type>/<int:user_id>/",
+        views.get_all_sessions_of_user_for_pmo,
+    ),
+    path(
         "sessions/upcoming/<str:user_type>/<int:user_id>/",
         views.get_upcoming_sessions_of_user,
     ),
@@ -151,8 +155,9 @@ urlpatterns = [
     path(
         "sessions/past/<str:user_type>/<int:user_id>/", views.get_past_sessions_of_user
     ),
-     path(
-        "new/sessions/past/<str:user_type>/<int:user_id>/", views.new_get_past_sessions_of_user
+    path(
+        "new/sessions/past/<str:user_type>/<int:user_id>/",
+        views.new_get_past_sessions_of_user,
     ),
     path("sessions/edit/<int:session_id>/", views.edit_session_availability),
     path("learners/<str:user_type>/<int:user_id>/", views.get_coachee_of_user),
@@ -333,5 +338,30 @@ urlpatterns = [
     path(
         "session-data/",
         SessionData.as_view(),
+    ),
+    path("add/pmo/", views.add_pmo),
+    path("get/all/pmo/", views.get_pmo, name="get_pmo"),
+    path(
+        "get-learner-of-user-optimized/<str:user_type>/<int:user_id>/",
+        views.get_learner_of_user_optimized,
+    ),
+    path(
+        "get-learner-course-enrolled-of-user-optimized/<str:user_type>/<int:user_id>/",
+        views.get_learner_course_enrolled_of_user_optimized,
+    ),
+    path(
+        "get-project-organisation-learner-of-user-optimized/<str:user_type>/<int:user_id>/",
+        views.get_project_organisation_learner_of_user_optimized,
+    ),
+    path("logs/", views.get_api_logs, name="get_api_logs"),
+    path(
+        "get-skill-training-projects/",
+        views.get_skill_training_projects,
+        name="get_skill_training_projects",
+    ),
+    path(
+        "update-reminders-of-project/",
+        views.update_reminders_of_project,
+        name="update_reminders_of_project",
     ),
 ]

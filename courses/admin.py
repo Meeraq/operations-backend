@@ -20,6 +20,9 @@ from .models import (
     Resources,
     PdfLesson,
     ThinkificLessonCompleted,
+    Nudge,
+    AssignmentLesson,
+    AssignmentLessonResponse,
 )
 
 # Register your models here.
@@ -43,3 +46,6 @@ admin.site.register(CourseTemplate)
 admin.site.register(Resources)
 admin.site.register(PdfLesson)
 admin.site.register(ThinkificLessonCompleted)
+admin.site.register(Nudge)
+admin.site.register(AssignmentLesson)
+admin.site.register(AssignmentLessonResponse)

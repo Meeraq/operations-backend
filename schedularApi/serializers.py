@@ -9,7 +9,7 @@ from .models import (
     CoachSchedularAvailibilty,
     RequestAvailibilty,
     SchedularSessions,
-    Facilitator,
+    
     SchedularUpdate,
 )
 from api.models import Coach
@@ -26,12 +26,20 @@ class SessionItemSerializer(serializers.Serializer):
     session_type = serializers.CharField()
     duration = serializers.IntegerField()
     order = serializers.IntegerField(required=False, allow_null=True)
+    description = serializers.CharField(required=False)
 
 
 class SchedularBatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularBatch
         fields = "__all__"
+
+
+class SchedularBatchDepthSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularBatch
+        fields = "__all__"
+        depth = 1
 
 
 class LiveSessionSerializerDepthOne(serializers.ModelSerializer):
@@ -135,11 +143,6 @@ class RequestAvailibiltySerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class FacilitatorSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Facilitator
-        fields = "__all__"
-
 
 class UpdateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -152,3 +155,10 @@ class SchedularUpdateDepthOneSerializer(serializers.ModelSerializer):
         model = SchedularUpdate
         fields = "__all__"
         depth = 1
+
+
+class SchedularBatchDepthTwoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularBatch
+        fields = "__all__"
+        depth = 2

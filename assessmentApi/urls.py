@@ -1,4 +1,6 @@
 from django.urls import path, include
+from . import views
+
 
 from .views import (
     CompetencyView,
@@ -51,8 +53,8 @@ from .views import (
     GetLearnersUniqueId,
     StartAssessmentDataForParticipant,
     StartAssessmentParticipantDisabled,
-    PreReportDownloadForParticipant,
-    PreReportDownloadForAllParticipant,
+    PrePostReportDownloadForParticipant,
+    PrePostReportDownloadForAllParticipant,
     MoveParticipant,
     GetAllLearnersUniqueId,
     DownloadParticipantResponseStatusData,
@@ -61,6 +63,13 @@ from .views import (
     GetOneAssessment,
     GetAssessmentsOfHr,
     GetAssessmentsDataForMoveParticipant,
+    CreateAssessmentAndAddMultipleParticipantsFromBatch,
+    AssessmentInAssessmentLesson,
+    AllAssessmentInAssessmentLesson,
+    PostReportDownloadForAllParticipant,
+    PostReportDownloadForParticipant,
+    GetProjectWiseReport,
+    GetAllAssessmentsOfSchedularProjects
 )
 
 
@@ -238,11 +247,11 @@ urlpatterns = [
     ),
     path(
         "pre-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
-        PreReportDownloadForParticipant.as_view(),
+        PrePostReportDownloadForParticipant.as_view(),
     ),
     path(
         "pre-report-download-for-all-participant/<int:assessment_id>/",
-        PreReportDownloadForAllParticipant.as_view(),
+        PrePostReportDownloadForAllParticipant.as_view(),
     ),
     path(
         "move-participant/",
@@ -262,5 +271,40 @@ urlpatterns = [
     ),
     path("assessment/<int:assessment_id>/", GetOneAssessment.as_view()),
     path("assessments/hr/<int:hr_id>/", GetAssessmentsOfHr.as_view()),
-    path("get-assessments-for-move-participant/", GetAssessmentsDataForMoveParticipant.as_view()),
+    path(
+        "get-assessments-for-move-participant/",
+        GetAssessmentsDataForMoveParticipant.as_view(),
+    ),
+    path(
+        "create-assessment-and-add-multiple-participants-from-batch/",
+        CreateAssessmentAndAddMultipleParticipantsFromBatch.as_view(),
+    ),
+    path(
+        "assessment-in-assessment-lesson/<int:assessment_id>/",
+        AssessmentInAssessmentLesson.as_view(),
+    ),
+    path(
+        "all-assessment-in-assessment-lesson/",
+        AllAssessmentInAssessmentLesson.as_view(),
+    ),
+    path(
+        "send-mail-to-non-responded-participant/<str:assessment_id>/",
+        views.send_mail_to_not_responded_participant,
+    ),
+    path(
+        "post-report-download-for-all-participants/<int:assessment_id>/",
+        PostReportDownloadForAllParticipant.as_view(),
+    ),
+    path(
+        "post-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
+        PostReportDownloadForParticipant.as_view(),
+    ),
+    path(
+        "get-project-wise-report/<int:project_id>/<str:report_to_download>/",
+        GetProjectWiseReport.as_view(),
+    ),
+    path(
+        "get-all-assessments-of-schedular-project/<str:project_id>/",
+        GetAllAssessmentsOfSchedularProjects.as_view(),
+    ),
 ]
