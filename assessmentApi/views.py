@@ -2009,62 +2009,65 @@ class AddMultipleQuestions(APIView):
     @transaction.atomic
     def post(self, request):
         try:
-            questions = request.data.get("questions")
+            with transaction.atomic():
+             
+                questions = request.data.get("questions")
 
-            for question in questions:
-                behavior, created = Behavior.objects.get_or_create(
-                    name=question["behaviour"], description="This is a demo description"
+                for question in questions:
+                    behavior, created = Behavior.objects.get_or_create(
+                        name=question["behaviour"], description="This is a demo description"
+                    )
+                    behavior.save()
+                    competency, created = Competency.objects.get_or_create(
+                        name=question["compentency_name"]
+                    )
+
+                    competency.behaviors.add(behavior)
+                    competency.save()
+
+                    if question["rating_type"] == "1-5":
+                        labels = {
+                            "1": question["label1"],
+                            "2": question["label2"],
+                            "3": question["label3"],
+                            "4": question["label4"],
+                            "5": question["label5"],
+                        }
+                    elif question["rating_type"] == "1-10":
+                        labels = {
+                            "1": question["label1"],
+                            "2": question["label2"],
+                            "3": question["label3"],
+                            "4": question["label4"],
+                            "5": question["label5"],
+                            "6": question["label6"],
+                            "7": question["label7"],
+                            "8": question["label8"],
+                            "9": question["label9"],
+                            "10": question["label10"],
+                        }
+
+                    new_question, created = Question.objects.get_or_create(
+                        type=question["type"],
+                        reverse_question=(
+                            True if question["reverse_question"] == "Yes" else False
+                        ),
+                        behavior=behavior,
+                        competency=competency,
+                        self_question=question["self_question"],
+                        observer_question=question["observer_question"],
+                        rating_type=question["rating_type"],
+                        label=labels,
+                        correct_answer=question["correct_answer"]
+                    )
+                    new_question.save()
+
+                return Response(
+                    {
+                        "message": "Questions created successfully.",
+                    },
+                    status=status.HTTP_200_OK,
                 )
-                behavior.save()
-                competency, created = Competency.objects.get_or_create(
-                    name=question["compentency_name"]
-                )
-
-                competency.behaviors.add(behavior)
-                competency.save()
-
-                if question["rating_type"] == "1-5":
-                    labels = {
-                        "1": question["label1"],
-                        "2": question["label2"],
-                        "3": question["label3"],
-                        "4": question["label4"],
-                        "5": question["label5"],
-                    }
-                elif question["rating_type"] == "1-10":
-                    labels = {
-                        "1": question["label1"],
-                        "2": question["label2"],
-                        "3": question["label3"],
-                        "4": question["label4"],
-                        "5": question["label5"],
-                        "6": question["label6"],
-                        "7": question["label7"],
-                        "8": question["label8"],
-                        "9": question["label9"],
-                        "10": question["label10"],
-                    }
-
-                new_question, created = Question.objects.get_or_create(
-                    type=question["type"],
-                    reverse_question=(
-                        True if question["reverse_question"] == "Yes" else False
-                    ),
-                    behavior=behavior,
-                    competency=competency,
-                    self_question=question["self_question"],
-                    observer_question=question["observer_question"],
-                    rating_type=question["rating_type"],
-                    label=labels,
-                )
-                new_question.save()
-
-            return Response(
-                {
-                    "message": "Questions created successfully.",
-                },
-                status=status.HTTP_200_OK,
-            )
 
         except Exception as e:
             print(str(e))
