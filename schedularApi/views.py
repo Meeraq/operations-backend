@@ -83,6 +83,7 @@ from .models import (
 from api.serializers import (
     FacilitatorSerializer,
     FacilitatorBasicDetailsSerializer,
+    CoachSerializer,
 )
 
 from courses.models import (
@@ -119,7 +120,10 @@ from django.db.models import Max
 import io
 from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
-from schedularApi.tasks import celery_send_unbooked_coaching_session_mail
+from schedularApi.tasks import (
+    celery_send_unbooked_coaching_session_mail,
+    get_current_date_timestamps,
+)
 
 # Create your views here.
 from itertools import chain
@@ -627,6 +631,7 @@ def get_batch_calendar(request, batch_id):
         except Exception as e:
             print(str(e))
             course = None
+        batch_for_response = SchedularBatch.objects.filter(id=batch_id).first()
         return Response(
             {
                 "sessions": sorted_sessions,
@@ -635,7 +640,8 @@ def get_batch_calendar(request, batch_id):
                 "course": course_serailizer.data if course else None,
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
-                "batch_name": SchedularBatch.objects.filter(id=batch_id).first().name,
+                "batch_name": batch_for_response.name,
+                "project_id":batch_for_response.project.id,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -729,7 +735,11 @@ def update_live_session(request, live_session_id):
                     f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
                     + update_live_session.description
                     if update_live_session.description
-                    else ""
+                    else (
+                        "" + update_live_session.description
+                        if update_live_session.description
+                        else ""
+                    )
                 )
                 if not existing_date_time:
                     create_outlook_calendar_invite(
@@ -2688,7 +2698,7 @@ def send_live_session_link_whatsapp(request):
                         },
                         {
                             "name": "description",
-                            "value": (
+                            "value": ( 
                                 (
                                     live_session.description
                                     if live_session.description
@@ -2698,7 +2708,7 @@ def send_live_session_link_whatsapp(request):
                                     f" Please join using this link: {live_session.meeting_link}"
                                     if live_session.meeting_link
                                     else ""
-                                )
+                                )    
                             ),
                         },
                     ],
@@ -4214,6 +4224,245 @@ def update_project_status(request):
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_skill_dashboard_card_data(request, project_id):
+    try:
+        if project_id == "all":
+
+            start_timestamp, end_timestamp = get_current_date_timestamps()
+            # schedular sessions scheduled today
+            today_sessions = SchedularSessions.objects.filter(
+                availibility__start_time__lte=end_timestamp,
+                availibility__end_time__gte=start_timestamp,
+            )
+
+            today = timezone.now().date()
+            today_live_sessions = LiveSession.objects.filter(date_time__date=today)
+
+            ongoing_assessment = Assessment.objects.filter(
+                assessment_modal__isnull=False, status="ongoing"
+            )
+           
+            completed_assessments = Assessment.objects.filter(
+                assessment_modal__isnull=False, status="completed"
+            )
+        else:
+            start_timestamp, end_timestamp = get_current_date_timestamps()
+            # schedular sessions scheduled today
+            today_sessions = SchedularSessions.objects.filter(
+                availibility__start_time__lte=end_timestamp,
+                availibility__end_time__gte=start_timestamp,
+                coaching_session__batch__project__id=int(project_id),
+            )
+
+            today = timezone.now().date()
+            today_live_sessions = LiveSession.objects.filter(
+                date_time__date=today, batch__project__id=int(project_id)
+            )
+
+            ongoing_assessment = Assessment.objects.filter(
+                assessment_modal__isnull=False,
+                status="ongoing",
+                assessment_modal__lesson__course__batch__project__id=int(project_id),
+            )
+
+            completed_assessments = Assessment.objects.filter(
+                assessment_modal__isnull=False,
+                status="completed",
+                assessment_modal__lesson__course__batch__project__id=int(project_id),
+            )
+        return Response(
+            {
+                "today_coaching_sessions": len(today_sessions),
+                "today_live_sessions": len(today_live_sessions),
+                "ongoing_assessments": len(ongoing_assessment),
+                "completed_assessments": len(completed_assessments),
+            },
+            status=200,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {
+                "error": "Failed to get data",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_coaching_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+        if project_id == "all":
+            schedular_session = SchedularSessions.objects.all()
+        else:
+            schedular_session = SchedularSessions.objects.filter(
+                coaching_session__batch__project__id=int(project_id)
+            )
+        upcoming_schedular_sessions = schedular_session.filter(
+            availibility__end_time__gt=timestamp_milliseconds
+        )
+        upcoming_schedular_session_data = []
+        for session in upcoming_schedular_sessions:
+            temp = {
+                "date_time": session.availibility.start_time,
+                "coach": session.availibility.coach.first_name
+                + " "
+                + session.availibility.coach.last_name,
+                "batch_name": session.coaching_session.batch.name,
+                "learner": session.learner.name,
+                "project_name": session.coaching_session.batch.project.name,
+            }
+            upcoming_schedular_session_data.append(temp)
+        return Response(upcoming_schedular_session_data, status=status.HTTP_200_OK)
+
+    except SchedularSessions.DoesNotExist:
+        return Response(
+            {"error": f"SchedularSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_past_coaching_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+        if project_id == "all":
+            schedular_session = SchedularSessions.objects.all()
+        else:
+            schedular_session = SchedularSessions.objects.filter(
+                coaching_session__batch__project__id=int(project_id)
+            )
+        past_schedular_sessions = schedular_session.filter(
+            availibility__end_time__lt=timestamp_milliseconds
+        )
+        past_schedular_session_data = []
+        for session in past_schedular_sessions:
+            temp = {
+                "date_time": session.availibility.start_time,
+                "coach": session.availibility.coach.first_name
+                + " "
+                + session.availibility.coach.last_name,
+                "batch_name": session.coaching_session.batch.name,
+                "learner": session.learner.name,
+                "project_name": session.coaching_session.batch.project.name,
+            }
+            past_schedular_session_data.append(temp)
+        return Response(past_schedular_session_data, status=status.HTTP_200_OK)
+
+    except SchedularSessions.DoesNotExist:
+        return Response(
+            {"error": f"SchedularSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_live_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        if project_id == "all":
+            live_sessions = LiveSession.objects.all()
+        else:
+            live_sessions = LiveSession.objects.filter(
+                batch__project__id=int(project_id)
+            )
+        upcoming_live_sessions = live_sessions.filter(date_time__gt=current_time_seeq)
+
+        upcoming_live_session_data = []
+
+        for live_session in upcoming_live_sessions:
+            facilitator_names = [
+                f"{facilitator.first_name} {facilitator.last_name}"
+                for facilitator in live_session.batch.facilitator.all()
+            ]
+            coach_names = [
+                f"{coach.first_name} {coach.last_name}"
+                for coach in live_session.batch.coaches.all()
+            ]
+            temp = {
+                "date_time": live_session.date_time,
+                "facilitator_names": facilitator_names,
+                "session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                "batch_name": live_session.batch.name,
+                "project_name": live_session.batch.project.name,
+                "coach_names": coach_names,
+            }
+
+            upcoming_live_session_data.append(temp)
+        return Response(upcoming_live_session_data, status=status.HTTP_200_OK)
+
+    except LiveSession.DoesNotExist:
+        return Response(
+            {"error": f"LiveSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_past_live_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        if project_id == "all":
+            live_sessions = LiveSession.objects.all()
+        else:
+            live_sessions = LiveSession.objects.filter(
+                batch__project__id=int(project_id)
+            )
+        past_live_sessions = live_sessions.filter(date_time__lt=current_time_seeq)
+
+        past_live_session_data = []
+
+        for live_session in past_live_sessions:
+            facilitator_names = [
+                f"{facilitator.first_name} {facilitator.last_name}"
+                for facilitator in live_session.batch.facilitator.all()
+            ]
+            coach_names = [
+                f"{coach.first_name} {coach.last_name}"
+                for coach in live_session.batch.coaches.all()
+            ]
+
+            temp = {
+                "date_time": live_session.date_time,
+                "facilitator_names": facilitator_names,
+                "session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                "batch_name": live_session.batch.name,
+                "project_name": live_session.batch.project.name,
+                "coach_names": coach_names,
+            }
+
+            past_live_session_data.append(temp)
+
+        return Response(past_live_session_data, status=status.HTTP_200_OK)
+
+    except LiveSession.DoesNotExist:
+        return Response(
+            {"error": f"LiveSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["PUT"])

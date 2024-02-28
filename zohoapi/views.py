@@ -29,6 +29,7 @@ from .serializers import (
     VendorDepthOneSerializer,
     VendorSerializer,
     InvoiceStatusUpdateGetSerializer,
+    VendorEditSerializer,
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -63,6 +64,102 @@ wkhtmltopdf_path = os.environ.get(
 )
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
+purchase_orders_allowed = [
+    "Meeraq/PO/CaaS/23-24/0024",
+    "Meeraq/PO/CaaS/23-24/0025",
+    "Meeraq/PO/CaaS/23-24/0026",
+    "Meeraq/PO/CaaS/23-24/0067",
+    "Meeraq/PO/CaaS/23-24/0068",
+    "Meeraq/PO/CaaS/23-24/0069",
+    "Meeraq/PO/CaaS/23-24/0070",
+    "Meeraq/PO/CaaS/23-24/0061",
+    "Meeraq/PO/CaaS/23-24/0062",
+    "Meeraq/PO/CaaS/23-24/0063",
+    "Meeraq/PO/CaaS/23-24/0084",
+    "Meeraq/PO/CaaS/23-24/0085",
+    "Meeraq/PO/CaaS/23-24/0086",
+    "Meeraq/PO/CaaS/23-24/0087",
+    "Meeraq/PO/CaaS/23-24/0088",
+    "Meeraq/PO/CaaS/23-24/0042",
+    "Meeraq/PO/CaaS/23-24/0043",
+    "Meeraq/PO/CaaS/23-24/0044",
+    "Meeraq/PO/CaaS/23-24/0045",
+    "Meeraq/PO/CaaS/23-24/0046",
+    "Meeraq/PO/CaaS/23-24/0047",
+    "Meeraq/PO/CaaS/23-24/0048",
+    "Meeraq/PO/CaaS/23-24/0049",
+    "Meeraq/PO/CaaS/23-24/0050",
+    "Meeraq/PO/CaaS/23-24/0051",
+    "Meeraq/PO/CaaS/23-24/0052",
+    "Meeraq/PO/CaaS/23-24/0053",
+    "Meeraq/PO/CaaS/23-24/0054",
+    "Meeraq/PO/CaaS/23-24/0055",
+    "Meeraq/PO/CaaS/23-24/0056",
+    "Meeraq/PO/CaaS/23-24/0057",
+    "Meeraq/PO/CaaS/23-24/0058",
+    "Meeraq/PO/CaaS/23-24/0064",
+    "Meeraq/PO/CaaS/23-24/0096",
+    "Meeraq/PO/CaaS/23-24/0097",
+    "Meeraq/PO/CaaS/23-24/0098",
+    "Meeraq/PO/CaaS/23-24/0099",
+    "Meeraq/PO/23-24/T/0030",
+    "Meeraq/PO/23-24/T/0039",
+    "Meeraq/PO/23-24/T/0023",
+    "Meeraq/PO/23-24/T/0024",
+    "Meeraq/PO/23-24/T/0033",
+    "Meeraq/PO/23-24/T/0034",
+    "Meeraq/PO/23-24/T/0035",
+    "Meeraq/PO/23-24/T/0036",
+    "Meeraq/PO/23-24/T/0038",
+    "Meeraq/PO/23-24/T/0013",
+    "Meeraq/PO/23-24/T/0032",
+    "Meeraq/PO/23-24/T/0005",
+    "Meeraq/PO/23-24/T/0007",
+    "Meeraq/PO/23-24/T/0008",
+    "Meeraq/PO/23-24/T/0009",
+    "Meeraq/PO/23-24/T/0002",
+    "Meeraq/PO/23-24/T/0006",
+    "Meeraq/PO/23-24/T/0001",
+    "Meeraq/PO/23-24/T/0003",
+    "Meeraq/PO/23-24/T/0004",
+    "Meeraq/PO/23-24/T/0010",
+    "Meeraq/PO/23-24/T/0031",
+    "Meeraq/PO/23-24/T/0012",
+    "Meeraq/PO/23-24/T/0029",
+    "Meeraq/PO/23-24/T/0015",
+    "Meeraq/PO/23-24/T/0014",
+    "Meeraq/PO/23-24/T/0028",
+    "Meeraq/PO/23-24/T/0037",
+    "Meeraq/PO/23-24/T/0021",
+    "Meeraq/PO/23-24/T/0016",
+    "Meeraq/PO/23-24/T/0017",
+    "Meeraq/PO/23-24/T/0018",
+    "Meeraq/PO/23-24/T/0022",
+    "Meeraq/PO/23-24/T/0019",
+    "Meeraq/PO/23-24/T/0020",
+    "CTT/PO/23-24/008",
+    "CTT/PO/23-24/006",
+    "CTT/PO/23-24/0018",
+    "CTT/PO/23-24/0017",
+    "CTT/PO/23-24/0016",
+    "CTT/PO/23-24/0015",
+    "CTT/PO/23-24/005",
+    "CTT/PO/23-24/004",
+    "CTT/PO/23-24/0012",
+    "CTT/PO/23-24/0011",
+    "CTT/PO/23-24/0014",
+    "CTT/PO/23-24/0013",
+    "Meeraq/PO/CaaS/23-24/0077",
+    "Meeraq/PO/22-23/0041",
+    "CTT/PO/22-23/058",
+    "CTT/PO/22-23/059",
+    "CTT/PO/22-23/060",
+    "CTT/PO/22-23/061",
+    "CTT/PO/22-23/065",
+    "CTT/PO/22-23/066",
+    "CTT/PO/22-23/067",
+]
 
 
 def get_line_items_details(invoices):
@@ -116,23 +213,20 @@ def generate_access_token_from_refresh_token(refresh_token):
 
 
 def send_mail_templates_with_attachment(
-    file_name, user_email, email_subject, content, body_message, bcc_emails
+    file_name,
+    user_email,
+    email_subject,
+    content,
+    body_message,
+    bcc_emails,
+    is_send_attatched_invoice,
 ):
     try:
-        image_url = f"{content['invoice']['signature']}"
         datetime_obj = datetime.strptime(
             content["invoice"]["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
         )
         formatted_date = datetime_obj.strftime("%d-%m-%Y")
-        image_response = requests.get(image_url)
-        image_response.raise_for_status()
-
-        # Convert the downloaded image to base64
-        image_base64 = base64.b64encode(image_response.content).decode("utf-8")
-        content["image_base64"] = image_base64
-        email_message = render_to_string(file_name, content)
-        pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
-        result = BytesIO(pdf)
+        pdf_name = f"{content['invoice']['vendor_name']}_{formatted_date}.pdf"
         email = EmailMessage(
             subject=f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
             body=body_message,
@@ -140,12 +234,35 @@ def send_mail_templates_with_attachment(
             to=user_email,
             bcc=bcc_emails,
         )
+        if is_send_attatched_invoice:
+
+            attachment_url = content["invoice"]["attatched_invoice"]
+            # attachment_file_name = attachment_url.split('/')[-1].split('?')[0]
+            attachment_response = requests.get(attachment_url)
+
+            if attachment_response.status_code == 200:
+
+                email.attach(pdf_name, attachment_response.content, "application/pdf")
+            else:
+
+                pass
+        else:
+            image_url = f"{content['invoice']['signature']}"
+            image_response = requests.get(image_url)
+            image_response.raise_for_status()
+            image_base64 = base64.b64encode(image_response.content).decode("utf-8")
+            content["image_base64"] = image_base64
+            email_message = render_to_string(file_name, content)
+            pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+            result = BytesIO(pdf)
+            email.attach(
+                pdf_name,
+                result.getvalue(),
+                "application/pdf",
+            )
+
+        # Convert the downloaded image to base64
         # Attach the PDF to the email
-        email.attach(
-            f"{content['invoice']['vendor_name']}_{formatted_date}.pdf",
-            result.getvalue(),
-            "application/pdf",
-        )
         email.content_subtype = "html"
         email.send()
 
@@ -612,6 +729,8 @@ def add_invoice_data(request):
     if invoices.count() > 0:
         return Response({"error": "Invoice number should be unique."}, status=400)
 
+    vendor = Vendor.objects.get(vendor_id=request.data["vendor_id"])
+
     serializer = InvoiceDataSerializer(data=request.data)
     if serializer.is_valid():
         invoice_instance = serializer.save()
@@ -632,6 +751,7 @@ def add_invoice_data(request):
         )
         return Response({"message": "Invoice generated successfully"}, status=201)
     else:
+        print(serializer.errors)
         return Response(serializer.errors, status=400)
 
 
@@ -648,6 +768,8 @@ def edit_invoice(request, invoice_id):
     ):
         return Response({"error": "Invoice already exists with the invoice number"})
     serializer = InvoiceDataEditSerializer(data=request.data, instance=invoice)
+    vendor = Vendor.objects.get(vendor_id=request.data["vendor_id"])
+
     if serializer.is_valid():
         serializer.save()
         invoice.status = "in_review"
@@ -920,6 +1042,64 @@ class DownloadInvoice(APIView):
             )
 
 
+class DownloadAttatchedInvoice(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, record_id):
+        try:
+            invoice = get_object_or_404(InvoiceData, id=record_id)
+            serializer = InvoiceDataSerializer(invoice)
+            response = requests.get(serializer.data["attatched_invoice"])
+            if response.status_code == 200:
+                file_content = response.content
+                content_type = response.headers.get("Content-Type", f"application/pdf")
+                file_response = HttpResponse(file_content, content_type=content_type)
+                file_response["Content-Disposition"] = (
+                    f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+                )
+                return file_response
+            else:
+                return HttpResponse(
+                    "Failed to download the file", status=response.status_code
+                )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download invoice."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class DownloadAttatchedInvoice(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, record_id):
+        try:
+            invoice = get_object_or_404(InvoiceData, id=record_id)
+            serializer = InvoiceDataSerializer(invoice)
+            response = requests.get(serializer.data["attatched_invoice"])
+            if response.status_code == 200:
+                file_content = response.content
+                content_type = response.headers.get("Content-Type", f"application/pdf")
+                file_response = HttpResponse(file_content, content_type=content_type)
+                file_response["Content-Disposition"] = (
+                    f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+                )
+                return file_response
+            else:
+                return HttpResponse(
+                    "Failed to download the file", status=response.status_code
+                )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download invoice."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_vendor(request):
@@ -971,6 +1151,8 @@ def add_vendor(request):
                     )
 
                 vendor_role, created = Role.objects.get_or_create(name="vendor")
+                user_profile.roles.add(vendor_role)
+                user_profile.save()
                 vendor = Vendor.objects.create(
                     user=user_profile,
                     name=name,
@@ -1117,6 +1299,21 @@ def get_all_invoices(request):
 
 
 @api_view(["PUT"])
+def edit_vendor(request, vendor_id):
+    try:
+        vendor = Vendor.objects.get(id=vendor_id)
+    except Vendor.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "PUT":
+        serializer = VendorEditSerializer(vendor, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_invoice_status(request, invoice_id):
     try:
@@ -1151,7 +1348,11 @@ def update_invoice_status(request, invoice_id):
             [env("BCC_EMAIL")],
         )
     else:
-        send_mail_to = invoice.vendor_email if env("ENVIRONMENT") == "PRODUCTION" else "tech@meeraq.com"
+        send_mail_to = (
+            invoice.vendor_email
+            if env("ENVIRONMENT") == "PRODUCTION"
+            else "tech@meeraq.com"
+        )
         send_mail_templates(
             "vendors/reject_invoice.html",
             [send_mail_to],

@@ -21,6 +21,8 @@ from .models import (
     File,
     DownloadableLesson,
     Nudge,
+    AssignmentLesson,
+    AssignmentLessonResponse,
 )
 
 
@@ -253,3 +255,21 @@ class DownloadableLessonSerializer(serializers.ModelSerializer):
         instance.file = validated_data.get("file", instance.file)
         instance.save()
         return instance
+
+
+class AssignmentSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = AssignmentLesson
+        fields = "__all__"
+        depth = 1
+
+class AssignmentResponseSerializerDepthSix(serializers.ModelSerializer):
+    class Meta:
+        model = AssignmentLessonResponse
+        fields = "__all__"
+        depth = 6
+
+class AssignmentResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssignmentLessonResponse
+        fields = "__all__"

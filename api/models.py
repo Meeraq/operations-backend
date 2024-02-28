@@ -123,6 +123,7 @@ class Profile(models.Model):
         ("hr", "hr"),
         ("superadmin", "superadmin"),
         ("facilitator", "facilitator"),
+        ("finance", "finance")
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)
@@ -139,6 +140,15 @@ class SuperAdmin(models.Model):
     def __str__(self):
         return self.name
 
+class Finance(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
 
 class Pmo(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)

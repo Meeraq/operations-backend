@@ -25,6 +25,7 @@ class InvoiceDataEditSerializer(serializers.ModelSerializer):
             "type_of_code",
             "iban",
             "swift_code",
+            "attatched_invoice",
         ]
 
 
@@ -47,3 +48,9 @@ class InvoiceStatusUpdateGetSerializer(serializers.ModelSerializer):
     class Meta:
         model = InvoiceStatusUpdate
         fields = ["id", "status", "comment", "username", "created_at"]
+
+
+class VendorEditSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vendor
+        fields = ["name", "phone", "is_upload_invoice_allowed"]

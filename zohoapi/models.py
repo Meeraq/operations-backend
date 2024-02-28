@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from api.models import Profile, validate_pdf_extension
 from api.models import Profile
 from django.contrib.auth.models import User
 
@@ -13,6 +14,8 @@ class Vendor(models.Model):
     phone = models.CharField(max_length=25)
     email = models.EmailField()
     vendor_id = models.CharField(max_length=255, blank=True, default="")
+    is_upload_invoice_allowed = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -55,6 +58,12 @@ class InvoiceData(models.Model):
     account_number = models.CharField(max_length=255, default="")
     ifsc_code = models.CharField(max_length=11, default="")
     signature = models.ImageField(upload_to="vendors-signature", default="", blank=True)
+    attatched_invoice = models.FileField(
+        upload_to="pdf_files",
+        blank=True,
+        default="",
+        validators=[validate_pdf_extension],
+    )
     status = models.CharField(
         max_length=50, choices=INVOICE_STATUS_CHOICES, default="in_review"
     )
