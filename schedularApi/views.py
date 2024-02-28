@@ -339,7 +339,7 @@ def create_facilitator_pricing(batch, facilitator):
                 session_type=session["session_type"],
             ).first()
 
-            facilitator_pricing = FacilitatorPricing.objects.create(
+            facilitator_pricing, created = FacilitatorPricing.objects.get_or_create(
                 project=batch.project,
                 facilitator=facilitator,
                 session_type=live_session.session_type,
@@ -1346,7 +1346,7 @@ def update_batch(request, batch_id):
                                 order=session["order"],
                                 session_type=session["session_type"],
                             ).first()
-                            coach_pricing = CoachPricing.objects.create(
+                            coach_pricing, created = CoachPricing.objects.get_or_create(
                                 project=batch.project,
                                 coach=coach,
                                 session_type=coaching_session.session_type,
@@ -4695,11 +4695,13 @@ def add_facilitator_to_batch(request, batch_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_sessions_pricing_for_a_coach(request, coach_id, project_id):
+def get_sessions_pricing_for_a_coach(request, coach_id, project_id, batch_id):
     try:
+        project = SchedularProject.objects.get(id=project_id)
         coach_pricing = CoachPricing.objects.filter(
             project__id=project_id, coach__id=coach_id
         ).first()
+        # for i in range(0, len(coach_pricing)/ len(project.project_structure))
         serialize = CoachPricing(coach_pricing, many=True)
         return Response(serialize.data)
     except Exception as e:
@@ -4753,13 +4755,41 @@ def update_coach_price(request, coach_price_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update price."}, status=201)
-    
+
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_price_in_project_structure(request):
     try:
-        pass
+        project_id = request.data.get("project_id")
+        price = request.data.get("price")
+        session_type = request.data.get("session_type")
+        order = request.data.get("order")
+
+        if session_type in [
+            "check_in_session",
+            "in_person_session",
+            "kickoff_session",
+            "virtual_session",
+        ]:
+            facilitator_pricing = FacilitatorPricing.objects.filter(
+                project__id=int(project_id),
+                session_type=session_type,
+                order=order,
+            ).first()
+            if facilitator_pricing:
+                facilitator_pricing.price = price
+        elif session_type in [
+            "laser_coaching_session",
+            "mentoring_session",
+        ]:
+            coach_pricing = CoachPricing.objects.filter(
+                project__id=int(project_id),
+                session_type=session_type,
+                order=order,
+            ).first()
+            if coach_pricing:
+                coach_pricing.price = price
         return Response({"message": "Price updated successfully."}, status=201)
 
     except Exception as e:
