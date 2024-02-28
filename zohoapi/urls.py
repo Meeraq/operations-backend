@@ -73,4 +73,13 @@ urlpatterns = [
         name="get_all_invoices",
     ),
     path("vendors/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
+    path(
+        "invoices/<int:invoice_id>/update_status/",
+        views.update_invoice_status,
+    ),
+    path(
+        "invoices/<int:invoice_id>/updates/",
+        views.get_invoice_updates,
+        name="get_invoice_updates",
+    ),
 ]
