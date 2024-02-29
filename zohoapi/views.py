@@ -50,7 +50,7 @@ import io
 import pdfkit
 from django.middleware.csrf import get_token
 from django.db import transaction
-
+from api.permissions import IsInRoles
 
 env = environ.Env()
 
@@ -541,7 +541,7 @@ def filter_purchase_order_data(purchase_orders):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def get_purchase_orders(request, vendor_id):
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_data:
@@ -581,7 +581,7 @@ def filter_invoice_data(invoices):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def get_invoices_with_status(request, vendor_id, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -624,7 +624,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def get_purchase_order_data(request, purchaseorder_id):
     access_token_purchase_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_order:
@@ -731,7 +731,7 @@ def get_line_items_for_template(line_items):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def add_invoice_data(request):
     invoices = InvoiceData.objects.filter(
         vendor_id=request.data["vendor_id"],
@@ -785,7 +785,7 @@ def add_invoice_data(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def edit_invoice(request, invoice_id):
     invoice = get_object_or_404(InvoiceData, id=invoice_id)
     if (
@@ -836,7 +836,7 @@ def edit_invoice(request, invoice_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def delete_invoice(request, invoice_id):
     try:
         invoice = get_object_or_404(InvoiceData, id=invoice_id)
@@ -849,7 +849,7 @@ def delete_invoice(request, invoice_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def get_purchase_order_and_invoices(request, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -879,7 +879,7 @@ def get_purchase_order_and_invoices(request, purchase_order_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def get_bank_account_data(
     request,
     vendor_id,
@@ -1055,7 +1055,7 @@ def export_invoice_data(request):
 
 
 class DownloadInvoice(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "vendor")]
 
     def get(self, request, record_id):
         try:
@@ -1108,7 +1108,7 @@ class DownloadInvoice(APIView):
 
 
 class DownloadAttatchedInvoice(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "vendor")]
 
     def get(self, request, record_id):
         try:
@@ -1137,7 +1137,7 @@ class DownloadAttatchedInvoice(APIView):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo","superadmin")])
 def add_vendor(request):
     # Extract data from the request
     with transaction.atomic():
@@ -1243,7 +1243,7 @@ def add_vendor(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo","finance","superadmin","vendor")])
 def get_all_vendors(request):
     try:
         vendors = Vendor.objects.all()
@@ -1318,7 +1318,7 @@ def fetch_bills(organization_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo","vendor","superadmin","finance")])
 def get_all_purchase_orders(request):
     try:
         all_purchase_orders = fetch_purchase_orders(organization_id)
@@ -1328,7 +1328,7 @@ def get_all_purchase_orders(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo","vendor","superadmin","finance")])
 def get_all_invoices(request):
     try:
         access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -1363,6 +1363,7 @@ def get_all_invoices(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo","vendor","superadmin","finance")])
 def edit_vendor(request, vendor_id):
     try:
         vendor = Vendor.objects.get(id=vendor_id)

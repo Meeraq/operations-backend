@@ -102,7 +102,11 @@ from courses.serializers import (
     CourseEnrollmentDepthOneSerializer,
 )
 from django.core.serializers import serialize
-from courses.views import create_or_get_learner,add_question_to_feedback_lesson,nps_default_feed_questions
+from courses.views import (
+    create_or_get_learner,
+    add_question_to_feedback_lesson,
+    nps_default_feed_questions,
+)
 from assessmentApi.models import (
     Assessment,
     ParticipantUniqueId,
@@ -132,6 +136,7 @@ import re
 from rest_framework.views import APIView
 from api.views import get_user_data
 from zohoapi.models import Vendor
+from api.permissions import IsInRoles
 
 env = environ.Env()
 
@@ -232,7 +237,7 @@ def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_project_schedular(request):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_name"]
@@ -299,7 +304,9 @@ def create_project_schedular(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+)
 def get_all_Schedular_Projects(request):
     projects = SchedularProject.objects.all()
     serializer = SchedularProjectSerializer(projects, many=True)
@@ -398,7 +405,7 @@ def get_all_Schedular_Projects(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_project_structure(request, project_id):
     try:
         project = get_object_or_404(SchedularProject, id=project_id)
@@ -426,7 +433,9 @@ def create_project_structure(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+)
 def get_schedular_batches(request):
     try:
         project_id = request.GET.get("project_id")
@@ -529,7 +538,9 @@ def generate_slots(start, end, duration):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+)
 def get_batch_calendar(request, batch_id):
     try:
         live_sessions = LiveSession.objects.filter(batch__id=batch_id)
@@ -641,7 +652,7 @@ def get_batch_calendar(request, batch_id):
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
                 "batch_name": batch_for_response.name,
-                "project_id":batch_for_response.project.id,
+                "project_id": batch_for_response.project.id,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -651,7 +662,7 @@ def get_batch_calendar(request, batch_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_live_session(request, live_session_id):
     try:
         live_session = LiveSession.objects.get(id=live_session_id)
@@ -784,7 +795,7 @@ def update_live_session(request, live_session_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_coaching_session(request, coaching_session_id):
     try:
         coaching_session = CoachingSession.objects.get(id=coaching_session_id)
@@ -912,7 +923,7 @@ def send_test_mails(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner")])
 def participants_list(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
@@ -932,7 +943,7 @@ def getSavedTemplates(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner")])
 def get_batches(request):
     batches = SchedularBatch.objects.all()
     serializer = BatchSerializer(batches, many=True)
@@ -1018,7 +1029,7 @@ def deleteEmailTemplate(request, template_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def get_all_schedular_availabilities(request):
     coach_id = request.GET.get("coach_id")
     if coach_id:
@@ -1030,7 +1041,7 @@ def get_all_schedular_availabilities(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_coach_schedular_availibilty(request):
     if request.method == "POST":
         serializer = RequestAvailibiltySerializer(data=request.data)
@@ -1074,7 +1085,7 @@ def create_coach_schedular_availibilty(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_batch(request, project_id):
     try:
         with transaction.atomic():
@@ -1213,7 +1224,9 @@ def add_batch(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "hr", "coach", "facilitator", "leanrer")]
+)
 def get_coaches(request):
     coaches = Coach.objects.filter(is_approved=True)
     serializer = CoachBasicDetailsSerializer(coaches, many=True)
@@ -1221,10 +1234,9 @@ def get_coaches(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_batch(request, batch_id):
-    print(request.data)
-    print(batch_id)
+
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
     except SchedularBatch.DoesNotExist:
@@ -1836,7 +1848,7 @@ def schedule_session_fixed(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def reschedule_session(request, session_id):
     try:
         with transaction.atomic():
@@ -2127,7 +2139,7 @@ def reschedule_session(request, session_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def create_coach_availabilities(request):
     try:
         slots_data = request.data.get("slots", [])
@@ -2284,7 +2296,7 @@ def get_sessions_by_type(request, sessions_type):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def edit_session_status(request, session_id):
     try:
         session = SchedularSessions.objects.get(id=session_id)
@@ -2299,7 +2311,7 @@ def edit_session_status(request, session_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def update_session_date_time(request, session_id):
     try:
         session = SchedularSessions.objects.get(id=session_id)
@@ -2364,7 +2376,7 @@ def get_current_session_of_learner(request, room_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach")])
 def get_requests_of_coach(request, coach_id):
     try:
         coach = get_object_or_404(Coach, id=coach_id)
@@ -2396,7 +2408,7 @@ def get_requests_of_coach(request, coach_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach")])
 def get_slots_of_request(request, request_id):
     coach_id = request.GET.get("coach_id")
     if coach_id:
@@ -2412,7 +2424,7 @@ def get_slots_of_request(request, request_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def get_upcoming_slots_of_coach(request, coach_id):
     current_time = timezone.now()
     timestamp_milliseconds = str(int(current_time.timestamp() * 1000))
@@ -2424,7 +2436,7 @@ def get_upcoming_slots_of_coach(request, coach_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def delete_slots(request):
     slot_ids = request.data.get("slot_ids", [])
     # Assuming slot_ids is a list of integers
@@ -2437,7 +2449,7 @@ def delete_slots(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def send_unbooked_coaching_session_mail(request):
     try:
         celery_send_unbooked_coaching_session_mail.delay(request.data)
@@ -2540,7 +2552,7 @@ def export_available_slot(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_participant_to_batch(request, batch_id):
     # batch_id = request.data.get("batch_id")
     with transaction.atomic():
@@ -2629,7 +2641,7 @@ def add_participant_to_batch(request, batch_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def finalize_project_structure(request, project_id):
     try:
         project = get_object_or_404(SchedularProject, id=project_id)
@@ -2647,7 +2659,7 @@ def finalize_project_structure(request, project_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def send_live_session_link(request):
     live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
     for learner in live_session.batch.learners.all():
@@ -2698,7 +2710,7 @@ def send_live_session_link_whatsapp(request):
                         },
                         {
                             "name": "description",
-                            "value": ( 
+                            "value": (
                                 (
                                     live_session.description
                                     if live_session.description
@@ -2708,7 +2720,7 @@ def send_live_session_link_whatsapp(request):
                                     f" Please join using this link: {live_session.meeting_link}"
                                     if live_session.meeting_link
                                     else ""
-                                )    
+                                )
                             ),
                         },
                     ],
@@ -2849,7 +2861,7 @@ def project_report_download_session_wise(request, project_id, batch_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_facilitator(request):
     first_name = request.data.get("firstName", "")
 
@@ -3010,7 +3022,7 @@ def add_facilitator(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_facilitators(request):
     facilitators = Facilitator.objects.all()
     serializer = FacilitatorSerializer(facilitators, many=True)
@@ -3067,7 +3079,7 @@ def get_facilitators(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_multiple_facilitator(request):
     data = request.data.get("coaches", [])
     print(data)
@@ -3163,7 +3175,7 @@ def add_multiple_facilitator(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
 def update_facilitator_profile(request, id):
     try:
         with transaction.atomic():
@@ -3229,7 +3241,7 @@ def update_facilitator_profile(request, id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def delete_facilitator(request):
     data = request.data
     facilitator_id = data.get("facilitator_id")
@@ -3255,7 +3267,7 @@ def delete_facilitator(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
 def get_facilitator_field_values(request):
     job_roles = set()
     languages = set()
@@ -3318,7 +3330,7 @@ def get_facilitator_field_values(request):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def delete_learner_from_course(request):
     learner_id = request.data.get("learnerId")
     batch_id = request.data.get("batchId")
@@ -3375,7 +3387,7 @@ def delete_learner_from_course(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def edit_schedular_project(request, project_id):
     try:
         project = SchedularProject.objects.get(pk=project_id)
@@ -3432,7 +3444,7 @@ def edit_schedular_project(request, project_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_schedular_project_update(request, project_id):
     try:
         project = SchedularProject.objects.get(id=project_id)
@@ -3456,7 +3468,7 @@ def add_schedular_project_update(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_schedular_project_updates(request, project_id):
     updates = SchedularUpdate.objects.filter(project__id=project_id).order_by(
         "-created_at"
@@ -3529,7 +3541,7 @@ def live_session_detail_view(request, pk):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def facilitator_projects(request, facilitator_id):
-    print(facilitator_id)
+
     try:
         projects = SchedularProject.objects.filter(
             schedularbatch__facilitator__id=facilitator_id
@@ -3583,7 +3595,7 @@ def get_facilitator_sessions(request, facilitator_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_certificate_status(request):
     try:
         participant_id = request.data.get("participantId")
@@ -3614,7 +3626,7 @@ def update_certificate_status(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_new_session_in_project_structure(request):
     try:
         with transaction.atomic():
@@ -3710,10 +3722,17 @@ def add_new_session_in_project_structure(request):
                         )
                         unique_id = uuid.uuid4()
                         feedback_lesson = FeedbackLesson.objects.create(
-                            lesson=new_feedback_lesson, unique_id=unique_id, live_session=live_session
+                            lesson=new_feedback_lesson,
+                            unique_id=unique_id,
+                            live_session=live_session,
                         )
-                        if live_session.session_type in ["in_person_session", "virtual_session"]:        
-                            add_question_to_feedback_lesson(feedback_lesson, nps_default_feed_questions)
+                        if live_session.session_type in [
+                            "in_person_session",
+                            "virtual_session",
+                        ]:
+                            add_question_to_feedback_lesson(
+                                feedback_lesson, nps_default_feed_questions
+                            )
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     coaching_session_number = (
                         CoachingSession.objects.filter(
@@ -3763,7 +3782,9 @@ def add_new_session_in_project_structure(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer")]
+)
 def get_completed_sessions_for_project(request, project_id):
     try:
         current_datetime = timezone.now()
@@ -3822,7 +3843,7 @@ def get_completed_sessions_for_project(request, project_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def delete_session_from_project_structure(request):
     try:
         with transaction.atomic():
@@ -4001,7 +4022,7 @@ def delete_session_from_project_structure(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_certificate_status_for_multiple_participants(request):
     try:
         with transaction.atomic():
@@ -4030,6 +4051,11 @@ def update_certificate_status_for_multiple_participants(request):
 
 
 class GetAllBatchesCoachDetails(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer"),
+    ]
+
     def get(self, request, project_id):
         try:
             batches = SchedularBatch.objects.filter(project__id=project_id)
@@ -4095,6 +4121,11 @@ class GetAllBatchesCoachDetails(APIView):
 
 
 class GetAllBatchesParticipantDetails(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer"),
+    ]
+
     def get(self, request, project_id):
         try:
             batches = SchedularBatch.objects.filter(project__id=project_id)
@@ -4130,7 +4161,9 @@ class GetAllBatchesParticipantDetails(APIView):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer")]
+)
 def coach_inside_skill_training_or_not(request, batch_id):
     try:
         batch = get_object_or_404(SchedularBatch, pk=batch_id)
@@ -4147,7 +4180,9 @@ def coach_inside_skill_training_or_not(request, batch_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "coach", "facilitator", "hr", "learner")]
+)
 def facilitator_inside_that_batch(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
@@ -4161,7 +4196,7 @@ def facilitator_inside_that_batch(request, batch_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def delete_coach_from_that_batch(request):
     try:
         batch_id = request.data.get("batch_id")
@@ -4179,7 +4214,7 @@ def delete_coach_from_that_batch(request):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def delete_facilitator_from_that_batch(request):
     print("Data", request.data)
     try:
@@ -4200,7 +4235,7 @@ def delete_facilitator_from_that_batch(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_project_status(request):
     project_id = request.data.get("id")
 
@@ -4227,7 +4262,7 @@ def update_project_status(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_skill_dashboard_card_data(request, project_id):
     try:
         if project_id == "all":
@@ -4245,7 +4280,7 @@ def get_skill_dashboard_card_data(request, project_id):
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="ongoing"
             )
-           
+
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )
@@ -4294,7 +4329,7 @@ def get_skill_dashboard_card_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_upcoming_coaching_session_dashboard_data(request, project_id):
     try:
         current_time_seeq = timezone.now()
@@ -4333,7 +4368,7 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_past_coaching_session_dashboard_data(request, project_id):
     try:
         current_time_seeq = timezone.now()
@@ -4372,7 +4407,7 @@ def get_past_coaching_session_dashboard_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_upcoming_live_session_dashboard_data(request, project_id):
     try:
         current_time_seeq = timezone.now()
@@ -4418,7 +4453,7 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_past_live_session_dashboard_data(request, project_id):
     try:
         current_time_seeq = timezone.now()
@@ -4466,7 +4501,7 @@ def get_past_live_session_dashboard_data(request, project_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def pre_post_assessment_or_nudge_update_in_project(request):
     try:
 
