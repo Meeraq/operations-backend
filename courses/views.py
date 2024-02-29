@@ -31,7 +31,7 @@ from .models import (
     AssignmentLesson,
     AssignmentLessonResponse,
     Feedback,
-    CoachingSessionsFeedbackResponse
+    CoachingSessionsFeedbackResponse,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -64,12 +64,12 @@ from .serializers import (
     AssignmentSerializerDepthOne,
     AssignmentResponseSerializerDepthSix,
     AssignmentResponseSerializer,
-    FeedbackDepthOneSerializer
+    FeedbackDepthOneSerializer,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 from rest_framework.views import APIView
-from api.models import User, Learner, Profile, Role, Coach,SessionRequestCaas
+from api.models import User, Learner, Profile, Role, Coach, SessionRequestCaas
 from schedularApi.models import (
     LiveSession,
     SchedularBatch,
@@ -2534,23 +2534,23 @@ class AssignCourseTemplateToBatch(APIView):
 
                 if assessment_creation:
                     max_order = (
-                        Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
-                            "order__max"
-                        ]
+                        Lesson.objects.filter(course=new_course).aggregate(
+                            Max("order")
+                        )["order__max"]
                         or 0
                     )
-                    
+
                     lesson2 = Lesson.objects.create(
                         course=new_course,
                         name="Post Assessment",
                         status="draft",
                         lesson_type="assessment",
                         # Duplicate specific lesson types
-                        order=max_order+1,
+                        order=max_order + 1,
                     )
 
                     assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
-                    
+
             return Response(
                 {
                     "message": "Course assigned successfully.",
@@ -3534,7 +3534,7 @@ class GetAllNudgesOfSchedularProjects(APIView):
 
     def get(self, request, project_id):
         try:
-            
+
             data = []
             courses = None
             if project_id == "all":
@@ -3569,8 +3569,6 @@ class GetAllNudgesOfSchedularProjects(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": "Failed to get data"}, status=500)
-
-
 
 
 class CreateAssignmentLesson(APIView):
@@ -3765,22 +3763,25 @@ def submit_feedback(request, feedback_id, learner_id):
         return Response(
             {"error": "Failed to submit feedback."}, status=status.HTTP_404_NOT_FOUND
         )
-    
-    caas_session_id = request.data.get('caas_session_id','')
-    schedular_session_id = request.data.get('schedular_session_id','')
-    caas_session=None
+
+    caas_session_id = request.data.get("caas_session_id", "")
+    schedular_session_id = request.data.get("schedular_session_id", "")
+    caas_session = None
     schedular_session = None
     if caas_session_id:
-        caas_session = SessionRequestCaas.objects.get(id = caas_session_id)
+        caas_session = SessionRequestCaas.objects.get(id=caas_session_id)
     if schedular_session_id:
-        schedular_session = SchedularSessions.objects.get(id = schedular_session_id)
+        schedular_session = SchedularSessions.objects.get(id=schedular_session_id)
     if caas_session or schedular_session:
         answers_data = request.data.get("answers", [])
         serializer = AnswerSerializer(data=answers_data, many=True)
         if serializer.is_valid():
             answers = serializer.save()
             coaching_session_response = CoachingSessionsFeedbackResponse.objects.create(
-                feedback=feedback, learner=learner, caas_session = caas_session, schedular_session = schedular_session
+                feedback=feedback,
+                learner=learner,
+                caas_session=caas_session,
+                schedular_session=schedular_session,
             )
             coaching_session_response.answers.set(answers)
             coaching_session_response.save()
@@ -3791,13 +3792,72 @@ def submit_feedback(request, feedback_id, learner_id):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     else:
         return Response(
-                {"error": "Failed to submit feedback"}, status=status.HTTP_200_OK
-            )
+            {"error": "Failed to submit feedback"}, status=status.HTTP_200_OK
+        )
 
-@api_view(['GET'])
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_feedback(request, feedback_id):
     feedback = Feedback.objects.get(id=feedback_id)
     serializer = FeedbackDepthOneSerializer(feedback)
     return Response(serializer.data)
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_end_meeting_feedback_response_data(request):
+
+    try:
+        coach_session_feedback_responses = (
+            CoachingSessionsFeedbackResponse.objects.all()
+        )
+        data = []
+        for coach_session_feedback_response in coach_session_feedback_responses:
+            temp = {}
+            cass_session = coach_session_feedback_response.caas_session
+            if cass_session:
+                if cass_session.coach:
+                    coach_name = (
+                        cass_session.coach.first_name
+                        + " "
+                        + cass_session.coach.last_name
+                    )
+
+                else:
+                    coach_name = None
+
+                temp = {
+                    "coach_name": coach_name,
+                    "project_name": cass_session.project.name,
+                    "prg_name": cass_session.project.organisation.name,
+                    "coachee_name": cass_session.learner.name,
+                    "session_type": cass_session.session_type,
+                    "session_number": cass_session.session_number,
+                    "type": "CAAS",
+                }
+            else:
+                seeq_session = coach_session_feedback_response.seeq_session
+
+                temp = {
+                    "coach_name": seeq_session.availibility.coach.first_name
+                    + " "
+                    + seeq_session.availibility.coach.last_name,
+                    "project_name": seeq_session.coaching_session.batch.project.name,
+                    "prg_name": seeq_session.coaching_session.batch.project.organisation.name,
+                    "coachee_name": seeq_session.learner.name,
+                    "session_type": seeq_session.coaching_session.session_type,
+                    "session_number": seeq_session.coaching_session.coaching_session_number,
+                    "type": "SEEQ",
+                }
+
+            for answer in coach_session_feedback_responses.answers.all():
+                if answer.question.type == "rating_1_to_5":
+                    temp["sesson_rating"] = answer.rating
+                    break
+
+            data.append(temp)
+
+        return Response(data)
+    except Exception as e:
+        print(str(e))

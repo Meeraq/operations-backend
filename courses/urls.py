@@ -383,4 +383,8 @@ urlpatterns = [
         "submit-session-feedback/<int:feedback_id>/<int:learner_id>/",
         views.submit_feedback,
     ),
+    path(
+        "get-end-meeting-feedback-response-data/",
+        views.get_end_meeting_feedback_response_data,
+    ),
 ]
