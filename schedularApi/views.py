@@ -631,9 +631,8 @@ def get_batch_calendar(request, batch_id):
                     Q(status="public"),
                     ~Q(lesson_type="feedback"),
                 )
-                lessons_serializer = LessonSerializer(lessons, many=True)
                 completed_lesson_count = completed_lessons_length
-                total_lesson_count = len(lessons_serializer.data)
+                total_lesson_count = lessons.count()
                 participant["progress"] = 0
                 if total_lesson_count > 0:
                     participant["progress"] = int(
@@ -4547,3 +4546,24 @@ def add_facilitator_to_batch(request, batch_id):
         live_session.facilitator = facilitator
         live_session.save()
     return Response({"message": "Facilitator added successfully."}, status=201)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def show_facilitator_inside_courses(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+        all_live_session=LiveSession.objects.filter(batch=batch)
+        facilitators = set()
+        for live_session in all_live_session:
+            if live_session.facilitator:
+                facilitators.add(live_session.facilitator)
+
+        facilitator_serializer = FacilitatorSerializer(list(facilitators), many=True)
+        return Response({"facilitators": facilitator_serializer.data}, status=status.HTTP_200_OK)
+
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

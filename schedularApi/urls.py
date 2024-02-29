@@ -245,4 +245,6 @@ urlpatterns = [
         views.pre_post_assessment_or_nudge_update_in_project,
     ),
     path("batch/add-facilitator/<int:batch_id>/", views.add_facilitator_to_batch),
+    path("batches/facilitators/<str:batch_id>/", views.show_facilitator_inside_courses),
+    
 ]
