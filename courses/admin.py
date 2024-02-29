@@ -23,6 +23,8 @@ from .models import (
     Nudge,
     AssignmentLesson,
     AssignmentLessonResponse,
+    Feedback, 
+    CoachingSessionsFeedbackResponse
 )
 
 # Register your models here.
@@ -49,3 +51,5 @@ admin.site.register(ThinkificLessonCompleted)
 admin.site.register(Nudge)
 admin.site.register(AssignmentLesson)
 admin.site.register(AssignmentLessonResponse)
+admin.site.register(Feedback)
+admin.site.register(CoachingSessionsFeedbackResponse)
