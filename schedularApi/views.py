@@ -4760,10 +4760,16 @@ def update_coach_price(request, coach_price_id):
 @permission_classes([IsAuthenticated])
 def update_price_in_project_structure(request):
     try:
-        project_id = request.data.get("project_id")
+
+        project_id = int(request.data.get("project_id"))
         price = request.data.get("price")
         session_type = request.data.get("session_type")
         order = request.data.get("order")
+
+        project = SchedularProject.objects.get(id=project_id)
+        for session in project.project_structure:
+            if session["session_type"] == session_type and session["order"] == order:
+                session["price"] = price
 
         if session_type in [
             "check_in_session",
@@ -4772,25 +4778,21 @@ def update_price_in_project_structure(request):
             "virtual_session",
         ]:
             facilitator_pricing = FacilitatorPricing.objects.filter(
-                project__id=int(project_id),
-                session_type=session_type,
-                order=order,
+                project_id=project_id, session_type=session_type, order=order
             ).first()
             if facilitator_pricing:
                 facilitator_pricing.price = price
-        elif session_type in [
-            "laser_coaching_session",
-            "mentoring_session",
-        ]:
+                facilitator_pricing.save()
+        elif session_type in ["laser_coaching_session", "mentoring_session"]:
             coach_pricing = CoachPricing.objects.filter(
-                project__id=int(project_id),
-                session_type=session_type,
-                order=order,
+                project_id=project_id, session_type=session_type, order=order
             ).first()
             if coach_pricing:
                 coach_pricing.price = price
-        return Response({"message": "Price updated successfully."}, status=201)
+                coach_pricing.save()
 
+        return Response({"message": "Price updated successfully."}, status=201)
+    
     except Exception as e:
         print(str(e))
-        return Response({"error": "Failed to update price."}, status=201)
+        return Response({"error": "Failed to update price"}, status=500)
