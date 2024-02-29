@@ -364,4 +364,5 @@ urlpatterns = [
         views.update_reminders_of_project,
         name="update_reminders_of_project",
     ),
+    path("api-logs/", views.get_all_api_logs, name="api-logs"),
 ]

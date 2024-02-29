@@ -69,6 +69,7 @@ from .serializers import (
     FinanceDepthOneSerializer,
     PmoSerializer,
     FacilitatorDepthOneSerializer,
+    APILogSerializer,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor
@@ -846,7 +847,7 @@ def update_coach_profile(request, id):
     try:
         coach = Coach.objects.get(id=id)
         mutable_data = request.data.copy()
-     
+
     except Coach.DoesNotExist:
         return Response(status=404)
 
@@ -1328,9 +1329,6 @@ def coach_session_list(request, coach_id):
     return Response({"projects": project_serializer.data})
 
 
-
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_coach(request):
@@ -1379,7 +1377,6 @@ def add_coach(request):
     # Check if required data is provided
     if not all(
         [
-          
             first_name,
             last_name,
             email,
@@ -3644,7 +3641,6 @@ def add_mulitple_coaches(request):
                         status=400,
                     )
 
-               
                 user = User.objects.filter(email=email).first()
                 if not user:
                     temp_password = "".join(
@@ -7558,7 +7554,9 @@ class UpdateCoachContract(APIView):
         coach_id = request.data.get("coach")
         project_id = request.data.get("project")
         try:
-            contract = CoachContract.objects.get(coach__id=coach_id, project__id=project_id)
+            contract = CoachContract.objects.get(
+                coach__id=coach_id, project__id=project_id
+            )
         except CoachContract.DoesNotExist:
             return Response(
                 {"error": "Coach Contract not found."}, status=status.HTTP_404_NOT_FOUND
@@ -8412,3 +8410,15 @@ def update_reminders_of_project(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+from rest_framework.pagination import PageNumberPagination
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_api_logs(request):
+    paginator = PageNumberPagination()
+    paginator.page_size = 200
+    logs = APILog.objects.exclude(path__startswith="/admin").order_by("-created_at")
+    result_page = paginator.paginate_queryset(logs, request)
+    serializer = APILogSerializer(result_page, many=True)
+    return paginator.get_paginated_response(serializer.data)
