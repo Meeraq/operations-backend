@@ -521,8 +521,8 @@ def create_outlook_calendar_invite(
 ):
     event_create_url = "https://graph.microsoft.com/v1.0/me/events"
     try:
-      
-        user_token = UserToken.objects.get(user_profile__user__username=user_email)    
+
+        user_token = UserToken.objects.get(user_profile__user__username=user_email)
         new_access_token = refresh_microsoft_access_token(user_token)
         if not new_access_token:
             new_access_token = user_token.access_token
@@ -608,6 +608,38 @@ def delete_outlook_calendar_invite(calendar_invite):
 
     except Exception as e:
         return {"error": "An error occurred", "details": str(e)}
+
+
+def update_outlook_attendees(calendar_invite, new_attendees):
+    try:
+        user_token = UserToken.objects.get(
+            user_profile__user__username=calendar_invite.creator
+        )
+        new_access_token = refresh_microsoft_access_token(user_token)
+        if not new_access_token:
+            new_access_token = user_token.access_token
+
+        graph_api_url = (
+            f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        )
+
+        headers = {
+            "Authorization": f"Bearer {new_access_token}",
+            "Content-Type": "application/json",
+        }
+
+        response = requests.patch(
+            graph_api_url, json={"attendees": new_attendees}, headers=headers
+        )
+
+        if response.status_code == 200:
+            print("Attendees updated successfully.")
+
+        else:
+            print(f"Failed to update attendees: {response.text}")
+
+    except Exception as e:
+        print(str(e))
 
 
 def create_notification(user, path, message):
@@ -5601,7 +5633,15 @@ def schedule_session_directly(request, session_id):
                                 "type": "required",
                             }
                         )
-
+                    else:
+                        attendees.append(
+                            {
+                                "emailAddress": {
+                                    "address": pmo.email,
+                                },
+                                "type": "required",
+                            }
+                        )
                     attendees.append(
                         {
                             "emailAddress": {
@@ -6005,9 +6045,57 @@ class UpdateInviteesView(APIView):
 
         try:
             invitee_emails = request.data.get("inviteeEmails", [])
-            print(invitee_emails)
+
+            existing_calendar_invite = CalendarInvites.objects.filter(
+                caas_session=session_request
+            ).first()
+
             session_request.invitees = get_trimmed_emails(invitee_emails)
             session_request.save()
+            try:
+                attendees = []
+
+                for invitee in session_request.invitees:
+                    attendee = {
+                        "emailAddress": {
+                            "address": invitee,
+                        },
+                        "type": "required",
+                    }
+                    attendees.append(attendee)
+                if session_request.coach:
+                    attendees.append(
+                        {
+                            "emailAddress": {
+                                "address": session_request.coach.email,
+                            },
+                            "type": "required",
+                        }
+                    )
+                if session_request.learner:
+                    attendees.append(
+                        {
+                            "emailAddress": {
+                                "address": session_request.learner.email,
+                            },
+                            "type": "required",
+                        }
+                    )
+                if session_request.pmo:
+                    attendees.append(
+                        {
+                            "emailAddress": {
+                                "address": session_request.pmo.email,
+                            },
+                            "type": "required",
+                        }
+                    )
+
+                update_outlook_attendees(existing_calendar_invite, attendees)
+
+            except Exception as e:
+                print(str(e))
+
             return Response(
                 {"message": " Invitees Updated Sucessfully"}, status=status.HTTP_200_OK
             )
