@@ -74,6 +74,11 @@ urlpatterns = [
     ),
     path("vendors/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
     path(
+        "invoices/<str:status>/",
+        views.get_invoices_by_status,
+        name="get_invoices_by_status",
+    ),
+    path(
         "invoices/<int:invoice_id>/update_status/",
         views.update_invoice_status,
     ),

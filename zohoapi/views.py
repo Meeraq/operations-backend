@@ -65,6 +65,7 @@ wkhtmltopdf_path = os.environ.get(
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
 
+
 def get_line_items_details(invoices):
     res = {}
     for invoice in invoices:
@@ -1201,6 +1202,57 @@ def get_all_invoices(request):
             )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_invoices_by_status(request, status):
+    try:
+        access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if access_token_purchase_data:
+            all_bills = fetch_bills(organization_id)
+            invoices = InvoiceData.objects.all()
+            invoices = filter_invoice_data(invoices)
+            invoice_serializer = InvoiceDataSerializer(invoices, many=True)
+            res = []
+            for invoice in invoice_serializer.data:
+                matching_bill = next(
+                    (
+                        bill
+                        for bill in all_bills
+                        if bill.get(env("INVOICE_FIELD_NAME"))
+                        == invoice["invoice_number"]
+                    ),
+                    None,
+                )
+                invoice_data = {**invoice, "bill": matching_bill}
+                if status == "approved":
+                    if invoice_data["bill"]:
+                        if (
+                            "status" in invoice_data["bill"]
+                            and not invoice_data["bill"]["status"] == "paid"
+                        ):
+                            res.append(invoice_data)
+                    elif invoice_data['status'] == "approved":
+                        res.append(invoice_data)
+                elif status == "paid":
+                    if (
+                        invoice_data["bill"]
+                        and invoice_data["bill"]["status"] == "paid"
+                    ):
+                        res.append(invoice_data)
+
+            return Response(res, status=200)
+        else:
+            return Response(
+                {
+                    "error": "Access token not found. Please generate an access token first."
+                },
+                status=401,
+            )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to load"}, status=400)
 
 
 @api_view(["PUT"])
