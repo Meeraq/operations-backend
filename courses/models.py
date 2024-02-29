@@ -1,11 +1,17 @@
 from django.db import models
 from api.models import Learner
-from schedularApi.models import SchedularBatch, LiveSession, CoachingSession
+from schedularApi.models import (
+    SchedularBatch,
+    LiveSession,
+    CoachingSession,
+    SchedularSessions,
+)
 import os
 from django.core.exceptions import ValidationError
 from django_celery_beat.models import PeriodicTask
 import uuid
 from assessmentApi.models import Assessment as AssessmentModal
+from api.models import SessionRequestCaas
 
 # Create your models here.
 
@@ -161,7 +167,7 @@ class File(models.Model):
     def __str__(self):
         return self.name
 
-    
+
 class AssignmentLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
@@ -229,6 +235,7 @@ class FeedbackLessonResponse(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(auto_now=True)
 
+
 class AssignmentLessonResponse(models.Model):
     assignment_lesson = models.ForeignKey(AssignmentLesson, on_delete=models.CASCADE)
     file = models.FileField(upload_to="assignment-files/")
@@ -279,3 +286,26 @@ class Nudge(models.Model):
 
     def __str__(self):
         return self.name
+
+class Feedback(models.Model):
+    questions = models.ManyToManyField(Question)
+    unique_id = models.CharField(
+        max_length=225,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class CoachingSessionsFeedbackResponse(models.Model):
+    caas_session = models.ForeignKey(
+        SessionRequestCaas, on_delete=models.CASCADE, blank=True, null=True
+    )
+    schedular_session = models.ForeignKey(
+        SchedularSessions, on_delete=models.CASCADE, blank=True, null=True
+    )
+    feedback = models.ForeignKey(Feedback, on_delete=models.CASCADE)
+    answers = models.ManyToManyField(Answer)
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)

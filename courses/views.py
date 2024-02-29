@@ -30,6 +30,8 @@ from .models import (
     Nudge,
     AssignmentLesson,
     AssignmentLessonResponse,
+    Feedback,
+    CoachingSessionsFeedbackResponse
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -62,11 +64,12 @@ from .serializers import (
     AssignmentSerializerDepthOne,
     AssignmentResponseSerializerDepthSix,
     AssignmentResponseSerializer,
+    FeedbackDepthOneSerializer
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 from rest_framework.views import APIView
-from api.models import User, Learner, Profile, Role, Coach
+from api.models import User, Learner, Profile, Role, Coach,SessionRequestCaas
 from schedularApi.models import (
     LiveSession,
     SchedularBatch,
@@ -3747,3 +3750,54 @@ class UpdateAssignmentLessonFile(APIView):
                 {"message": f"Failed to update file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def submit_feedback(request, feedback_id, learner_id):
+    try:
+        feedback = get_object_or_404(Feedback, id=feedback_id)
+        learner = get_object_or_404(Learner, id=learner_id)
+    except (
+        Feedback.DoesNotExist,
+        Learner.DoesNotExist,
+    ) as e:
+        return Response(
+            {"error": "Failed to submit feedback."}, status=status.HTTP_404_NOT_FOUND
+        )
+    
+    caas_session_id = request.data.get('caas_session_id','')
+    schedular_session_id = request.data.get('schedular_session_id','')
+    caas_session=None
+    schedular_session = None
+    if caas_session_id:
+        caas_session = SessionRequestCaas.objects.get(id = caas_session_id)
+    if schedular_session_id:
+        schedular_session = SchedularSessions.objects.get(id = schedular_session_id)
+    if caas_session or schedular_session:
+        answers_data = request.data.get("answers", [])
+        serializer = AnswerSerializer(data=answers_data, many=True)
+        if serializer.is_valid():
+            answers = serializer.save()
+            coaching_session_response = CoachingSessionsFeedbackResponse.objects.create(
+                feedback=feedback, learner=learner, caas_session = caas_session, schedular_session = schedular_session
+            )
+            coaching_session_response.answers.set(answers)
+            coaching_session_response.save()
+            return Response(
+                {"detail": "Feedback submitted successfully"}, status=status.HTTP_200_OK
+            )
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        return Response(
+                {"error": "Failed to submit feedback"}, status=status.HTTP_200_OK
+            )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_feedback(request, feedback_id):
+    feedback = Feedback.objects.get(id=feedback_id)
+    serializer = FeedbackDepthOneSerializer(feedback)
+    return Response(serializer.data)
+

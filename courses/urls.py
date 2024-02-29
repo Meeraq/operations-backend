@@ -375,4 +375,12 @@ urlpatterns = [
         "update_assignments_responses/",
         UpdateAssignmentLessonFile.as_view(),
     ),
+    path(
+        "get-feedback/<int:feedback_id>/",
+        views.get_feedback,
+    ),
+    path(
+        "submit-session-feedback/<int:feedback_id>/<int:learner_id>/",
+        views.submit_feedback,
+    ),
 ]
