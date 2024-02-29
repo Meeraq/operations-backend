@@ -345,9 +345,11 @@ def create_facilitator_pricing(batch, facilitator):
                 session_type=live_session.session_type,
                 live_session_number=live_session.live_session_number,
                 order=live_session.order,
-                price=session["price"],
                 duration=live_session.duration,
             )
+            if created:
+                facilitator_pricing.price = session["price"]
+                facilitator_pricing.save()
 
 
 def delete_facilitator_pricing(batch, facilitator):
@@ -1352,8 +1354,10 @@ def update_batch(request, batch_id):
                                 session_type=coaching_session.session_type,
                                 coaching_session_number=coaching_session.coaching_session_number,
                                 order=coaching_session.order,
-                                price=session["price"],
                             )
+                            if created:
+                                coach_pricing.price = session["price"]
+                                coach_pricing.save()
 
             serializer = SchedularBatchSerializer(
                 batch, data=request.data, partial=True
@@ -4770,29 +4774,31 @@ def update_price_in_project_structure(request):
         for session in project.project_structure:
             if session["session_type"] == session_type and session["order"] == order:
                 session["price"] = price
-
+        project.save()
         if session_type in [
             "check_in_session",
             "in_person_session",
             "kickoff_session",
             "virtual_session",
         ]:
-            facilitator_pricing = FacilitatorPricing.objects.filter(
+            facilitator_pricings = FacilitatorPricing.objects.filter(
                 project_id=project_id, session_type=session_type, order=order
-            ).first()
-            if facilitator_pricing:
-                facilitator_pricing.price = price
-                facilitator_pricing.save()
+            )
+            for facilitator_pricing in facilitator_pricings:
+                if facilitator_pricing:
+                    facilitator_pricing.price = price
+                    facilitator_pricing.save()
         elif session_type in ["laser_coaching_session", "mentoring_session"]:
-            coach_pricing = CoachPricing.objects.filter(
+            coach_pricings = CoachPricing.objects.filter(
                 project_id=project_id, session_type=session_type, order=order
-            ).first()
-            if coach_pricing:
-                coach_pricing.price = price
-                coach_pricing.save()
+            )
+            for coach_pricing in coach_pricings:
+                if coach_pricing:
+                    coach_pricing.price = price
+                    coach_pricing.save()
 
         return Response({"message": "Price updated successfully."}, status=201)
-    
+
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update price"}, status=500)
