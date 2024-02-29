@@ -2353,16 +2353,18 @@ class AssignCourseTemplateToBatch(APIView):
                 assessment_creation = False
                 if not original_lessons.filter(lesson_type="assessment").exists():
                     if batch.project.pre_post_assessment:
-                        assessment_creation =  True
+                        assessment_creation = True
                         lesson1 = Lesson.objects.create(
-                                course=new_course,
-                                name="Pre Assessment",
-                                status="draft",
-                                lesson_type="assessment",
-                                # Duplicate specific lesson types
-                                order=1,
-                            )
-                        assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+                            course=new_course,
+                            name="Pre Assessment",
+                            status="draft",
+                            lesson_type="assessment",
+                            # Duplicate specific lesson types
+                            order=1,
+                        )
+                        assessment1 = Assessment.objects.create(
+                            lesson=lesson1, type="pre"
+                        )
                 for original_lesson in original_lessons:
                     new_lesson = None
                     # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
@@ -3792,7 +3794,8 @@ def submit_feedback(request, feedback_id, learner_id):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     else:
         return Response(
-            {"error": "Failed to submit feedback"}, status=status.HTTP_200_OK
+            {"error": "Failed to submit feedback"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
@@ -3828,6 +3831,7 @@ def get_end_meeting_feedback_response_data(request):
                     coach_name = None
 
                 temp = {
+                    "feedback_responses_id": coach_session_feedback_response.id,
                     "coach_name": coach_name,
                     "project_name": cass_session.project.name,
                     "prg_name": cass_session.project.organisation.name,
@@ -3840,6 +3844,7 @@ def get_end_meeting_feedback_response_data(request):
                 seeq_session = coach_session_feedback_response.seeq_session
 
                 temp = {
+                    "feedback_responses_id": coach_session_feedback_response.id,
                     "coach_name": seeq_session.availibility.coach.first_name
                     + " "
                     + seeq_session.availibility.coach.last_name,
@@ -3861,3 +3866,37 @@ def get_end_meeting_feedback_response_data(request):
         return Response(data)
     except Exception as e:
         print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_session_feedback_response_data(request, feedback_response_id):
+
+    try:
+        coach_session_feedback_responses = CoachingSessionsFeedbackResponse.objects.get(
+            id=feedback_response_id
+        )
+
+        data = []
+
+        for answer in coach_session_feedback_responses.answers.all():
+
+            temp = {
+                "question": answer.question.text,
+                "rating": answer.rating,
+                "selected_answer": answer.selected_options,
+                "type": answer.question.type,
+            }
+
+            data.append(temp)
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

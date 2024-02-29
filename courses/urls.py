@@ -387,4 +387,8 @@ urlpatterns = [
         "get-end-meeting-feedback-response-data/",
         views.get_end_meeting_feedback_response_data,
     ),
+    path(
+        "get-coach-session-feedback-response-data/<int:feedback_response_id>/",
+        views.get_coach_session_feedback_response_data,
+    ),
 ]
