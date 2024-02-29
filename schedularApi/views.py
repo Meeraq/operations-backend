@@ -84,6 +84,7 @@ from api.serializers import (
     FacilitatorSerializer,
     FacilitatorBasicDetailsSerializer,
     CoachSerializer,
+    FacilitatorDepthOneSerializer
 )
 
 from courses.models import (
@@ -2861,44 +2862,37 @@ def project_report_download_session_wise(request, project_id, batch_id):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_facilitator(request):
-    first_name = request.data.get("firstName", "")
-
-    last_name = request.data.get("lastName", "")
-
-    email = request.data.get("email", "")
-
-    age = request.data.get("age", "")
-
+    first_name = request.data.get("first_name", "")
+    last_name = request.data.get("last_name", "")
+    email = request.data.get("email", "").strip().lower()
+    age = request.data.get("age")
     gender = request.data.get("gender", "")
-
-    domain = request.data.get("domain", [])
-
-    phone_country_code = request.data.get("phoneCountryCode", "")
-
+    domain = json.loads(request.data["domain"])
+    phone_country_code = request.data.get("phone_country_code", "")
     phone = request.data.get("phone", "")
-
-    level = request.data.get("level", [])
-
+    level = json.loads(request.data["level"])
     rating = request.data.get("rating", "")
-
-    area_of_expertise = request.data.get("areaOfExpertise", [])
-
-    profile_pic = request.data.get("profilePic", "")
-    education = request.data.get("education", [])
-    years_of_corporate_experience = request.data.get("corporateyearsOfExperience", "")
-    language = request.data.get("language", [])
-    job_roles = request.data.get("job_roles", [])
-    city = request.data.get("city", [])
-    country = request.data.get("country", [])
+    area_of_expertise = json.loads(request.data["area_of_expertise"])
+    profile_pic = request.data.get("profile_pic", None)
+    education = json.loads(request.data["education"])
+    years_of_corporate_experience = request.data.get("years_of_corporate_experience", "")
+    language = json.loads(request.data["language"])
+    job_roles = json.loads(request.data["job_roles"])
+    city = json.loads(request.data["city"])
+    country = json.loads(request.data["country"])
     linkedin_profile_link = request.data.get("linkedin_profile_link", "")
-    companies_worked_in = request.data.get("companies_worked_in", [])
-    other_certification = request.data.get("other_certification", [])
+    companies_worked_in = json.loads(request.data["companies_worked_in"])
+    other_certification = json.loads(request.data["other_certification"])
     currency = request.data.get("currency", "")
-    client_companies = request.data.get("client_companies", [])
-    educational_qualification = request.data.get("educational_qualification", [])
+    client_companies = json.loads(request.data["client_companies"])
+    educational_qualification = json.loads(request.data["educational_qualification"])    
     fees_per_hour = request.data.get("fees_per_hour", "")
     fees_per_day = request.data.get("fees_per_day", "")
-    topic = request.data.get("topic", [])
+    topic = json.loads(request.data["topic"])
+    corporate_experience = request.data.get("corporate_experience", "")
+    coaching_experience = request.data.get("coaching_experience", "")
+    education_pic = request.data.get("education_pic", None)
+    # education_upload_file = request.data.get("education_upload_file", None)
     username = email
     # Check if required data is provided
     if not all(
@@ -2970,6 +2964,10 @@ def add_facilitator(request):
                 other_certification=other_certification,
                 client_companies=client_companies,
                 educational_qualification=educational_qualification,
+                corporate_experience=corporate_experience,
+                coaching_experience=coaching_experience,
+                education_pic=education_pic,  
+                # education_upload_file=education_upload_file,
             )
 
             # Approve coach
@@ -2989,6 +2987,7 @@ def add_facilitator(request):
                 if user_token:
                     user_token_present = True
             except Exception as e:
+                print(str(e))
                 pass
             # send_mail_templates(
             #     "coach_templates/pmo-adds-coach-as-user.html",
@@ -3006,13 +3005,13 @@ def add_facilitator(request):
         return Response({"message": "Facilitator added successfully."}, status=201)
 
     except IntegrityError as e:
-        print(e)
+        print(str(e))
         return Response(
             {"error": "A facilitator user with this email already exists."}, status=400
         )
 
     except Exception as e:
-        print(e)
+        print(str(e))
         return Response(
             {"error": "An error occurred while creating the facilitator user."},
             status=500,
@@ -3227,9 +3226,17 @@ def update_facilitator_profile(request, id):
 
             if serializer.is_valid():
                 serializer.save()
-                user_data = get_user_data(facilitator.user.user)
-
-                return Response(user_data)
+                roles = []
+                for role in user.profile.roles.all():
+                    roles.append(role.name)
+                serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
+                return Response({
+                    **serializer.data,
+                    "roles": roles,
+                    "user": {**serializer.data["user"], "type": "facilitator"},
+                })
+                # user_data = get_user_data(facilitator.user.user)
+                # return Response(user_data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         print(str(e))

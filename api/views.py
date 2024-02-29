@@ -913,8 +913,10 @@ def update_coach_profile(request, id):
             coaches=user.profile.coach
         ).exists()
         roles = []
-        for role in roles:
+
+        for role in user.profile.roles.all():
             roles.append(role.name)
+  
         return Response(
             {
                 **depth_serializer.data,
