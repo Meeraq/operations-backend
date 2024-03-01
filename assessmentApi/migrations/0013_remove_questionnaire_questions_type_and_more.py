@@ -3,14 +3,13 @@
 from django.db import migrations, models
 
 
-from assessmentApi.models import Question, Questionnaire
 from django.db import transaction
 
 
 def update_field_correct_answer_and_populate_rating_type(apps, schema_editor):
     try:
         with transaction.atomic():
-
+            Question = apps.get_model("assessmentApi", "Question")
             for question in Question.objects.all():
                 prev_correct_answer = question.correct_answer
                 if prev_correct_answer:
@@ -21,11 +20,6 @@ def update_field_correct_answer_and_populate_rating_type(apps, schema_editor):
 
                 question.save()
 
-            for questionnaire in Questionnaire.objects.filter(
-                questions_type="single_correct"
-            ):
-                questionnaire.questions_type = "correct_answer_type"
-                questionnaire.save()
 
     except Exception as e:
         print(str(e))
