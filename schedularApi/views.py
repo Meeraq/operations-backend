@@ -102,7 +102,11 @@ from courses.serializers import (
     CourseEnrollmentDepthOneSerializer,
 )
 from django.core.serializers import serialize
-from courses.views import create_or_get_learner,add_question_to_feedback_lesson,nps_default_feed_questions
+from courses.views import (
+    create_or_get_learner,
+    add_question_to_feedback_lesson,
+    nps_default_feed_questions,
+)
 from assessmentApi.models import (
     Assessment,
     ParticipantUniqueId,
@@ -641,7 +645,7 @@ def get_batch_calendar(request, batch_id):
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
                 "batch_name": batch_for_response.name,
-                "project_id":batch_for_response.project.id,
+                "project_id": batch_for_response.project.id,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -1235,6 +1239,18 @@ def update_batch(request, batch_id):
         serializer.save()
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = SchedularBatchSerializer(batch)
+    return Response({**serializer.data, "is_nudge_enabled" : batch.project.nudges})
+
 
 
 @api_view(["GET"])
@@ -2698,7 +2714,7 @@ def send_live_session_link_whatsapp(request):
                         },
                         {
                             "name": "description",
-                            "value": ( 
+                            "value": (
                                 (
                                     live_session.description
                                     if live_session.description
@@ -2708,7 +2724,7 @@ def send_live_session_link_whatsapp(request):
                                     f" Please join using this link: {live_session.meeting_link}"
                                     if live_session.meeting_link
                                     else ""
-                                )    
+                                )
                             ),
                         },
                     ],
@@ -3710,10 +3726,17 @@ def add_new_session_in_project_structure(request):
                         )
                         unique_id = uuid.uuid4()
                         feedback_lesson = FeedbackLesson.objects.create(
-                            lesson=new_feedback_lesson, unique_id=unique_id, live_session=live_session
+                            lesson=new_feedback_lesson,
+                            unique_id=unique_id,
+                            live_session=live_session,
                         )
-                        if live_session.session_type in ["in_person_session", "virtual_session"]:        
-                            add_question_to_feedback_lesson(feedback_lesson, nps_default_feed_questions)
+                        if live_session.session_type in [
+                            "in_person_session",
+                            "virtual_session",
+                        ]:
+                            add_question_to_feedback_lesson(
+                                feedback_lesson, nps_default_feed_questions
+                            )
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     coaching_session_number = (
                         CoachingSession.objects.filter(
@@ -4245,7 +4268,7 @@ def get_skill_dashboard_card_data(request, project_id):
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="ongoing"
             )
-           
+
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )

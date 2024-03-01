@@ -35,11 +35,6 @@ class Course(models.Model):
         CourseTemplate, on_delete=models.SET_NULL, blank=True, null=True
     )
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
-    nudge_start_date = models.DateField(default=None, blank=True, null=True)
-    nudge_frequency = models.CharField(max_length=50, default="", blank=True, null=True)
-    nudge_periodic_task = models.ForeignKey(
-        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
-    )
 
     def __str__(self):
         return self.name
@@ -161,7 +156,7 @@ class File(models.Model):
     def __str__(self):
         return self.name
 
-    
+
 class AssignmentLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
@@ -229,6 +224,7 @@ class FeedbackLessonResponse(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(auto_now=True)
 
+
 class AssignmentLessonResponse(models.Model):
     assignment_lesson = models.ForeignKey(AssignmentLesson, on_delete=models.CASCADE)
     file = models.FileField(upload_to="assignment-files/")
@@ -272,7 +268,10 @@ class Nudge(models.Model):
     content = models.TextField()
     file = models.FileField(upload_to="nudge_files/", blank=True, null=True)
     order = models.IntegerField()
-    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    # course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    batch = models.ForeignKey(
+        SchedularBatch, on_delete=models.CASCADE, null=True, blank=True, default=None
+    )
     is_sent = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

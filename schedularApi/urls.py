@@ -56,6 +56,7 @@ urlpatterns = [
     ),
     path("coaches/", views.get_coaches),
     path("batch/<int:batch_id>/", views.update_batch),
+    path("batches/get/<int:batch_id>/", views.get_batch),
     path(
         "create-coach-availibilty/",
         views.create_coach_schedular_availibilty,
@@ -219,9 +220,8 @@ urlpatterns = [
         "update-project-status/",
         views.update_project_status,
     ),
-
-      path(
-        "get-skill-dashboard-card-data/<str:project_id>/", 
+    path(
+        "get-skill-dashboard-card-data/<str:project_id>/",
         views.get_skill_dashboard_card_data,
     ),
     path(
@@ -240,7 +240,7 @@ urlpatterns = [
         "get-past-coaching-session-dashboard-data/<str:project_id>/",
         views.get_past_coaching_session_dashboard_data,
     ),
-     path(
+    path(
         "pre-post-assessment-or-nudge-update-in-project/",
         views.pre_post_assessment_or_nudge_update_in_project,
     ),

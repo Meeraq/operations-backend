@@ -49,6 +49,11 @@ class SchedularBatch(models.Model):
     facilitator = models.ManyToManyField(Facilitator, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
+    nudge_start_date = models.DateField(default=None, blank=True, null=True)
+    nudge_frequency = models.CharField(max_length=50, default="", blank=True, null=True)
+    nudge_periodic_task = models.ForeignKey(
+        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
+    )
 
 
 class RequestAvailibilty(models.Model):
@@ -106,7 +111,9 @@ class SchedularSessions(models.Model):
     )
     coaching_session = models.ForeignKey(CoachingSession, on_delete=models.CASCADE)
     status = models.CharField(max_length=50, default="pending", blank=True)
-    auto_generated_status = models.CharField(max_length=50, default="pending", blank=True)
+    auto_generated_status = models.CharField(
+        max_length=50, default="pending", blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
 

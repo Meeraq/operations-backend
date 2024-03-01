@@ -14,6 +14,7 @@ from schedularApi.models import (
     SchedularSessions,
     RequestAvailibilty,
     CoachSchedularAvailibilty,
+    SchedularBatch,
 )
 from django.utils import timezone
 from api.views import (
@@ -1513,16 +1514,15 @@ def coach_has_to_give_slots_availability_reminder():
 
 
 @shared_task
-def schedule_nudges(course_id):
-    course = Course.objects.get(id=course_id)
-    nudges = Nudge.objects.filter(course__id=course_id).order_by("order")
-
+def schedule_nudges(batch_id):
+    batch = SchedularBatch.objects.get(id=batch_id)
+    nudges = Nudge.objects.filter(batch__id=batch_id).order_by("order")
     desired_time = time(8, 30)
-    nudge_scheduled_for = datetime.combine(course.nudge_start_date, desired_time)
+    nudge_scheduled_for = datetime.combine(batch_id.nudge_start_date, desired_time)
     for nudge in nudges:
         if (
-            nudge.course.batch.project.nudges
-            and nudge.course.batch.project.status == "ongoing"
+            nudge.batch.project.nudges
+            and nudge.batch.project.status == "ongoing"
         ):
             clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
             periodic_task = PeriodicTask.objects.create(
@@ -1533,7 +1533,7 @@ def schedule_nudges(course_id):
                 one_off=True,
             )
             nudge_scheduled_for = nudge_scheduled_for + timedelta(
-                int(course.nudge_frequency)
+                int(batch.nudge_frequency)
             )
 
 
@@ -1556,8 +1556,8 @@ def get_file_extension(url):
 def send_nudge(nudge_id):
     nudge = Nudge.objects.get(id=nudge_id)
     if (
-        nudge.course.batch.project.nudges
-        and nudge.course.batch.project.status == "ongoing"
+        nudge.batch.project.nudges
+        and nudge.batch.project.status == "ongoing"
     ):
         subject = f"New Nudge: {nudge.name}"
         if nudge.is_sent:
@@ -1570,7 +1570,7 @@ def send_nudge(nudge_id):
             attachment_path = nudge.file.url
             file_content = get_file_content(nudge.file.url)
 
-        for learner in nudge.course.batch.learners.all():
+        for learner in nudge.batch.learners.all():
             email = EmailMessage(
                 subject,
                 email_message,
