@@ -102,11 +102,16 @@ from courses.serializers import (
     CourseEnrollmentDepthOneSerializer,
 )
 from django.core.serializers import serialize
-from courses.views import create_or_get_learner,add_question_to_feedback_lesson,nps_default_feed_questions
+from courses.views import (
+    create_or_get_learner,
+    add_question_to_feedback_lesson,
+    nps_default_feed_questions,
+)
 from assessmentApi.models import (
     Assessment,
     ParticipantUniqueId,
     ParticipantObserverMapping,
+    ParticipantResponse,
 )
 from io import BytesIO
 from api.serializers import LearnerSerializer
@@ -641,7 +646,7 @@ def get_batch_calendar(request, batch_id):
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
                 "batch_name": batch_for_response.name,
-                "project_id":batch_for_response.project.id,
+                "project_id": batch_for_response.project.id,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -2698,7 +2703,7 @@ def send_live_session_link_whatsapp(request):
                         },
                         {
                             "name": "description",
-                            "value": ( 
+                            "value": (
                                 (
                                     live_session.description
                                     if live_session.description
@@ -2708,7 +2713,7 @@ def send_live_session_link_whatsapp(request):
                                     f" Please join using this link: {live_session.meeting_link}"
                                     if live_session.meeting_link
                                     else ""
-                                )    
+                                )
                             ),
                         },
                     ],
@@ -3710,10 +3715,17 @@ def add_new_session_in_project_structure(request):
                         )
                         unique_id = uuid.uuid4()
                         feedback_lesson = FeedbackLesson.objects.create(
-                            lesson=new_feedback_lesson, unique_id=unique_id, live_session=live_session
+                            lesson=new_feedback_lesson,
+                            unique_id=unique_id,
+                            live_session=live_session,
                         )
-                        if live_session.session_type in ["in_person_session", "virtual_session"]:        
-                            add_question_to_feedback_lesson(feedback_lesson, nps_default_feed_questions)
+                        if live_session.session_type in [
+                            "in_person_session",
+                            "virtual_session",
+                        ]:
+                            add_question_to_feedback_lesson(
+                                feedback_lesson, nps_default_feed_questions
+                            )
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     coaching_session_number = (
                         CoachingSession.objects.filter(
@@ -4245,7 +4257,7 @@ def get_skill_dashboard_card_data(request, project_id):
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="ongoing"
             )
-           
+
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )
@@ -4495,4 +4507,106 @@ def pre_post_assessment_or_nudge_update_in_project(request):
                 "error": "Failed to perform operation.",
             },
             status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_project_wise_progress_data(request, project_id):
+    try:
+        batch_id = request.query_params.get("batch_id", None)
+
+        project = SchedularProject.objects.get(id=int(project_id))
+
+        if batch_id:
+            batches = SchedularBatch.objects.filter(id=int(batch_id))
+        else:
+            batches = SchedularBatch.objects.filter(project=project)
+
+        data = []
+
+        for batch in batches:
+
+            assessments = Assessment.objects.filter(
+                assessment_modal__lesson__course__batch=batch
+            )
+            pre_assessment = assessments.filter(assessment_timing="pre").first()
+            post_assessment = assessments.filter(assessment_timing="post").first()
+
+            for participant in batch.learners.all():
+
+                temp = {"participant_name": participant.name, "batch_name": batch.name}
+
+                pre_participant_response = ParticipantResponse.objects.filter(
+                    assessment=pre_assessment, participant=participant
+                ).first()
+                post_participant_response = ParticipantResponse.objects.filter(
+                    assessment=post_assessment, participant=participant
+                ).first()
+
+                if project and project.pre_post_assessment:
+                    temp["pre_assessment"] = "Yes" if pre_participant_response else "No"
+
+                for session in project.project_structure:
+                    session_type = session["session_type"]
+                    if session_type in [
+                        "live_session",
+                        "check_in_session",
+                        "in_person_session",
+                        "kickoff_session",
+                        "virtual_session",
+                    ]:
+                        live_session = LiveSession.objects.filter(
+                            batch=batch,
+                            session_type=session_type,
+                            order=int(session["order"]),
+                        ).first()
+                        if live_session:
+                            temp[
+                                f"{get_live_session_name(session_type)} {live_session.live_session_number}"
+                            ] = (
+                                "Yes"
+                                if participant.name in live_session.attendees
+                                else "No"
+                            )
+
+                    elif session_type in [
+                        "laser_coaching_session",
+                        "mentoring_session",
+                    ]:
+                        coaching_session = CoachingSession.objects.filter(
+                            batch=batch,
+                            order=int(session["order"]),
+                            session_type=session_type,
+                        ).first()
+                        if coaching_session:
+                            schedular_session = SchedularSessions.objects.filter(
+                                coaching_session=coaching_session
+                            ).first()
+                            if schedular_session:
+                                temp[
+                                    f"{session_type} {schedular_session.coaching_session.coaching_session_number}"
+                                ] = (
+                                    "Yes"
+                                    if schedular_session.status == "completed"
+                                    else "No"
+                                )
+                            else:
+                                temp[
+                                    f"{session_type} {coaching_session.coaching_session_number}"
+                                ] = "No"
+                        else:
+                            temp[f"{session_type} {session['order']}"] = "No"
+
+                if project and project.pre_post_assessment:
+                    temp["post_assessment"] = (
+                        "Yes" if post_participant_response else "No"
+                    )
+                data.append(temp)
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )

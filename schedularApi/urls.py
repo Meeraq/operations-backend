@@ -244,4 +244,9 @@ urlpatterns = [
         "pre-post-assessment-or-nudge-update-in-project/",
         views.pre_post_assessment_or_nudge_update_in_project,
     ),
+    path(
+        "get-project-wise-progress-data/<int:project_id>/",
+        views.get_project_wise_progress_data,
+    ),
 ]
+
