@@ -31,6 +31,12 @@ class Question(models.Model):
         ("1-5", "1-5"),
         ("1-10", "1-10"),
     ]
+
+    RESPONSE_CHOICES = [
+        ("correct_answer", "Correct Answer"),
+        ("rating_type", "Rating Type"),
+    ]
+
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
     type = models.CharField(max_length=10, choices=QUESTION_TYPES, blank=True)
     self_question = models.TextField()
@@ -42,6 +48,7 @@ class Question(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     label = models.JSONField(blank=True, null=True)
     correct_answer = models.JSONField(default=list, blank=True)
+    response_type = models.CharField(max_length=50, choices=RESPONSE_CHOICES, blank=True)
 
     def __str__(self):
         return self.self_question
@@ -59,9 +66,6 @@ class Questionnaire(models.Model):
     name = models.CharField(max_length=255, blank=True, null=True)
     type = models.CharField(max_length=10, choices=QUESTIONNAIRE_TYPES, blank=True)
     questions = models.ManyToManyField(Question, blank=True)
-    questions_type = models.CharField(
-        max_length=255, choices=QUESTIONS_TYPE, default="correct_answer_type"
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
