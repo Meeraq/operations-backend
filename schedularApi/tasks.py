@@ -22,7 +22,7 @@ from api.views import (
     generateManagementToken,
 )
 from schedularApi.serializers import AvailabilitySerializer
-from datetime import timedelta, time, datetime
+from datetime import timedelta, time, datetime, date
 import pytz
 
 # /from assessmentApi.views import send_whatsapp_message
@@ -1924,3 +1924,15 @@ def reminder_to_pmo_bank_details_unavailable():
             },
             [env("BCC_EMAIL")],  # no bcc
         )
+
+
+@shared_task
+def update_lesson_status_according_to_drip_dates():
+    try:
+        today = date.today()
+        lessons = Lesson.objects.filter(drip_date=today)
+        for lesson in lessons:
+            lesson.status = "public"
+            lesson.save()
+    except Exception as e:
+        print(str(e))

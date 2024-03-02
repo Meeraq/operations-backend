@@ -58,10 +58,13 @@ class TextLessonCreateSerializer(serializers.ModelSerializer):
         fields = ["lesson", "content"]
 
     def create(self, validated_data):
-        lesson_data = validated_data.pop("lesson")
-        lesson = Lesson.objects.create(**lesson_data)
-        text_lesson = TextLesson.objects.create(lesson=lesson, **validated_data)
-        return text_lesson
+        try:
+            lesson_data = validated_data.pop("lesson")
+            lesson = Lesson.objects.create(**lesson_data)
+            text_lesson = TextLesson.objects.create(lesson=lesson, **validated_data)
+            return text_lesson
+        except Exception as e:
+            print(str(e))
 
     def update(self, instance, validated_data):
         lesson_data = validated_data.pop("lesson")
@@ -70,6 +73,10 @@ class TextLessonCreateSerializer(serializers.ModelSerializer):
         lesson_instance.course = lesson_data.get("course", lesson_instance.course)
         lesson_instance.name = lesson_data.get("name", lesson_instance.name)
         lesson_instance.status = lesson_data.get("status", lesson_instance.status)
+        lesson_instance.drip_date = lesson_data.get(
+            "drip_date", lesson_instance.drip_date
+        )
+    
         lesson_instance.lesson_type = lesson_data.get(
             "lesson_type", lesson_instance.lesson_type
         )
@@ -98,6 +105,7 @@ class LessonSerializer(serializers.ModelSerializer):
             "lesson_type",
             "order",
             "course_template",
+            "drip_date",
         ]
 
 
@@ -263,11 +271,13 @@ class AssignmentSerializerDepthOne(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+
 class AssignmentResponseSerializerDepthSix(serializers.ModelSerializer):
     class Meta:
         model = AssignmentLessonResponse
         fields = "__all__"
         depth = 6
+
 
 class AssignmentResponseSerializer(serializers.ModelSerializer):
     class Meta:

@@ -1750,6 +1750,7 @@ def create_video_lesson(request):
                 "lesson": lesson_instance.id,
                 "video": video_instance.id,
                 "content": content,
+                
             }
             video_lesson_serializer = VideoLessonSerializer(data=video_lesson_data)
             if video_lesson_serializer.is_valid():
@@ -2619,6 +2620,7 @@ def create_pdf_lesson(request):
                     status=lesson_data["status"],
                     lesson_type=lesson_data["lesson_type"],
                     order=lesson_data["order"],
+                    drip_date=lesson_data["drip_date"],
                 )
 
                 pdf_lesson_instance = PdfLesson.objects.create(
@@ -3595,6 +3597,7 @@ class CreateAssignmentLesson(APIView):
                     name=request.data["name"],
                     status=request.data["status"],
                     lesson_type="assignment",
+                    drip_date=request.data["drip_date"],
                     order=int(request.data["order"]),
                 )
 
@@ -3629,6 +3632,7 @@ class UpdateAssignmentLesson(APIView):
             assignment_lesson.save()
             lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
             lesson.name = request.data["name"]
+            lesson.drip_date=request.data["drip_date"]
             lesson.save()
             return Response(
                 {"message": f"Assignment Lesson Updated."}, status=status.HTTP_200_OK

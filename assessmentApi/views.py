@@ -3401,7 +3401,7 @@ def generate_graph_for_participant_for_post_assessment(
                     str(question.id)
                 )
             )
-         
+
             if question.response_type == "correct_answer":
 
                 correct_answer = (
@@ -3409,9 +3409,9 @@ def generate_graph_for_participant_for_post_assessment(
                     .first()
                     .correct_answer
                 )
-              
+
                 if str(pre_assessment_participant_response_value) in correct_answer:
-              
+
                     pre_competency_object[question.competency.name] = (
                         pre_competency_object[question.competency.name] + 1
                     )
@@ -3430,7 +3430,6 @@ def generate_graph_for_participant_for_post_assessment(
                     if pre_assessment_participant_response_value:
                         if question.reverse_question:
 
-                            
                             pre_competency_object[
                                 question.competency.name
                             ] = pre_competency_object[question.competency.name] + (
@@ -4244,11 +4243,14 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                         )
 
                         for lesson in lessons:
+
                             assessment_lesson = AssessmentLesson.objects.filter(
                                 lesson=lesson
                             ).first()
 
                             if assessment_lesson.type == "pre":
+                                lesson.drip_date = pre_assessment.assessment_start_date
+                                lesson.save()
                                 assessment_lesson.assessment_modal = pre_assessment
 
                                 assessment_lesson.save()
@@ -4261,6 +4263,8 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                                 pre_assessment.save()
 
                             elif assessment_lesson.type == "post":
+                                lesson.drip_date = post_assessment.assessment_start_date
+                                lesson.save()
                                 post_assessment = Assessment.objects.get(
                                     id=post_assessment_id
                                 )

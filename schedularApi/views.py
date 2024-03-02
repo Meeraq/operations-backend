@@ -102,7 +102,11 @@ from courses.serializers import (
     CourseEnrollmentDepthOneSerializer,
 )
 from django.core.serializers import serialize
-from courses.views import create_or_get_learner,add_question_to_feedback_lesson,nps_default_feed_questions
+from courses.views import (
+    create_or_get_learner,
+    add_question_to_feedback_lesson,
+    nps_default_feed_questions,
+)
 from assessmentApi.models import (
     Assessment,
     ParticipantUniqueId,
@@ -641,7 +645,7 @@ def get_batch_calendar(request, batch_id):
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
                 "batch_name": batch_for_response.name,
-                "project_id":batch_for_response.project.id,
+                "project_id": batch_for_response.project.id,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -654,152 +658,184 @@ def get_batch_calendar(request, batch_id):
 @permission_classes([IsAuthenticated])
 def update_live_session(request, live_session_id):
     try:
-        live_session = LiveSession.objects.get(id=live_session_id)
-    except LiveSession.DoesNotExist:
+        with transaction.atomic():
+            live_session = LiveSession.objects.get(id=live_session_id)
+
+            existing_date_time = live_session.date_time
+            serializer = LiveSessionSerializer(
+                live_session, data=request.data, partial=True
+            )
+            if serializer.is_valid():
+                update_live_session = serializer.save()
+                current_time = timezone.now()
+                if update_live_session.date_time > current_time:
+                    try:
+                        scheduled_for = update_live_session.date_time - timedelta(
+                            minutes=30
+                        )
+                        clocked = ClockedSchedule.objects.create(
+                            clocked_time=scheduled_for
+                        )
+                        # time is utc one here
+                        periodic_task = PeriodicTask.objects.create(
+                            name=f"send_whatsapp_reminder_30_min_before_live_session_{uuid.uuid1()}",
+                            task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
+                            args=[update_live_session.id],
+                            clocked=clocked,
+                            one_off=True,
+                        )
+                        periodic_task.save()
+                        if update_live_session.pt_30_min_before:
+                            update_live_session.pt_30_min_before.enabled = False
+                            update_live_session.pt_30_min_before.save()
+                        live_session.pt_30_min_before = periodic_task
+                        live_session.save()
+                    except Exception as e:
+                        print(str(e))
+                        pass
+                live_session_lesson = LiveSessionLesson.objects.filter(
+                    live_session=live_session
+                ).first()
+                lesson = live_session_lesson.lesson
+
+                lesson.drip_date = live_session.date_time + timedelta(
+                    hours=5, minutes=30
+                )
+               
+                lesson.save()
+
+                AIR_INDIA_PROJECT_ID = 3
+                if (
+                    not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
+                    and update_live_session.batch.project.status == "ongoing"
+                    and update_live_session.batch.project.calendar_invites
+                ):
+                    try:
+                        learners = live_session.batch.learners.all()
+                        facilitators = live_session.batch.facilitator.all()
+                        attendees = []
+
+                        # Adding learners to attendees list
+                        for learner in learners:
+                            attendee = {
+                                "emailAddress": {
+                                    "name": learner.name,
+                                    "address": learner.email,
+                                },
+                                "type": "required",
+                            }
+                            attendees.append(attendee)
+
+                        # Adding facilitators to attendees list
+                        for facilitator in facilitators:
+                            attendee = {
+                                "emailAddress": {
+                                    "name": facilitator.first_name
+                                    + " "
+                                    + facilitator.last_name,
+                                    "address": facilitator.email,
+                                },
+                                "type": "required",
+                            }
+                            attendees.append(attendee)
+
+                        start_time_stamp = (
+                            update_live_session.date_time.timestamp() * 1000
+                        )
+                        end_time_stamp = (
+                            start_time_stamp + int(update_live_session.duration) * 60000
+                        )
+                        start_datetime_obj = datetime.fromtimestamp(
+                            int(start_time_stamp) / 1000
+                        ) + timedelta(hours=5, minutes=30)
+                        start_datetime_str = (
+                            start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
+                        )
+                        description = (
+                            f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
+                            + update_live_session.description
+                            if update_live_session.description
+                            else (
+                                "" + update_live_session.description
+                                if update_live_session.description
+                                else ""
+                            )
+                        )
+                        if not existing_date_time:
+                            create_outlook_calendar_invite(
+                                "Meeraq - Live Session",
+                                description,
+                                start_time_stamp,
+                                end_time_stamp,
+                                attendees,
+                                env("CALENDAR_INVITATION_ORGANIZER"),
+                                None,
+                                None,
+                                update_live_session,
+                                update_live_session.meeting_link,
+                            )
+                        elif not existing_date_time.strftime(
+                            "%d-%m-%Y %H:%M"
+                        ) == update_live_session.date_time.strftime("%d-%m-%Y %H:%M"):
+                            existing_calendar_invite = CalendarInvites.objects.filter(
+                                live_session=live_session
+                            ).first()
+                            # delete the current one
+                            if existing_calendar_invite:
+                                delete_outlook_calendar_invite(existing_calendar_invite)
+                            # create the new one
+                            create_outlook_calendar_invite(
+                                "Meeraq - Live Session",
+                                description,
+                                start_time_stamp,
+                                end_time_stamp,
+                                attendees,
+                                env("CALENDAR_INVITATION_ORGANIZER"),
+                                None,
+                                None,
+                                update_live_session,
+                                update_live_session.meeting_link,
+                            )
+                    except Exception as e:
+                        print(str(e))
+                        pass
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(str(e))
         return Response(
-            {"error": "LiveSession not found"}, status=status.HTTP_404_NOT_FOUND
+            {"error": "Failed to updated live session"},
+            status=status.HTTP_404_NOT_FOUND,
         )
-    existing_date_time = live_session.date_time
-    serializer = LiveSessionSerializer(live_session, data=request.data, partial=True)
-    if serializer.is_valid():
-        update_live_session = serializer.save()
-        current_time = timezone.now()
-        if update_live_session.date_time > current_time:
-            try:
-                scheduled_for = update_live_session.date_time - timedelta(minutes=30)
-                clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
-                # time is utc one here
-                periodic_task = PeriodicTask.objects.create(
-                    name=f"send_whatsapp_reminder_30_min_before_live_session_{uuid.uuid1()}",
-                    task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
-                    args=[update_live_session.id],
-                    clocked=clocked,
-                    one_off=True,
-                )
-                periodic_task.save()
-                if update_live_session.pt_30_min_before:
-                    update_live_session.pt_30_min_before.enabled = False
-                    update_live_session.pt_30_min_before.save()
-                live_session.pt_30_min_before = periodic_task
-                live_session.save()
-            except Exception as e:
-                # Handle any exceptions that may occur during task creation
-                print(str(e))
-                pass
-        AIR_INDIA_PROJECT_ID = 3
-        if (
-            not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
-            and update_live_session.batch.project.status == "ongoing"
-            and update_live_session.batch.project.calendar_invites
-        ):
-            try:
-                learners = live_session.batch.learners.all()
-                facilitators = live_session.batch.facilitator.all()
-                attendees = []
-
-                # Adding learners to attendees list
-                for learner in learners:
-                    attendee = {
-                        "emailAddress": {
-                            "name": learner.name,
-                            "address": learner.email,
-                        },
-                        "type": "required",
-                    }
-                    attendees.append(attendee)
-
-                # Adding facilitators to attendees list
-                for facilitator in facilitators:
-                    attendee = {
-                        "emailAddress": {
-                            "name": facilitator.first_name
-                            + " "
-                            + facilitator.last_name,
-                            "address": facilitator.email,
-                        },
-                        "type": "required",
-                    }
-                    attendees.append(attendee)
-
-                start_time_stamp = update_live_session.date_time.timestamp() * 1000
-                end_time_stamp = (
-                    start_time_stamp + int(update_live_session.duration) * 60000
-                )
-                start_datetime_obj = datetime.fromtimestamp(
-                    int(start_time_stamp) / 1000
-                ) + timedelta(hours=5, minutes=30)
-                start_datetime_str = (
-                    start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
-                )
-                description = (
-                    f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
-                    + update_live_session.description
-                    if update_live_session.description
-                    else (
-                        "" + update_live_session.description
-                        if update_live_session.description
-                        else ""
-                    )
-                )
-                if not existing_date_time:
-                    create_outlook_calendar_invite(
-                        "Meeraq - Live Session",
-                        description,
-                        start_time_stamp,
-                        end_time_stamp,
-                        attendees,
-                        env("CALENDAR_INVITATION_ORGANIZER"),
-                        None,
-                        None,
-                        update_live_session,
-                        update_live_session.meeting_link,
-                    )
-                elif not existing_date_time.strftime(
-                    "%d-%m-%Y %H:%M"
-                ) == update_live_session.date_time.strftime("%d-%m-%Y %H:%M"):
-                    existing_calendar_invite = CalendarInvites.objects.filter(
-                        live_session=live_session
-                    ).first()
-                    # delete the current one
-                    if existing_calendar_invite:
-                        delete_outlook_calendar_invite(existing_calendar_invite)
-                    # create the new one
-                    create_outlook_calendar_invite(
-                        "Meeraq - Live Session",
-                        description,
-                        start_time_stamp,
-                        end_time_stamp,
-                        attendees,
-                        env("CALENDAR_INVITATION_ORGANIZER"),
-                        None,
-                        None,
-                        update_live_session,
-                        update_live_session.meeting_link,
-                    )
-            except Exception as e:
-                print(str(e))
-                pass
-        return Response(serializer.data)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_coaching_session(request, coaching_session_id):
     try:
-        coaching_session = CoachingSession.objects.get(id=coaching_session_id)
-    except CoachingSession.DoesNotExist:
-        return Response(
-            {"error": "Coaching session not found"}, status=status.HTTP_404_NOT_FOUND
-        )
-    serializer = CoachingSessionSerializer(
-        coaching_session, data=request.data, partial=True
-    )
+        with transaction.atomic():
+            coaching_session = CoachingSession.objects.get(id=coaching_session_id)
 
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            serializer = CoachingSessionSerializer(
+                coaching_session, data=request.data, partial=True
+            )
+
+            if serializer.is_valid():
+                serializer.save()
+                coaching_session_lesson = LaserCoachingSession.objects.filter(
+                    coaching_session=coaching_session
+                ).first()
+                lesson = coaching_session_lesson.lesson
+                lesson.drip_date = coaching_session.start_date
+                lesson.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to updated coaching session"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
 
 @api_view(["GET"])
@@ -2698,7 +2734,7 @@ def send_live_session_link_whatsapp(request):
                         },
                         {
                             "name": "description",
-                            "value": ( 
+                            "value": (
                                 (
                                     live_session.description
                                     if live_session.description
@@ -2708,7 +2744,7 @@ def send_live_session_link_whatsapp(request):
                                     f" Please join using this link: {live_session.meeting_link}"
                                     if live_session.meeting_link
                                     else ""
-                                )    
+                                )
                             ),
                         },
                     ],
@@ -3710,10 +3746,17 @@ def add_new_session_in_project_structure(request):
                         )
                         unique_id = uuid.uuid4()
                         feedback_lesson = FeedbackLesson.objects.create(
-                            lesson=new_feedback_lesson, unique_id=unique_id, live_session=live_session
+                            lesson=new_feedback_lesson,
+                            unique_id=unique_id,
+                            live_session=live_session,
                         )
-                        if live_session.session_type in ["in_person_session", "virtual_session"]:        
-                            add_question_to_feedback_lesson(feedback_lesson, nps_default_feed_questions)
+                        if live_session.session_type in [
+                            "in_person_session",
+                            "virtual_session",
+                        ]:
+                            add_question_to_feedback_lesson(
+                                feedback_lesson, nps_default_feed_questions
+                            )
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     coaching_session_number = (
                         CoachingSession.objects.filter(
@@ -4245,7 +4288,7 @@ def get_skill_dashboard_card_data(request, project_id):
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="ongoing"
             )
-           
+
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )

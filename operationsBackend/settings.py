@@ -297,6 +297,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.weekly_invoice_approval_reminder",
         "schedule": crontab(hour=3, minute=30, day_of_week="mon"),  # 10 AM IST Monday
     },
+    "update_lesson_status_according_to_drip_dates": {
+        "task": "schedularApi.tasks.update_lesson_status_according_to_drip_dates",
+        "schedule": crontab(hour=1, minute=30, day_of_week="*"),  #  7 AM
+    },
 }
 
 
