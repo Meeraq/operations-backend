@@ -2,10 +2,10 @@
 
 from django.db import migrations, models
 import uuid
-from courses.models import FeedbackLesson
 
 
 def populate_unique_ids(apps, schema_editor):
+    FeedbackLesson = apps.get_model("courses", "FeedbackLesson")
     for feedback_lesson in FeedbackLesson.objects.all():
         # Generate a unique ID using uuid
         feedback_lesson.unique_id = uuid.uuid4()
