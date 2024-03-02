@@ -3747,3 +3747,15 @@ class UpdateAssignmentLessonFile(APIView):
                 {"message": f"Failed to update file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+class FacilitatorWiseFeedback(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self,request,feedback_id):
+        try:
+            feedback=FeedbackLesson.objects.get(id=feedback_id)
+        except Exception as e:
+            return Response (
+                {"message": f"Failed to update file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
