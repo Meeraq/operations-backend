@@ -1,4 +1,6 @@
 amqp==5.1.1
+--extra-index-url=https://pypi.apryse.com
+apryse-sdk
 arabic-reshaper==3.0.0
 asgiref==3.6.0
 asn1crypto==1.5.1

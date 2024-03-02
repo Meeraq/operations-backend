@@ -1,6 +1,6 @@
 from django.urls import path, include
-from . import views 
-from .views import DownloadInvoice
+from . import views
+from .views import DownloadInvoice, DownloadAttatchedInvoice
 import environ
 
 env = environ.Env()
@@ -56,4 +56,30 @@ urlpatterns = [
     path("import-invoices/", views.import_invoices_from_zoho),
     path("export-invoice-data/", views.export_invoice_data),
     path("download-invoice/<int:record_id>/", DownloadInvoice.as_view()),
+    path(
+        "download-attatched-invoice/<int:record_id>/",
+        DownloadAttatchedInvoice.as_view(),
+    ),
+    path("add/vendor/", views.add_vendor),
+    path("vendors/", views.get_all_vendors),
+    path(
+        "get-all-purchase-orders/",
+        views.get_all_purchase_orders,
+        name="get_all_purchase_orders",
+    ),
+    path(
+        "get-all-invoices/",
+        views.get_all_invoices,
+        name="get_all_invoices",
+    ),
+    path("vendors/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
+    path(
+        "invoices/<int:invoice_id>/update_status/",
+        views.update_invoice_status,
+    ),
+    path(
+        "invoices/<int:invoice_id>/updates/",
+        views.get_invoice_updates,
+        name="get_invoice_updates",
+    ),
 ]

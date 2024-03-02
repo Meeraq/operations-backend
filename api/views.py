@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, time
 import requests
 from django.http import JsonResponse
 import calendar
@@ -6,6 +6,7 @@ from os import name
 from django.shortcuts import render, get_object_or_404
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
+from django.utils.timezone import make_aware
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 from django.db import transaction, IntegrityError
 from django.core.mail import EmailMessage
@@ -64,8 +65,13 @@ from .serializers import (
     FinalizeCoachActivitySerializer,
     SessionDataSerializer,
     SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer,
+    SuperAdminDepthOneSerializer,
+    FinanceDepthOneSerializer,
+    PmoSerializer,
+    FacilitatorDepthOneSerializer,
 )
-
+from zohoapi.serializers import VendorDepthOneSerializer
+from zohoapi.views import get_organization_data, get_vendor
 from rest_framework import generics
 from django.utils.crypto import get_random_string
 import jwt
@@ -121,6 +127,8 @@ from .models import (
     ShareCoachProfileActivity,
     CreateProjectActivity,
     FinalizeCoachActivity,
+    APILog,
+    Facilitator,
 )
 
 from rest_framework.authtoken.models import Token
@@ -150,7 +158,12 @@ from schedularApi.models import (
     SchedularProject,
     SchedularBatch,
     SchedularSessions,
+    CalendarInvites,
 )
+from schedularApi.serializers import (
+    SchedularProjectSerializer,
+)
+
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
@@ -167,12 +180,25 @@ from collections import defaultdict
 import pandas as pd
 from django.http import HttpResponse
 import environ
+from time import sleep
 
 env = environ.Env()
 
 wkhtmltopdf_path = os.environ.get("WKHTMLTOPDF_PATH", r"/usr/local/bin/wkhtmltopdf")
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
+
+def get_current_date_timestamps():
+    now = timezone.now()
+    current_date = now.date()
+    start_timestamp = str(
+        int(datetime.combine(current_date, datetime.min.time()).timestamp() * 1000)
+    )
+    end_timestamp = str(
+        int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
+    )
+    return start_timestamp, end_timestamp
 
 
 def create_send_email(user_email, file_name):
@@ -481,6 +507,108 @@ def delete_microsoft_calendar_event(access_token, event_id):
         return {"error": "An error occurred", "details": str(e)}
 
 
+def create_outlook_calendar_invite(
+    subject,
+    description,
+    start_time_stamp,
+    end_time_stamp,
+    attendees,
+    user_email,
+    caas_session,
+    schedular_session,
+    live_session,
+    meeting_location,
+):
+    event_create_url = "https://graph.microsoft.com/v1.0/me/events"
+    try:
+        user_token = UserToken.objects.get(user_profile__user__email=user_email)
+        new_access_token = refresh_microsoft_access_token(user_token)
+        if not new_access_token:
+            new_access_token = user_token.access_token
+        headers = {
+            "Authorization": f"Bearer {new_access_token}",
+            "Content-Type": "application/json",
+        }
+        start_datetime_obj = datetime.fromtimestamp(
+            int(start_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
+        end_datetime_obj = datetime.fromtimestamp(
+            int(end_time_stamp) / 1000
+        ) + timedelta(hours=5, minutes=30)
+        start_datetime = start_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
+        end_datetime = end_datetime_obj.strftime("%Y-%m-%dT%H:%M:00")
+        event_payload = {
+            "subject": subject,
+            "body": {"contentType": "HTML", "content": description},
+            "start": {"dateTime": start_datetime, "timeZone": "Asia/Kolkata"},
+            "end": {"dateTime": end_datetime, "timeZone": "Asia/Kolkata"},
+            "attendees": attendees,
+            "location": {
+                "displayName": meeting_location if meeting_location else "",
+            },
+        }
+        response = requests.post(event_create_url, json=event_payload, headers=headers)
+        if response.status_code == 201:
+            microsoft_response_data = response.json()
+            calendar_invite = CalendarInvites(
+                event_id=microsoft_response_data.get("id"),
+                title=subject,
+                description=description,
+                start_datetime=start_datetime,
+                end_datetime=end_datetime,
+                attendees=attendees,
+                creator=user_email,
+                caas_session=caas_session,
+                schedular_session=schedular_session,
+                live_session=live_session,
+            )
+            calendar_invite.save()
+            print("Calendar invite sent successfully.")
+            return True
+        else:
+            print(f"Calendar invitation failed. Status code: {response.status_code}")
+            print(response.text)
+            return False
+
+    except UserToken.DoesNotExist:
+        print(f"User token not found for email: {user_email}")
+        return False
+
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return False
+
+
+def delete_outlook_calendar_invite(calendar_invite):
+    try:
+        user_token = UserToken.objects.get(
+            user_profile__user__username=calendar_invite.creator
+        )
+        new_access_token = refresh_microsoft_access_token(user_token)
+        if not new_access_token:
+            new_access_token = user_token.access_token
+        event_delete_url = (
+            f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        )
+        headers = {
+            "Authorization": f"Bearer {new_access_token}",
+        }
+        response = requests.delete(event_delete_url, headers=headers)
+        if response.status_code == 204:
+            calendar_invite.delete()
+            return {"message": "Event deleted successfully"}
+        elif response.status_code == 404:
+            return {"error": "Event not found"}
+        else:
+            return {
+                "error": "Failed to delete event",
+                "status_code": response.status_code,
+            }
+
+    except Exception as e:
+        return {"error": "An error occurred", "details": str(e)}
+
+
 def create_notification(user, path, message):
     notification = Notification.objects.create(user=user, path=path, message=message)
     return notification
@@ -556,7 +684,7 @@ def generate_room_id(email):
 def get_trimmed_emails(emails):
     res = []
     for email in emails:
-        res.append(email.strip())
+        res.append(email.strip().lower())
     return res
 
 
@@ -584,7 +712,36 @@ FIELD_NAME_VALUES = {
     "domain": "Functional Domain",
     "client_companies": "Client companies",
     "educational_qualification": "Educational Qualification",
+    "city": "City",
+    "country": "Country",
+    "topic": "Topic",
 }
+
+
+def add_contact_in_wati(user_type, name, phone):
+    try:
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = f"{wati_api_endpoint}/api/v1/addContact/{phone}"
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        payload = {
+            "customParams": [
+                {
+                    "name": "user_type",
+                    "value": user_type,
+                },
+            ],
+            "name": name,
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()  # Raise an HTTPError for bad responses
+        print(response.json())
+        return response.json()
+    except Exception as e:
+        pass
 
 
 @api_view(["POST"])
@@ -592,7 +749,7 @@ FIELD_NAME_VALUES = {
 def create_pmo(request):
     # Get data from request
     name = request.data.get("name")
-    email = request.data.get("email", "").strip()
+    email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
     username = email  # username and email are the same
     password = request.data.get("password")
@@ -628,6 +785,9 @@ def create_pmo(request):
                 user=profile, name=name, email=email, phone=phone, room_id=room_id
             )
 
+            name = pmo_user.name
+            add_contact_in_wati("pmo", name, pmo_user.phone)
+
             # Return success response without room_id
             return Response({"message": "PMO added successfully."}, status=201)
 
@@ -639,60 +799,8 @@ def create_pmo(request):
         return Response({"error": str(e)}, status=500)
 
 
-# room_id = ""
-# management_token = generateManagementToken()
-# try:
-#     response_from_100ms = requests.post(
-#     "https://api.100ms.live/v2/rooms",
-#                         headers={
-#                             "Authorization": f"Bearer {management_token}",
-#                             "Content-Type": "application/json",
-#                         },
-#                         json={
-#                             "name": email.replace(".", "-").replace("@", ""),
-#                             "description": "This is a sample description for the room",
-#                             "region": "in",
-#                         },
-#                     )
-#     if response_from_100ms.status_code == 200:
-#         room_id = response_from_100ms.json().get("id")
-# except Exception as e:
-#     print(f"Error while generating meeting link, {str(e)}")
-
-# # Create pmo user
-# @api_view(["POST"])
-# def create_pmo(request):
-#     # Get data from request
-#     name = request.data.get("name")
-#     email = request.data.get("email")
-#     phone = request.data.get("phone")
-#     username = request.data.get("email")  # username and email are same
-#     password = request.data.get("password")
-#     # Check if required data is provided
-#     if not all([name, email, phone, username, password]):
-#         return Response({"error": "All required fields must be provided."}, status=400)
-
-#     try:
-#         with transaction.atomic():
-#             # Create the Django User
-#             user = User.objects.create_user(
-#                 username=username, password=password, email=email
-#             )
-#             # Create the PMO Profile linked to the User
-#             pmo_profile = Profile.objects.create(user=user, type="pmo")
-#             # Create the PMO User using the Profile
-#             pmo_user = Pmo.objects.create(
-#                 user=pmo_profile, name=name, email=email, phone=phone
-#             )
-#         # Return success response
-#         return Response({"message": "PMO added successfully."}, status=201)
-
-#     except Exception as e:
-#         # Return error response if any exception occurs
-#         return Response({"error": str(e)}, status=500)
-
-
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def approve_coach(request):
     try:
         # Get the Coach object
@@ -733,20 +841,19 @@ def approve_coach(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_coach_profile(request, id):
     try:
         coach = Coach.objects.get(id=id)
         mutable_data = request.data.copy()
-        if "coach_id" not in mutable_data or not mutable_data["coach_id"]:
-            mutable_data["coach_id"] = coach.coach_id
-
+     
     except Coach.DoesNotExist:
         return Response(status=404)
 
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email", "").strip()
+    new_email = mutable_data.get("email", "").strip().lower()
     #  other user exists with the new email
     if (
         new_email
@@ -794,15 +901,8 @@ def update_coach_profile(request, id):
     )
     serializer = CoachSerializer(coach, data=mutable_data, partial=True)
 
-    coach_id = request.data.get("coach_id")
-
-    # Check if coach_id exists in request.data
-    if coach_id is not None:
-        # Check if any other coach already has this coach_id
-        existing_coach = Coach.objects.exclude(id=id).filter(coach_id=coach_id).first()
-
-        if existing_coach:
-            return Response({"error": "Coach ID must be unique"}, status=400)
+    name = coach.first_name + " " + coach.last_name
+    add_contact_in_wati("coach", name, coach.phone)
 
     if serializer.is_valid():
         serializer.save()
@@ -830,6 +930,7 @@ def update_coach_profile(request, id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_coaches(request):
     try:
         # Get all the Coach objects
@@ -884,7 +985,7 @@ def pmo_login(request):
 
 @api_view(["POST"])
 def coach_login(request):
-    email = request.data.get("email")
+    email = request.data.get("email").strip().lower()
     password = request.data.get("password")
 
     if email is None or password is None:
@@ -907,6 +1008,7 @@ def coach_login(request):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def get_management_token(request):
     management_token = generateManagementToken()
     return Response(
@@ -914,93 +1016,8 @@ def get_management_token(request):
     )
 
 
-# @api_view(['POST'])
-# def create_user_without_password(request):
-#     try:
-#         with transaction.atomic():
-#             # Check if username field is provided
-#             if 'username' not in request.data:
-#                 raise ValueError('Username field is required')
-#             # Create user object with unusable password
-#             user = User.objects.create_user(
-#                 username=request.data['username'],
-#                 email=request.data['username'])
-#             user.set_unusable_password()
-#             user.save()
-
-#             # Create the learner profile
-#             learner_profile = Profile.objects.create(user=user, type='learner')
-
-#             # Create the learner object
-#             learner = Learner.objects.create(user=learner_profile, name=request.data.get('name'), email=request.data['username'], phone=request.data.get('phone'))
-
-#             # Return success response
-#             return Response({}, status=200)
-
-#     except ValueError as e:
-#         # Handle missing or invalid request data
-#         return Response({'error': str(e)}, status=400)
-
-#     except IntegrityError:
-#         # Handle username or email already exists
-#         return Response({'error': 'Username or email already exists'}, status=409)
-
-#     except Exception as e:
-#         # Handle any other exceptions
-#         transaction.set_rollback(True) # Rollback the transaction
-#         return Response({'error': str(e)}, status=500)
-
-
-# @api_view(['POST'])
-# def otp_generation(request):
-#     try:
-#         learner = Learner.objects.get(email=request.data['email'])
-#         try:
-#             # Check if OTP already exists for the learner
-#             otp_obj = OTP.objects.get(learner=learner)
-#             otp_obj.delete()
-#         except OTP.DoesNotExist:
-#             pass
-
-#         # Generate OTP and save it to the database
-#         otp = get_random_string(length=6, allowed_chars='0123456789')
-#         created_otp = OTP.objects.create(learner=learner, otp=otp)
-
-#         # Send OTP on email to learner
-#         subject = f'Meeraq Login Otp'
-#         message = f'Dear {learner.name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}'
-#         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [learner.email])
-
-#         return Response({'success': True,'otp':created_otp.otp})
-
-
-#     except Learner.DoesNotExist:
-#         # Handle the case where the learner with the given email does not exist
-#         return Response({'error': 'Learner with the given email does not exist.'}, status=400)
-
-#     except Exception as e:
-#         # Handle any other exceptions
-#         return Response({'error': str(e)}, status=500)
-
-# @api_view(['POST'])
-# def otp_validation(request):
-#     otp_obj = OTP.objects.filter(learner__email=request.data['email'], otp=request.data['otp']).order_by('-created_at').first()
-
-#     if otp_obj is None:
-#         raise AuthenticationFailed('Invalid OTP')
-
-#     learner = otp_obj.learner
-#     token, created = Token.objects.get_or_create(user=learner.user.user)
-
-#     # Delete the OTP object after it has been validated
-#     otp_obj.delete()
-
-#     learner_data = {'id':learner.id,'name':learner.name,'email': learner.email,'phone': learner.email,'last_login': learner.user.user.last_login ,'token': token.key}
-#     updateLastLogin(learner.email)
-#     return Response({ 'learner': learner_data},status=200)
-
-
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_project_cass(request):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_name"]
@@ -1050,6 +1067,8 @@ def create_project_cass(request):
                 project_live="pending",
             ),
             status="presales",
+            masked_coach_profile=request.data["masked_coach_profile"],
+            automated_reminder=request.data["automated_reminder"],
         )
 
         project.save()
@@ -1108,67 +1127,6 @@ def create_project_cass(request):
     )
 
 
-# @api_view(['POST'])
-# def create_project(request):
-#     organisation = Organisation.objects.filter(name=request.data['organisation_name']).first()
-#     if not organisation:
-#         organisation= Organisation(
-#             name=request.data['organisation_name'], image_url=request.data['image_url']
-#         )
-#     organisation.save()
-
-
-#     project= Project(
-#         project_type = request.data['project_type'],
-#         name=request.data['project_name'],
-#         organisation=organisation,
-#         total_sessions=request.data['total_session'],
-# 		end_date=request.data['end_date'],
-#         cost_per_session=request.data['cost_per_session'],
-#         currency=request.data['currency'],
-#         sessions_per_employee=request.data['sessions_per_employee'],
-#         session_duration= request.data['session_duration'],
-#         status=dict(project_live='pending')
-#     )
-#     hr_emails=[]
-#     coach_emails=[]
-#     project.save()
-#     project_name= project.name
-#     for coach in request.data["coach_id"]:
-#         single_coach = Coach.objects.get(id=coach)
-#         coach_emails.append(single_coach.email)
-#         project.coaches.add(single_coach)
-
-#     # Send email notification to the coach
-#     subject = f'Hey Coach! You have assigned to a project {project_name}'
-#     message = f'Dear {coach_emails},\n\nPlease be there to book slots requested by learner in this {project_name}. Best of luck!'
-#     send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, coach_emails)
-
-
-#     project_name= project.name
-#     print(project_name)
-#     for hr in request.data["hr_id"]:
-#         single_hr = HR.objects.get(id=hr)
-#         print(single_hr)
-#         hr_emails.append(single_hr.email)
-#         project.hr.add(single_hr)
-
-
-#     hrs= create_hr(request.data['hr'])
-#     for hr in hrs:
-#         project.hr.add(hr)
-
-#     try:
-#         learners = create_learners(request.data['learners'])
-#         for learner in learners:
-#             project.learner.add(learner)
-#     except Exception as e:
-#         # Handle any exceptions from create_learners
-#         return Response({'error': str(e)}, status=500)
-
-#     return Response({'message': "Project created!"}, status=200)
-
-
 def create_learners(learners_data):
     try:
         with transaction.atomic():
@@ -1177,7 +1135,7 @@ def create_learners(learners_data):
             learners = []
             for learner_data in learners_data:
                 # Check if username field is provided
-                email = learner_data.get("email", "").strip()
+                email = learner_data.get("email", "").strip().lower()
                 if "email" not in learner_data:
                     raise ValueError("Username field is required")
                 # Check if user already exists
@@ -1187,6 +1145,9 @@ def create_learners(learners_data):
                     learner = Learner.objects.filter(user__user=user).first()
 
                     if learner:
+                        learner.name = learner_data.get("name").strip()
+                        learner.phone = learner_data.get("phone")
+                        learner.save()
                         learners.append(learner)
                         continue
                     else:
@@ -1222,7 +1183,9 @@ def create_learners(learners_data):
                     phone=learner_data.get("phone"),
                 )
                 learners.append(learner)
-            # Return response with learners created or already existing
+                # Return response with learners created or already existing
+                name = learner.name
+                add_contact_in_wati("learner", name, learner.phone)
             serializer = LearnerSerializer(learners, many=True)
             return learners
 
@@ -1236,73 +1199,8 @@ def create_learners(learners_data):
         raise Exception(str(e))
 
 
-# Create learner user
-# @api_view(['POST'])
-# def create_learner(request):
-#     # Get data from request
-#     name = request.data.get('name')
-#     email = request.data.get('email')
-#     phone = request.data.get('phone')
-#     area_of_expertise= request.data.get('area_of_expertise')
-#     years_of_experience=request.data.get('years_of_experience')
-#     username = request.data.get('email') # username and email are same
-#     password = request.data.get('password')
-#     # Check if required data is provided
-#     if not all([name, email, phone, area_of_expertise, years_of_experience, username, password]):
-#         return Response({'error': 'All required fields must be provided.'}, status=400)
-
-#     try:
-#         with transaction.atomic():
-#             # Create the Django User
-#             user = User.objects.create_user(username=username, password=password,email=email)
-#             # Create the learner Profile linked to the User
-#             learner_profile = Profile.objects.create(user=user, type='learner')
-#             # Create the learner User using the Profile
-#             learner = Learner.objects.create(user=learner_profile, name=name, email=email, phone=phone)
-#         # Return success response
-#         return Response({'message': 'Learner added successfully.'}, status=201)
-
-#     except Exception as e:
-#         # Return error response if any exception occurs
-#         return Response({'error': str(e)}, status=500)
-
-
-# @api_view(["POST"])
-# def get_coaches_by_project(request):
-#     project_id = request.data['project_id']
-#     project= Project.objects.get(id=project_id)
-#     coaches= project.coaches.name
-#     return Response({"message": "Success"}, status=200)
-
-# @api_view(["POST"])
-# def get_learners_by_project(request):
-#     project_id = request.data['project_id']
-#     project= Project.objects.get(id=project_id)
-#     learner= project.learner.name
-#     return Response({"message": "Success"}, status=200)
-
-
-# get projects details
-
-
-# @api_view(["GET"])
-# def project_details(request, project_id):
-#     try:
-#         project = Project.objects.get(id=project_id)
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     serializer =  ProjectDepthTwoSerializer(project)
-#     return Response(serializer.data, status=200)
-
-
-# @api_view(['GET'])
-# def get_projects(request):
-#     projects = Project.objects.all()
-#     serializer = ProjectSerializer(projects, many=True)
-#     return Response(serializer.data)
-
-
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_ongoing_projects(request):
     projects = Project.objects.filter(steps__project_live="pending")
     serializer = ProjectDepthTwoSerializer(projects, many=True)
@@ -1317,6 +1215,7 @@ def get_ongoing_projects(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_project_updates(request, project_id):
     updates = Update.objects.filter(project__id=project_id).order_by("-created_at")
     serializer = UpdateDepthOneSerializer(updates, many=True)
@@ -1324,6 +1223,7 @@ def get_project_updates(request, project_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_project_update(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
@@ -1346,354 +1246,34 @@ def add_project_update(request, project_id):
     return Response(serializer.errors, status=400)
 
 
-# @api_view(['GET'])
-# def get_completed_projects(request):
-#     projects = Project.objects.filter(steps__project_live="complete")
-#     serializer = ProjectSerializer(projects, many=True)
-#     return Response(serializer.data)
-
-
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_projects_of_learner(request, learner_id):
     projects = Project.objects.filter(engagement__learner__id=learner_id)
     serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response(serializer.data)
 
 
-# @api_view(['POST'])
-# def create_session_request(request):
-#     time_arr = []
-#     for time in request.data['availibility']:
-#         availibility_serilizer = AvailibilitySerializer(data = time)
-#         if availibility_serilizer.is_valid():
-#             avil_id = availibility_serilizer.save()
-#             time_arr.append(avil_id.id)
-#         else:
-#             return Response({"message": str(availibility_serilizer.errors),}, status=401)
-#     session = {
-#            "learner": request.data['learner'],
-#            "project": request.data['project'],
-#            "availibility":time_arr
-# 		      }
-#     session_serilizer = SessionRequestSerializer(data = session)
-#     if session_serilizer.is_valid():
-#         session_serilizer.save()
-#         return Response({"message": "Success"}, status=201)
-#     else:
-#         return Response({"message": str(session_serilizer.errors),}, status=401)
-
-
-# Coach- view session request
-# @api_view(["GET"])
-# def session_requests_by_coach(request, coach_id):
-#     coach = get_object_or_404(Coach, id=coach_id)
-#     session_requests = SessionRequest.objects.filter(project__coaches=coach, is_booked=False)
-#     serializer = SessionRequestDepthOneSerializer(session_requests, many=True)
-#     return Response(serializer.data, status=200)
-
-# @api_view(['POST'])
-# def book_session(request):
-#     serializer = SessionSerializer(data=request.data)
-#     if serializer.is_valid():
-#         session = serializer.save()
-#         # Mark the session request as booked
-#         session_request = session.session_request
-#         session_request.is_booked = True
-#         session_request.save()
-
-#         coach=session.coach
-#         coach_email=coach.email
-#         learner=session.session_request.learner
-#         learner_email= learner.email
-
-#     # Send email notification to the coach
-#     subject = 'Hello coach your session is booked.'
-#     message = f'Dear {coach.first_name},\n\nThank you booking slots of learner.Please be ready on date and time to complete session. Best of luck!'
-#     send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [coach_email])
-
-
-#     # Send email notification to the learner
-#     subject = 'Hello learner your session is booked.'
-#     message = f'Dear {learner.name},\n\nThank you booking slots of learner.Please be ready on date and time to complete session. Best of luck!'
-#     send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [learner_email])
-
-#     return Response({'message':'','details':serializer.data}, status=201)
-#     return Response(serializer.errors, status=400)
-
-
-# @api_view(["GET"])
-# def get_upcoming_session_coach(request, coach_id):
-#     coach = get_object_or_404(Coach, id=coach_id)
-#     current_timestamp =  int(timezone.now().timestamp() * 1000)
-#     sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(coach=coach,end_time_int__gt=current_timestamp)
-#     serializer = SessionsDepthTwoSerializer(sessions, many=True)
-#     return Response(serializer.data, status=200)
-
-
-# @api_view(["GET"])
-# def get_past_session_coach(request, coach_id):
-#     coach = get_object_or_404(Coach, id=coach_id)
-#     current_timestamp = int(timezone.now().timestamp() * 1000)
-#     sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(end_time_int__lt=current_timestamp,coach=coach)
-#     serializer = SessionsDepthTwoSerializer(sessions, many=True)
-#     return Response(serializer.data, status=200)
-
-
-# @api_view(["GET"])
-# def get_upcoming_session_learner(request, learner_id):
-#     learner = get_object_or_404(Learner, id=learner_id)
-#     current_timestamp =  int(timezone.now().timestamp() * 1000)
-#     sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(end_time_int__gt=current_timestamp,session_request__learner=learner)
-#     serializer = SessionsDepthTwoSerializer(sessions, many=True)
-#     return Response(serializer.data, status=200)
-
-
-# @api_view(["GET"])
-# def get_past_session_learner(request, learner_id):
-#     learner = get_object_or_404(Learner, id=learner_id)
-#     current_timestamp = int(timezone.now().timestamp() * 1000)
-#     sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(end_time_int__lt=current_timestamp,session_request__learner=learner)
-#     serializer = SessionsDepthTwoSerializer(sessions, many=True)
-#     return Response(serializer.data, status=200)
-
-# @api_view(["POST"])
-# def add_learner(request, project_id):
-#     try:
-#         project = Project.objects.get(id=project_id)
-#     except Project.DoesNotExist:
-#         raise ParseError("Invalid project id provided.")
-
-#     email = request.data.get('email')
-#     if not email:
-#         raise ValidationError("Email is required.")
-
-#     with transaction.atomic():
-#         # Create user and learner profile
-#         user = User.objects.create_user(username=email, email=email)
-#         learner_profile = Profile.objects.create(user=user, type='learner')
-
-#         # Create learner
-#         learner_data = {'name': request.data.get('name'), 'email': email, 'phone': request.data.get('phone')}
-#         learner = Learner.objects.create(user=learner_profile, **learner_data)
-
-#         # Add learner to project
-#         project.learner.add(learner)
-#         project.save()
-
-#     serializer = ProjectSerializer(project)
-#     return Response({'message':'Learner added successfully','details':serializer.data}, status=201)
-
-
-# @api_view(["GET"])
-# def get_upcoming_session(request):
-#     current_timestamp =  int(timezone.now().timestamp() * 1000)
-#     sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(end_time_int__gt=current_timestamp)
-#     serializer = SessionsDepthTwoSerializer(sessions, many=True)
-# return Response(serializer.data, status=200)
-
-
-# @api_view(["GET"])
-# def get_past_session(request):
-#     current_timestamp = int(timezone.now().timestamp() * 1000)
-#     sessions = Session.objects.annotate(end_time_int=Cast('confirmed_availability__end_time', IntegerField())).filter(end_time_int__lt=current_timestamp)
-#     serializer = SessionsDepthTwoSerializer(sessions, many=True)
-#     return Response(serializer.data, status=200)
-
-
-# @api_view(["GET"])
-# def get_session_requests(request):
-#     session_requests = SessionRequest.objects.filter(is_booked=False)
-#     serializer = SessionRequestDepthTwoSerializer(session_requests, many=True)
-#     return Response(serializer.data, status=200)
-
-
-# @api_view(['POST'])
-# def complete_project(request):
-#     project = get_object_or_404(Project, id=request.data['project_id'])
-#     project.status = 'Completed'
-#     project.save()
-#     project_serializer = ProjectSerializer(project)
-#     return Response({'message':'Project marked as complete!','details':project_serializer.data},status=200)
-
-
-# @api_view(['POST'])
-# def mark_coach_joined_session(request):
-#     session = get_object_or_404(Session, id=request.data['session_id'])
-#     session.coach_joined = True
-#     session.save()
-#     session_serializer = SessionSerializer(session)
-#     return Response({"message":"","details":session_serializer.data},status=200)
-
-
-# @api_view(['POST'])
-# def mark_learner_joined_session(request):
-#     session = get_object_or_404(Session, id=request.data['session_id'])
-#     session.learner_joined = True
-#     session.save()
-#     session_serializer = SessionSerializer(session)
-#     return Response({'message':'','details':session_serializer.data},status=200)
-
-# @api_view(['GET'])
-# def get_session_request_count(request):
-#     session_requests = SessionRequest.objects.filter(is_booked=False)
-#     count = len(session_requests)
-#     return Response({'session_request_count':count },status=200)
-
-
-# @api_view(["GET"])
-# def get_pending_session_requests_by_learner(request,learner_id):
-#     session_requests = SessionRequest.objects.filter(is_booked=False,learner__id=learner_id)
-#     serializer = SessionRequestDepthOneSerializer(session_requests, many=True)
-#     return Response(serializer.data, status=200)
-
-
-# @api_view(["GET"])
-# def get_all_session_requests_by_learner(request,learner_id):
-#     session_requests = SessionRequest.objects.filter(learner__id=learner_id)
-#     serializer = SessionRequestDepthOneSerializer(session_requests, many=True)
-#     return Response(serializer.data, status=200)
-
-
-# @api_view(['POST'])
-# def forgot_password(request):
-#     reset_password_request = ResetPasswordRequestTokenView.as_view()
-
-#     response = reset_password_request(request)
-#     if response.status_code == 200:
-#         email = request.data.get('email')
-#         token = response.data.get('token')
-#         print(token)
-#     return Response(response.data, status=response.status_code)
-
-
-# @api_view(['POST'])
-# def otp_generation_hr(request):
-#     try:
-#         hr = HR.objects.get(email=request.data['email'])
-#         try:
-#             # Check if OTP already exists for the hr
-#             otp_obj = OTP_HR.objects.get(hr=hr)
-#             otp_obj.delete()
-#         except OTP_HR.DoesNotExist:
-#             pass
-
-#         # Generate OTP and save it to the database
-#         otp = get_random_string(length=6, allowed_chars='0123456789')
-#         created_otp = OTP_HR.objects.create(hr=hr, otp=otp)
-
-#         # Send OTP on email to hr
-#         subject = f'Meeraq Login Otp'
-#         message = f'Dear {hr.first_name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}'
-#         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [hr.email])
-
-#         return Response({'success': True,'otp':created_otp.otp})
-
-
-#     except HR.DoesNotExist:
-#         # Handle the case where the hr with the given email does not exist
-#         return Response({'error': 'HR with the given email does not exist.'}, status=400)
-
-#     except Exception as e:
-#         # Handle any other exceptions
-#         return Response({'error': str(e)}, status=500)
-
-
-# @api_view(['POST'])
-# def otp_validation_hr(request):
-#     otp_obj = OTP_HR.objects.filter(hr__email=request.data['email'], otp=request.data['otp']).order_by('-created_at').first()
-
-#     if otp_obj is None:
-#         raise AuthenticationFailed('Invalid OTP')
-
-#     hr = otp_obj.hr
-#     token, created = Token.objects.get_or_create(user=hr.user.user)
-
-#     # Delete the OTP object after it has been validated
-#     otp_obj.delete()
-
-#     hr_data = {'id':hr.id,'name':hr.first_name,'email': hr.email,'phone': hr.phone,'last_login': hr.user.user.last_login ,'token': token.key}
-#     updateLastLogin(hr.email)
-#     return Response({ 'hr': hr_data},status=200)
-
-
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_ongoing_projects_of_hr(request, hr_id):
     projects = Project.objects.filter(hr__id=hr_id, steps__project_live="pending")
+    schedular_projects = SchedularProject.objects.filter(hr__id=hr_id)
+    schedular_project_serializer = SchedularProjectSerializer(
+        schedular_projects, many=True
+    )
     serializer = ProjectDepthTwoSerializer(projects, many=True)
-    return Response(serializer.data, status=200)
-
-
-# @api_view(['GET'])
-# def get_completed_projects_of_hr(request,hr_id):
-#     projects = Project.objects.filter(hr__id = hr_id, steps__project_live="complete")
-#     serializer = ProjectDepthTwoSerializer(projects, many=True)
-#     return Response(serializer.data, status=200)
-
-# @api_view(['POST'])
-# def add_coach(request):
-#     # Get data from request
-#     first_name = request.data.get('first_name')
-#     last_name = request.data.get('last_name')
-#     email = request.data.get('email')
-#     age = request.data.get('age')
-#     gender = request.data.get('gender')
-#     domain = request.data.get('domain')
-#     room_id = request.data.get('room_id')
-#     phone = request.data.get('phone')
-#     level = request.data.get('level')
-#     rating = "5"
-#     area_of_expertise = request.data['area_of_expertise']
-#     username = request.data.get('email') # keeping username and email same
-#     password = request.data.get('password')
-
-#     print(first_name, last_name, email, age, gender, domain, room_id, phone, level,  username, password)
-
-#     # Check if required data is provided
-#     if not all([first_name, last_name, email, age, gender, domain, room_id, phone, level,  username, password]):
-#         return Response({'error': 'All required fields must be provided.'}, status=400)
-
-#     try:
-#         # Create the Django User
-#         with transaction.atomic():
-#             user = User.objects.create_user(username=username, password=password,email=email)
-
-#             # Create the Coach Profile linked to the User
-#             coach_profile = Profile.objects.create(user=user, type='coach')
-
-#             # Create the Coach User using the Profile
-#             coach_user = Coach.objects.create(user=coach_profile, first_name= first_name, last_name=last_name, email=email, room_id=room_id, phone=phone, level=level, rating=rating, area_of_expertise=area_of_expertise)
-
-# 			# approve coach
-#             coach = Coach.objects.get(id=coach_user.id)
-#             # Change the is_approved field to True
-#             coach.is_approved = True
-#             coach.save()
-
-#             full_name = coach_user.first_name + " " + coach_user.last_name
-
-
-#             # Send email notification to the coach
-#             subject = 'Welcome to our coaching platform'
-#             message = f'Dear {full_name},\n\n You have been added to the Meeraq portal as a coach. \n Here is your credentials. \n\n Username: {email} \n Password: {password}\n\n Click on the link to login or reset the password http://localhost:3003/'
-#             send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [email])
-
-#             # # Send email notification to the admin
-#             admin_email = 'jatin@meeraq.com'
-#             admin_message = f'Dear PMO! \n\n A new coach {full_name} has been added on our coaching platform.'
-#             send_mail(subject, admin_message, settings.DEFAULT_FROM_EMAIL, [admin_email])
-
-#             # Return success response
-#         return Response({'message': 'Coach added successfully.'}, status=201)
-
-#     except IntegrityError:
-#         return Response({'error': 'A coach user with this email already exists.'}, status=400)
-
-#     except Exception as e:
-#         # Return error response if any other exception occurs
-#         return Response({'error': 'An error occurred while creating the coach user.'}, status=500)
+    return Response(
+        {
+            "caas_projects": serializer.data,
+            "schedular_projects": schedular_project_serializer.data,
+        },
+        status=200,
+    )
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_hr(request):
     try:
         # Get all the Coach objects
@@ -1710,186 +1290,22 @@ def get_hr(request):
         return Response({"error": str(e)}, status=500)
 
 
-# def create_hr(hrs_data):
-#     try:
-#             if not hrs_data:
-#                 raise ValueError('HR data is required')
-#             hrs = []
-#             for hr_data in hrs_data:
-#                 print('email',hr_data)
-#                 # Check if username field is provided
-#                 # if 'email' not in hr_data:
-#                 #     raise ValueError('Username field is required')
-
-#                 # Check if user already exists
-#                 user = User.objects.filter(username=hr_data).first()
-#                 if user:
-#                     # If user exists, check if hr already exists
-#                     print('user exists',user)
-#                     hr_profile = HR.objects.get(user__user=user)
-#                     print(hr_profile,'hr_profile')
-#                     if hr_profile:
-#                         hrs.append(hr_profile)
-#                         continue
-#                 else:
-#                 # If HR does not exist, create the user object with an unusable password
-#                     user = User.objects.create_user(
-#                         username=hr_data,
-#                         email=hr_data
-#                         )
-#                     user.set_unusable_password()
-#                     user.save()
-
-#                 # Create the hr profile
-#                     hr_profile = Profile.objects.create(user=user, type='hr')
-
-#                 # Create the hr object
-#                     hr = HR.objects.create(user=hr_profile , email=hr_data)
-#                     hrs.append(hr)
-
-#             # Return response with hr created or already existing
-#             serializer = HrSerializer(hrs, many=True)
-#             print(hrs,'helloo')
-#             return hrs
-
-
-#     except ValueError as e:
-#         # Handle missing or invalid request data
-#         raise ValueError(str(e))
-
-#     except Exception as e:
-#         # Handle any other exceptions
-#         # transaction.set_rollback(True) # Rollback the transaction
-#         raise Exception(str(e))
-
-
-# @api_view(['POST'])
-# def change_password(request):
-#     return ResetPasswordConfirmTokenView.as_view()(request)
-
-
-# @api_view(['POST'])
-# def edit_project(request,project_id):
-# 		print(project_id)
-# 		organisation= Organisation(
-#         name=request.data['organisation_name'], image_url=request.data['image_url']
-#     )
-# 		organisation.save()
-# 		project = Project.objects.get(id=project_id)
-# 		project.name = request.data['project_name']
-# 		project.organisation = organisation
-# 		project.total_sessions = request.data['total_sessions']
-# 		project.cost_per_session = request.data['cost_per_session']
-# 		project.session_duration = request.data['session_duration']
-# 		project.sessions_per_employee = request.data['sessions_per_employee']
-# 		project.currency=request.data['currency']
-# 		project.end_date = request.data['end_date']
-# 		project.coaches.clear()
-# 		for coach_id in request.data['coach_id']:
-# 				coach = Coach.objects.get(id = coach_id)
-# 				project.coaches.add(coach)
-# 		project.save()
-# 		return Response({'message':'Project details updated!','details':{}},status=200)
-
-
-# @api_view(['POST'])
-# def delete_session_request(request, session_request_id):
-# 		session_request = SessionRequest.objects.get(id = session_request_id)
-# 		session_request.delete()
-# 		return Response({'message':'','details':{'deleted_session_request_id': session_request_id}})
-
-
-# @api_view(['GET'])
-# def get_dashboard_details(request):
-#     local_time = timezone.localtime(timezone.now())
-#     india_tz = pytz.timezone('Asia/Kolkata')
-#     india_time = local_time.astimezone(india_tz)
-#     print(india_time)
-#     current_datetime = timezone.localtime(timezone.now())
-#     print(current_datetime)
-#     start_of_day = india_time.replace(hour=0, minute=0, second=0, microsecond=0)
-#     end_of_day = start_of_day + timedelta(days=1)
-#     today_sessions = Session.objects.filter(
-#         confirmed_availability__start_time__gte=start_of_day.timestamp() * 1000,
-#         confirmed_availability__start_time__lt=end_of_day.timestamp() * 1000
-#     )
-#     sessions_serializer = SessionsDepthTwoSerializer(today_sessions,many=True)
-#     session_requests = SessionRequest.objects.filter(is_booked=False)
-#     # session_requests_serializer = SessionRequestDepthTwoSerializer(session_requests, many=True)
-#     return Response({'todays_sessions': sessions_serializer.data,'session_requests_count': len(session_requests)})
-
-
-# @api_view(['POST'])
-# def invite_coach(request):
-#     serializer = CoachInvitesSerializer(data=request.data)
-#     if serializer.is_valid():
-#         invite = serializer.save()
-#         subject = f'Meeraq Portal invitation'
-#         message = f'Dear {invite.name} \n\n Sign up on Meeraq coach portal'
-#         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [invite.email])
-#         return Response({'message':'Coach invited successfully!','details':serializer.data}, status=201)
-#     return Response(serializer.errors, status=400)
-
-
-# @api_view(['GET'])
-# def get_coach_invites(request):
-#     invites = CoachInvites.objects.order_by('-created_at')
-#     serializer = CoachInvitesSerializer(invites, many=True)
-#     return Response(serializer.data)
-
-
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_projects_and_sessions_by_coach(request, coach_id):
     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
-    # sessions = Session.objects.filter(session_request__project__in=projects,coach__id=coach_id)
-    # session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
-    # sessions_dict = {}
-    # for session in session_serializer.data:
-    #     project_id = session['session_request']['project']['id']
-    #     if project_id in sessions_dict:
-    #         sessions_dict[project_id].append(session)
-    #     else:
-    #         sessions_dict[project_id] = [session]
     project_serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response({"projects": project_serializer.data})
 
 
-# @api_view(["GET"])
-# def coach_session_list(request, coach_id):
-#     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
-#     project_serializer = ProjectDepthTwoSerializer(projects, many=True)
-
-#     # Fetch sessions related to the coach
-#     sessions = SessionRequestCaas.objects.filter(coach_id=coach_id)
-#     session_serializer = SessionsDepthTwoSerializer(sessions, many=True)
-
-#     # Group sessions by project ID
-#     sessions_dict = {}
-#     for session in session_serializer.data:
-#         project_id = session['project']['id']
-#         if project_id in sessions_dict:
-#             sessions_dict[project_id].append(session)
-#         else:
-#             sessions_dict[project_id] = [session]
-
-#     # Add the session data to the projects
-#     for project_data in project_serializer.data:
-#         project_id = project_data['id']
-#         if project_id in sessions_dict:
-#             project_data['sessions'] = sessions_dict[project_id]
-#         else:
-#             project_data['sessions'] = []
-
-#     return Response({"projects": project_serializer.data})
-
-
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def coach_session_list(request, coach_id):
     projects = Project.objects.filter(coaches_status__coach__id=coach_id)
     project_serializer = ProjectDepthTwoSerializer(projects, many=True)
 
     # Fetch sessions related to the coach
-    sessions = SessionRequestCaas.objects.filter(coach_id=coach_id)
+    sessions = SessionRequestCaas.objects.filter(coach__id=coach_id)
     session_serializer = SessionRequestCaasSerializer(sessions, many=True)
 
     # Group sessions by project ID
@@ -1912,81 +1328,16 @@ def coach_session_list(request, coach_id):
     return Response({"projects": project_serializer.data})
 
 
-# @api_view(['POST'])
-# def otp_generation_hr(request):
-#     try:
-#         hr = HR.objects.get(email=request.data['email'])
-#         try:
-#             # Check if OTP already exists for the hr
-#             otp_obj = OTP_HR.objects.get(hr=hr)
-#             otp_obj.delete()
-#         except OTP_HR.DoesNotExist:
-#             pass
 
-#         # Generate OTP and save it to the database
-#         otp = get_random_string(length=6, allowed_chars='0123456789')
-#         created_otp = OTP_HR.objects.create(hr=hr, otp=otp)
-
-#         # Send OTP on email to hr
-#         subject = f'Meeraq Login Otp'
-#         message = f'Dear {hr.first_name} \n\n Your OTP for login on meeraq portal is {created_otp.otp}'
-#         send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [hr.email])
-
-#         return Response({'success': True,'otp':created_otp.otp})
-
-
-#     except HR.DoesNotExist:
-#         # Handle the case where the hr with the given email does not exist
-#         return Response({'error': 'HR with the given email does not exist.'}, status=400)
-
-#     except Exception as e:
-#         # Handle any other exceptions
-#         return Response({'error': str(e)}, status=500)
-
-
-# @api_view(['POST'])
-# def otp_validation_hr(request):
-#     otp_obj = OTP_HR.objects.filter(hr__email=request.data['email'], otp=request.data['otp']).order_by('-created_at').first()
-
-#     if otp_obj is None:
-#         raise AuthenticationFailed('Invalid OTP')
-
-#     hr = otp_obj.hr
-#     token, created = Token.objects.get_or_create(user=hr.user.user)
-
-#     # Delete the OTP object after it has been validated
-#     otp_obj.delete()
-
-#     hr_data = {'id':hr.id,'name':hr.first_name,'email': hr.email,'phone': hr.phone,'last_login': hr.user.user.last_login ,'token': token.key}
-#     updateLastLogin(hr.email)
-#     return Response({ 'hr': hr_data},status=200)
-
-
-# @api_view(['GET'])
-# def get_ongoing_projects_of_hr(request,hr_id):
-#     projects = Project.objects.filter(hr__id = hr_id,steps__project_live="pending")
-#     serializer = ProjectDepthTwoSerializer(projects, many=True)
-#     return Response(serializer.data, status=200)
-
-
-# @api_view(['GET'])
-# def get_completed_projects_of_hr(request,hr_id):
-#     projects = Project.objects.filter(hr__id = hr_id, steps__project_live="complete")
-#     serializer = ProjectDepthTwoSerializer(projects, many=True)
-#     return Response(serializer.data, status=200)
-
-
-def coach_exists(coach_id):
-    return Coach.objects.filter(coach_id=coach_id).exists()
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_coach(request):
     # Get data from request
-    coach_id = request.data.get("coach_id")
     first_name = request.data.get("first_name")
     last_name = request.data.get("last_name")
-    email = request.data.get("email", "").strip()
+    email = request.data.get("email", "").strip().lower()
     age = request.data.get("age")
     gender = request.data.get("gender")
     domain = json.loads(request.data["domain"])
@@ -2011,7 +1362,9 @@ def add_coach(request):
     ctt_nctt = json.loads(request.data["ctt_nctt"])
     years_of_coaching_experience = request.data.get("years_of_coaching_experience")
     years_of_corporate_experience = request.data.get("years_of_corporate_experience")
-    username = request.data.get("email", "").strip()  # keeping username and email same
+    username = (
+        request.data.get("email", "").strip().lower()
+    )  # keeping username and email same
     profile_pic = request.data.get("profile_pic", None)
     corporate_experience = request.data.get("corporate_experience", "")
     coaching_experience = request.data.get("coaching_experience", "")
@@ -2026,7 +1379,7 @@ def add_coach(request):
     # Check if required data is provided
     if not all(
         [
-            coach_id,
+          
             first_name,
             last_name,
             email,
@@ -2075,7 +1428,6 @@ def add_coach(request):
             # Create the Coach User using the Profile
             coach_user = Coach.objects.create(
                 user=profile,
-                coach_id=coach_id,
                 room_id=room_id,
                 first_name=first_name,
                 last_name=last_name,
@@ -2118,8 +1470,11 @@ def add_coach(request):
             # Approve coach
             coach_user.is_approved = True
             coach_user.save()
-
             # Send email notification to the coach
+
+            name = coach_user.first_name + " " + coach_user.last_name
+            add_contact_in_wati("coach", name, coach_user.phone)
+
             full_name = coach_user.first_name + " " + coach_user.last_name
             microsoft_auth_url = (
                 f'{env("BACKEND_URL")}/api/microsoft/oauth/{coach_user.email}/'
@@ -2162,6 +1517,7 @@ def add_coach(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def delete_coach(request):
     coach_id = request.data.get("coach_id", None)
     user_id = request.data.get("user_id")
@@ -2199,77 +1555,9 @@ def delete_coach(request):
         return Response({"message": "Failed to delete coach profile"}, status=400)
 
 
-# @api_view(['GET'])
-# def get_hr(request):
-#     try:
-#         # Get all the Coach objects
-#         hr = HR.objects.all()
-
-#         # Serialize the Coach objects
-#         serializer = HrSerializer(hr, many=True)
-
-#         # Return the serialized Coach objects as the response
-#         return Response(serializer.data, status=200)
-
-#     except Exception as e:
-#         # Return error response if any exception occurs
-#         return Response({'error': str(e)}, status=500)
-
-# def create_hr(hrs_data):
-#     try:
-#             if not hrs_data:
-#                 raise ValueError('HR data is required')
-#             hrs = []
-#             for hr_data in hrs_data:
-#                 print('email',hr_data)
-#                 # Check if username field is provided
-#                 # if 'email' not in hr_data:
-#                 #     raise ValueError('Username field is required')
-
-#                 # Check if user already exists
-#                 user = User.objects.filter(username=hr_data).first()
-#                 if user:
-#                     # If user exists, check if hr already exists
-#                     print('user exists',user)
-#                     hr_profile = HR.objects.get(user__user=user)
-#                     print(hr_profile,'hr_profile')
-#                     if hr_profile:
-#                         hrs.append(hr_profile)
-#                         continue
-#                 else:
-#                 # If HR does not exist, create the user object with an unusable password
-#                     user = User.objects.create_user(
-#                         username=hr_data,
-#                         email=hr_data
-#                         )
-#                     user.set_unusable_password()
-#                     user.save()
-
-#                 # Create the hr profile
-#                     hr_profile = Profile.objects.create(user=user, type='hr')
-
-#                 # Create the hr object
-#                     hr = HR.objects.create(user=hr_profile , email=hr_data)
-#                     hrs.append(hr)
-
-#             # Return response with hr created or already existing
-#             serializer = HrSerializer(hrs, many=True)
-#             print(hrs,'helloo')
-#             return hrs
-
-
-#     except ValueError as e:
-#         # Handle missing or invalid request data
-#         raise ValueError(str(e))
-
-#     except Exception as e:
-#         # Handle any other exceptions
-#         # transaction.set_rollback(True) # Rollback the transaction
-#         raise Exception(str(e))
-
-
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@ensure_csrf_cookie
 def get_csrf(request):
     response = Response({"detail": "CSRF cookie set"})
     response["X-CSRFToken"] = get_token(request)
@@ -2280,17 +1568,13 @@ def get_csrf(request):
 @permission_classes([AllowAny])
 def login_view(request):
     data = request.data
+    print(data)
     username = data.get("username")
     password = data.get("password")
     platform = data.get("platform", "unknown")
     if username is None or password is None:
         raise ValidationError({"detail": "Please provide username and password."})
     user = authenticate(request, username=username, password=password)
-
-    # check_user = Profile.objects.get(user__username=username)
-    # if check_user:
-    #     if check_user.type == 'hr':
-    #         raise AuthenticationFailed({'detail': 'Try login with OTP.'})
 
     if user is None:
         raise AuthenticationFailed({"detail": "Invalid credentials."})
@@ -2314,12 +1598,14 @@ def login_view(request):
         except ObjectDoesNotExist:
             print("Does not exist")
 
-        return Response(
+        response = Response(
             {
                 "detail": "Successfully logged in.",
                 "user": {**user_data, "last_login": last_login},
             }
         )
+        response["X-CSRFToken"] = get_token(request)
+        return response
     else:
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
@@ -2343,12 +1629,14 @@ def session_view(request):
     last_login = user.last_login
     user_data = get_user_data(user)
     if user_data:
-        return Response(
+        response = Response(
             {
                 "isAuthenticated": True,
                 "user": {**user_data, "last_login": last_login},
             }
         )
+        response["X-CSRFToken"] = get_token(request)
+        return response
     else:
         return Response({"error": "Invalid user type"}, status=400)
 
@@ -2356,9 +1644,9 @@ def session_view(request):
 def get_user_data(user):
     if not user.profile:
         return None
-    elif user.profile.roles.count() == 0:
+    elif user.profile.roles.exclude(name="vendor").count() == 0:
         return None
-    user_profile_role = user.profile.roles.all().first().name
+    user_profile_role = user.profile.roles.all().exclude(name="vendor").first().name
     roles = []
     for role in user.profile.roles.all():
         roles.append(role.name)
@@ -2377,8 +1665,19 @@ def get_user_data(user):
             "roles": roles,
             "user": {**serializer.data["user"], "type": user_profile_role},
         }
+    elif user_profile_role == "facilitator":
+        serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
+        return {
+            **serializer.data,
+            "roles": roles,
+            "user": {**serializer.data["user"], "type": user_profile_role},
+        }
     elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
+    elif user_profile_role == "superadmin":
+        serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
+    elif user_profile_role == "finance":
+        serializer = FinanceDepthOneSerializer(user.profile.finance)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
@@ -2525,12 +1824,14 @@ def validate_otp(request):
         except ObjectDoesNotExist:
             print("Does not exist")
 
-        return Response(
+        response = Response(
             {
                 "detail": "Successfully logged in.",
                 "user": {**user_data, "last_login": last_login},
             }
         )
+        response["X-CSRFToken"] = get_token(request)
+        return response
     else:
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
@@ -2541,6 +1842,7 @@ def validate_otp(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_organisation(request):
     orgs = Organisation.objects.all()
     serializer = OrganisationSerializer(orgs, many=True)
@@ -2548,6 +1850,7 @@ def get_organisation(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_organisation(request):
     print(request.data.get("image_url", ""))
     org = Organisation.objects.create(
@@ -2562,6 +1865,7 @@ def add_organisation(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_organisation(request, org_id):
     try:
         org = Organisation.objects.get(id=org_id)
@@ -2580,9 +1884,10 @@ def update_organisation(request, org_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_hr(request):
     try:
-        email = request.data.get("email", "").strip()
+        email = request.data.get("email", "").strip().lower()
         with transaction.atomic():
             user = User.objects.filter(email=email).first()
             if not user:
@@ -2616,6 +1921,8 @@ def add_hr(request):
                 phone=request.data.get("phone"),
                 organisation=organisation,
             )
+            name = hr.first_name + " " + hr.last_name
+            add_contact_in_wati("hr", name, hr.phone)
 
             hrs = HR.objects.all()
             serializer = HrSerializer(hrs, many=True)
@@ -2629,6 +1936,7 @@ def add_hr(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def update_hr(request, hr_id):
     try:
         hr = HR.objects.get(id=hr_id)
@@ -2640,9 +1948,9 @@ def update_hr(request, hr_id):
         # Update HR instance
         serializer = HrSerializer(hr, data=request.data, partial=True)
         if serializer.is_valid():
-            new_email = request.data.get(
-                "email", ""
-            ).strip()  # Get the new email from the request
+            new_email = (
+                request.data.get("email", "").strip().lower()
+            )  # Get the new email from the request
             existing_user = (
                 User.objects.filter(email=new_email).exclude(username=hr.email).first()
             )
@@ -2656,8 +1964,11 @@ def update_hr(request, hr_id):
             updated_hr = serializer.save()
             user = updated_hr.user.user
 
+            name = hr.first_name + " " + hr.last_name
+            add_contact_in_wati("hr", name, hr.phone)
+
             # if email if getting updated -> updating email in all other user present
-            if not updated_hr.email == user.email:
+            if not updated_hr.email.strip().lower() == user.email.strip().lower():
                 user.email = new_email
                 user.username = new_email
                 user.save()
@@ -2687,6 +1998,7 @@ def update_hr(request, hr_id):
 
 
 @api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
 def delete_hr(request, hr_id):
     try:
         hr = HR.objects.get(id=hr_id)
@@ -2713,22 +2025,8 @@ def delete_hr(request, hr_id):
         )
 
 
-# Filter API for Coaches
-# Expected input "filters": [{"key":"area_of_expertise","value":"test"},...]
-# @api_view(['POST'])
-# def filter_coach(request):
-#     filters=request.data.get('filters',[])
-#     temp={}
-#     for filter in filters:
-#         print(filter)
-#         if filter['key'] in ["area_of_expertise", "years_of_coaching_experience", "gender"] and filter['value'] is not None and filter['value']!='':
-#             temp[filter['key']] = filter['value']
-#     coaches = Coach.objects.filter(**temp).all()
-#     serializer = CoachSerializer(coaches, many=True)
-#     return Response(serializer.data, status=200)
-
-
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_project_struture(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2736,14 +2034,12 @@ def add_project_struture(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.project_structure = request.data.get("project_structure", [])
     project.currency = request.data.get("currency", "")
-    # project.price_per_hour = request.data.get("price", "")
-    # project.coach_fees_per_hour = request.data.get("coach_price", "")
-    # project.status['project_structure'] = 'complete'
     project.save()
     return Response({"message": "Structure added", "details": ""}, status=200)
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def send_consent(request):
     # Get the project
     try:
@@ -2949,26 +2245,8 @@ def send_consent(request):
     return Response({"message": "Consent sent successfully", "details": ""}, status=200)
 
 
-# @api_view(['POST'])
-# def select_coaches(request):
-#     # Get all the Coach objects
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     coaches = Coach.objects.filter(id__in=request.data.get('coach_list',[])).all()
-#     coach_status = []
-#     for coach in coaches:
-#         status = project.coaches_status.get(coach=coach)
-#         status.status['hr'] = "Selected"
-#         status.save()
-#     # project.coaches = coach_list
-#     project.status['coach_list_to_hr'] = 'complete'
-#     project.save()
-#     return Response({"message":"Coaches selected successfully"},status=200)
-
-
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_project_details(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
@@ -2984,6 +2262,7 @@ def get_project_details(request, project_id):
 # "coach_id": 1
 # "status": Consent Approved/Consent Rejected
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def receive_coach_consent(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3053,6 +2332,7 @@ def receive_coach_consent(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def update_project_structure_consent_by_coach(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3094,6 +2374,7 @@ def update_project_structure_consent_by_coach(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def complete_coach_consent(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3105,6 +2386,7 @@ def complete_coach_consent(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def complete_coach_list_to_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3122,6 +2404,7 @@ def complete_coach_list_to_hr(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def complete_interviews_step(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3139,6 +2422,7 @@ def complete_interviews_step(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def complete_empanelment(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3149,18 +2433,8 @@ def complete_empanelment(request):
     return Response({"message": "Empanelement completed.", "details": ""}, status=200)
 
 
-# @api_view(['POST'])
-# def complete_interview(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.steps['interviews']['status'] = 'complete'
-#     project.save()
-#     return Response({'message': "Interviews completed."},status=200)
-
-
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def complete_project_structure(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3171,29 +2445,8 @@ def complete_project_structure(request):
     return Response({"message": "Project structure approved."}, status=200)
 
 
-# @api_view(['POST'])
-# def complete_coach_approval(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.status['coach_approval'] = 'complete'
-#     project.save()
-#     return Response({'message': "Coach approval completed."},status=200)
-
-
-# @api_view(['POST'])
-# def complete_chemistry_sessions(request):
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-#     project.steps['chemistry_session']['status'] = 'complete'
-#     project.save()
-#     return Response({'message': "Chemistry sessions completed."},status=200)
-
-
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_interview_data(request, project_id):
     sessions = SessionRequestCaas.objects.filter(
         project__id=project_id, session_type="interview"
@@ -3203,6 +2456,7 @@ def get_interview_data(request, project_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_chemistry_session_data(request, project_id):
     sessions = SessionRequestCaas.objects.filter(
         project__id=project_id, session_type="chemistry"
@@ -3212,6 +2466,7 @@ def get_chemistry_session_data(request, project_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_session_requests_of_hr(request, hr_id):
     sessions = SessionRequestCaas.objects.filter(hr__id=hr_id).all()
     serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
@@ -3219,6 +2474,7 @@ def get_session_requests_of_hr(request, hr_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_session_requests_of_learner(request, learner_id):
     sessions = SessionRequestCaas.objects.filter(learner__id=learner_id).all()
     print(sessions, "session")
@@ -3227,6 +2483,7 @@ def get_session_requests_of_learner(request, learner_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_upcoming_booked_session_of_coach(request, coach_id):
     current_time = int(timezone.now().timestamp() * 1000)
     # convert current time to milliseconds
@@ -3240,6 +2497,7 @@ def get_upcoming_booked_session_of_coach(request, coach_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def book_session_caas(request):
     session_request = SessionRequestCaas.objects.get(
         id=request.data.get("session_request")
@@ -3334,6 +2592,51 @@ def book_session_caas(request):
             message = f"{coach_name.title()} has booked the {SESSION_TYPE_VALUE[session_request.session_type]} for Project - {project.name}.The booked slot is "
             message += slot_message
             create_notification(pmo_user, path, message)
+
+            # WHATSAPP MESSAGE CHECK
+            # before 5 mins whatsapp msg
+            confirmed_availability_start_time = (
+                session_request.confirmed_availability.start_time
+            )
+            start_datetime_obj = datetime.fromtimestamp(
+                int(confirmed_availability_start_time) / 1000
+            )
+            # Decrease 5 minutes
+            five_minutes_prior_start_datetime = start_datetime_obj - timedelta(
+                minutes=5
+            )
+            clocked = ClockedSchedule.objects.create(
+                clocked_time=five_minutes_prior_start_datetime
+            )
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_caas",
+                args=[session_request.id],
+                clocked=clocked,
+                one_off=True,
+            )
+            periodic_task.save()
+
+            # after 3 minutes whatsapp message
+            # increase 5 minutes
+            three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(
+                minutes=3
+            )
+            clocked = ClockedSchedule.objects.create(
+                clocked_time=three_minutes_ahead_start_datetime
+            )
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_caas",
+                args=[session_request.id],
+                clocked=clocked,
+                one_off=True,
+            )
+            periodic_task.save()
+
+            # WHATSAPP MESSAGE CHECK
+            booking_id = coach.room_id
+
             if coachee:
                 microsoft_auth_url = (
                     f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
@@ -3360,6 +2663,7 @@ def book_session_caas(request):
                             ],
                             "slot_date": session_date,
                             "slot_time": session_time,
+                            "booking_id": booking_id,
                             "email": coachee.email,
                             "microsoft_auth_url": microsoft_auth_url,
                             "user_token_present": user_token_present,
@@ -3513,6 +2817,7 @@ def get_slot_message(availability):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_session_request_caas(request):
     time_arr = create_time_arr(request.data["availibility"])
 
@@ -3588,6 +2893,7 @@ def create_session_request_caas(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_session_requests_of_coach(request, coach_id):
     sessions = SessionRequestCaas.objects.filter(coach__id=coach_id).all()
     serializer = SessionRequestCaasDepthTwoSerializer(sessions, many=True)
@@ -3595,6 +2901,7 @@ def get_session_requests_of_coach(request, coach_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def accept_coach_caas_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3750,6 +3057,7 @@ def accept_coach_caas_hr(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_learner_to_project(request):
     coacheeCounts = int(0)
     try:
@@ -3849,9 +3157,9 @@ def transform_project_structure(sessions):
                 "session_number": session_counts[session_type],
                 "session_type": session_type,
                 "session_duration": session_duration,
-                "billable_session_number": billable_session_number
-                if is_billable
-                else None,
+                "billable_session_number": (
+                    billable_session_number if is_billable else None
+                ),
                 "status": "pending",
             }
             print(transformed_session)
@@ -3887,6 +3195,7 @@ def create_engagement(learner, project):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def accept_coach_caas_learner(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3944,37 +3253,8 @@ def accept_coach_caas_learner(request):
     return Response({"message": message}, status=200)
 
 
-# @api_view(['POST'])
-# def send_contract(request):
-#     # Get all the Coach objects
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-
-#     coach_statuses = project.coaches_status.filter(coach__id__in=request.data.get('coach_list',[]))
-#     for status in coach_statuses:
-#         status.status['contract']="sent"
-#         status.save()
-
-#     return Response({"message":"Contract sent successfully",'details':''},status=200)
-
-
-# @api_view(['POST'])
-# def approve_contract(request):
-#     # Get all the Coach objects
-#     try:
-#         project = Project.objects.get(id=request.data.get('project_id',''))
-#     except Project.DoesNotExist:
-#         return Response({"message": "Project does not exist"}, status=400)
-
-#     status = project.coaches_status.get(coach__id=request.data.get('coach_id',[]))
-#     status.status['contract']="approved"
-#     status.save()
-#     return Response({"message":"Contract approved.",'details':''},status=200)
-
-
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def complete_cass_step(request):
     try:
         step = request.data.get("step")
@@ -3987,6 +3267,7 @@ def complete_cass_step(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def mark_as_incomplete(request):
     stepList = [
         "coach_list",
@@ -4020,6 +3301,7 @@ def mark_as_incomplete(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def send_project_strure_to_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -4045,6 +3327,7 @@ def send_project_strure_to_hr(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def send_reject_reason(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -4063,6 +3346,7 @@ def send_reject_reason(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def project_structure_agree_by_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -4074,6 +3358,7 @@ def project_structure_agree_by_hr(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def request_more_profiles_by_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -4107,23 +3392,36 @@ def request_more_profiles_by_hr(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def edit_learner(request):
     try:
         learner = Learner.objects.get(id=request.data.get("learner_id", ""))
-    except Project.DoesNotExist:
+    except Learner.DoesNotExist:
         return Response({"message": "Learner does not exist"}, status=400)
-    user = learner.user.user
-    user.username = request.data["email"]
-    user.email = request.data["email"]
-    user.save()
-    learner.email = request.data["email"]
+    email = request.data["email"].strip().lower()
+    existing_user = (
+        User.objects.filter(username=email).exclude(username=learner.email).first()
+    )
+    if existing_user:
+        return Response(
+            {"error": "User with this email already exists."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    learner.user.user.username = email
+    learner.user.user.email = email
+    learner.user.user.save()
+    learner.email = email
     learner.name = request.data["name"]
-    learner.phone = request.data["phone"]
+    learner.phone = request.data.get("phone", "")
     learner.save()
+    if learner.phone:
+        add_contact_in_wati("learner", learner.name, learner.phone)
+
     return Response({"message": "Learner details updated.", "details": ""}, status=200)
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def mark_finalized_list_complete(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -4135,6 +3433,7 @@ def mark_finalized_list_complete(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def send_list_to_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -4204,6 +3503,7 @@ def send_list_to_hr(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def finalized_coach_from_coach_consent(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -4222,6 +3522,7 @@ def finalized_coach_from_coach_consent(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_coach_field_values(request):
     job_roles = set()
     languages = set()
@@ -4268,21 +3569,25 @@ def get_coach_field_values(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_mulitple_coaches(request):
     # Get data from request
     coaches = request.data.get("coaches")
-
+    coaches_count_bulk_upload = 0
     # Check if coaches data is provided
     if not coaches or not isinstance(coaches, list):
         return Response(
             {"error": "Coaches data must be provided as a list."}, status=400
         )
-
+    total_coaches_in_excel = len(coaches)
+    for coach_data in coaches:
+        email = coach_data.get("email", "").strip()
+        if Coach.objects.filter(email=email).exists():
+            coaches_count_bulk_upload += 1
     try:
         for coach_data in coaches:
             with transaction.atomic():
                 # Extract coach details from the coach_data dictionary
-                coach_id = coach_data.get("coach_id")
                 first_name = coach_data.get("first_name")
                 last_name = coach_data.get("last_name")
                 age = coach_data.get("age", "")
@@ -4323,7 +3628,6 @@ def add_mulitple_coaches(request):
                 # Perform validation on required fields
                 if not all(
                     [
-                        coach_id,
                         first_name,
                         last_name,
                         gender,
@@ -4340,12 +3644,7 @@ def add_mulitple_coaches(request):
                         status=400,
                     )
 
-                # Create the Django User
-                if coach_exists(coach_id):
-                    return Response(
-                        {"error": f"Coach with ID {coach_id} already exists."},
-                        status=400,
-                    )
+               
                 user = User.objects.filter(email=email).first()
                 if not user:
                     temp_password = "".join(
@@ -4391,7 +3690,6 @@ def add_mulitple_coaches(request):
                 # Create the Coach User using the Profile
                 coach_user = Coach.objects.create(
                     user=profile,
-                    coach_id=coach_id,
                     first_name=first_name,
                     last_name=last_name,
                     age=age,
@@ -4426,10 +3724,35 @@ def add_mulitple_coaches(request):
                 coach = Coach.objects.get(id=coach_user.id)
                 coach.is_approved = True
                 coach.save()
+                name = coach_user.first_name + " " + coach_user.last_name
+                add_contact_in_wati("coach", name, coach_user.phone)
 
-        return Response({"message": "Coaches added successfully."}, status=201)
+        return Response(
+            {
+                "message": f"{total_coaches_in_excel-coaches_count_bulk_upload} Coaches added successfully."
+            },
+            status=201,
+        )
     except IntegrityError as e:
-        print(e)
+        print(str(e))
+        if "Duplicate entry" in str(e):
+            coaches_message = (
+                f"{coaches_count_bulk_upload} coach"
+                if coaches_count_bulk_upload == 1
+                else f"{coaches_count_bulk_upload} coaches"
+            )
+            added_coaches_message = (
+                f"{total_coaches_in_excel-coaches_count_bulk_upload} coach"
+                if total_coaches_in_excel - coaches_count_bulk_upload == 1
+                else f"{total_coaches_in_excel-coaches_count_bulk_upload} coaches"
+            )
+            return Response(
+                {
+                    "message": f"{added_coaches_message} added successfully and {coaches_message} already exist."
+                },
+                status=201,
+            )
+
         return Response(
             {"error": "A coach user with this email already exists."}, status=400
         )
@@ -4443,6 +3766,7 @@ def add_mulitple_coaches(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_notifications(request, user_id):
     notifications = Notification.objects.filter(user__id=user_id).order_by(
         "-created_at"
@@ -4452,6 +3776,7 @@ def get_notifications(request, user_id):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def mark_all_notifications_as_read(request):
     notifications = Notification.objects.filter(
         read_status=False, user__id=request.data["user_id"]
@@ -4461,6 +3786,7 @@ def mark_all_notifications_as_read(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def mark_notifications_as_read(request):
     user_id = request.data.get("user_id")
     notification_ids = request.data.get("notification_ids")
@@ -4479,12 +3805,14 @@ def mark_notifications_as_read(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def unread_notification_count(request, user_id):
     count = Notification.objects.filter(user__id=user_id, read_status=False).count()
     return Response({"count": count})
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def mark_project_as_sold(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -4507,6 +3835,7 @@ def mark_project_as_sold(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_session_requests_of_user_on_date(request, user_type, user_id, date):
     date_obj = datetime.strptime(date, "%Y-%m-%d")
     start_time = date_obj.replace(hour=0, minute=0, second=0)
@@ -4536,6 +3865,7 @@ def get_session_requests_of_user_on_date(request, user_type, user_id, date):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def request_reschedule(request, session_id):
     session = SessionRequestCaas.objects.get(id=session_id)
     session.reschedule_request.append(
@@ -4550,6 +3880,7 @@ def request_reschedule(request, session_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def reschedule_session(request):
     existing_session = SessionRequestCaas.objects.get(
         id=request.data["existing_session_id"]
@@ -4627,6 +3958,7 @@ def reschedule_session(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_engagement_in_projects(request, project_id):
     engagements = Engagement.objects.filter(project__id=project_id)
     engagements_data = []
@@ -4654,6 +3986,7 @@ def get_engagement_in_projects(request, project_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_engagements_of_hr(request, user_id):
     engagements = Engagement.objects.filter(project__hr__id=user_id)
     engagements_data = []
@@ -4692,6 +4025,8 @@ def get_engagements_of_hr(request, user_id):
 
 
 class SessionCountsForAllLearners(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, user_type, user_id, format=None):
         try:
             if user_type == "pmo":
@@ -4744,6 +4079,7 @@ class SessionCountsForAllLearners(APIView):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_learner_engagement_of_project(request, project_id, learner_id):
     engagement = Engagement.objects.get(learner__id=learner_id, project__id=project_id)
     serializer = EngagementDepthOneSerializer(engagement)
@@ -4751,6 +4087,7 @@ def get_learner_engagement_of_project(request, project_id, learner_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_learners_engagement(request, learner_id):
     engagements = Engagement.objects.filter(learner__id=learner_id)
     serializer = EngagementDepthOneSerializer(engagements, many=True)
@@ -4758,6 +4095,7 @@ def get_learners_engagement(request, learner_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_session_request_by_learner(request, session_id):
     # print(request.user)
     # if request.user.profile.type != "learner":
@@ -4771,6 +4109,7 @@ def create_session_request_by_learner(request, session_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_session_requests_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
@@ -4809,6 +4148,7 @@ def get_session_requests_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_session_pending_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
@@ -4840,8 +4180,9 @@ def get_session_pending_of_user(request, user_type, user_id):
     return Response(res, status=200)
 
 
-# used for pmo and hr report section
+# used  for hr report section
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_sessions_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
@@ -4875,7 +4216,147 @@ def get_all_sessions_of_user(request, user_type, user_id):
     return Response(res, status=200)
 
 
+# used for pmo report section
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
+    session_requests = []
+    schedular_sessions = []
+
+    if user_type == "pmo":
+        session_requests = SessionRequestCaas.objects.filter(
+            ~Q(session_type="interview"),
+            ~Q(session_type="chemistry", billable_session_number=None),
+            is_archive=False,
+        )
+        schedular_sessions = SchedularSessions.objects.all()
+    elif user_type == "hr":
+        session_requests = SessionRequestCaas.objects.filter(
+            ~Q(session_type="interview"),
+            ~Q(session_type="chemistry", billable_session_number=None),
+            is_archive=False,
+            project__hr__id=user_id,
+        )
+        schedular_sessions = SchedularSessions.objects.all()
+    res = []
+    for session_request in session_requests:
+        project_name = session_request.project.name
+        project = ProjectSerializer(session_request.project).data
+        project_type = "caas"
+        organisation = session_request.project.organisation.name
+        engagement = Engagement.objects.filter(
+            learner_id=session_request.learner.id, project_id=session_request.project.id
+        )
+        if len(engagement) > 0 and engagement[0].coach:
+            coach_name = (
+                engagement[0].coach.first_name + " " + engagement[0].coach.last_name
+            )
+            coach_email = engagement[0].coach.email
+            coach = CoachSerializer(engagement[0].coach).data
+        else:
+            coach = None
+            coach_name = None
+            coach_email = None
+        learner = LearnerSerializer(session_request.learner).data
+        learner_name = session_request.learner.name
+        learner_email = session_request.learner.email
+        session_type = session_request.session_type
+        session_number = session_request.session_number
+        billable_session_number = session_request.billable_session_number
+        status = session_request.status
+        status_updated_at = session_request.status_updated_at
+        if session_request.confirmed_availability:
+            slot_start_time = session_request.confirmed_availability.start_time
+        else:
+            slot_start_time = None
+        if session_request.confirmed_availability:
+            slot_end_time = session_request.confirmed_availability.end_time
+        else:
+            slot_end_time = None
+        session_duration = session_request.session_duration
+        is_archive = session_request.is_archive
+        invitees = session_request.invitees
+
+        res.append(
+            {
+                "project_name": project_name,
+                "project_type": project_type,
+                "organisation": organisation,
+                "coach_name": coach_name,
+                "coach_email": coach_email,
+                "learner": learner,
+                "learner_name": learner_name,
+                "learner_email": learner_email,
+                "session_type": session_type,
+                "session_number": session_number,
+                "billable_session_number": billable_session_number,
+                "status": status,
+                "status_updated_at": status_updated_at,
+                "slot_start_time": slot_start_time,
+                "slot_end_time": slot_end_time,
+                "session_duration": session_duration,
+                "is_archive": is_archive,
+                "invitees": invitees,
+                "coach": coach,
+                "project": project,
+            }
+        )
+    for schedular_session in schedular_sessions:
+        project_name = schedular_session.coaching_session.batch.project.name
+        project_type = "seeq"
+        organisation = (
+            schedular_session.coaching_session.batch.project.organisation.name
+        )
+        coach_name = (
+            schedular_session.availibility.coach.first_name
+            + " "
+            + schedular_session.availibility.coach.last_name
+        )
+        coach_email = schedular_session.availibility.coach.email
+        learner = LearnerSerializer(schedular_session.learner).data
+        learner_name = schedular_session.learner.name
+        learner_email = schedular_session.learner.email
+        session_type = schedular_session.coaching_session.session_type
+        session_number = schedular_session.coaching_session.coaching_session_number
+        billable_session_number = None
+        status = schedular_session.status
+        status_updated_at = schedular_session.updated_at
+        slot_start_time = schedular_session.availibility.start_time
+        slot_end_time = schedular_session.availibility.end_time
+        session_duration = schedular_session.coaching_session.duration
+        coach = CoachSerializer(schedular_session.availibility.coach).data
+        is_archive = None
+        invitees = []
+
+        res.append(
+            {
+                "project_name": project_name,
+                "project_type": project_type,
+                "organisation": organisation,
+                "coach_name": coach_name,
+                "coach_email": coach_email,
+                "learner": learner,
+                "learner_name": learner_name,
+                "learner_email": learner_email,
+                "session_type": session_type,
+                "session_number": session_number,
+                "billable_session_number": billable_session_number,
+                "status": status,
+                "status_updated_at": status_updated_at,
+                "slot_start_time": slot_start_time,
+                "slot_end_time": slot_end_time,
+                "session_duration": session_duration,
+                "is_archive": is_archive,
+                "invitees": invitees,
+                "coach": coach,
+            }
+        )
+
+    return Response({"sessions": res})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -4926,6 +4407,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -4978,6 +4460,12 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             Q(is_archive=False),
             ~Q(status="completed"),
         )
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__gt=timestamp_milliseconds
+        )
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -4995,14 +4483,14 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     for session in avaliable_sessions:
         session_detail = {
             "id": session.id,
-            "batch_name": session.coaching_session.batch.name
-            if coach_id is None
-            else None,
+            "batch_name": (
+                session.coaching_session.batch.name if coach_id is None else None
+            ),
             "project_name": session.coaching_session.batch.project.name,
             "organisation_name": session.coaching_session.batch.project.organisation.name,
-            "project_id": session.coaching_session.batch.project.id
-            if coach_id is None
-            else None,
+            "project_id": (
+                session.coaching_session.batch.project.id if coach_id is None else None
+            ),
             "coach_name": session.availibility.coach.first_name
             + " "
             + session.availibility.coach.last_name,
@@ -5013,16 +4501,19 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             "participant_name": session.learner.name,
             "participant_email": session.learner.email,
             "participant_phone": session.learner.phone,
-            "coaching_session_number": session.coaching_session.coaching_session_number
-            if coach_id is None
-            else None,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "coaching_session_number": (
+                session.coaching_session.coaching_session_number
+                if coach_id is None
+                else None
+            ),
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
             "session_type": session.coaching_session.session_type,
             "end_time": session.availibility.end_time,
             "is_seeq_project": True,
+            "coaching_session_id": session.coaching_session.id,
         }
         session_details.append(session_detail)
 
@@ -5039,6 +4530,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -5091,11 +4583,12 @@ def get_past_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def new_get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     current_time_seeq = timezone.now()
-    timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+    timestamp_milliseconds = int(current_time_seeq.timestamp() * 1000)
     avaliable_sessions = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
@@ -5143,6 +4636,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             Q(project__hr__id=user_id),
             Q(is_archive=False),
         )
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
+        avaliable_sessions = schedular_sessions.filter(
+            availibility__end_time__lt=timestamp_milliseconds
+        )
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -5160,14 +4659,14 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
     for session in avaliable_sessions:
         session_detail = {
             "id": session.id,
-            "batch_name": session.coaching_session.batch.name
-            if coach_id is None
-            else None,
+            "batch_name": (
+                session.coaching_session.batch.name if coach_id is None else None
+            ),
             "project_name": session.coaching_session.batch.project.name,
             "organisation_name": session.coaching_session.batch.project.organisation.name,
-            "project_id": session.coaching_session.batch.project.id
-            if coach_id is None
-            else None,
+            "project_id": (
+                session.coaching_session.batch.project.id if coach_id is None else None
+            ),
             "coach_name": session.availibility.coach.first_name
             + " "
             + session.availibility.coach.last_name,
@@ -5178,16 +4677,21 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "participant_name": session.learner.name,
             "participant_email": session.learner.email,
             "participant_phone": session.learner.phone,
-            "coaching_session_number": session.coaching_session.coaching_session_number
-            if coach_id is None
-            else None,
-            "meeting_link": f"{env('CAAS_APP_URL')}/coaching/join/{session.availibility.coach.room_id}",
+            "coaching_session_number": (
+                session.coaching_session.coaching_session_number
+                if coach_id is None
+                else None
+            ),
+            "meeting_link": f"{env('CAAS_APP_URL')}/call/{session.availibility.coach.room_id}",
             "start_time": session.availibility.start_time,
             "room_id": f"{session.availibility.coach.room_id}",
             "status": session.status,
             "session_type": session.coaching_session.session_type,
             "end_time": session.availibility.end_time,
+            "session_duration": session.coaching_session.duration,
             "is_seeq_project": True,
+            "auto_generated_status": session.auto_generated_status,
+            "coaching_session_id": session.coaching_session.id,
         }
         session_details.append(session_detail)
 
@@ -5204,6 +4708,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def edit_session_status(request, session_id):
     try:
         session_request = SessionRequestCaas.objects.get(id=session_id)
@@ -5220,6 +4725,7 @@ def edit_session_status(request, session_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def edit_session_availability(request, session_id):
     time_arr = create_time_arr(request.data["availibility"])
     try:
@@ -5247,6 +4753,7 @@ def edit_session_availability(request, session_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_coachee_of_user(request, user_type, user_id):
     learners_data = []
     if user_type == "pmo":
@@ -5257,7 +4764,7 @@ def get_coachee_of_user(request, user_type, user_id):
         learners = Learner.objects.filter(
             Q(engagement__project__hr__id=user_id)
             | Q(schedularbatch__project__hr__id=user_id)
-        )
+        ).distinct()
     for learner in learners:
         learner_dict = {
             "id": learner.id,
@@ -5296,12 +4803,21 @@ def get_coachee_of_user(request, user_type, user_id):
                 courses_names.append(course_enrollment.course.name)
             learner_dict["coursesEnrolled"] = courses_names
         for project in projects:
-            project_dict = {"name": project.name, "type": "CAAS"}
+            project_dict = {
+                "project_id": project.id,
+                "name": project.name,
+                "type": "CAAS",
+            }
             learner_dict["organisation"].add(project.organisation.name)
             learner_dict["projects"].append(project_dict)
         if user_type == "pmo" or user_type == "hr":
             for batch in schedular_batches:
-                project_dict = {"name": batch.project.name, "type": "SEEQ"}
+                project_dict = {
+                    "project_id": batch.project.id,
+                    "batch_id": batch.id,
+                    "name": batch.project.name,
+                    "type": "SEEQ",
+                }
                 learner_dict["organisation"].add(batch.project.organisation.name)
                 if project_dict["name"] not in [
                     proj["name"] for proj in learner_dict["projects"]
@@ -5312,6 +4828,141 @@ def get_coachee_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_learner_of_user_optimized(request, user_type, user_id):
+    try:
+        learners = None
+        if user_type == "pmo":
+            learners = Learner.objects.all()
+        elif user_type == "coach":
+            learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+        elif user_type == "hr":
+            learners = Learner.objects.filter(
+                Q(engagement__project__hr__id=user_id)
+                | Q(schedularbatch__project__hr__id=user_id)
+            ).distinct()
+
+        serializer = LearnerSerializer(learners, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_learner_course_enrolled_of_user_optimized(request, user_type, user_id):
+    try:
+        learners = None
+        learner_dict = {}
+
+        if user_type == "pmo":
+            learners = Learner.objects.all()
+        elif user_type == "coach":
+            learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+        elif user_type == "hr":
+            learners = Learner.objects.filter(
+                Q(engagement__project__hr__id=user_id)
+                | Q(schedularbatch__project__hr__id=user_id)
+            ).distinct()
+
+        for learner in learners:
+            if user_type == "pmo" or user_type == "hr":
+                course_enrollments = CourseEnrollment.objects.filter(learner=learner)
+                courses_names = [
+                    course_enrollment.course.name
+                    for course_enrollment in course_enrollments
+                ]
+                learner_dict[learner.id] = courses_names
+
+        return Response(learner_dict)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_project_organisation_learner_of_user_optimized(request, user_type, user_id):
+    try:
+        learners = None
+        learner_dict_project = {}
+        learner_dict_organisation = {}
+
+        if user_type == "pmo":
+            learners = Learner.objects.all()
+        elif user_type == "coach":
+            learners = Learner.objects.filter(engagement__coach__id=user_id).distinct()
+        elif user_type == "hr":
+            learners = Learner.objects.filter(
+                Q(engagement__project__hr__id=user_id)
+                | Q(schedularbatch__project__hr__id=user_id)
+            ).distinct()
+
+        for learner in learners:
+            projects = None
+            schedular_batches = None
+            if user_type == "pmo":
+                projects = Project.objects.filter(engagement__learner=learner)
+                schedular_batches = SchedularBatch.objects.filter(
+                    learners__email=learner.email
+                )
+            elif user_type == "coach":
+                projects = Project.objects.filter(
+                    Q(engagement__learner=learner) & Q(engagement__coach__id=user_id)
+                )
+            elif user_type == "hr":
+                projects = Project.objects.filter(
+                    Q(engagement__learner=learner) & Q(hr__id=user_id)
+                )
+                schedular_batches = SchedularBatch.objects.filter(
+                    Q(learners__email=learner.email) & Q(project__hr__id=user_id)
+                )
+
+            learner_dict_organisation[learner.id] = set()
+            learner_dict_project[learner.id] = []
+
+            for project in projects:
+                project_dict = {
+                    "project_id": project.id,
+                    "name": project.name,
+                    "type": "CAAS",
+                }
+
+                learner_dict_organisation[learner.id].add(project.organisation.name)
+                learner_dict_project[learner.id].append(project_dict)
+
+            if user_type == "pmo" or user_type == "hr":
+                for batch in schedular_batches:
+                    project_dict = {
+                        "project_id": batch.project.id,
+                        "batch_id": batch.id,
+                        "name": batch.project.name,
+                        "type": "SEEQ",
+                    }
+                    learner_dict_organisation[learner.id].add(
+                        batch.project.organisation.name
+                    )
+                    if project_dict["name"] not in [
+                        proj["name"] for proj in learner_dict_project[learner.id]
+                    ]:
+                        learner_dict_project[learner.id].append(project_dict)
+
+        return Response(
+            {
+                "learner_dict_project": learner_dict_project,
+                "learner_dict_organisation": learner_dict_organisation,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_learner_data(request, learner_id):
     learner = Learner.objects.get(id=learner_id)
     serializer = LearnerSerializer(learner)
@@ -5320,6 +4971,7 @@ def get_learner_data(request, learner_id):
 
 # updating the availability and coach in the first pending chemistry available for learner
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def request_chemistry_session(request, project_id, learner_id):
     session = SessionRequestCaas.objects.filter(
         learner__id=learner_id,
@@ -5327,7 +4979,7 @@ def request_chemistry_session(request, project_id, learner_id):
         session_type="chemistry",
         status="pending",
     )
-    print(session)
+
     if len(session) == 0:
         return Response({"error": "Max sessions exceeded."}, status=400)
     else:
@@ -5362,6 +5014,7 @@ def request_chemistry_session(request, project_id, learner_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_learner_sessions_in_project(request, project_id, learner_id):
     sessions = SessionRequestCaas.objects.filter(
         project__id=project_id, learner__id=learner_id
@@ -5371,6 +5024,7 @@ def get_learner_sessions_in_project(request, project_id, learner_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def request_session(request, session_id, coach_id):
     session = SessionRequestCaas.objects.get(id=session_id)
     coach = Coach.objects.get(id=coach_id)
@@ -5399,16 +5053,9 @@ def request_session(request, session_id, coach_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def reschedule_session_of_coachee(request, session_id):
     session = SessionRequestCaas.objects.get(id=session_id)
-
-    google_calendar_event = CalendarEvent.objects.filter(
-        session=session, account_type="google"
-    ).first()
-    microsoft_calendar_event = CalendarEvent.objects.filter(
-        session=session, account_type="microsoft"
-    ).first()
-
     session.is_archive = True
 
     time_arr = create_time_arr(request.data["availibility"])
@@ -5426,17 +5073,11 @@ def reschedule_session_of_coachee(request, session_id):
     new_session.save()
     session.save()
 
-    if google_calendar_event:
-        google_calendar_event.session = new_session
-        google_calendar_event.save()
-    if microsoft_calendar_event:
-        microsoft_calendar_event.session = new_session
-        microsoft_calendar_event.save()
-
     return Response({"message": "Session reschedule successfully"}, status=200)
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_goal(request):
     user_email = request.data.get("email")
     serializer = GoalSerializer(data=request.data)
@@ -5468,6 +5109,7 @@ def create_goal(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_engagement_goals(request, engagement_id):
     goals = Goal.objects.filter(engagement__id=engagement_id)
     serializer = GetGoalSerializer(goals, many=True)
@@ -5475,6 +5117,7 @@ def get_engagement_goals(request, engagement_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def edit_goal(request, goal_id):
     try:
         goal = Goal.objects.get(id=goal_id)
@@ -5504,6 +5147,7 @@ def edit_goal(request, goal_id):
 
 
 @api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
 def delete_goal(request, goal_id):
     try:
         goal = Goal.objects.get(id=goal_id)
@@ -5514,6 +5158,7 @@ def delete_goal(request, goal_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_competency(request):
     serializer = CompetencySerializer(data=request.data)
     goal_id = request.data.get("goal")
@@ -5532,6 +5177,7 @@ def create_competency(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def edit_competency(request, competency_id):
     try:
         competency = Competency.objects.get(id=competency_id)
@@ -5559,6 +5205,7 @@ def edit_competency(request, competency_id):
 
 
 @api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
 def delete_competency(request, competency_id):
     try:
         competency = Competency.objects.get(id=competency_id)
@@ -5569,6 +5216,7 @@ def delete_competency(request, competency_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_engagement_competency(request, engagement_id):
     competentcy = Competency.objects.filter(goal__engagement__id=engagement_id)
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
@@ -5576,6 +5224,7 @@ def get_engagement_competency(request, engagement_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_score_to_competency(request, competency_id):
     try:
         competency = Competency.objects.get(id=competency_id)
@@ -5603,6 +5252,7 @@ def add_score_to_competency(request, competency_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_competency_by_goal(request, goal_id):
     competentcy = Competency.objects.filter(goal__id=goal_id)
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
@@ -5610,6 +5260,7 @@ def get_competency_by_goal(request, goal_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_action_item(request):
     serializer = ActionItemSerializer(data=request.data)
     competency_id = request.data.get("competency")
@@ -5627,6 +5278,7 @@ def create_action_item(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_engagement_action_items(request, engagement_id):
     action_items = ActionItem.objects.filter(
         competency__goal__engagement__id=engagement_id
@@ -5636,6 +5288,7 @@ def get_engagement_action_items(request, engagement_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_action_items_by_competency(request, competency_id):
     action_items = ActionItem.objects.filter(competency__id=competency_id)
     serializer = GetActionItemDepthOneSerializer(action_items, many=True)
@@ -5643,6 +5296,7 @@ def get_action_items_by_competency(request, competency_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def edit_action_item(request, action_item_id):
     try:
         action_item = ActionItem.objects.get(id=action_item_id)
@@ -5656,6 +5310,7 @@ def edit_action_item(request, action_item_id):
 
 
 @api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
 def delete_action_item(request, action_item_id):
     try:
         action_item = ActionItem.objects.get(id=action_item_id)
@@ -5666,6 +5321,7 @@ def delete_action_item(request, action_item_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def mark_session_as_complete(request, session_id):
     try:
         session = SessionRequestCaas.objects.get(id=session_id)
@@ -5677,6 +5333,7 @@ def mark_session_as_complete(request, session_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def update_engagement_status(request, status, engagement_id):
     try:
         engagement = Engagement.objects.get(id=engagement_id)
@@ -5688,6 +5345,7 @@ def update_engagement_status(request, status, engagement_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_competencies(request):
     goals_with_competencies = Goal.objects.prefetch_related("competency_set").all()
 
@@ -5743,96 +5401,102 @@ def get_all_competencies(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_current_session(request, user_type, room_id, user_id):
     five_minutes_in_milliseconds = 300000
     current_time = int(timezone.now().timestamp() * 1000)
     five_minutes_plus_current_time = current_time + five_minutes_in_milliseconds
+    sessions = None
+    session_modal = "CAAS"
     if user_type == "coach":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
-            & Q(confirmed_availability__end_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
             Q(coach__room_id=room_id),
             Q(is_archive=False),
             ~Q(status="completed"),
-        )
+        ).order_by("confirmed_availability__start_time")
+
         if sessions.count() == 0:
             coach = Coach.objects.get(id=user_id)
             sessions = SchedularSessions.objects.filter(
-                availibility__start_time__lt=five_minutes_plus_current_time,
                 availibility__end_time__gt=current_time,
                 availibility__coach__email=coach.email,
                 availibility__coach__room_id=room_id,
-            )
+            ).order_by("availibility__start_time")
+            session_modal = "SEEQ"
+
     elif user_type == "learner":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
-            & Q(confirmed_availability__end_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             Q(learner__id=user_id),
             (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
             ~Q(status="completed"),
-        )
+        ).order_by("confirmed_availability__start_time")
 
         if sessions.count() == 0:
             learner = Learner.objects.get(id=user_id)
             sessions = SchedularSessions.objects.filter(
-                availibility__start_time__lt=five_minutes_plus_current_time,
                 availibility__end_time__gt=current_time,
                 learner__email=learner.email,
                 availibility__coach__room_id=room_id,
-            )
+            ).order_by("availibility__start_time")
+            session_modal = "SEEQ"
 
     elif user_type == "hr":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
-            & Q(confirmed_availability__end_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             Q(hr__id=user_id),
             (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
             ~Q(status="completed"),
-        )
+        ).order_by("confirmed_availability__start_time")
+
     elif user_type == "pmo":
         sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
-            Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
-            & Q(confirmed_availability__end_time__gt=current_time),
+            Q(confirmed_availability__end_time__gt=current_time),
             Q(pmo__id=user_id),
             (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
             ~Q(status="completed"),
-        )
-    if len(sessions) == 0:
-        return Response({"error": "You don't have any sessions right now."}, status=404)
-    return Response({"message": "success"}, status=200)
+        ).order_by("confirmed_availability__start_time")
 
+    if not sessions:
+        return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
-# @api_view(["POST"])
-# def get_current_session_of_stakeholder(request, room_id):
-#     five_minutes_in_milliseconds = 300000
-#     current_time = int(timezone.now().timestamp() * 1000)
-#     five_minutes_plus_current_time = current_time + five_minutes_in_milliseconds
-#     sessions = SessionRequestCaas.objects.filter(
-#         Q(is_booked=True),
-#         Q(confirmed_availability__start_time__lt=five_minutes_plus_current_time)
-#         & Q(confirmed_availability__end_time__gt=current_time),
-#         Q(coach__room_id=room_id),
-#         Q(session_type="tripartite")
-#         | Q(session_type="mid_review")
-#         | Q(session_type="end_review"),
-#         Q(invitees__contains=request.data["email"]),
-#         Q(is_archive=False),
-#         ~Q(status="completed"),
-#     )
-#     if len(sessions) == 0:
-#         return Response({"error": "You don't have any sessions right now."}, status=404)
-#     return Response({"message": "success"}, status=200)
+    # Get the upcoming next session and current session
+    upcoming_session = sessions.first()
+    if session_modal == "CAAS" and upcoming_session:
+        session_details = {
+            "session_id": upcoming_session.id,
+            "type": "CAAS",
+            "start_time": upcoming_session.confirmed_availability.start_time,
+            "end_time": upcoming_session.confirmed_availability.end_time,
+        }
+    elif session_modal == "SEEQ" and upcoming_session:
+        session_details = {
+            "session_id": upcoming_session.id,
+            "type": "SEEQ",
+            "start_time": upcoming_session.availibility.start_time,
+            "end_time": upcoming_session.availibility.end_time,
+        }
+
+    # You can customize the response data based on your requirements
+    response_data = {
+        "message": "success",
+        "upcoming_session": session_details if upcoming_session else None,
+    }
+
+    return Response(response_data, status=200)
 
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def get_current_session_of_stakeholder(request, room_id):
     five_minutes_in_milliseconds = 300000
     current_time = int(timezone.now().timestamp() * 1000)
@@ -5857,6 +5521,7 @@ def get_current_session_of_stakeholder(request, room_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def schedule_session_directly(request, session_id):
     try:
         session = SessionRequestCaas.objects.get(id=session_id)
@@ -5925,6 +5590,41 @@ def schedule_session_directly(request, session_id):
             "endDate": session_date,
             "endTime": end_time,
         }
+
+        # WHATSAPP MESSAGE CHECK
+        start_datetime_obj = datetime.fromtimestamp(
+            int(session.confirmed_availability.start_time) / 1000
+        )
+        # Decrease 5 minutes
+        five_minutes_prior_start_datetime = start_datetime_obj - timedelta(minutes=5)
+        clocked = ClockedSchedule.objects.create(
+            clocked_time=five_minutes_prior_start_datetime
+        )
+        periodic_task = PeriodicTask.objects.create(
+            name=uuid.uuid1(),
+            task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_caas",
+            args=[session_id],
+            clocked=clocked,
+            one_off=True,
+        )
+        periodic_task.save()
+
+        # after 3 minutes
+        three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(minutes=3)
+        clocked = ClockedSchedule.objects.create(
+            clocked_time=three_minutes_ahead_start_datetime
+        )
+        periodic_task = PeriodicTask.objects.create(
+            name=uuid.uuid1(),
+            task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_caas",
+            args=[session_id],
+            clocked=clocked,
+            one_off=True,
+        )
+        periodic_task.save()
+        # WHATSAPP MESSAGE CHECK
+        booking_id = coach.room_id
+
         if session.project.enable_emails_to_hr_and_coachee:
             microsoft_auth_url = (
                 f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
@@ -5949,6 +5649,7 @@ def schedule_session_directly(request, session_id):
                     "sessionName": SESSION_TYPE_VALUE[session.session_type],
                     "slot_date": session_date,
                     "slot_time": session_time,
+                    "booking_id": booking_id,
                     "email": coachee.email,
                     "microsoft_auth_url": microsoft_auth_url,
                     "user_token_present": user_token_present,
@@ -6064,6 +5765,7 @@ def schedule_session_directly(request, session_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def delete_learner_from_project(request, engagement_id):
     try:
         engagement = Engagement.objects.get(id=engagement_id)
@@ -6091,6 +5793,7 @@ def delete_learner_from_project(request, engagement_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def reset_consent(request):
     try:
         coach_status = get_object_or_404(
@@ -6113,6 +5816,7 @@ def reset_consent(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_competency_averages(request, hr_id):
     # Step 1: Retrieve the data from the Competency model
     competencies = Competency.objects.filter(goal__engagement__project__hr__id=hr_id)
@@ -6143,6 +5847,7 @@ def get_competency_averages(request, hr_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_learner_competency_averages(request, learner_id):
     competencies = Competency.objects.filter(goal__engagement__learner__id=learner_id)
     serializer = CompetencyDepthOneSerializer(competencies, many=True)
@@ -6150,6 +5855,7 @@ def get_learner_competency_averages(request, learner_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_upcoming_session_count(request, hr_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -6181,6 +5887,7 @@ def get_upcoming_session_count(request, hr_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_requests_count(request, hr_id):
     session_requests = SessionRequestCaas.objects.filter(
         Q(confirmed_availability=None) & Q(project__hr__id=hr_id) & ~Q(status="pending")
@@ -6197,6 +5904,7 @@ def get_requests_count(request, hr_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_completed_sessions_count(request, hr_id):
     session_requests = SessionRequestCaas.objects.filter(
         Q(project__hr__id=hr_id) & Q(status="completed")
@@ -6213,6 +5921,7 @@ def get_completed_sessions_count(request, hr_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_completed_learner_sessions_count(request, learner_id):
     learner_session_requests = SessionRequestCaas.objects.filter(
         Q(learner__id=learner_id) & Q(status="completed")
@@ -6231,6 +5940,7 @@ def get_completed_learner_sessions_count(request, learner_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_total_goals_for_learner(request, learner_id):
     try:
         total_goals = Goal.objects.filter(engagement__learner_id=learner_id).count()
@@ -6246,6 +5956,7 @@ def get_total_goals_for_learner(request, learner_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_total_competencies_for_learner(request, learner_id):
     try:
         total_competencies = Competency.objects.filter(
@@ -6263,6 +5974,7 @@ def get_total_competencies_for_learner(request, learner_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_learners_without_sessions(request, hr_id):
     # Get the learners associated with the given hr_id who don't have any sessions with status = "requested" or "booked".
     learners = (
@@ -6279,6 +5991,7 @@ def get_learners_without_sessions(request, hr_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def select_coach_for_coachee(request):
     try:
         coach_status = CoachStatus.objects.get(id=request.data["coach_status_id"])
@@ -6296,6 +6009,7 @@ def select_coach_for_coachee(request):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_past_session(request, session_id):
     # print("request data",request.data)
     try:
@@ -6347,6 +6061,7 @@ def add_past_session(request, session_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_pending_action_items_by_competency(request, learner_id):
     action_items = ActionItem.objects.filter(
         competency__goal__engagement__learner_id=learner_id, status="not_done"
@@ -6356,6 +6071,7 @@ def get_pending_action_items_by_competency(request, learner_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_competencies_of_hr(request, hr_id):
     goals_with_competencies = Goal.objects.prefetch_related("competency_set").filter(
         engagement__project__hr=hr_id
@@ -6414,6 +6130,8 @@ def get_all_competencies_of_hr(request, hr_id):
 
 
 class UpdateInviteesView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, session_request_id):
         try:
             session_request = SessionRequestCaas.objects.get(pk=session_request_id)
@@ -6473,6 +6191,7 @@ class UpdateInviteesView(APIView):
 
 
 @api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
 def remove_coach_from_project(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
@@ -6548,32 +6267,50 @@ def remove_coach_from_project(request, project_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def standard_field_request(request, user_id):
-    value = request.data.get("value")
+    try:
+        value = request.data.get("value").strip()
+        userType = request.data.get("userType")
 
-    user_instance = Coach.objects.get(id=user_id)
+        field_name = request.data.get(
+            "field_name"
+        )  # Adjust this based on your field name
+        standardized_field, created = StandardizedField.objects.get_or_create(
+            field=field_name
+        )
+        if userType == "coach":
+            user_instance = Coach.objects.get(id=user_id)
+            standardized_field_request = StandardizedFieldRequest(
+                standardized_field_name=standardized_field,
+                coach=user_instance,
+                value=value,
+                status="pending",
+            )
+            standardized_field_request.save()
 
-    field_name = request.data.get("field_name")  # Adjust this based on your field name
-    standardized_field, created = StandardizedField.objects.get_or_create(
-        field=field_name
-    )
+        elif userType == "facilitator":
+            user_instance = Facilitator.objects.get(id=user_id)
+            standardized_field_request = StandardizedFieldRequest(
+                standardized_field_name=standardized_field,
+                facilitator=user_instance,
+                value=value,
+                status="pending",
+            )
+            standardized_field_request.save()
 
-    standardized_field_request = StandardizedFieldRequest(
-        standardized_field_name=standardized_field,
-        coach=user_instance,
-        value=value,
-        status="pending",
-    )
-    standardized_field_request.save()
-
-    return Response({"message": "Request sent."}, status=200)
+        return Response({"message": "Request sent."}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to create request."}, status=500)
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def coaches_which_are_included_in_projects(request):
     coachesId = []
     projects = Project.objects.all()
-
+    schedular_projects = SchedularProject.objects.all()
     for project in projects:
         for coach_status in project.coaches_status.all():
             if (
@@ -6581,9 +6318,13 @@ def coaches_which_are_included_in_projects(request):
                 and coach_status.status["project_structure"]["status"] == "select"
             ):
                 coachesId.append(coach_status.coach.id)
-
+    for project in schedular_projects:
+        batches = SchedularBatch.objects.filter(project=project)
+        for batch in batches:
+            coaches = batch.coaches.all()
+            for coach in coaches:
+                coachesId.append(coach.id)
     coachesId = set(coachesId)
-
     return Response(coachesId)
 
 
@@ -6662,13 +6403,15 @@ def calculate_and_send_session_data(user_id):
             project_name: {
                 session_type: {
                     **session,
-                    "completion_percentage": format(
-                        (session["completed_sessions"] / session["total_sessions"])
-                        * 100,
-                        ".1f",
-                    )
-                    if session["total_sessions"] > 0
-                    else 0,
+                    "completion_percentage": (
+                        format(
+                            (session["completed_sessions"] / session["total_sessions"])
+                            * 100,
+                            ".1f",
+                        )
+                        if session["total_sessions"] > 0
+                        else 0
+                    ),
                 }
                 for session_type, session in project_data.items()
             }
@@ -6732,6 +6475,8 @@ def calculate_and_send_session_data(user_id):
 
 
 class SessionsProgressOfAllCoacheeForAnHr(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, user_id, format=None):
         session_data = calculate_session_progress_data_for_hr(user_id)
 
@@ -6739,6 +6484,8 @@ class SessionsProgressOfAllCoacheeForAnHr(APIView):
 
 
 class AddRegisteredCoach(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request, *args, **kwargs):
         # Get data from request
 
@@ -6804,6 +6551,8 @@ class AddRegisteredCoach(APIView):
                 # Change the is_approved field to True
                 coach.is_approved = False
                 coach.save()
+                name = coach_user.first_name + " " + coach_user.last_name
+                add_contact_in_wati("coach", name, coach_user.phone)
                 coach_serializer = CoachSerializer(coach)
 
                 path = f"/profile"
@@ -6856,6 +6605,7 @@ class AddRegisteredCoach(APIView):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_registered_coaches(request):
     try:
         # Filter coaches where isapproved is False
@@ -6964,6 +6714,7 @@ def get_registered_coaches(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_engagements(request):
     # Get all engagements
     engagements = Engagement.objects.all()
@@ -7043,6 +6794,7 @@ def get_all_engagements(request):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def edit_project_caas(request, project_id):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_id"]
@@ -7082,12 +6834,22 @@ def edit_project_caas(request, project_id):
         project.enable_emails_to_hr_and_coachee = request.data.get(
             "enable_emails_to_hr_and_coachee", project.enable_emails_to_hr_and_coachee
         )
+
+        project.masked_coach_profile = request.data.get(
+            "masked_coach_profile", project.masked_coach_profile
+        )
+
+        project.automated_reminder = request.data.get(
+            "automated_reminder", project.automated_reminder
+        )
+
         project.hr.clear()
         for hr in request.data["hr"]:
             single_hr = HR.objects.get(id=hr)
             project.hr.add(single_hr)
 
         # Save the updated project
+
         project.save()
 
         # You can return a success response with the updated project details
@@ -7103,6 +6865,7 @@ def edit_project_caas(request, project_id):
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def project_status(request, project_id):
     try:
         # Use get_object_or_404 to retrieve the project or return a 404 response if it doesn't exist
@@ -7142,6 +6905,7 @@ def project_status(request, project_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def completed_projects(request, user_id):
     projects = Project.objects.filter(coaches_status__coach__id=user_id)
     completed_project = []
@@ -7155,6 +6919,8 @@ def completed_projects(request, user_id):
 
 
 class ActivitySummary(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         try:
             user_login_activities = UserLoginActivity.objects.all()
@@ -7331,31 +7097,30 @@ class ActivitySummary(APIView):
 
 
 @api_view(["POST"])
+@permission_classes([AllowAny])
 def send_reset_password_link(request):
-    # Assuming you are sending a POST request with a list of emails in the body
     users = request.data["users"]
     for user_data in users:
         try:
             user = User.objects.get(email=user_data["email"])
-            # Replace YourUserModel with your actual user model
             token = get_token_generator().generate_token()
-            # Save the token to the database
             ResetPasswordToken.objects.create(user=user, key=token)
-            # def send_mail_templates(file_name, user_email, email_subject, content, bcc_emails):
-            reset_password_link = f"https://vendor.meeraq.com/reset-password/{token}"
+            reset_password_link = f"{env('ZOHO_APP_URL')}/reset-password/{token}"
             send_mail_templates(
-                "greeting_email_to_vendor.html",
+                "vendors/vendor_welcome.html",
                 [user_data["email"]],
                 "Meeraq - Exciting News! New Vendor Platform Launch.",
-                {"vendor_name": user_data["name"], "link": reset_password_link},
+                {"name": user_data["name"], "link": reset_password_link},
                 [],
             )
         except Exception as e:
             print(f"Error sending link to {user_data['email']}: {str(e)}")
+        sleep(5)
     return Response({"message": "Reset password links sent successfully"})
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_coach_profile_template(request):
     coach_id = request.data.get("coach")
     project_id = request.data.get("project")
@@ -7367,11 +7132,11 @@ def create_coach_profile_template(request):
     try:
         # Fetch the existing CoachProfileTemplate object based on coach and project IDs
         template = CoachProfileTemplate.objects.get(
-            coach_id=coach_id, project_id=project_id
+            coach__id=coach_id, project__id=project_id
         )
     except CoachProfileTemplate.DoesNotExist:
         # If the object doesn't exist, create a new one
-        template = CoachProfileTemplate(coach_id=coach_id, project_id=project_id)
+        template = CoachProfileTemplate(coach__id=coach_id, project__id=project_id)
 
     # Get the existing templates data
     existing_templates = template.templates
@@ -7392,6 +7157,7 @@ def create_coach_profile_template(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_coach_profile_template(request, project_id):
     try:
         coach_profile_templates = CoachProfileTemplate.objects.filter(
@@ -7404,6 +7170,8 @@ def get_coach_profile_template(request, project_id):
 
 
 class StandardizedFieldAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         standardized_fields = StandardizedField.objects.all()
 
@@ -7420,6 +7188,8 @@ class StandardizedFieldAPI(APIView):
 
 
 class StandardizedFieldRequestAPI(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -7447,61 +7217,106 @@ class StandardizedFieldRequestAPI(APIView):
 
 
 class StandardFieldAddValue(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
-        field_name = request.data.get("field_name")
-        option_value = request.data.get("optionValue")
-
-        standardized_field, created = StandardizedField.objects.get_or_create(
-            field=field_name
-        )
-
-        if option_value not in standardized_field.values:
-            standardized_field.values.append(option_value)
-            standardized_field.save()
-        else:
-            return Response({"error": "Value already present."}, status=404)
-
-        return Response(
-            {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."},
-            status=200,
-        )
-
-
-class StandardFieldEditValue(APIView):
-    def put(self, request):
-        field_name = request.data.get("field_name")
-        previous_value = request.data.get("previous_value")
-        new_value = request.data.get("new_value")
-
         try:
-            standardized_field = StandardizedField.objects.get(field=field_name)
+            with transaction.atomic():
+                # Extracting data from request body
+                field_name = request.data.get("field_name")
+                option_value = request.data.get("optionValue").strip()
 
-            if previous_value in standardized_field.values:
-                index = standardized_field.values.index(previous_value)
-                standardized_field.values[index] = new_value
+                # Get or create the StandardizedField instance for the given field_name
+                standardized_field, created = StandardizedField.objects.get_or_create(
+                    field=field_name
+                )
 
-                standardized_field.save()
+                # Check if the option_value already exists in the values list of the standardized_field
+                if option_value not in standardized_field.values:
+                    # Add the option_value to the values list and save the instance
+                    standardized_field.values.append(option_value)
+                    standardized_field.save()
+                else:
+                    # Return error response if the option_value already exists
+                    return Response({"error": "Value already present."}, status=400)
 
+                # Return success response
                 return Response(
                     {
-                        "message": f"Value Updated in {FIELD_NAME_VALUES[field_name]} field."
+                        "message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."
                     },
                     status=200,
                 )
-            else:
-                return Response(
-                    {
-                        "message": f"{previous_value} not found in {FIELD_NAME_VALUES[field_name]} field."
-                    },
-                    status=404,
-                )
-        except StandardizedField.DoesNotExist:
+
+        except Exception as e:
+            print(str(e))
+            # Return error response if any exception occurs
             return Response(
-                {"error": f"{FIELD_NAME_VALUES[field_name]} not found."}, status=404
+                {"error": "Failed to add value."},
+                status=500,
+            )
+
+
+class StandardFieldEditValue(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request):
+        try:
+            with transaction.atomic():
+                # Extracting data from request body
+                field_name = request.data.get("field_name")
+                previous_value = request.data.get("previous_value")
+                new_value = request.data.get("new_value").strip()
+
+                # Retrieve the StandardizedField instance corresponding to the provided field_name
+                standardized_field = StandardizedField.objects.filter(
+                    field=field_name
+                ).first()
+
+                # Check if the field exists
+                if standardized_field:
+                    # Check if the previous_value exists in the values list of the standardized_field
+                    if previous_value in standardized_field.values:
+                        # Update the value if it exists
+
+                        index = standardized_field.values.index(previous_value)
+                        standardized_field.values[index] = new_value
+                        standardized_field.save()
+
+                        # Return success response
+                        return Response(
+                            {
+                                "message": f"Value Updated in {FIELD_NAME_VALUES[field_name]} field."
+                            },
+                            status=200,
+                        )
+                    else:
+                        # Return error response if the previous_value does not exist
+                        return Response(
+                            {
+                                "message": f"{previous_value} not found in {FIELD_NAME_VALUES[field_name]} field."
+                            },
+                            status=404,
+                        )
+                else:
+                    # Return error response if the field does not exist
+                    return Response(
+                        {"message": f"{FIELD_NAME_VALUES[field_name]} not found."},
+                        status=404,
+                    )
+
+        except Exception as e:
+            print(str(e))
+            # Return error response if any exception occurs
+            return Response(
+                {"error": "Failed to update."},
+                status=500,
             )
 
 
 class StandardizedFieldRequestAcceptReject(APIView):
+    permission_classes = [IsAuthenticated]
+
     def put(self, request):
         status = request.data.get("status")
         request_id = request.data.get("request_id")
@@ -7536,25 +7351,50 @@ class StandardizedFieldRequestAcceptReject(APIView):
 
 
 class StandardFieldDeleteValue(APIView):
+    permission_classes = [IsAuthenticated]
+
     def delete(self, request):
-        field_name = request.data.get("field_name")
-        option_value = request.data.get("optionValue")
+        try:
+            with transaction.atomic():
+                # Extracting data from request body
+                field_name = request.data.get("field_name")
+                option_value = request.data.get("optionValue")
 
-        standardized_field = StandardizedField.objects.get(field=field_name)
+                # Retrieve the StandardizedField instance for the given field_name
+                standardized_field = StandardizedField.objects.get(field=field_name)
 
-        if option_value in standardized_field.values:
-            standardized_field.values.remove(option_value)
-            standardized_field.save()
-        else:
-            return Response({"error": "Value not present."}, status=404)
+                # Check if the option_value exists in the values list of the standardized_field
+                if option_value in standardized_field.values:
+                    # Remove the option_value from the values list and save the instance
+                    standardized_field.values.remove(option_value)
+                    standardized_field.save()
+                else:
+                    # Return error response if the option_value does not exist
+                    return Response({"error": "Value not present."}, status=404)
 
-        return Response(
-            {"message": f"Value deleted from {FIELD_NAME_VALUES[field_name]} field."},
-            status=200,
-        )
+                # Return success response
+                return Response(
+                    {
+                        "message": f"Value deleted from {FIELD_NAME_VALUES[field_name]} field."
+                    },
+                    status=200,
+                )
+
+        except StandardizedField.DoesNotExist:
+            # Return error response if the StandardizedField instance does not exist
+            return Response({"error": "Field not found."}, status=404)
+
+        except Exception as e:
+            print(str(e))
+            # Return error response if any other exception occurs
+            return Response(
+                {"error": "Failed to delete value."},
+                status=500,
+            )
 
 
 @api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
 def template_list_create_view(request):
     if request.method == "GET":
         templates = Template.objects.all()
@@ -7570,6 +7410,7 @@ def template_list_create_view(request):
 
 
 @api_view(["GET", "PUT", "DELETE"])
+@permission_classes([IsAuthenticated])
 def template_retrieve_update_destroy_view(request, pk):
     try:
         template = Template.objects.get(pk=pk)
@@ -7593,6 +7434,7 @@ def template_retrieve_update_destroy_view(request, pk):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_project_contract(request):
     serializer = ProjectContractSerializer(data=request.data)
     if serializer.is_valid():
@@ -7602,6 +7444,8 @@ def create_project_contract(request):
 
 
 class ProjectContractAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, format=None):
         contracts = ProjectContract.objects.all()
         serializer = ProjectContractSerializer(contracts, many=True)
@@ -7609,6 +7453,8 @@ class ProjectContractAPIView(APIView):
 
 
 class ProjectContractDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, project_id, format=None):
         print(project_id)
         try:
@@ -7624,6 +7470,8 @@ class ProjectContractDetailView(APIView):
 
 
 class CoachContractList(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, format=None):
         contracts = CoachContract.objects.all()
         serializer = CoachContractSerializer(contracts, many=True)
@@ -7655,6 +7503,8 @@ class CoachContractList(APIView):
 
 
 class CoachContractDetail(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get_object(self, pk):
         try:
             return CoachContract.objects.get(pk=pk)
@@ -7702,11 +7552,13 @@ class CoachContractDetail(APIView):
 
 
 class UpdateCoachContract(APIView):
+    permission_classes = [IsAuthenticated]
+
     def put(self, request, format=None):
         coach_id = request.data.get("coach")
         project_id = request.data.get("project")
         try:
-            contract = CoachContract.objects.get(coach=coach_id, project=project_id)
+            contract = CoachContract.objects.get(coach__id=coach_id, project__id=project_id)
         except CoachContract.DoesNotExist:
             return Response(
                 {"error": "Coach Contract not found."}, status=status.HTTP_404_NOT_FOUND
@@ -7735,6 +7587,8 @@ class UpdateCoachContract(APIView):
 
 
 class AssignCoachContractAndProjectContract(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, format=None):
         project_id = request.data.get("project")
         existing_contract = ProjectContract.objects.filter(project=project_id).first()
@@ -7808,10 +7662,12 @@ class AssignCoachContractAndProjectContract(APIView):
 
 
 class ApprovedCoachContract(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, project_id, coach_id, format=None):
         try:
             coach_contract = CoachContract.objects.get(
-                project=project_id, coach=coach_id, status="approved"
+                project__id=project_id, coach__id=coach_id, status="approved"
             )
         except CoachContract.DoesNotExist:
             return Response(
@@ -7824,6 +7680,8 @@ class ApprovedCoachContract(APIView):
 
 
 class CoachWithApprovedContractsInProject(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, project_id, format=None):
         try:
             coach_contracts = CoachContract.objects.filter(
@@ -7845,6 +7703,8 @@ class CoachWithApprovedContractsInProject(APIView):
 
 
 class SendContractReminder(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request, format=None):
         try:
             coachs_data = request.data["pending_coaches"]
@@ -7886,6 +7746,7 @@ class SendContractReminder(APIView):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def change_user_role(request, user_id):
     user_role = request.data.get("user_role", "")
     user = User.objects.get(id=user_id)
@@ -7924,6 +7785,36 @@ def change_user_role(request, user_id):
         )
     elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
+    elif user_profile_role == "superadmin":
+        serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
+    elif user_profile_role == "finance":
+        serializer = FinanceDepthOneSerializer(user.profile.finance)
+    elif user_profile_role == "facilitator":
+        serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
+    elif user_profile_role == "vendor":
+        serializer = VendorDepthOneSerializer(user.profile.vendor)
+        organization = get_organization_data()
+        zoho_vendor = get_vendor(serializer.data["vendor_id"])
+        login_timestamp = timezone.now()
+        UserLoginActivity.objects.create(
+            user=user, timestamp=login_timestamp, platform="caas"
+        )
+
+        return Response(
+            {
+                **serializer.data,
+                "roles": roles,
+                "user": {
+                    **serializer.data["user"],
+                    "type": user_profile_role,
+                    "last_login": user.last_login,
+                },
+                "last_login": user.last_login,
+                "organization": organization,
+                "zoho_vendor": zoho_vendor,
+                "message": f"Role changed to billing",
+            }
+        )
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
@@ -7932,6 +7823,7 @@ def change_user_role(request, user_id):
         is_seeq_allowed = SchedularBatch.objects.filter(
             learners=user.profile.learner
         ).exists()
+
         return Response(
             {
                 **serializer.data,
@@ -7959,6 +7851,7 @@ def change_user_role(request, user_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_users(request):
     user_profiles = Profile.objects.all()
     res = []
@@ -8006,6 +7899,8 @@ def get_weeks_for_current_month():
 
 
 class SessionData(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, format=None):
         now = date.today()
         current_datetime = datetime.now()
@@ -8116,6 +8011,7 @@ class SessionData(APIView):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def google_oauth(request, user_email):
     oauth2_endpoint = "https://accounts.google.com/o/oauth2/v2/auth"
 
@@ -8134,6 +8030,7 @@ def google_oauth(request, user_email):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def google_auth_callback(request):
     code = request.GET.get("code")
 
@@ -8187,6 +8084,7 @@ def google_auth_callback(request):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def microsoft_auth(request, user_mail_address):
     oauth2_endpoint = f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
 
@@ -8206,6 +8104,7 @@ def microsoft_auth(request, user_mail_address):
 
 
 @api_view(["POST", "GET"])
+@permission_classes([AllowAny])
 def microsoft_callback(request):
     try:
         authorization_code = request.GET.get("code")
@@ -8261,6 +8160,8 @@ def microsoft_callback(request):
 
 
 class UserTokenAvaliableCheck(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, user_mail, format=None):
         user_token_present = False
         try:
@@ -8273,6 +8174,8 @@ class UserTokenAvaliableCheck(APIView):
 
 
 class DownloadCoachContract(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, coach_contract_id, format=None):
         try:
             coach_contract = CoachContract.objects.get(id=coach_contract_id)
@@ -8316,6 +8219,196 @@ class DownloadCoachContract(APIView):
         except Exception as e:
             print(str(e))
             return Response(
-                {"error": "Failed to downlaod Contract."},
+                {"error": "Failed to download Contract."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["POST"])
+def add_pmo(request):
+    try:
+        with transaction.atomic():
+            data = request.data.copy()
+            data["user"] = {"user_types": "pmo"}  # Assigning the role 'pmo' to the user
+
+            pmo_serializer = PmoSerializer(data=data)
+
+            if pmo_serializer.is_valid():
+                name = data.get("name")
+                email = data.get("email")
+                phone = data.get("phone")
+
+                if not (name and phone):
+                    return Response(
+                        {"error": "Name and phone are mandatory fields."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    user = User.objects.create_user(
+                        username=email,
+                        email=email,
+                        password=User.objects.make_random_password(),
+                    )
+
+                    profile = Profile.objects.create(user=user)
+                else:
+                    profile = Profile.objects.get(user=user)
+                pmo_role, created = Role.objects.get_or_create(name="pmo")
+                profile.roles.add(pmo_role)
+                profile.save()
+                pmo_serializer.save(user=profile)
+                return Response(pmo_serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(
+                    pmo_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+def get_pmo(request):
+    try:
+        pmos = Pmo.objects.all()
+        serializer = PmoSerializer(pmos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+PATH_ACTIVITY_MAPPING = {
+    "/api/login/": "Login",  # for all
+    "/api/send_list_to_hr/": "Send profile to HR",  # Pmo
+    "/schedular/give_availibilty/": "Give availability",  # coach
+    "/api/accept-coach-caas/hr": "Finalize Coach",  # hr
+    "/schedular/send_coaching_session_mail": "Send booking link email manually",  # pmo
+    "/api/competency/": "Add competency",  # coach
+    "/api/competency/score/": "Add score",  # coach
+    "/schedular/schedule-session/": "Book slot",  # coachee
+    "/api/otp/validate/": "Login with OTP",  # for all
+}
+
+
+ACTIVITIES_PER_USER_TYPE = {
+    "hr": ["Login", "Finalize Coach", "Login with OTP"],
+    "pmo": [
+        "Login",
+        "Send profile to HR",
+        "Send booking link email manually",
+        "Login with OTP",
+    ],
+    "coach": [
+        "Login",
+        "Give availability",
+        "Add competency",
+        "Add score",
+        "Login with OTP",
+    ],
+    "learner": ["Login", "Book slot", "Login with OTP"],
+}
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_api_logs(request):
+    start_date = request.GET.get("start_date")
+    end_date = request.GET.get("end_date")
+    if not start_date or not end_date:
+        logs = APILog.objects.all()
+    else:
+        try:
+            start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+            logs = APILog.objects.filter(created_at__date__range=(start_date, end_date))
+        except ValueError:
+            return JsonResponse(
+                {"error": "Invalid date format. Please use YYYY-MM-DD."}, status=400
+            )
+
+    result_dict = {}
+
+    for log in logs:
+        matching_key = next(
+            (key for key in PATH_ACTIVITY_MAPPING if log.path.startswith(key)), None
+        )
+        if matching_key:
+            activity = PATH_ACTIVITY_MAPPING[matching_key]
+            user_type = (
+                log.user.profile.roles.all().exclude(name="vendor").first().name.lower()
+                if log.user
+                and log.user.profile
+                and log.user.profile.roles.all().exclude(name="vendor").first()
+                else None
+            )
+            if (
+                user_type in ACTIVITIES_PER_USER_TYPE
+                and activity in ACTIVITIES_PER_USER_TYPE[user_type]
+            ):
+                key = (user_type, activity)
+                result_dict[key] = result_dict.get(key, 0) + 1
+
+    # Create a nested dictionary with user types and activities as keys and counts as values
+    user_activity_count_dict = {
+        user_type: {
+            activity: sum(
+                value
+                for key, value in result_dict.items()
+                if key[0] == user_type and key[1] == activity
+            )
+            for activity in ACTIVITIES_PER_USER_TYPE[user_type]
+        }
+        for user_type in set(key[0] for key in result_dict)
+    }
+    output_list = []
+    for user_type, activities in user_activity_count_dict.items():
+        for activity, count in activities.items():
+            output_list.append(
+                {"user_type": user_type, "activity": activity, "count": count}
+            )
+    return Response(output_list)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_skill_training_projects(request):
+    projects = SchedularProject.objects.all()
+    project_serializer = SchedularProjectSerializer(projects, many=True)
+
+    # Modify the reminder status directly in the serialized data
+    for project in project_serializer.data:
+        project["project_name"] = project["name"]
+        project["email_reminder"] = bool(project["email_reminder"])
+        project["whatsapp_reminder"] = bool(project["whatsapp_reminder"])
+        project["calendar_invites"] = bool(project["calendar_invites"])
+    return Response(project_serializer.data)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_reminders_of_project(request):
+    print("data", request.data)
+    try:
+        project_id = request.data.get("id")
+        reminder_type = request.data.get("reminder_type")
+        changes_status = request.data.get("changed_status")
+        schedular_project = SchedularProject.objects.get(id=project_id)
+
+        if reminder_type == "email_reminder":
+            schedular_project.email_reminder = changes_status
+        elif reminder_type == "whatsapp_reminder":
+            schedular_project.whatsapp_reminder = changes_status
+        elif reminder_type == "calendar_invites":
+            schedular_project.calendar_invites = changes_status
+
+        schedular_project.save()
+        return Response({"message": "Reminders updated successfully"})
+    except SchedularProject.DoesNotExist:
+        return Response(
+            {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+

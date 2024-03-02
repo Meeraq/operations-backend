@@ -3,7 +3,9 @@ from api.models import Learner
 from schedularApi.models import SchedularBatch, LiveSession, CoachingSession
 import os
 from django.core.exceptions import ValidationError
-
+from django_celery_beat.models import PeriodicTask
+import uuid
+from assessmentApi.models import Assessment as AssessmentModal
 
 # Create your models here.
 
@@ -29,8 +31,15 @@ class Course(models.Model):
     name = models.TextField()
     description = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
-    course_template = models.ForeignKey(CourseTemplate, on_delete=models.CASCADE)
+    course_template = models.ForeignKey(
+        CourseTemplate, on_delete=models.SET_NULL, blank=True, null=True
+    )
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    nudge_start_date = models.DateField(default=None, blank=True, null=True)
+    nudge_frequency = models.CharField(max_length=50, default="", blank=True, null=True)
+    nudge_periodic_task = models.ForeignKey(
+        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
+    )
 
     def __str__(self):
         return self.name
@@ -47,6 +56,7 @@ class Lesson(models.Model):
         ("video", "Video"),
         ("ppt", "PPT"),
         ("downloadable_file", "Downloadable File"),
+        ("assignment", "Assignment"),
     )
     STATUS_CHOICES = (
         ("draft", "Draft"),
@@ -75,6 +85,7 @@ class Question(models.Model):
         ("rating_1_to_5", "1 to 5 Rating"),
         ("rating_1_to_10", "1 to 10 Rating"),
         ("descriptive_answer", "Descriptive Answer"),
+        ("rating_0_to_10", "0 to 10 Rating"),
     ]
     text = models.CharField(max_length=255)
     options = models.JSONField(default=list)
@@ -88,7 +99,14 @@ class QuizLesson(models.Model):
 
 class FeedbackLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    live_session = models.ForeignKey(
+        LiveSession, on_delete=models.CASCADE, null=True, blank=True, default=None
+    )
     questions = models.ManyToManyField(Question)
+    unique_id = models.CharField(
+        max_length=225,
+        blank=True,
+    )
 
 
 class LiveSessionLesson(models.Model):
@@ -107,7 +125,22 @@ class LaserCoachingSession(models.Model):
 
 
 class Assessment(models.Model):
+    ASSESSMENT_TIMING_CHOICES = [
+        ("pre", "Pre-Assessment"),
+        ("post", "Post-Assessment"),
+        ("none", "None"),
+    ]
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    type = models.CharField(
+        max_length=255, choices=ASSESSMENT_TIMING_CHOICES, default="none"
+    )
+    assessment_modal = models.ForeignKey(
+        AssessmentModal,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        related_name="assessment_modal",
+    )
 
 
 class Video(models.Model):
@@ -119,11 +152,21 @@ class Video(models.Model):
 class VideoLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     video = models.ForeignKey(Video, on_delete=models.CASCADE)
+    content = models.TextField(default="", blank=True)
 
 
 class File(models.Model):
     name = models.CharField(max_length=255)
     file = models.FileField(upload_to="file-uploads/")
+
+    def __str__(self):
+        return self.name
+
+    
+class AssignmentLesson(models.Model):
+    lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+    name = models.CharField(max_length=255)
+    description = models.TextField(default="", blank=True)
 
     def __str__(self):
         return self.name
@@ -143,6 +186,7 @@ class CourseEnrollment(models.Model):
     course = models.ForeignKey(Course, on_delete=models.CASCADE)
     enrollment_date = models.DateTimeField(auto_now_add=True)
     completed_lessons = models.JSONField(default=list, blank=True)
+    is_certificate_allowed = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return f"{self.learner.name} enrolled in {self.course.name}"
@@ -186,6 +230,13 @@ class FeedbackLessonResponse(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(auto_now=True)
 
+class AssignmentLessonResponse(models.Model):
+    assignment_lesson = models.ForeignKey(AssignmentLesson, on_delete=models.CASCADE)
+    file = models.FileField(upload_to="assignment-files/")
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
+
 
 def validate_pdf_extension(value):
     ext = os.path.splitext(value.name)[1].lower()
@@ -204,3 +255,28 @@ class Resources(models.Model):
 class PdfLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
     pdf = models.ForeignKey(Resources, on_delete=models.CASCADE)
+    content = models.TextField(default="", blank=True)
+
+
+class ThinkificLessonCompleted(models.Model):
+    course_name = models.TextField(blank=True)
+    lesson_name = models.TextField(blank=True)
+    student_name = models.TextField(blank=True)
+    completion_data = models.JSONField(blank=True)
+
+    def __str__(self):
+        return f"{self.student_name} completed {self.lesson_name} in {self.course_name}"
+
+
+class Nudge(models.Model):
+    name = models.CharField(max_length=255)
+    content = models.TextField()
+    file = models.FileField(upload_to="nudge_files/", blank=True, null=True)
+    order = models.IntegerField()
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    is_sent = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name

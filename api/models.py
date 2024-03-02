@@ -47,6 +47,8 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
 def password_reset_token_created(
     sender, instance, reset_password_token, *args, **kwargs
 ):
+    app_name = instance.request.data.get("app_name", "")
+    print("app", app_name)
     user = reset_password_token.user
     email_plaintext_message = "{}?token={}".format(
         reverse("password_reset:reset-password-request"), reset_password_token.key
@@ -57,7 +59,11 @@ def password_reset_token_created(
         and user.profile.roles.all().first().name == "coach"
         and user.profile.coach.is_approved == False
     ):
-        link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
+        # link = f'{env("APP_URL")}/create-password/{reset_password_token.key}'
+        if app_name == "assessment":
+            link = f"{env('ASSESSMENT_APP_URL')}/create-password/{reset_password_token.key}"
+        else:
+            link = f"{env('APP_URL')}/create-password/{reset_password_token.key}"
         name = user.profile.coach.first_name
         send_mail_templates(
             "coach_templates/create_new_password.html",
@@ -84,7 +90,15 @@ def password_reset_token_created(
             if projects.exists():
                 return None
         name = "User"
-        link = f'{env("APP_URL")}/reset-password/{reset_password_token.key}'
+        if app_name == "assessment":
+            link = f"{env('ASSESSMENT_APP_URL')}/create-password/{reset_password_token.key}"
+        elif app_name == "zoho":
+            link = f"{env('ZOHO_APP_URL')}/reset-password/{reset_password_token.key}"
+            # not sending when requested from vendor portal but user is not vendor in our system
+            if not user.profile.roles.all().filter(name="vendor").exists():
+                return None
+        else:
+            link = f"{env('APP_URL')}/create-password/{reset_password_token.key}"
         send_mail_templates(
             "hr_emails/forgot_password.html",
             [reset_password_token.user.email],
@@ -107,6 +121,9 @@ class Profile(models.Model):
         ("coach", "coach"),
         ("learner", "learner"),
         ("hr", "hr"),
+        ("superadmin", "superadmin"),
+        ("facilitator", "facilitator"),
+        ("finance", "finance")
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)
@@ -114,6 +131,24 @@ class Profile(models.Model):
     def __str__(self):
         return self.user.username
 
+
+class SuperAdmin(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+
+    def __str__(self):
+        return self.name
+
+class Finance(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
 
 class Pmo(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
@@ -134,7 +169,6 @@ def validate_pdf_extension(value):
 
 class Coach(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
-    coach_id = models.CharField(max_length=20, blank=True)
     vendor_id = models.CharField(max_length=255, blank=True, default="")
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
@@ -186,6 +220,44 @@ class Coach(models.Model):
     def __str__(self):
         return self.first_name + " " + self.last_name
 
+class Facilitator(models.Model):
+    user = models.OneToOneField(
+        Profile, on_delete=models.CASCADE, blank=True, default=""
+    )
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+    email = models.EmailField()
+    age = models.CharField(max_length=10, default="", blank=True)
+    gender = models.CharField(max_length=50, blank=True)
+    domain = models.JSONField(default=list, blank=True)
+    phone_country_code = models.CharField(max_length=20, default="", blank=True)
+    phone = models.CharField(max_length=25)
+    level = models.JSONField(default=list, blank=True)
+    rating = models.CharField(max_length=20, blank=True)
+    area_of_expertise = models.JSONField(default=list, blank=True)
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
+    education = models.JSONField(default=list, blank=True)
+    years_of_corporate_experience = models.CharField(max_length=20, blank=True)
+    city = models.JSONField(default=list, blank=True)
+    language = models.JSONField(default=list, blank=True)
+    job_roles = models.JSONField(default=list, blank=True)
+    city = models.JSONField(default=list, blank=True)
+    country = models.JSONField(default=list, blank=True)
+    created_at = models.DateField(auto_now_add=True)
+    edited_at = models.DateField(auto_now=True)
+    linkedin_profile_link = models.CharField(max_length=500, blank=True)
+    companies_worked_in = models.JSONField(default=list, blank=True)
+    other_certification = models.JSONField(default=list, blank=True)
+    currency = models.CharField(max_length=100, blank=True, default="")
+    client_companies = models.JSONField(default=list, blank=True)
+    educational_qualification = models.JSONField(default=list, blank=True)
+    fees_per_hour = models.CharField(max_length=20, blank=True)
+    fees_per_day = models.CharField(max_length=20, blank=True)
+    topic = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return self.first_name + " " + self.last_name
+    
 
 class Learner(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
@@ -281,6 +353,8 @@ class Project(models.Model):
     )
     coach_consent_mandatory = models.BooleanField(default=True)
     enable_emails_to_hr_and_coachee = models.BooleanField(default=True)
+    masked_coach_profile = models.BooleanField(default=False)
+    automated_reminder = models.BooleanField(blank=True, default=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -527,6 +601,9 @@ class StandardizedField(models.Model):
         ("domain", "Functional Domain"),
         ("client_companies", "Client companies"),
         ("educational_qualification", "Educational Qualification"),
+        ("city", "City"),
+        ("country", "Country"),
+        ("topic", "Topic"),
     )
 
     field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
@@ -544,7 +621,8 @@ class StandardizedFieldRequest(models.Model):
         ("accepted", "Accepted"),
         ("rejected", "Rejected"),
     )
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True , null=True)
+    facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE, blank=True , null=True)
     standardized_field_name = models.ForeignKey(
         StandardizedField, on_delete=models.CASCADE, blank=True
     )
@@ -555,7 +633,7 @@ class StandardizedFieldRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.coach.email} - {self.standardized_field_name} - {self.status}"
+        return f" {self.standardized_field_name} - {self.status}"
 
 
 class SessionRequestedActivity(models.Model):
@@ -715,3 +793,18 @@ class FinalizeCoachActivity(models.Model):
 
     def __str__(self):
         return f"{self.user_who_finalized.username} finalized the coach."
+
+
+class APILog(models.Model):
+    path = models.CharField(max_length=255)
+    method = models.CharField(max_length=10)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.path}"
