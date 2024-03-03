@@ -102,7 +102,11 @@ from courses.serializers import (
     CourseEnrollmentDepthOneSerializer,
 )
 from django.core.serializers import serialize
-from courses.views import create_or_get_learner,add_question_to_feedback_lesson,nps_default_feed_questions
+from courses.views import (
+    create_or_get_learner,
+    add_question_to_feedback_lesson,
+    nps_default_feed_questions,
+)
 from assessmentApi.models import (
     Assessment,
     ParticipantUniqueId,
@@ -303,7 +307,14 @@ def create_project_schedular(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_Schedular_Projects(request):
-    projects = SchedularProject.objects.all()
+    status = request.query_params.get("status")
+
+    if status:
+
+        projects = SchedularProject.objects.exclude(status="completed")
+    else:
+        projects = SchedularProject.objects.all()
+
     serializer = SchedularProjectSerializer(projects, many=True)
     for project_data in serializer.data:
         latest_update = (
@@ -643,7 +654,7 @@ def get_batch_calendar(request, batch_id):
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
                 "batch_name": batch_for_response.name,
-                "project_id":batch_for_response.project.id,
+                "project_id": batch_for_response.project.id,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -3787,10 +3798,17 @@ def add_new_session_in_project_structure(request):
                         )
                         unique_id = uuid.uuid4()
                         feedback_lesson = FeedbackLesson.objects.create(
-                            lesson=new_feedback_lesson, unique_id=unique_id, live_session=live_session
+                            lesson=new_feedback_lesson,
+                            unique_id=unique_id,
+                            live_session=live_session,
                         )
-                        if live_session.session_type in ["in_person_session", "virtual_session"]:        
-                            add_question_to_feedback_lesson(feedback_lesson, nps_default_feed_questions)
+                        if live_session.session_type in [
+                            "in_person_session",
+                            "virtual_session",
+                        ]:
+                            add_question_to_feedback_lesson(
+                                feedback_lesson, nps_default_feed_questions
+                            )
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     coaching_session_number = (
                         CoachingSession.objects.filter(
@@ -4322,7 +4340,7 @@ def get_skill_dashboard_card_data(request, project_id):
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="ongoing"
             )
-           
+
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )
@@ -4575,3 +4593,186 @@ def pre_post_assessment_or_nudge_update_in_project(request):
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_coach_of_project_or_batch(request, project_id, batch_id):
+    try:
+
+        if project_id == "all":
+            projects = SchedularProject.objects.exclude(status="completed")
+        else:
+            projects = SchedularProject.objects.filter(id=int(project_id))
+        all_coach = set()
+
+        for project in projects:
+            if project_id == "all" or batch_id == "all":
+                batches = SchedularBatch.objects.filter(project__id=project.id)
+            else:
+                batches = SchedularBatch.objects.filter(id=int(batch_id))
+
+            for batch in batches:
+                for coach in batch.coaches.all():
+                    all_coach.add(coach)
+
+        serialize = CoachSerializer(list(all_coach), many=True)
+        return Response(serialize.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def merge_coaching_sessions(coaching_sessions):
+    if not coaching_sessions:
+        return []
+
+    coaching_sessions = list(coaching_sessions)  # Convert QuerySet to list
+    coaching_sessions.sort(key=lambda session: session.start_date)  # Sort list
+
+    merged_sessions = []
+    current_start = coaching_sessions[0].start_date
+    current_end = coaching_sessions[0].end_date
+
+    for session in coaching_sessions[1:]:
+        if session.start_date <= current_end:  # Overlapping or contiguous
+            current_end = max(current_end, session.end_date)
+        else:
+            merged_sessions.append((current_start, current_end))
+            current_start = session.start_date
+            current_end = session.end_date
+
+    merged_sessions.append((current_start, current_end))
+
+    return merged_sessions
+
+
+def get_merged_date_of_coaching_session_for_a_batches(batches):
+    try:
+        data = []
+
+        coaching_sessions = CoachingSession.objects.filter(batch__in=batches)
+
+        for coaching_session in coaching_sessions:
+            if coaching_session.start_date:
+                data.append([coaching_session.start_date, coaching_session.end_date])
+
+        data.sort(key=lambda x: x[0])
+        merged = [data[0]]
+
+        for current_start, current_end in data[1:]:
+            last_merged_start, last_merged_end = merged[-1]
+
+            if current_start <= last_merged_end:
+                merged[-1] = [last_merged_start, max(last_merged_end, current_end)]
+            else:
+                merged.append([current_start, current_end])
+        if merged:
+            return merged
+        else:
+            return []
+    except Exception as e:
+        print(str(e))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_id):
+    try:
+        range_start_date = request.query_params.get("start_date")
+        range_end_date = request.query_params.get("end_date")
+ 
+        
+        current_time = timezone.now()
+        timestamp_milliseconds = current_time.timestamp() * 1000
+
+        data = []
+        if project_id == "all":
+            projects = SchedularProject.objects.exclude(status="completed")
+            for project in projects:
+                temp = {
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "coaches_batches_slots": {},
+                }
+                data.append(temp)
+            return Response(data)
+
+        else:
+            projects = SchedularProject.objects.filter(id=int(project_id))
+
+        for project in projects:
+            temp = {
+                "project_id": project.id,
+                "project_name": project.name,
+                "coaches_batches_slots": {},
+            }
+
+            if batch_id == "all":
+                batches = SchedularBatch.objects.filter(project=project)
+            else:
+                batches = SchedularBatch.objects.filter(id=int(batch_id))
+            coaches = list(
+                {coach for batch in batches for coach in batch.coaches.all()}
+            )
+
+            merged_dates = get_merged_date_of_coaching_session_for_a_batches(batches)
+
+            count = 0
+            if merged_dates:
+                for merged_date in merged_dates:
+                    start_date, end_date = merged_date
+                    count = count + 1
+                    start_date = datetime.combine(start_date, datetime.min.time())
+                    end_date = (
+                        datetime.combine(end_date, datetime.min.time())
+                        + timedelta(days=1)
+                        - timedelta(milliseconds=1)
+                    )
+
+                    start_timestamp = str(int(start_date.timestamp() * 1000))
+                    end_timestamp = str(int(end_date.timestamp() * 1000))
+                    if range_start_date and range_end_date:
+                        start_timestamp = str(
+                            max((int(start_timestamp)), int(range_start_date))
+                        )
+                        end_timestamp = str(min((int(end_timestamp)), int(range_end_date)))
+                    else:
+
+                        start_timestamp = str(
+                            max((int(start_timestamp)), timestamp_milliseconds)
+                        )
+                    if coach_id == "all":
+                        availabilities = CoachSchedularAvailibilty.objects.filter(
+                            coach__in=coaches,
+                            start_time__gte=start_timestamp,
+                            end_time__lte=end_timestamp,
+                        )
+                    else:
+                        coach_ids = [int(coach_id)]  # Convert coach_id to int if needed
+                        availabilities = CoachSchedularAvailibilty.objects.filter(
+                            coach_id__in=coach_ids,
+                            start_time__gte=start_timestamp,
+                            end_time__lte=end_timestamp,
+                        )
+
+                    for availability in availabilities:
+                        coach_id = availability.coach.id
+                        if coach_id not in temp["coaches_batches_slots"]:
+                            temp["coaches_batches_slots"][coach_id] = {
+                                "coach_name": availability.coach.first_name
+                                + " "
+                                + availability.coach.last_name,
+                                "slots": [],
+                                "batches": list({batch.name for batch in batches}),
+                            }
+                        serializer = CoachSchedularAvailibiltySerializer(availability)
+                        temp["coaches_batches_slots"][coach_id]["slots"].append(
+                            serializer.data
+                        )
+
+            data.append(temp)
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
