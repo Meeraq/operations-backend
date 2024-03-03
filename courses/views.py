@@ -3775,7 +3775,7 @@ def submit_feedback(request, feedback_id, learner_id):
     if schedular_session_id:
         schedular_session = SchedularSessions.objects.get(id=schedular_session_id)
     if caas_session or schedular_session:
-        answers_data = request.data.get("answers", [])
+        answers_data = request.data.get("answers", )
         serializer = AnswerSerializer(data=answers_data, many=True)
         if serializer.is_valid():
             answers = serializer.save()
@@ -3834,14 +3834,14 @@ def get_end_meeting_feedback_response_data(request):
                     "feedback_responses_id": coach_session_feedback_response.id,
                     "coach_name": coach_name,
                     "project_name": cass_session.project.name,
-                    "prg_name": cass_session.project.organisation.name,
+                    "org_name": cass_session.project.organisation.name,
                     "coachee_name": cass_session.learner.name,
                     "session_type": cass_session.session_type,
                     "session_number": cass_session.session_number,
                     "type": "CAAS",
                 }
             else:
-                seeq_session = coach_session_feedback_response.seeq_session
+                seeq_session = coach_session_feedback_response.schedular_session
 
                 temp = {
                     "feedback_responses_id": coach_session_feedback_response.id,
@@ -3849,14 +3849,14 @@ def get_end_meeting_feedback_response_data(request):
                     + " "
                     + seeq_session.availibility.coach.last_name,
                     "project_name": seeq_session.coaching_session.batch.project.name,
-                    "prg_name": seeq_session.coaching_session.batch.project.organisation.name,
+                    "org_name": seeq_session.coaching_session.batch.project.organisation.name,
                     "coachee_name": seeq_session.learner.name,
                     "session_type": seeq_session.coaching_session.session_type,
                     "session_number": seeq_session.coaching_session.coaching_session_number,
                     "type": "SEEQ",
                 }
 
-            for answer in coach_session_feedback_responses.answers.all():
+            for answer in coach_session_feedback_response.answers.all():
                 if answer.question.type == "rating_1_to_5":
                     temp["sesson_rating"] = answer.rating
                     break
