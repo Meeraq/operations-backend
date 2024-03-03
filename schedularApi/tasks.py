@@ -46,6 +46,7 @@ from zohoapi.models import Vendor, PoReminder
 from zohoapi.views import (
     filter_purchase_order_data,
 )
+from zohoapi.tasks import get_access_token, organization_id, base_url
 
 
 env = environ.Env()
@@ -1924,6 +1925,7 @@ def update_schedular_session_status():
 # Notify vendor by email when the po is in open status, 1st of every month (pending PO)
 @shared_task
 def generate_invoice_reminder_on_first_of_month():
+    return None
     vendors = Vendor.objects.all()
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     for vendor in vendors:
@@ -1975,6 +1977,7 @@ def generate_invoice_reminder_on_first_of_month():
 # Reminder to vendor for new PO, Checks every day if any po without reminder exist and then send the reminder
 @shared_task
 def generate_invoice_reminder_once_when_po_is_created():
+    return None
     vendors = Vendor.objects.all()
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     for vendor in vendors:
