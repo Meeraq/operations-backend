@@ -4014,6 +4014,58 @@ class GetAllLearnersUniqueId(APIView):
             )
 
 
+def getParticipantsResponseStatusForAssessment(assessment):
+    try:
+        response_data = []
+
+        if assessment.assessment_timing == "pre":
+            for participant_observers in assessment.participants_observers.all():
+                participant_responses = ParticipantResponse.objects.filter(
+                    assessment=assessment,
+                    participant__id=participant_observers.participant.id,
+                ).first()
+
+                data = {
+                    "name": participant_observers.participant.name.title(),
+                    "email": participant_observers.participant.email,
+                    "response_status": (
+                        "Responded" if participant_responses else "Not Responded"
+                    ),
+                }
+
+                response_data.append(data)
+
+        elif assessment.assessment_timing == "post":
+            for participant_observers in assessment.participants_observers.all():
+                post_participant_responses = ParticipantResponse.objects.filter(
+                    assessment=assessment,
+                    participant__id=participant_observers.participant.id,
+                ).first()
+
+                pre_assessment = assessment.pre_assessment
+
+                pre_participant_responses = ParticipantResponse.objects.filter(
+                    assessment=pre_assessment,
+                    participant__id=participant_observers.participant.id,
+                ).first()
+
+                data = {
+                    "name": participant_observers.participant.name.title(),
+                    "email": participant_observers.participant.email,
+                    "pre_response_status": (
+                        "Responded" if pre_participant_responses else "Not Responded"
+                    ),
+                    "post_response_status": (
+                        "Responded" if post_participant_responses else "Not Responded"
+                    ),
+                }
+
+                response_data.append(data)
+        return response_data
+    except Exception as e:
+        print(str(e))
+
+
 class DownloadParticipantResponseStatusData(APIView):
     permission_classes = [AllowAny]
 
@@ -4021,59 +4073,9 @@ class DownloadParticipantResponseStatusData(APIView):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
 
-            response_data = []
+            response_data = getParticipantsResponseStatusForAssessment(assessment)
 
-            if assessment.assessment_timing == "pre":
-                for participant_observers in assessment.participants_observers.all():
-                    participant_responses = ParticipantResponse.objects.filter(
-                        assessment=assessment,
-                        participant__id=participant_observers.participant.id,
-                    ).first()
-
-                    data = {
-                        "name": participant_observers.participant.name.title(),
-                        "email": participant_observers.participant.email,
-                        "response_status": (
-                            "Responded" if participant_responses else "Not Responded"
-                        ),
-                    }
-
-                    response_data.append(data)
-
-                return Response(response_data)
-
-            elif assessment.assessment_timing == "post":
-                for participant_observers in assessment.participants_observers.all():
-                    post_participant_responses = ParticipantResponse.objects.filter(
-                        assessment=assessment,
-                        participant__id=participant_observers.participant.id,
-                    ).first()
-
-                    pre_assessment = assessment.pre_assessment
-
-                    pre_participant_responses = ParticipantResponse.objects.filter(
-                        assessment=pre_assessment,
-                        participant__id=participant_observers.participant.id,
-                    ).first()
-
-                    data = {
-                        "name": participant_observers.participant.name.title(),
-                        "email": participant_observers.participant.email,
-                        "pre_response_status": (
-                            "Responded"
-                            if pre_participant_responses
-                            else "Not Responded"
-                        ),
-                        "post_response_status": (
-                            "Responded"
-                            if post_participant_responses
-                            else "Not Responded"
-                        ),
-                    }
-
-                    response_data.append(data)
-
-                return Response(response_data)
+            return Response(response_data)
 
         except Assessment.DoesNotExist:
             return Response(
@@ -4122,6 +4124,9 @@ class GetAllAssessments(APIView):
             total_responses_count = ParticipantResponse.objects.filter(
                 assessment=assessment
             ).count()
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
             assessment_data = {
                 "id": assessment.id,
                 "name": assessment.name,
@@ -4135,6 +4140,21 @@ class GetAllAssessments(APIView):
                 "status": assessment.status,
                 "total_learners_count": assessment.participants_observers.count(),
                 "total_responses_count": total_responses_count,
+                "batch_name": (
+                    assessment_lesson.lesson.course.batch.name
+                    if assessment_lesson
+                    else None
+                ),
+                "project_name": (
+                    assessment_lesson.lesson.course.batch.project.name
+                    if assessment_lesson
+                    else None
+                ),
+                "project_id": (
+                    assessment_lesson.lesson.course.batch.project.id
+                    if assessment_lesson
+                    else None
+                ),
                 "created_at": assessment.created_at,
             }
 
@@ -4379,6 +4399,7 @@ def get_average_for_all_compentency(compentency_precentages):
             if count_occurrences[competency_name] != 0
             else 0
         )
+
     return average_percentage
 
 
@@ -4583,3 +4604,22 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": "Failed to get data"}, status=500)
+
+
+class AssessmentsResponseStatusDownload(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            assessment_ids = request.data.get("assessment_ids")
+
+            response_data_for_assessments = {}
+            for assessment_id in assessment_ids:
+                assessment = Assessment.objects.get(id=assessment_id)
+                response_data = getParticipantsResponseStatusForAssessment(assessment)
+                response_data_for_assessments[assessment.name] = response_data
+            return Response(response_data_for_assessments)
+        except Exception as e:
+            print(str(e))
+
+
