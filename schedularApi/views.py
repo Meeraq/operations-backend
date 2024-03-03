@@ -108,6 +108,7 @@ from courses.views import (
     add_question_to_feedback_lesson,
     nps_default_feed_questions,
 )
+
 from assessmentApi.models import (
     Assessment,
     ParticipantUniqueId,
@@ -128,6 +129,8 @@ from assessmentApi.views import delete_participant_from_assessments
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
     get_current_date_timestamps,
+    get_coaching_session_according_to_time,
+    get_live_session_according_to_time,
 )
 
 # Create your views here.
@@ -306,7 +309,14 @@ def create_project_schedular(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_Schedular_Projects(request):
-    projects = SchedularProject.objects.all()
+    status = request.query_params.get("status")
+
+    if status:
+
+        projects = SchedularProject.objects.exclude(status="completed")
+    else:
+        projects = SchedularProject.objects.all()
+
     serializer = SchedularProjectSerializer(projects, many=True)
     for project_data in serializer.data:
         latest_update = (
@@ -651,7 +661,7 @@ def get_batch_calendar(request, batch_id):
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
                 "batch_name": batch_for_response.name,
-                "project_id":batch_for_response.project.id,
+                "project_id": batch_for_response.project.id,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -2709,6 +2719,7 @@ def send_live_session_link_whatsapp(request):
                         {
                             "name": "description",
                             "value": (
+                      
                                 (
                                     live_session.description
                                     if live_session.description
@@ -2751,7 +2762,7 @@ def update_session_status(request, session_id):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def project_report_download(request, project_id):
+def project_batch_wise_report_download(request, project_id,session_to_download):
     project = get_object_or_404(SchedularProject, pk=project_id)
     batches = SchedularBatch.objects.filter(project=project)
     # Create a Pandas DataFrame for each batch
@@ -2764,13 +2775,22 @@ def project_report_download(request, project_id):
             "Percentage": [],
             "Date": [],
         }
-        live_sessions = LiveSession.objects.filter(batch=batch)
-        coaching_sessions = CoachingSession.objects.filter(batch=batch)
-        sessions = list(live_sessions) + list(coaching_sessions)
+        if session_to_download == "both":
+            live_sessions = LiveSession.objects.filter(batch=batch)
+            coaching_sessions = CoachingSession.objects.filter(batch=batch)
+            sessions = list(live_sessions) + list(coaching_sessions)
+        elif session_to_download == "live":
+            live_sessions = LiveSession.objects.filter(batch=batch)
+            sessions = list(live_sessions)
+        elif session_to_download == "coaching":
+            coaching_sessions = CoachingSession.objects.filter(batch=batch)
+            sessions = list(coaching_sessions)
+        
+        
         sorted_sessions = sorted(sessions, key=lambda x: x.order)
         for session in sorted_sessions:
             if isinstance(session, LiveSession):
-                session_name = f"Live Session {session.live_session_number}"
+                session_name = f"{get_live_session_name(session.session_type)} {session.live_session_number}"
                 attendance = len(session.attendees)
                 if session.date_time:
                     adjusted_date_time = session.date_time + timedelta(
@@ -2780,7 +2800,11 @@ def project_report_download(request, project_id):
                 else:
                     date = "Not added"
             elif isinstance(session, CoachingSession):
-                session_name = f"Coaching Session {session.coaching_session_number}"
+                if session.session_type == "laser_coaching_session":
+                    session_type_name = "Laser Coaching Session"
+                else:
+                    session_type_name = "Mentoring Session"
+                session_name = f"{session_type_name} {session.coaching_session_number}"
                 attendance = SchedularSessions.objects.filter(
                     coaching_session=session, status="completed"
                 ).count()
@@ -2790,7 +2814,11 @@ def project_report_download(request, project_id):
                 attendance = ""
                 date = ""
             total_participants = batch.learners.count()
-            percentage = str(int((attendance / total_participants) * 100)) + " %"
+            percentage = None
+            if not total_participants:
+                percentage ="0%"
+            else:
+                percentage = str(int((attendance / total_participants) * 100)) + " %"
             data["Session name"].append(session_name)
             data["Attendance"].append(attendance)
             data["Total Participants"].append(total_participants)
@@ -2813,49 +2841,107 @@ def project_report_download(request, project_id):
     return response
 
 
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def project_report_download_session_wise(request, project_id, batch_id):
+def project_report_download_session_wise(project_id, batch_id, download_session_type):
     try:
-        batch = get_object_or_404(SchedularBatch, pk=batch_id)
-        live_sessions = LiveSession.objects.filter(batch=batch)
-        dfs = []
+        batches = None
+        if batch_id == "all":
+            project = get_object_or_404(SchedularProject, pk=project_id)
+            batches = SchedularBatch.objects.filter(project=project)
+        else:
+            batches = SchedularBatch.objects.filter(id=int(batch_id))
 
-        for session in live_sessions:
-            data = {
-                "Participant name": [],
-                "Attended or Not": [],
-            }
+        dfs = {}
+        for batch in batches:
+            sessions = None
+            if download_session_type == "live_session":
+                sessions = LiveSession.objects.filter(batch=batch)
+            elif download_session_type == "coaching_session":
+                sessions = SchedularSessions.objects.filter(
+                    coaching_session__batch=batch
+                )
+            for session in sessions:
+                schedular_sessions = (
+                    session if download_session_type == "coaching_session" else None
+                )
+                session = (
+                    session.coaching_session
+                    if download_session_type == "coaching_session"
+                    else session
+                )
 
-            for learner in session.batch.learners.all():
-                participant_name = learner.name
+                data = {
+                    "Participant name": [],
+                    "Batch name": [],
+                    f"{'Attended' if download_session_type == 'live_session' else 'Completed'} or Not": [],
+                }
+                for learner in session.batch.learners.all():
+                    participant_name = learner.name
 
-                if learner.id in session.attendees:
-                    attendance = "YES"
+                    attendance = (
+                        "YES"
+                        if (
+                            download_session_type == "live_session"
+                            and learner.id in session.attendees
+                        )
+                        or (
+                            download_session_type == "coaching_session"
+                            and schedular_sessions.status == "completed"
+                        )
+                        else "NO"
+                    )
+
+                    data["Participant name"].append(participant_name)
+                    data["Batch name"].append(batch.name)
+                    data[
+                        f"{'Attended' if download_session_type == 'live_session' else 'Completed'} or Not"
+                    ].append(attendance)
+
+                session_name = f"{session.session_type if download_session_type == 'coaching_session' else get_live_session_name(session.session_type)} {session.coaching_session_number if download_session_type == 'coaching_session' else session.live_session_number}"
+
+                if session_name not in dfs:
+                    dfs[session_name] = pd.DataFrame(data)
                 else:
-                    attendance = "NO"
-
-                # Append data inside the learner loop
-                data["Participant name"].append(participant_name)
-                data["Attended or Not"].append(attendance)
-
-            # Move these lines inside the session loop
-            session_name = f"{get_live_session_name(session.session_type)} {session.live_session_number}"
-            df = pd.DataFrame(data)
-            dfs.append((session_name, df))
+                    dfs[session_name] = pd.concat(
+                        [dfs[session_name], pd.DataFrame(data)]
+                    )
 
         response = HttpResponse(content_type="application/ms-excel")
-        response["Content-Disposition"] = (
-            f'attachment; filename="{batch.name}_batches.xlsx"'
-        )
+        response["Content-Disposition"] = 'attachment; filename="batches.xlsx"'
 
         with pd.ExcelWriter(response, engine="openpyxl") as writer:
-            for session_name, df in dfs:
+            for session_name, df in dfs.items():
                 df.to_excel(writer, sheet_name=session_name, index=False)
 
         return response
     except Exception as e:
         print(str(e))
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def project_report_download_live_session_wise(request, project_id, batch_id):
+    try:
+        response = project_report_download_session_wise(
+            project_id, batch_id, "live_session"
+        )
+        return response
+    except Exception as e:
+        print(str(e))
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def project_report_download_coaching_session_wise(request, project_id, batch_id):
+    try:
+
+        response = project_report_download_session_wise(
+            project_id, batch_id, "coaching_session"
+        )
+        return response
+
+    except Exception as e:
+        print(str(e))
+
 
 
 @api_view(["POST"])
@@ -4276,7 +4362,7 @@ def get_skill_dashboard_card_data(request, project_id):
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="ongoing"
             )
-           
+
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )
@@ -4336,8 +4422,8 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
             schedular_session = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=int(project_id)
             )
-        upcoming_schedular_sessions = schedular_session.filter(
-            availibility__end_time__gt=timestamp_milliseconds
+        upcoming_schedular_sessions = get_coaching_session_according_to_time(
+            schedular_session, "upcoming"
         )
         upcoming_schedular_session_data = []
         for session in upcoming_schedular_sessions:
@@ -4375,9 +4461,11 @@ def get_past_coaching_session_dashboard_data(request, project_id):
             schedular_session = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=int(project_id)
             )
-        past_schedular_sessions = schedular_session.filter(
-            availibility__end_time__lt=timestamp_milliseconds
+
+        past_schedular_sessions = get_coaching_session_according_to_time(
+            schedular_session, "past"
         )
+
         past_schedular_session_data = []
         for session in past_schedular_sessions:
             temp = {

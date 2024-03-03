@@ -40,6 +40,7 @@ from .models import (
     APILog,
     SuperAdmin,
     Facilitator,
+    Finance,
 )
 
 # Register your models here.
@@ -86,3 +87,4 @@ admin.site.register(FinalizeCoachActivity)
 admin.site.register(Role)
 admin.site.register(APILog)
 admin.site.register(SuperAdmin)
+admin.site.register(Finance)

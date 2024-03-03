@@ -66,6 +66,7 @@ from .serializers import (
     SessionDataSerializer,
     SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer,
     SuperAdminDepthOneSerializer,
+    FinanceDepthOneSerializer,
     PmoSerializer,
     FacilitatorDepthOneSerializer,
 )
@@ -1677,6 +1678,8 @@ def get_user_data(user):
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "superadmin":
         serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
+    elif user_profile_role == "finance":
+        serializer = FinanceDepthOneSerializer(user.profile.finance)
     elif user_profile_role == "learner":
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
@@ -7786,6 +7789,8 @@ def change_user_role(request, user_id):
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "superadmin":
         serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
+    elif user_profile_role == "finance":
+        serializer = FinanceDepthOneSerializer(user.profile.finance)
     elif user_profile_role == "facilitator":
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
     elif user_profile_role == "vendor":
@@ -8407,3 +8412,5 @@ def update_reminders_of_project(request):
         )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
