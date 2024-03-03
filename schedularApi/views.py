@@ -83,6 +83,7 @@ from .models import (
 from api.serializers import (
     FacilitatorSerializer,
     FacilitatorBasicDetailsSerializer,
+    CoachSerializer,
 )
 
 from courses.models import (
@@ -101,7 +102,11 @@ from courses.serializers import (
     CourseEnrollmentDepthOneSerializer,
 )
 from django.core.serializers import serialize
-from courses.views import create_or_get_learner
+from courses.views import (
+    create_or_get_learner,
+    add_question_to_feedback_lesson,
+    nps_default_feed_questions,
+)
 from assessmentApi.models import (
     Assessment,
     ParticipantUniqueId,
@@ -119,7 +124,12 @@ from django.db.models import Max
 import io
 from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
-from schedularApi.tasks import celery_send_unbooked_coaching_session_mail
+from schedularApi.tasks import (
+    celery_send_unbooked_coaching_session_mail,
+    get_current_date_timestamps,
+    get_coaching_session_according_to_time,
+    get_live_session_according_to_time,
+)
 
 # Create your views here.
 from itertools import chain
@@ -297,7 +307,14 @@ def create_project_schedular(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_Schedular_Projects(request):
-    projects = SchedularProject.objects.all()
+    status = request.query_params.get("status")
+
+    if status:
+
+        projects = SchedularProject.objects.exclude(status="completed")
+    else:
+        projects = SchedularProject.objects.all()
+
     serializer = SchedularProjectSerializer(projects, many=True)
     for project_data in serializer.data:
         latest_update = (
@@ -627,6 +644,7 @@ def get_batch_calendar(request, batch_id):
         except Exception as e:
             print(str(e))
             course = None
+        batch_for_response = SchedularBatch.objects.filter(id=batch_id).first()
         return Response(
             {
                 "sessions": sorted_sessions,
@@ -635,7 +653,8 @@ def get_batch_calendar(request, batch_id):
                 "course": course_serailizer.data if course else None,
                 "batch": batch_id,
                 "facilitator": facilitator_serializer.data,
-                "batch_name": SchedularBatch.objects.filter(id=batch_id).first().name,
+                "batch_name": batch_for_response.name,
+                "project_id": batch_for_response.project.id,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -729,7 +748,11 @@ def update_live_session(request, live_session_id):
                     f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
                     + update_live_session.description
                     if update_live_session.description
-                    else ""
+                    else (
+                        "" + update_live_session.description
+                        if update_live_session.description
+                        else ""
+                    )
                 )
                 if not existing_date_time:
                     create_outlook_calendar_invite(
@@ -2688,7 +2711,17 @@ def send_live_session_link_whatsapp(request):
                         },
                         {
                             "name": "description",
-                            "value": ((live_session.description if live_session.description else "") + (f" Please join using this link: {live_session.meeting_link}" if live_session.meeting_link else "")
+                            "value": (
+                                (
+                                    live_session.description
+                                    if live_session.description
+                                    else ""
+                                )
+                                + (
+                                    f" Please join using this link: {live_session.meeting_link}"
+                                    if live_session.meeting_link
+                                    else ""
+                                )
                             ),
                         },
                     ],
@@ -2721,7 +2754,7 @@ def update_session_status(request, session_id):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def project_report_download(request, project_id):
+def project_batch_wise_report_download(request, project_id,session_to_download):
     project = get_object_or_404(SchedularProject, pk=project_id)
     batches = SchedularBatch.objects.filter(project=project)
     # Create a Pandas DataFrame for each batch
@@ -2734,13 +2767,22 @@ def project_report_download(request, project_id):
             "Percentage": [],
             "Date": [],
         }
-        live_sessions = LiveSession.objects.filter(batch=batch)
-        coaching_sessions = CoachingSession.objects.filter(batch=batch)
-        sessions = list(live_sessions) + list(coaching_sessions)
+        if session_to_download == "both":
+            live_sessions = LiveSession.objects.filter(batch=batch)
+            coaching_sessions = CoachingSession.objects.filter(batch=batch)
+            sessions = list(live_sessions) + list(coaching_sessions)
+        elif session_to_download == "live":
+            live_sessions = LiveSession.objects.filter(batch=batch)
+            sessions = list(live_sessions)
+        elif session_to_download == "coaching":
+            coaching_sessions = CoachingSession.objects.filter(batch=batch)
+            sessions = list(coaching_sessions)
+        
+        
         sorted_sessions = sorted(sessions, key=lambda x: x.order)
         for session in sorted_sessions:
             if isinstance(session, LiveSession):
-                session_name = f"Live Session {session.live_session_number}"
+                session_name = f"{get_live_session_name(session.session_type)} {session.live_session_number}"
                 attendance = len(session.attendees)
                 if session.date_time:
                     adjusted_date_time = session.date_time + timedelta(
@@ -2750,7 +2792,11 @@ def project_report_download(request, project_id):
                 else:
                     date = "Not added"
             elif isinstance(session, CoachingSession):
-                session_name = f"Coaching Session {session.coaching_session_number}"
+                if session.session_type == "laser_coaching_session":
+                    session_type_name = "Laser Coaching Session"
+                else:
+                    session_type_name = "Mentoring Session"
+                session_name = f"{session_type_name} {session.coaching_session_number}"
                 attendance = SchedularSessions.objects.filter(
                     coaching_session=session, status="completed"
                 ).count()
@@ -2760,7 +2806,11 @@ def project_report_download(request, project_id):
                 attendance = ""
                 date = ""
             total_participants = batch.learners.count()
-            percentage = str(int((attendance / total_participants) * 100)) + " %"
+            percentage = None
+            if not total_participants:
+                percentage ="0%"
+            else:
+                percentage = str(int((attendance / total_participants) * 100)) + " %"
             data["Session name"].append(session_name)
             data["Attendance"].append(attendance)
             data["Total Participants"].append(total_participants)
@@ -2783,47 +2833,105 @@ def project_report_download(request, project_id):
     return response
 
 
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def project_report_download_session_wise(request, project_id, batch_id):
+def project_report_download_session_wise(project_id, batch_id, download_session_type):
     try:
-        batch = get_object_or_404(SchedularBatch, pk=batch_id)
-        live_sessions = LiveSession.objects.filter(batch=batch)
-        dfs = []
+        batches = None
+        if batch_id == "all":
+            project = get_object_or_404(SchedularProject, pk=project_id)
+            batches = SchedularBatch.objects.filter(project=project)
+        else:
+            batches = SchedularBatch.objects.filter(id=int(batch_id))
 
-        for session in live_sessions:
-            data = {
-                "Participant name": [],
-                "Attended or Not": [],
-            }
+        dfs = {}
+        for batch in batches:
+            sessions = None
+            if download_session_type == "live_session":
+                sessions = LiveSession.objects.filter(batch=batch)
+            elif download_session_type == "coaching_session":
+                sessions = SchedularSessions.objects.filter(
+                    coaching_session__batch=batch
+                )
+            for session in sessions:
+                schedular_sessions = (
+                    session if download_session_type == "coaching_session" else None
+                )
+                session = (
+                    session.coaching_session
+                    if download_session_type == "coaching_session"
+                    else session
+                )
 
-            for learner in session.batch.learners.all():
-                participant_name = learner.name
+                data = {
+                    "Participant name": [],
+                    "Batch name": [],
+                    f"{'Attended' if download_session_type == 'live_session' else 'Completed'} or Not": [],
+                }
+                for learner in session.batch.learners.all():
+                    participant_name = learner.name
 
-                if learner.id in session.attendees:
-                    attendance = "YES"
+                    attendance = (
+                        "YES"
+                        if (
+                            download_session_type == "live_session"
+                            and learner.id in session.attendees
+                        )
+                        or (
+                            download_session_type == "coaching_session"
+                            and schedular_sessions.status == "completed"
+                        )
+                        else "NO"
+                    )
+
+                    data["Participant name"].append(participant_name)
+                    data["Batch name"].append(batch.name)
+                    data[
+                        f"{'Attended' if download_session_type == 'live_session' else 'Completed'} or Not"
+                    ].append(attendance)
+
+                session_name = f"{session.session_type if download_session_type == 'coaching_session' else get_live_session_name(session.session_type)} {session.coaching_session_number if download_session_type == 'coaching_session' else session.live_session_number}"
+
+                if session_name not in dfs:
+                    dfs[session_name] = pd.DataFrame(data)
                 else:
-                    attendance = "NO"
-
-                # Append data inside the learner loop
-                data["Participant name"].append(participant_name)
-                data["Attended or Not"].append(attendance)
-
-            # Move these lines inside the session loop
-            session_name = f"{get_live_session_name(session.session_type)} {session.live_session_number}"
-            df = pd.DataFrame(data)
-            dfs.append((session_name, df))
+                    dfs[session_name] = pd.concat(
+                        [dfs[session_name], pd.DataFrame(data)]
+                    )
 
         response = HttpResponse(content_type="application/ms-excel")
-        response["Content-Disposition"] = (
-            f'attachment; filename="{batch.name}_batches.xlsx"'
-        )
+        response["Content-Disposition"] = 'attachment; filename="batches.xlsx"'
 
         with pd.ExcelWriter(response, engine="openpyxl") as writer:
-            for session_name, df in dfs:
+            for session_name, df in dfs.items():
                 df.to_excel(writer, sheet_name=session_name, index=False)
 
         return response
+
+    except Exception as e:
+        print(str(e))
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def project_report_download_live_session_wise(request, project_id, batch_id):
+    try:
+        response = project_report_download_session_wise(
+            project_id, batch_id, "live_session"
+        )
+        return response
+    except Exception as e:
+        print(str(e))
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def project_report_download_coaching_session_wise(request, project_id, batch_id):
+    try:
+
+        response = project_report_download_session_wise(
+            project_id, batch_id, "coaching_session"
+        )
+        return response
+
     except Exception as e:
         print(str(e))
 
@@ -3690,8 +3798,17 @@ def add_new_session_in_project_structure(request):
                         )
                         unique_id = uuid.uuid4()
                         feedback_lesson = FeedbackLesson.objects.create(
-                            lesson=new_feedback_lesson, unique_id=unique_id
+                            lesson=new_feedback_lesson,
+                            unique_id=unique_id,
+                            live_session=live_session,
                         )
+                        if live_session.session_type in [
+                            "in_person_session",
+                            "virtual_session",
+                        ]:
+                            add_question_to_feedback_lesson(
+                                feedback_lesson, nps_default_feed_questions
+                            )
                 elif session_type in ["laser_coaching_session", "mentoring_session"]:
                     coaching_session_number = (
                         CoachingSession.objects.filter(
@@ -4202,3 +4319,460 @@ def update_project_status(request):
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_skill_dashboard_card_data(request, project_id):
+    try:
+        if project_id == "all":
+
+            start_timestamp, end_timestamp = get_current_date_timestamps()
+            # schedular sessions scheduled today
+            today_sessions = SchedularSessions.objects.filter(
+                availibility__start_time__lte=end_timestamp,
+                availibility__end_time__gte=start_timestamp,
+            )
+
+            today = timezone.now().date()
+            today_live_sessions = LiveSession.objects.filter(date_time__date=today)
+
+            ongoing_assessment = Assessment.objects.filter(
+                assessment_modal__isnull=False, status="ongoing"
+            )
+
+            completed_assessments = Assessment.objects.filter(
+                assessment_modal__isnull=False, status="completed"
+            )
+        else:
+            start_timestamp, end_timestamp = get_current_date_timestamps()
+            # schedular sessions scheduled today
+            today_sessions = SchedularSessions.objects.filter(
+                availibility__start_time__lte=end_timestamp,
+                availibility__end_time__gte=start_timestamp,
+                coaching_session__batch__project__id=int(project_id),
+            )
+
+            today = timezone.now().date()
+            today_live_sessions = LiveSession.objects.filter(
+                date_time__date=today, batch__project__id=int(project_id)
+            )
+
+            ongoing_assessment = Assessment.objects.filter(
+                assessment_modal__isnull=False,
+                status="ongoing",
+                assessment_modal__lesson__course__batch__project__id=int(project_id),
+            )
+
+            completed_assessments = Assessment.objects.filter(
+                assessment_modal__isnull=False,
+                status="completed",
+                assessment_modal__lesson__course__batch__project__id=int(project_id),
+            )
+        return Response(
+            {
+                "today_coaching_sessions": len(today_sessions),
+                "today_live_sessions": len(today_live_sessions),
+                "ongoing_assessments": len(ongoing_assessment),
+                "completed_assessments": len(completed_assessments),
+            },
+            status=200,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {
+                "error": "Failed to get data",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_coaching_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+        if project_id == "all":
+            schedular_session = SchedularSessions.objects.all()
+        else:
+            schedular_session = SchedularSessions.objects.filter(
+                coaching_session__batch__project__id=int(project_id)
+            )
+        upcoming_schedular_sessions = get_coaching_session_according_to_time(
+            schedular_session, "upcoming"
+        )
+        upcoming_schedular_session_data = []
+        for session in upcoming_schedular_sessions:
+            temp = {
+                "date_time": session.availibility.start_time,
+                "coach": session.availibility.coach.first_name
+                + " "
+                + session.availibility.coach.last_name,
+                "batch_name": session.coaching_session.batch.name,
+                "learner": session.learner.name,
+                "project_name": session.coaching_session.batch.project.name,
+            }
+            upcoming_schedular_session_data.append(temp)
+        return Response(upcoming_schedular_session_data, status=status.HTTP_200_OK)
+
+    except SchedularSessions.DoesNotExist:
+        return Response(
+            {"error": f"SchedularSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_past_coaching_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+        if project_id == "all":
+            schedular_session = SchedularSessions.objects.all()
+        else:
+            schedular_session = SchedularSessions.objects.filter(
+                coaching_session__batch__project__id=int(project_id)
+            )
+
+        past_schedular_sessions = get_coaching_session_according_to_time(
+            schedular_session, "past"
+        )
+
+        past_schedular_session_data = []
+        for session in past_schedular_sessions:
+            temp = {
+                "date_time": session.availibility.start_time,
+                "coach": session.availibility.coach.first_name
+                + " "
+                + session.availibility.coach.last_name,
+                "batch_name": session.coaching_session.batch.name,
+                "learner": session.learner.name,
+                "project_name": session.coaching_session.batch.project.name,
+            }
+            past_schedular_session_data.append(temp)
+        return Response(past_schedular_session_data, status=status.HTTP_200_OK)
+
+    except SchedularSessions.DoesNotExist:
+        return Response(
+            {"error": f"SchedularSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_live_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        if project_id == "all":
+            live_sessions = LiveSession.objects.all()
+        else:
+            live_sessions = LiveSession.objects.filter(
+                batch__project__id=int(project_id)
+            )
+        upcoming_live_sessions = live_sessions.filter(date_time__gt=current_time_seeq)
+
+        upcoming_live_session_data = []
+
+        for live_session in upcoming_live_sessions:
+            facilitator_names = [
+                f"{facilitator.first_name} {facilitator.last_name}"
+                for facilitator in live_session.batch.facilitator.all()
+            ]
+            coach_names = [
+                f"{coach.first_name} {coach.last_name}"
+                for coach in live_session.batch.coaches.all()
+            ]
+            temp = {
+                "date_time": live_session.date_time,
+                "facilitator_names": facilitator_names,
+                "session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                "batch_name": live_session.batch.name,
+                "project_name": live_session.batch.project.name,
+                "coach_names": coach_names,
+            }
+
+            upcoming_live_session_data.append(temp)
+        return Response(upcoming_live_session_data, status=status.HTTP_200_OK)
+
+    except LiveSession.DoesNotExist:
+        return Response(
+            {"error": f"LiveSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_past_live_session_dashboard_data(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        if project_id == "all":
+            live_sessions = LiveSession.objects.all()
+        else:
+            live_sessions = LiveSession.objects.filter(
+                batch__project__id=int(project_id)
+            )
+        past_live_sessions = live_sessions.filter(date_time__lt=current_time_seeq)
+
+        past_live_session_data = []
+
+        for live_session in past_live_sessions:
+            facilitator_names = [
+                f"{facilitator.first_name} {facilitator.last_name}"
+                for facilitator in live_session.batch.facilitator.all()
+            ]
+            coach_names = [
+                f"{coach.first_name} {coach.last_name}"
+                for coach in live_session.batch.coaches.all()
+            ]
+
+            temp = {
+                "date_time": live_session.date_time,
+                "facilitator_names": facilitator_names,
+                "session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                "batch_name": live_session.batch.name,
+                "project_name": live_session.batch.project.name,
+                "coach_names": coach_names,
+            }
+
+            past_live_session_data.append(temp)
+
+        return Response(past_live_session_data, status=status.HTTP_200_OK)
+
+    except LiveSession.DoesNotExist:
+        return Response(
+            {"error": f"LiveSession with id {project_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def pre_post_assessment_or_nudge_update_in_project(request):
+    try:
+
+        operation = request.data.get("operation")
+        nudge_or_assessment = request.data.get("nudgeOrAssessment")
+        project_id = request.data.get("projectId")
+
+        project = SchedularProject.objects.get(id=project_id)
+
+        if nudge_or_assessment == "nudge" and operation == "delete":
+            project.nudges = False
+        elif nudge_or_assessment == "nudge" and operation == "add":
+            project.nudges = True
+        elif nudge_or_assessment == "assessment" and operation == "delete":
+            project.pre_post_assessment = False
+        elif nudge_or_assessment == "assessment" and operation == "add":
+            project.pre_post_assessment = True
+
+        project.save()
+
+        return Response(status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {
+                "error": "Failed to perform operation.",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_coach_of_project_or_batch(request, project_id, batch_id):
+    try:
+
+        if project_id == "all":
+            projects = SchedularProject.objects.exclude(status="completed")
+        else:
+            projects = SchedularProject.objects.filter(id=int(project_id))
+        all_coach = set()
+
+        for project in projects:
+            if project_id == "all" or batch_id == "all":
+                batches = SchedularBatch.objects.filter(project__id=project.id)
+            else:
+                batches = SchedularBatch.objects.filter(id=int(batch_id))
+
+            for batch in batches:
+                for coach in batch.coaches.all():
+                    all_coach.add(coach)
+
+        serialize = CoachSerializer(list(all_coach), many=True)
+        return Response(serialize.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def merge_coaching_sessions(coaching_sessions):
+    if not coaching_sessions:
+        return []
+
+    coaching_sessions = list(coaching_sessions)  # Convert QuerySet to list
+    coaching_sessions.sort(key=lambda session: session.start_date)  # Sort list
+
+    merged_sessions = []
+    current_start = coaching_sessions[0].start_date
+    current_end = coaching_sessions[0].end_date
+
+    for session in coaching_sessions[1:]:
+        if session.start_date <= current_end:  # Overlapping or contiguous
+            current_end = max(current_end, session.end_date)
+        else:
+            merged_sessions.append((current_start, current_end))
+            current_start = session.start_date
+            current_end = session.end_date
+
+    merged_sessions.append((current_start, current_end))
+
+    return merged_sessions
+
+
+def get_merged_date_of_coaching_session_for_a_batches(batches):
+    try:
+        data = []
+
+        coaching_sessions = CoachingSession.objects.filter(batch__in=batches)
+
+        for coaching_session in coaching_sessions:
+            if coaching_session.start_date:
+                data.append([coaching_session.start_date, coaching_session.end_date])
+
+        data.sort(key=lambda x: x[0])
+        merged = [data[0]]
+
+        for current_start, current_end in data[1:]:
+            last_merged_start, last_merged_end = merged[-1]
+
+            if current_start <= last_merged_end:
+                merged[-1] = [last_merged_start, max(last_merged_end, current_end)]
+            else:
+                merged.append([current_start, current_end])
+        if merged:
+            return merged
+        else:
+            return []
+    except Exception as e:
+        print(str(e))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_id):
+    try:
+        range_start_date = request.query_params.get("start_date")
+        range_end_date = request.query_params.get("end_date")
+ 
+        
+        current_time = timezone.now()
+        timestamp_milliseconds = current_time.timestamp() * 1000
+
+        data = []
+        if project_id == "all":
+            projects = SchedularProject.objects.exclude(status="completed")
+            for project in projects:
+                temp = {
+                    "project_id": project.id,
+                    "project_name": project.name,
+                    "coaches_batches_slots": {},
+                }
+                data.append(temp)
+            return Response(data)
+
+        else:
+            projects = SchedularProject.objects.filter(id=int(project_id))
+
+        for project in projects:
+            temp = {
+                "project_id": project.id,
+                "project_name": project.name,
+                "coaches_batches_slots": {},
+            }
+
+            if batch_id == "all":
+                batches = SchedularBatch.objects.filter(project=project)
+            else:
+                batches = SchedularBatch.objects.filter(id=int(batch_id))
+            coaches = list(
+                {coach for batch in batches for coach in batch.coaches.all()}
+            )
+
+            merged_dates = get_merged_date_of_coaching_session_for_a_batches(batches)
+
+            count = 0
+            if merged_dates:
+                for merged_date in merged_dates:
+                    start_date, end_date = merged_date
+                    count = count + 1
+                    start_date = datetime.combine(start_date, datetime.min.time())
+                    end_date = (
+                        datetime.combine(end_date, datetime.min.time())
+                        + timedelta(days=1)
+                        - timedelta(milliseconds=1)
+                    )
+
+                    start_timestamp = str(int(start_date.timestamp() * 1000))
+                    end_timestamp = str(int(end_date.timestamp() * 1000))
+                    if range_start_date and range_end_date:
+                        start_timestamp = str(
+                            max((int(start_timestamp)), int(range_start_date))
+                        )
+                        end_timestamp = str(min((int(end_timestamp)), int(range_end_date)))
+                    else:
+
+                        start_timestamp = str(
+                            max((int(start_timestamp)), timestamp_milliseconds)
+                        )
+                    if coach_id == "all":
+                        availabilities = CoachSchedularAvailibilty.objects.filter(
+                            coach__in=coaches,
+                            start_time__gte=start_timestamp,
+                            end_time__lte=end_timestamp,
+                        )
+                    else:
+                        coach_ids = [int(coach_id)]  # Convert coach_id to int if needed
+                        availabilities = CoachSchedularAvailibilty.objects.filter(
+                            coach_id__in=coach_ids,
+                            start_time__gte=start_timestamp,
+                            end_time__lte=end_timestamp,
+                        )
+
+                    for availability in availabilities:
+                        coach_id = availability.coach.id
+                        if coach_id not in temp["coaches_batches_slots"]:
+                            temp["coaches_batches_slots"][coach_id] = {
+                                "coach_name": availability.coach.first_name
+                                + " "
+                                + availability.coach.last_name,
+                                "slots": [],
+                                "batches": list({batch.name for batch in batches}),
+                            }
+                        serializer = CoachSchedularAvailibiltySerializer(availability)
+                        temp["coaches_batches_slots"][coach_id]["slots"].append(
+                            serializer.data
+                        )
+
+            data.append(temp)
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

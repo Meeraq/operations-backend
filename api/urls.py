@@ -354,4 +354,14 @@ urlpatterns = [
         views.get_project_organisation_learner_of_user_optimized,
     ),
     path("logs/", views.get_api_logs, name="get_api_logs"),
+    path(
+        "get-skill-training-projects/",
+        views.get_skill_training_projects,
+        name="get_skill_training_projects",
+    ),
+    path(
+        "update-reminders-of-project/",
+        views.update_reminders_of_project,
+        name="update_reminders_of_project",
+    ),
 ]

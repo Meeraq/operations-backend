@@ -1,5 +1,5 @@
 {% extends "table_parent_template.html" %} {% block title %}Meeraq | Invoice
-Raised {% endblock %} {% block content %}
+Approved {% endblock %} {% block content %}
 <tr style="border: 0">
   <td style="padding: 20px; background: #f8f7f8; border: 0">
     <div align="center">
@@ -27,24 +27,35 @@ Raised {% endblock %} {% block content %}
             <td style="padding: 15pt 15pt 15pt 15pt">
               <p>
                 <strong><span style="font-size: 16px">Dear&nbsp;</span></strong
-                ><b>Team,</b><strong>,</strong>
+                ><b>Finance Team</b><strong>,</strong>
               </p>
               <p
                 class="child-para"
                 style="color: #333; font-size: 14px; font-weight: bold"
               >
-                Greetings from Meeraq!
+                Greetings from Meeraq!!
               </p>
               <br />
               <p class="child-para">
-                Quick heads up! We need your approval on the invoice
-                {{invoice_number}} raised by {{vendor_name}}.
+                I trust this email finds you well. I am writing to inform you
+                that the invoice associated with Purchase Order:
+                {{purchase_order_no}} from {{vendor_name}} has been approved by
+                {{ approved_by }}.
+              </p>
+
+              <p class="child-para">
+                Please proceed with the necessary actions for processing this
+                invoice accordingly.
+              </p>
+
+              <p class="child-para">"{{comment}}"</p>
+              <p class="child-para">
+                Should you require any further information or assistance, please
+                don't hesitate to reach out.
               </p>
               <p class="child-para">
-                Click here to log in to the system and give it the green light.
+                Thank you for your attention to this matter.
               </p>
-              <p class="child-para"><a href="{{link}}">{{link}}</a></p>
-              <p class="child-para">Thanks for your speedy action!</p>
               <p><br /></p>
               <p>Best regards,</p>
               <p>Team Meeraq.</p>
