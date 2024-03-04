@@ -917,7 +917,7 @@ def update_coach_profile(request, id):
 
         for role in user.profile.roles.all():
             roles.append(role.name)
-  
+
         return Response(
             {
                 **depth_serializer.data,
@@ -1295,7 +1295,9 @@ def get_hr(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_projects_and_sessions_by_coach(request, coach_id):
-    projects = Project.objects.filter(coaches_status__coach__id=coach_id, coaches_status__is_consent_asked = True)
+    projects = Project.objects.filter(
+        coaches_status__coach__id=coach_id, coaches_status__is_consent_asked=True
+    )
     project_serializer = ProjectDepthTwoSerializer(projects, many=True)
     return Response({"projects": project_serializer.data})
 
@@ -1303,7 +1305,9 @@ def get_projects_and_sessions_by_coach(request, coach_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def coach_session_list(request, coach_id):
-    projects = Project.objects.filter(coaches_status__coach__id=coach_id, coaches_status__is_consent_asked=True)
+    projects = Project.objects.filter(
+        coaches_status__coach__id=coach_id, coaches_status__is_consent_asked=True
+    )
     project_serializer = ProjectDepthTwoSerializer(projects, many=True)
 
     # Fetch sessions related to the coach
@@ -2047,7 +2051,9 @@ def send_consent(request):
 
     # Get the list of coach IDs
     coach_list = request.data.get("coach_list", [])
-    for coach_status in project.coaches_status.filter(coach__id__in=coach_list, is_consent_asked=False):
+    for coach_status in project.coaches_status.filter(
+        coach__id__in=coach_list, is_consent_asked=False
+    ):
         coach_status.consent_expiry_date = request.data["consent_expiry_date"]
         coach_status.is_consent_asked = True
         coach_status.save()
@@ -3149,7 +3155,7 @@ def send_project_strure_to_hr(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.steps["project_structure"]["status"] = "complete"
     project.save()
-    
+
     #  adding project structure for coach if project structure not added yet.
     for coach_status in project.coaches_status.all():
         if len(coach_status.project_structure) == 0:
@@ -6750,7 +6756,9 @@ def project_status(request, project_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def completed_projects(request, user_id):
-    projects = Project.objects.filter(coaches_status__coach__id=user_id, coaches_status__is_consent_asked=True)
+    projects = Project.objects.filter(
+        coaches_status__coach__id=user_id, coaches_status__is_consent_asked=True
+    )
     completed_project = []
     for project in projects:
         if project.status == "completed":
@@ -8023,18 +8031,30 @@ class DownloadCoachContract(APIView):
         try:
             coach_contract = CoachContract.objects.get(id=coach_contract_id)
             coach_contract.project_contract.project.project_structure
-            coach_status = CoachStatus.objects.get(coach=coach_contract.coach, project= coach_contract.project_contract.project)
+            coach_status = CoachStatus.objects.get(
+                coach=coach_contract.coach,
+                project=coach_contract.project_contract.project,
+            )
             data = coach_status.project_structure
             for item in data:
                 if (
                     "session_type" in item
                     and item["session_type"] in SESSION_TYPE_VALUE
                 ):
+
+                    result = (
+                        float(item["coach_price"])
+                        * float(item["session_duration"])
+                        * float(item["no_of_sessions"])
+                    ) / 60
+
+                    item["coach_price"] = float(result)
+
                     item["session_type"] = SESSION_TYPE_VALUE[item["session_type"]]
 
             total_sessions = sum(session["no_of_sessions"] for session in data)
             total_duration = sum(int(session["session_duration"]) for session in data)
-            total_coach_fees = sum(int(session["coach_price"]) for session in data)
+            total_coach_fees = sum(float(session["coach_price"]) for session in data)
 
             html_content = render_to_string(
                 "contract/contract_template.html",
@@ -8256,8 +8276,6 @@ def update_reminders_of_project(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_coaches_to_project(request):
@@ -8340,7 +8358,6 @@ def add_coaches_to_project(request):
     return Response({"message": "Coaches added to project successfully!"})
 
 
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def update_coach_project_structure(request, coach_id):
@@ -8349,15 +8366,12 @@ def update_coach_project_structure(request, coach_id):
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
     try:
-        coach_status = project.coaches_status.get(coach__id = coach_id)
+        coach_status = project.coaches_status.get(coach__id=coach_id)
         coach_status.project_structure = request.data.get("project_structure", [])
         coach_status.save()
-        return Response({"message" : "Project structure updated for coach successfully."})
+        return Response(
+            {"message": "Project structure updated for coach successfully."}
+        )
     except Exception as e:
         print(str(e))
-        return Response({
-            "error" : "Failed to update project structure."
-        }, status=401)
-
-    
-    
+        return Response({"error": "Failed to update project structure."}, status=401)
