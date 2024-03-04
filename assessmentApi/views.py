@@ -2015,51 +2015,54 @@ class AddMultipleQuestions(APIView):
 
                 for question in questions:
                     behavior, created = Behavior.objects.get_or_create(
-                        name=question["behaviour"],
+                        name=question["behaviour"].strip(),
                         description="This is a demo description",
                     )
                     behavior.save()
                     competency, created = Competency.objects.get_or_create(
-                        name=question["compentency_name"]
+                        name=question["compentency_name"].strip()
                     )
 
                     competency.behaviors.add(behavior)
                     competency.save()
 
-                    if question["rating_type"] == "1-5":
+                    if question["rating_type"].strip() == "1-5":
                         labels = {
-                            "1": question["label1"],
-                            "2": question["label2"],
-                            "3": question["label3"],
-                            "4": question["label4"],
-                            "5": question["label5"],
+                            "1": question["label1"].strip(),
+                            "2": question["label2"].strip(),
+                            "3": question["label3"].strip(),
+                            "4": question["label4"].strip(),
+                            "5": question["label5"].strip(),
                         }
                     elif question["rating_type"] == "1-10":
                         labels = {
-                            "1": question["label1"],
-                            "2": question["label2"],
-                            "3": question["label3"],
-                            "4": question["label4"],
-                            "5": question["label5"],
-                            "6": question["label6"],
-                            "7": question["label7"],
-                            "8": question["label8"],
-                            "9": question["label9"],
-                            "10": question["label10"],
+                            "1": question["label1"].strip(),
+                            "2": question["label2"].strip(),
+                            "3": question["label3"].strip(),
+                            "4": question["label4"].strip(),
+                            "5": question["label5"].strip(),
+                            "6": question["label6"].strip(),
+                            "7": question["label7"].strip(),
+                            "8": question["label8"].strip(),
+                            "9": question["label9"].strip(),
+                            "10": question["label10"].strip(),
                         }
 
                     new_question, created = Question.objects.get_or_create(
-                        type=question["type"],
+                        type=question["type"].strip(),
                         reverse_question=(
-                            True if question["reverse_question"] == "Yes" else False
+                            True
+                            if question["reverse_question"].strip() == "Yes"
+                            else False
                         ),
                         behavior=behavior,
                         competency=competency,
-                        self_question=question["self_question"],
-                        observer_question=question["observer_question"],
-                        rating_type=question["rating_type"],
+                        self_question=question["self_question"].strip(),
+                        observer_question=question["observer_question"].strip(),
+                        rating_type=question["rating_type"].strip(),
                         label=labels,
                         correct_answer=question["correct_answer"],
+                        response_type=question["response_type"].strip(),
                     )
                     new_question.save()
 
@@ -3401,7 +3404,7 @@ def generate_graph_for_participant_for_post_assessment(
                     str(question.id)
                 )
             )
-         
+
             if question.response_type == "correct_answer":
 
                 correct_answer = (
@@ -3409,9 +3412,9 @@ def generate_graph_for_participant_for_post_assessment(
                     .first()
                     .correct_answer
                 )
-              
+
                 if str(pre_assessment_participant_response_value) in correct_answer:
-              
+
                     pre_competency_object[question.competency.name] = (
                         pre_competency_object[question.competency.name] + 1
                     )
@@ -3430,7 +3433,6 @@ def generate_graph_for_participant_for_post_assessment(
                     if pre_assessment_participant_response_value:
                         if question.reverse_question:
 
-                            
                             pre_competency_object[
                                 question.competency.name
                             ] = pre_competency_object[question.competency.name] + (
@@ -4621,5 +4623,3 @@ class AssessmentsResponseStatusDownload(APIView):
             return Response(response_data_for_assessments)
         except Exception as e:
             print(str(e))
-
-
