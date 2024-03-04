@@ -69,7 +69,8 @@ from .views import (
     PostReportDownloadForAllParticipant,
     PostReportDownloadForParticipant,
     GetProjectWiseReport,
-    GetAllAssessmentsOfSchedularProjects
+    GetAllAssessmentsOfSchedularProjects,
+    AssessmentsResponseStatusDownload,
 )
 
 
@@ -306,5 +307,9 @@ urlpatterns = [
     path(
         "get-all-assessments-of-schedular-project/<str:project_id>/",
         GetAllAssessmentsOfSchedularProjects.as_view(),
+    ),
+    path(
+        "assessments-download-respose-status/",
+        AssessmentsResponseStatusDownload.as_view(),
     ),
 ]

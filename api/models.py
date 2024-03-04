@@ -123,6 +123,7 @@ class Profile(models.Model):
         ("hr", "hr"),
         ("superadmin", "superadmin"),
         ("facilitator", "facilitator"),
+        ("finance", "finance")
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)
@@ -139,6 +140,15 @@ class SuperAdmin(models.Model):
     def __str__(self):
         return self.name
 
+class Finance(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
 
 class Pmo(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
@@ -228,6 +238,8 @@ class Facilitator(models.Model):
     area_of_expertise = models.JSONField(default=list, blank=True)
     profile_pic = models.ImageField(upload_to="post_images", blank=True)
     education = models.JSONField(default=list, blank=True)
+    corporate_experience = models.TextField(blank=True)
+    coaching_experience = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
     city = models.JSONField(default=list, blank=True)
     language = models.JSONField(default=list, blank=True)
@@ -241,6 +253,11 @@ class Facilitator(models.Model):
     other_certification = models.JSONField(default=list, blank=True)
     currency = models.CharField(max_length=100, blank=True, default="")
     client_companies = models.JSONField(default=list, blank=True)
+    education_pic = models.ImageField(upload_to="post_images", blank=True)
+    # education_upload_file = models.ImageField(upload_to="post_images", blank=True)
+    education_upload_file = models.FileField(
+        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+    )
     educational_qualification = models.JSONField(default=list, blank=True)
     fees_per_hour = models.CharField(max_length=20, blank=True)
     fees_per_day = models.CharField(max_length=20, blank=True)
