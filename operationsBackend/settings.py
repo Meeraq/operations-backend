@@ -31,7 +31,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-@4lj39m8fw$6-h66bk=!!8qws9jo!7vg-i@m+r&3c+z&iiabk@"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env("DEBUG", default=False)
 
 ALLOWED_HOSTS = [env("ALLOWED_HOSTS")]
 
@@ -296,6 +296,10 @@ CELERY_BEAT_SCHEDULE = {
     "weekly_invoice_approval_reminder": {
         "task": "schedularApi.tasks.weekly_invoice_approval_reminder",
         "schedule": crontab(hour=3, minute=30, day_of_week="mon"),  # 10 AM IST Monday
+    },
+    "send_tomorrow_action_items_data": {
+        "task": "schedularApi.tasks.send_tomorrow_action_items_data",
+        "schedule": crontab(hour=12, minute=30, day_of_week="*"),
     },
 }
 

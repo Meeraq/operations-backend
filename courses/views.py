@@ -30,6 +30,7 @@ from .models import (
     Nudge,
     AssignmentLesson,
     AssignmentLessonResponse,
+    FacilitatorLesson,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -62,6 +63,7 @@ from .serializers import (
     AssignmentSerializerDepthOne,
     AssignmentResponseSerializerDepthSix,
     AssignmentResponseSerializer,
+    FacilitatorSerializer,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
@@ -107,6 +109,7 @@ from schedularApi.tasks import (
     get_file_content,
     get_file_extension,
     get_live_session_name,
+    get_nudges_of_course,
 )
 
 from django.core.mail import EmailMessage
@@ -671,6 +674,9 @@ class LessonDetailView(generics.RetrieveAPIView):
         elif lesson_type == "assignment":
             assignment_lesson = AssignmentLesson.objects.get(lesson=lesson)
             serializer = AssignmentSerializerDepthOne(assignment_lesson)
+        elif lesson_type == "facilitator":
+            facilitator_lesson = FacilitatorLesson.objects.get(lesson=lesson)
+            serializer = FacilitatorSerializer(facilitator_lesson)
         else:
             return Response({"error": f"Failed to get the lessons"}, status=400)
 
@@ -2348,6 +2354,17 @@ class AssignCourseTemplateToBatch(APIView):
                 original_lessons = Lesson.objects.filter(
                     course_template=course_template
                 )
+                facilitator_lesson_creation = Lesson.objects.create(
+                    course=new_course,
+                    name="Facilitator Lesson",
+                    status="draft",
+                    lesson_type="facilitator",
+                    # Duplicate specific lesson types
+                    order=1,
+                )
+                FacilitatorLesson.objects.create(
+                    lesson=facilitator_lesson_creation,
+                )
                 assessment_creation = False
                 if not original_lessons.filter(lesson_type="assessment").exists():
                     if batch.project.pre_post_assessment:
@@ -2358,7 +2375,7 @@ class AssignCourseTemplateToBatch(APIView):
                             status="draft",
                             lesson_type="assessment",
                             # Duplicate specific lesson types
-                            order=1,
+                            order=2,
                         )
                         assessment1 = Assessment.objects.create(
                             lesson=lesson1, type="pre"
@@ -2370,9 +2387,9 @@ class AssignCourseTemplateToBatch(APIView):
                         "live_session",
                         "laser_coaching",
                     ]:
-                        updated_order = original_lesson.order
+                        updated_order = original_lesson.order + 1
                         if assessment_creation:
-                            updated_order = original_lesson.order + 1
+                            updated_order = original_lesson.order + 2
                         new_lesson = Lesson.objects.create(
                             course=new_course,
                             name=original_lesson.name,
@@ -3531,6 +3548,7 @@ def get_nps_project_wise(request):
 
 class GetAllNudgesOfSchedularProjects(APIView):
     permission_classes = [IsAuthenticated]
+
     def get(self, request, project_id):
         try:
             data = []
@@ -3540,28 +3558,8 @@ class GetAllNudgesOfSchedularProjects(APIView):
             else:
                 courses = Course.objects.filter(batch__project__id=int(project_id))
             for course in courses:
-                nudges = Nudge.objects.filter(batch__id=course.batch.id).order_by(
-                    "order"
-                )
-                desired_time = time(8, 30)
-                if course.batch.nudge_start_date:
-                    nudge_scheduled_for = datetime.combine(
-                        course.batch.nudge_start_date, desired_time
-                    )
-
-                    for nudge in nudges:
-                        temp = {
-                            "is_sent": nudge.is_sent,
-                            "name": nudge.name,
-                            "learner_count": nudge.batch.learners.count(),
-                            "batch_name": nudge.batch.name,
-                            "nudge_scheduled_for": nudge_scheduled_for,
-                        }
-
-                        data.append(temp)
-                        nudge_scheduled_for = nudge_scheduled_for + timedelta(
-                            int(course.batch.nudge_frequency)
-                        )
+                nudges = get_nudges_of_course(course)
+                data = list(data) + list(nudges)
 
             return Response(data)
         except Exception as e:

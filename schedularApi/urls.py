@@ -122,13 +122,18 @@ urlpatterns = [
         name="update_session_status",
     ),
     path(
-        "project-report-download/<int:project_id>/",
-        views.project_report_download,
-        name="project_report_download",
+        "project-batch-wise-report-download/<int:project_id>/<str:session_to_download>/",
+        views.project_batch_wise_report_download,
+        name="project_batch_wise_report_download",
     ),
     path(
-        "project-report-download-session-wise/<int:project_id>/<int:batch_id>/",
-        views.project_report_download_session_wise,
+        "project-report-download-live-session-wise/<int:project_id>/<str:batch_id>/",
+        views.project_report_download_live_session_wise,
+        name="project_report_download_session_wise",
+    ),
+    path(
+        "project-report-download-coaching-session-wise/<int:project_id>/<str:batch_id>/",
+        views.project_report_download_coaching_session_wise,
         name="project_report_download_session_wise",
     ),
     path(
@@ -244,4 +249,14 @@ urlpatterns = [
         "pre-post-assessment-or-nudge-update-in-project/",
         views.pre_post_assessment_or_nudge_update_in_project,
     ),
+    path(
+        "get-all-coach-of-project-or-batch/<str:project_id>/<str:batch_id>/",
+        views.get_all_coach_of_project_or_batch,
+    ),
+    path(
+        "get-slots-based-on-project-batch-coach/<str:project_id>/<str:batch_id>/<str:coach_id>/",
+        views.get_slots_based_on_project_batch_coach,
+    ),
+    path("batch/add-facilitator/<int:batch_id>/", views.add_facilitator_to_batch),
+    path("batches/facilitators/<str:batch_id>/", views.show_facilitator_inside_courses),
 ]
