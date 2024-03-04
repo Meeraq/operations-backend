@@ -1932,7 +1932,19 @@ def update_lesson_status_according_to_drip_dates():
         today = date.today()
         lessons = Lesson.objects.filter(drip_date=today)
         for lesson in lessons:
-            lesson.status = "public"
-            lesson.save()
+            if lesson.lesson_type == "assessment":
+                assessment = Assessment.objects.filter(lesson=lesson).first()
+
+                assessment_modal = Assessment.objects.get(
+                    id=assessment.assessment_modal.id
+                )
+                lesson.status == "public"
+                assessment_modal.status = "ongoing"
+                lesson.save()
+                assessment_modal.save()
+            else:
+
+                lesson.status = "public"
+                lesson.save()
     except Exception as e:
         print(str(e))

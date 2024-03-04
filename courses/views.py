@@ -1750,7 +1750,6 @@ def create_video_lesson(request):
                 "lesson": lesson_instance.id,
                 "video": video_instance.id,
                 "content": content,
-                
             }
             video_lesson_serializer = VideoLessonSerializer(data=video_lesson_data)
             if video_lesson_serializer.is_valid():
@@ -2351,16 +2350,18 @@ class AssignCourseTemplateToBatch(APIView):
                 assessment_creation = False
                 if not original_lessons.filter(lesson_type="assessment").exists():
                     if batch.project.pre_post_assessment:
-                        assessment_creation =  True
+                        assessment_creation = True
                         lesson1 = Lesson.objects.create(
-                                course=new_course,
-                                name="Pre Assessment",
-                                status="draft",
-                                lesson_type="assessment",
-                                # Duplicate specific lesson types
-                                order=1,
-                            )
-                        assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+                            course=new_course,
+                            name="Pre Assessment",
+                            status="draft",
+                            lesson_type="assessment",
+                            # Duplicate specific lesson types
+                            order=1,
+                        )
+                        assessment1 = Assessment.objects.create(
+                            lesson=lesson1, type="pre"
+                        )
                 for original_lesson in original_lessons:
                     new_lesson = None
                     # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
@@ -2532,23 +2533,23 @@ class AssignCourseTemplateToBatch(APIView):
 
                 if assessment_creation:
                     max_order = (
-                        Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
-                            "order__max"
-                        ]
+                        Lesson.objects.filter(course=new_course).aggregate(
+                            Max("order")
+                        )["order__max"]
                         or 0
                     )
-                    
+
                     lesson2 = Lesson.objects.create(
                         course=new_course,
                         name="Post Assessment",
                         status="draft",
                         lesson_type="assessment",
                         # Duplicate specific lesson types
-                        order=max_order+1,
+                        order=max_order + 1,
                     )
 
                     assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
-                    
+
             return Response(
                 {
                     "message": "Course assigned successfully.",
@@ -3533,7 +3534,7 @@ class GetAllNudgesOfSchedularProjects(APIView):
 
     def get(self, request, project_id):
         try:
-            
+
             data = []
             courses = None
             if project_id == "all":
@@ -3568,8 +3569,6 @@ class GetAllNudgesOfSchedularProjects(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": "Failed to get data"}, status=500)
-
-
 
 
 class CreateAssignmentLesson(APIView):
@@ -3632,7 +3631,7 @@ class UpdateAssignmentLesson(APIView):
             assignment_lesson.save()
             lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
             lesson.name = request.data["name"]
-            lesson.drip_date=request.data["drip_date"]
+            lesson.drip_date = request.data["drip_date"]
             lesson.save()
             return Response(
                 {"message": f"Assignment Lesson Updated."}, status=status.HTTP_200_OK
