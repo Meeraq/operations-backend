@@ -4904,7 +4904,7 @@ def get_project_wise_progress_data(request, project_id):
                                 f"{get_live_session_name(session_type)} {live_session.live_session_number}"
                             ] = (
                                 "Yes"
-                                if participant.name in live_session.attendees
+                                if participant.id in live_session.attendees
                                 else "No"
                             )
 
@@ -4919,7 +4919,8 @@ def get_project_wise_progress_data(request, project_id):
                         ).first()
                         if coaching_session:
                             schedular_session = SchedularSessions.objects.filter(
-                                coaching_session=coaching_session
+                                coaching_session=coaching_session,
+                                learner__id=participant.id,
                             ).first()
                             if schedular_session:
                                 temp[
