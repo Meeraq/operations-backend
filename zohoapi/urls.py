@@ -89,6 +89,11 @@ urlpatterns = [
         name="get_invoices_by_status",
     ),
     path(
+        "invoices/founders/<str:status>/",
+        views.get_invoices_by_status_for_founders,
+        name="get_invoices_by_status_for_founders",
+    ),
+    path(
         "invoices/<int:invoice_id>/update_status/",
         views.update_invoice_status,
     ),

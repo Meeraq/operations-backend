@@ -1262,6 +1262,39 @@ def get_invoices_by_status(request, status):
         print(str(e))
         return Response({"error": "Failed to load"}, status=400)
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_invoices_by_status_for_founders(request, status):
+    
+    try:
+        all_invoices = fetch_invoices(organization_id)
+        res = []
+        for invoice_data in all_invoices:
+            if status == "in_review":
+                if not invoice_data["bill"] and invoice_data["bill"]["status"] == "in_review":
+                    res.append(invoice_data)
+            elif status == "approved":
+                if not invoice_data["bill"] and invoice_data["bill"]["status"] == "approved":
+                    res.append(invoice_data)
+            elif status == "rejected":
+                if not invoice_data["bill"] and invoice_data["bill"]["status"] == "rejected":
+                    res.append(invoice_data)        
+            if status == "approved":
+                if invoice_data["bill"]:
+                    if (
+                        "status" in invoice_data["bill"]
+                        and not invoice_data["bill"]["status"] == "paid"
+                    ):
+                        res.append(invoice_data)
+            elif status == "paid":
+                if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid":
+                    res.append(invoice_data)
+        return Response(res, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to load"}, status=400)
+
 
 @api_view(["PUT"])
 def edit_vendor(request, vendor_id):
