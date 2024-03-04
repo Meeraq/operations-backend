@@ -14,6 +14,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from api.models import Coach, OTP, UserLoginActivity, Profile, Role
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
+import json
 
 from rest_framework.views import APIView
 
@@ -1171,35 +1172,66 @@ def get_all_purchase_orders(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def get_all_purchase_orders_for_pmo(request):
+    try:
+        all_purchase_orders = fetch_purchase_orders(organization_id)
+        pmos_allowed = json.loads(env("PMOS_ALLOWED_TO_VIEW_ALL_INVOICES_AND_POS"))
+        if not request.user.username in pmos_allowed:
+            all_purchase_orders = [
+                purchase_order
+                for purchase_order in all_purchase_orders
+                if "cf_invoice_approver_s_email" in purchase_order
+                and purchase_order["cf_invoice_approver_s_email"].strip().lower()
+                == request.user.username.strip().lower()
+            ]
+        # filter based on the conditions
+        return Response(all_purchase_orders, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def fetch_invoices(organization_id):
+    all_bills = fetch_bills(organization_id)
+    invoices = InvoiceData.objects.all()
+    invoices = filter_invoice_data(invoices)
+    invoice_serializer = InvoiceDataSerializer(invoices, many=True)
+    all_invoices = []
+    for invoice in invoice_serializer.data:
+        matching_bill = next(
+            (
+                bill
+                for bill in all_bills
+                if bill.get(env("INVOICE_FIELD_NAME")) == invoice["invoice_number"]
+            ),
+            None,
+        )
+        all_invoices.append({**invoice, "bill": matching_bill})
+    return all_invoices
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_invoices(request):
     try:
-        access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-        if access_token_purchase_data:
-            all_bills = fetch_bills(organization_id)
-            invoices = InvoiceData.objects.all()
-            invoices = filter_invoice_data(invoices)
-            invoice_serializer = InvoiceDataSerializer(invoices, many=True)
-            all_invoices = []
-            for invoice in invoice_serializer.data:
-                matching_bill = next(
-                    (
-                        bill
-                        for bill in all_bills
-                        if bill.get(env("INVOICE_FIELD_NAME"))
-                        == invoice["invoice_number"]
-                    ),
-                    None,
-                )
-                all_invoices.append({**invoice, "bill": matching_bill})
+        all_invoices = fetch_invoices(organization_id)
+        return Response(all_invoices, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            return Response(all_invoices, status=status.HTTP_200_OK)
-        else:
-            return Response(
-                {
-                    "error": "Access token not found. Please generate an access token first."
-                },
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_invoices_for_pmo(request):
+    try:
+        all_invoices = fetch_invoices(organization_id)
+        pmos_allowed = json.loads(env("PMOS_ALLOWED_TO_VIEW_ALL_INVOICES_AND_POS"))
+        if not request.user.username in pmos_allowed:
+            all_invoices = [
+                invoice
+                for invoice in all_invoices
+                if invoice["approver_email"].strip().lower() == request.user.username
+            ]
+        return Response(all_invoices, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -1208,48 +1240,24 @@ def get_all_invoices(request):
 @permission_classes([IsAuthenticated])
 def get_invoices_by_status(request, status):
     try:
-        access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-        if access_token_purchase_data:
-            all_bills = fetch_bills(organization_id)
-            invoices = InvoiceData.objects.all()
-            invoices = filter_invoice_data(invoices)
-            invoice_serializer = InvoiceDataSerializer(invoices, many=True)
-            res = []
-            for invoice in invoice_serializer.data:
-                matching_bill = next(
-                    (
-                        bill
-                        for bill in all_bills
-                        if bill.get(env("INVOICE_FIELD_NAME"))
-                        == invoice["invoice_number"]
-                    ),
-                    None,
-                )
-                invoice_data = {**invoice, "bill": matching_bill}
-                if status == "approved":
-                    if invoice_data["bill"]:
-                        if (
-                            "status" in invoice_data["bill"]
-                            and not invoice_data["bill"]["status"] == "paid"
-                        ):
-                            res.append(invoice_data)
-                    elif invoice_data['status'] == "approved":
-                        res.append(invoice_data)
-                elif status == "paid":
+        all_invoices = fetch_invoices(organization_id)
+        res = []
+        for invoice_data in all_invoices:
+            if status == "approved":
+                if invoice_data["bill"]:
                     if (
-                        invoice_data["bill"]
-                        and invoice_data["bill"]["status"] == "paid"
+                        "status" in invoice_data["bill"]
+                        and not invoice_data["bill"]["status"] == "paid"
                     ):
                         res.append(invoice_data)
+                elif invoice_data["status"] == "approved":
+                    res.append(invoice_data)
+            elif status == "paid":
+                if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid":
+                    res.append(invoice_data)
 
-            return Response(res, status=200)
-        else:
-            return Response(
-                {
-                    "error": "Access token not found. Please generate an access token first."
-                },
-                status=401,
-            )
+        return Response(res, status=200)
+
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to load"}, status=400)
