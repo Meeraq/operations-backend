@@ -444,8 +444,12 @@ class SessionDataSerializer(serializers.ModelSerializer):
 class PmoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pmo
-        fields = ["name", "email", "phone"]
+        fields = ["name", "email", "phone","sub_role"]
 
+class PmoSerializerAll(serializers.ModelSerializer):
+    class Meta:
+        model = Pmo
+        fields = "__all__"
 
 class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
     class Meta:

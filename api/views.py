@@ -69,6 +69,7 @@ from .serializers import (
     FinanceDepthOneSerializer,
     PmoSerializer,
     FacilitatorDepthOneSerializer,
+    PmoSerializerAll,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor
@@ -753,7 +754,7 @@ def create_pmo(request):
     phone = request.data.get("phone")
     username = email  # username and email are the same
     password = request.data.get("password")
-
+    sub_role = request.data.get("sub_role")
     room_id = generate_room_id(email)
 
     # Check if required data is provided
@@ -782,7 +783,12 @@ def create_pmo(request):
 
             # Create the PMO User using the Profile
             pmo_user = Pmo.objects.create(
-                user=profile, name=name, email=email, phone=phone, room_id=room_id
+                user=profile,
+                name=name,
+                email=email,
+                phone=phone,
+                room_id=room_id,
+                sub_role=sub_role,
             )
 
             name = pmo_user.name
@@ -797,6 +803,44 @@ def create_pmo(request):
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny])
+def edit_pmo(request):
+    # Get data from request
+    name = request.data.get("name")
+    email = request.data.get("email", "").strip().lower()
+    phone = request.data.get("phone")
+
+    sub_role = request.data.get("sub_role")
+    pmo_email = request.data.get("pmo_email", "").strip().lower()
+    try:
+        with transaction.atomic():
+            existing_user = (
+                User.objects.filter(username=email).exclude(username=pmo_email).first()
+            )
+            if existing_user:
+                return Response(
+                    {"error": "User with this email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            pmo = Pmo.objects.get(email=pmo_email)
+            pmo.user.user.username = email
+            pmo.user.user.email = email
+            pmo.user.user.save()
+            pmo.email = email
+            pmo.name = name
+            pmo.phone = phone
+            pmo.sub_role = sub_role
+            pmo.save()
+            if pmo.phone:
+                add_contact_in_wati("pmo", pmo.name, pmo.phone)
+
+            return Response({"message": "PMO updated successfully."}, status=201)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update pmo."}, status=500)
 
 
 @api_view(["PUT"])
@@ -846,7 +890,7 @@ def update_coach_profile(request, id):
     try:
         coach = Coach.objects.get(id=id)
         mutable_data = request.data.copy()
-     
+
     except Coach.DoesNotExist:
         return Response(status=404)
 
@@ -917,7 +961,7 @@ def update_coach_profile(request, id):
 
         for role in user.profile.roles.all():
             roles.append(role.name)
-  
+
         return Response(
             {
                 **depth_serializer.data,
@@ -1024,6 +1068,10 @@ def create_project_cass(request):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_name"]
     ).first()
+    junior_pmo = None
+    if "junior_pmo" in request.data:
+        junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
+
     if not organisation:
         organisation = Organisation(
             name=request.data["organisation_name"], image_url=request.data["image_url"]
@@ -1071,6 +1119,7 @@ def create_project_cass(request):
             status="presales",
             masked_coach_profile=request.data["masked_coach_profile"],
             automated_reminder=request.data["automated_reminder"],
+            junior_pmo=junior_pmo,
         )
 
         project.save()
@@ -1204,16 +1253,30 @@ def create_learners(learners_data):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_ongoing_projects(request):
-    projects = Project.objects.filter(steps__project_live="pending")
-    serializer = ProjectDepthTwoSerializer(projects, many=True)
-    for project_data in serializer.data:
-        latest_update = (
-            Update.objects.filter(project__id=project_data["id"])
-            .order_by("-created_at")
-            .first()
-        )
-        project_data["latest_update"] = latest_update.message if latest_update else None
-    return Response(serializer.data)
+    try:
+        pmo_id = request.query_params.get("pmo")
+        projects = Project.objects.all()
+
+        if pmo_id:
+            pmo = Pmo.objects.get(id=int(pmo_id))
+            if pmo.sub_role == "junior_pmo":
+                projects = projects.filter(junior_pmo=int(pmo_id))
+
+        projects = projects.filter(steps__project_live="pending")
+        serializer = ProjectDepthTwoSerializer(projects, many=True)
+        for project_data in serializer.data:
+            latest_update = (
+                Update.objects.filter(project__id=project_data["id"])
+                .order_by("-created_at")
+                .first()
+            )
+            project_data["latest_update"] = (
+                latest_update.message if latest_update else None
+            )
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)
 
 
 @api_view(["GET"])
@@ -1330,9 +1393,6 @@ def coach_session_list(request, coach_id):
     return Response({"projects": project_serializer.data})
 
 
-
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_coach(request):
@@ -1381,7 +1441,6 @@ def add_coach(request):
     # Check if required data is provided
     if not all(
         [
-          
             first_name,
             last_name,
             email,
@@ -3646,7 +3705,6 @@ def add_mulitple_coaches(request):
                         status=400,
                     )
 
-               
                 user = User.objects.filter(email=email).first()
                 if not user:
                     temp_password = "".join(
@@ -4226,12 +4284,24 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
     schedular_sessions = []
 
     if user_type == "pmo":
-        session_requests = SessionRequestCaas.objects.filter(
-            ~Q(session_type="interview"),
-            ~Q(session_type="chemistry", billable_session_number=None),
-            is_archive=False,
-        )
-        schedular_sessions = SchedularSessions.objects.all()
+        pmo = Pmo.objects.get(id=user_id)
+        if pmo.sub_role == "manager":
+            session_requests = SessionRequestCaas.objects.filter(
+                ~Q(session_type="interview"),
+                ~Q(session_type="chemistry", billable_session_number=None),
+                is_archive=False,
+            )
+            schedular_sessions = SchedularSessions.objects.all()
+        else:
+            session_requests = SessionRequestCaas.objects.filter(
+                ~Q(session_type="interview"),
+                Q(project__junior_pmo=pmo),
+                ~Q(session_type="chemistry", billable_session_number=None),
+                is_archive=False,
+            )
+            schedular_sessions = SchedularSessions.objects.filter(
+                coaching_session__batch__project__junior_pmo=pmo
+            )
     elif user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
             ~Q(session_type="interview"),
@@ -4363,11 +4433,20 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     if user_type == "pmo":
-        session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__gt=current_time),
-            ~Q(status="completed"),
-        )
+        pmo = Pmo.objects.get(id=user_id)
+        if pmo.sub_role == "manager":
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__gt=current_time),
+                ~Q(status="completed"),
+            )
+        else:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__gt=current_time),
+                ~Q(status="completed"),
+                Q(project__junior_pmo=pmo),
+            )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -4417,15 +4496,32 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
     avaliable_sessions = []
     if user_type == "pmo":
-        session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__gt=current_time),
-            ~Q(status="completed"),
-        )
-        schedular_sessions = SchedularSessions.objects.all()
-        avaliable_sessions = schedular_sessions.filter(
-            availibility__end_time__gt=timestamp_milliseconds
-        )
+        pmo = Pmo.objects.get(id=user_id)
+        if pmo.sub_role == "manager":
+
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__gt=current_time),
+                ~Q(status="completed"),
+            )
+            schedular_sessions = SchedularSessions.objects.all()
+            avaliable_sessions = schedular_sessions.filter(
+                availibility__end_time__gt=timestamp_milliseconds
+            )
+        else:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__gt=current_time),
+                ~Q(status="completed"),
+                Q(project__junior_pmo=pmo),
+            )
+            schedular_sessions = SchedularSessions.objects.filter(
+                coaching_session__batch__project__junior_pmo=pmo
+            )
+            avaliable_sessions = schedular_sessions.filter(
+                availibility__end_time__gt=timestamp_milliseconds
+            )
+
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -4537,11 +4633,21 @@ def get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
     if user_type == "pmo":
-        session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__lt=current_time)
-            | Q(status="completed"),
-        )
+        pmo = Pmo.objects.get(id=user_id)
+        if pmo.sub_role == "manager":
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__lt=current_time)
+                | Q(status="completed"),
+            )
+        else:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__lt=current_time)
+                | Q(status="completed"),
+                Q(project__junior_pmo=pmo),
+            )
+
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -4593,15 +4699,30 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
     timestamp_milliseconds = int(current_time_seeq.timestamp() * 1000)
     avaliable_sessions = []
     if user_type == "pmo":
-        session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__lt=current_time)
-            | Q(status="completed"),
-        )
-        schedular_sessions = SchedularSessions.objects.all()
-        avaliable_sessions = schedular_sessions.filter(
-            availibility__end_time__lt=timestamp_milliseconds
-        )
+        pmo = Pmo.objects.get(id=user_id)
+        if pmo.sub_role == "manager":
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__lt=current_time)
+                | Q(status="completed"),
+            )
+            schedular_sessions = SchedularSessions.objects.all()
+            avaliable_sessions = schedular_sessions.filter(
+                availibility__end_time__lt=timestamp_milliseconds
+            )
+        else:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__lt=current_time)
+                | Q(status="completed"),
+                Q(project__junior_pmo=pmo),
+            )
+            schedular_sessions = SchedularSessions.objects.filter(
+                coaching_session__batch__project__junior_pmo=pmo
+            )
+            avaliable_sessions = schedular_sessions.filter(
+                availibility__end_time__lt=timestamp_milliseconds
+            )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
@@ -6801,6 +6922,9 @@ def edit_project_caas(request, project_id):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_id"]
     ).first()
+    junior_pmo = None
+    if "junior_pmo" in request.data:
+        junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
 
     try:
         # Retrieve the existing project from the database
@@ -6844,6 +6968,7 @@ def edit_project_caas(request, project_id):
         project.automated_reminder = request.data.get(
             "automated_reminder", project.automated_reminder
         )
+        project.junior_pmo = junior_pmo
 
         project.hr.clear()
         for hr in request.data["hr"]:
@@ -7560,7 +7685,9 @@ class UpdateCoachContract(APIView):
         coach_id = request.data.get("coach")
         project_id = request.data.get("project")
         try:
-            contract = CoachContract.objects.get(coach__id=coach_id, project__id=project_id)
+            contract = CoachContract.objects.get(
+                coach__id=coach_id, project__id=project_id
+            )
         except CoachContract.DoesNotExist:
             return Response(
                 {"error": "Coach Contract not found."}, status=status.HTTP_404_NOT_FOUND
@@ -8239,6 +8366,7 @@ def add_pmo(request):
                 name = data.get("name")
                 email = data.get("email")
                 phone = data.get("phone")
+                sub_role = data.get("subRole")
 
                 if not (name and phone):
                     return Response(
@@ -8275,6 +8403,16 @@ def get_pmo(request):
     try:
         pmos = Pmo.objects.all()
         serializer = PmoSerializer(pmos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+def get_junior_pmo(request, user_id):
+    try:
+        pmos = Pmo.objects.filter(sub_role="junior_pmo").exclude(id=user_id)
+        serializer = PmoSerializerAll(pmos, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -8414,3 +8552,36 @@ def update_reminders_of_project(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_pmo(request):
+    try:
+        with transaction.atomic():
+            pmo_email = request.data.get("email").strip().lower()
+            if pmo_email:
+
+                pmo = Pmo.objects.get(email=pmo_email)
+
+                pmo_user_profile = pmo.user
+                is_delete_user = True
+                for role in pmo_user_profile.roles.all():
+                    if not role.name == "pmo":
+                        # don't delete user if any other role exists
+                        is_delete_user = False
+                    else:
+                        pmo_user_profile.roles.remove(role)
+                        pmo_user_profile.save()
+                if is_delete_user:
+                    user = pmo.user.user
+                    user.delete()
+                else:
+                    pmo.delete()
+
+                return Response({"message": "Pmo deleted successfully"})
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to delete pmo."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

@@ -341,6 +341,7 @@ urlpatterns = [
     ),
     path("add/pmo/", views.add_pmo),
     path("get/all/pmo/", views.get_pmo, name="get_pmo"),
+    path("get/junior/pmo/<int:user_id>/", views.get_junior_pmo),
     path(
         "get-learner-of-user-optimized/<str:user_type>/<int:user_id>/",
         views.get_learner_of_user_optimized,
@@ -364,4 +365,9 @@ urlpatterns = [
         views.update_reminders_of_project,
         name="update_reminders_of_project",
     ),
+    path(
+        "delete-pmo/",
+        views.delete_pmo,
+    ),
+    path("edit-pmo/", views.edit_pmo),
 ]

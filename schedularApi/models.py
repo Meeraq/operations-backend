@@ -33,7 +33,13 @@ class SchedularProject(models.Model):
     email_reminder = models.BooleanField(blank=True, default=True)
     whatsapp_reminder = models.BooleanField(blank=True, default=True)
     calendar_invites = models.BooleanField(blank=True, default=True)
-
+    junior_pmo = models.ForeignKey(
+        Pmo,
+        null=True,
+        on_delete=models.SET_NULL,
+        blank=True,
+    )
+    
     class Meta:
         ordering = ["-created_at"]
 
@@ -189,7 +195,7 @@ class CalendarInvites(models.Model):
 
 
 class SchedularUpdate(models.Model):
-    pmo = models.ForeignKey(Pmo, on_delete=models.CASCADE)
+    pmo = models.ForeignKey(Pmo, on_delete=models.SET_NULL, null=True, blank=True)
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
     message = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
