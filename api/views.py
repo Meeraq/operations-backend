@@ -846,7 +846,7 @@ def update_coach_profile(request, id):
     try:
         coach = Coach.objects.get(id=id)
         mutable_data = request.data.copy()
-     
+
     except Coach.DoesNotExist:
         return Response(status=404)
 
@@ -917,7 +917,7 @@ def update_coach_profile(request, id):
 
         for role in user.profile.roles.all():
             roles.append(role.name)
-  
+
         return Response(
             {
                 **depth_serializer.data,
@@ -1330,9 +1330,6 @@ def coach_session_list(request, coach_id):
     return Response({"projects": project_serializer.data})
 
 
-
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_coach(request):
@@ -1381,7 +1378,6 @@ def add_coach(request):
     # Check if required data is provided
     if not all(
         [
-          
             first_name,
             last_name,
             email,
@@ -3646,7 +3642,6 @@ def add_mulitple_coaches(request):
                         status=400,
                     )
 
-               
                 user = User.objects.filter(email=email).first()
                 if not user:
                     temp_password = "".join(
@@ -7560,7 +7555,9 @@ class UpdateCoachContract(APIView):
         coach_id = request.data.get("coach")
         project_id = request.data.get("project")
         try:
-            contract = CoachContract.objects.get(coach__id=coach_id, project__id=project_id)
+            contract = CoachContract.objects.get(
+                coach__id=coach_id, project__id=project_id
+            )
         except CoachContract.DoesNotExist:
             return Response(
                 {"error": "Coach Contract not found."}, status=status.HTTP_404_NOT_FOUND
@@ -8414,3 +8411,26 @@ def update_reminders_of_project(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def blacklist_coach(request):
+    try:
+        coach_id = request.data.get("coach_id")
+        coach = Coach.objects.get(id=int(coach_id))
+        if coach.active_inactive:
+            coach.active_inactive = False
+        else:
+            coach.active_inactive = True
+        coach.save()
+        return Response(
+            {
+                "message": f"Coach {'whitelist' if coach.active_inactive else 'blacklisted'} successfully"
+            },
+            status=200,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to blacklist coach"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

@@ -364,4 +364,8 @@ urlpatterns = [
         views.update_reminders_of_project,
         name="update_reminders_of_project",
     ),
+    path(
+        "blacklist-coach/",
+        views.blacklist_coach,
+    ),
 ]
