@@ -181,6 +181,8 @@ import pandas as pd
 from django.http import HttpResponse
 import environ
 from time import sleep
+from django.db.models import Max
+
 
 env = environ.Env()
 
@@ -8414,3 +8416,31 @@ def update_reminders_of_project(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_extra_session_in_caas(request,learner_id, project_id):
+    try:
+    
+        session_data = request.data
+        learner = Learner.objects.get(id=learner_id)
+        project = Project.objects.get(id=project_id)
+        sessions = SessionRequestCaas.objects.filter(project__id=project_id, learner__id=learner_id).order_by("order")
+        filtered_sessions = sessions.filter(session_type=session_data["session_type"])
+        max_session_number = filtered_sessions.aggregate(Max('session_number'))['session_number__max'] if filtered_sessions.count() > 0 else 0
+        max_billable_session_number = sessions.aggregate(Max('billable_session_number'))['billable_session_number__max']
+        max_order = sessions.aggregate(Max('order'))['order__max']
+        session_data = SessionRequestCaas.objects.create(
+                learner=learner,
+                project=project,
+                session_duration=session_data["session_duration"],
+                session_number=(max_session_number+1),
+                session_type=session_data["session_type"],
+                billable_session_number=(max_billable_session_number+1),
+                status="pending",
+                order=(max_order+1),
+            )
+        return Response({"detail": "Extra session added successfully"}, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        # Handle the exception as per your application's requirements
+        return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

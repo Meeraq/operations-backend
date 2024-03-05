@@ -456,6 +456,7 @@ class SessionRequestCaas(models.Model):
     session_duration = models.IntegerField(blank=True, default=None, null=True)
     status_updated_at = models.DateTimeField(blank=True, null=True, default=None)
     billable_session_number = models.IntegerField(blank=True, default=None, null=True)
+    is_extra = models.BooleanField(blank=True, default=False)
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
