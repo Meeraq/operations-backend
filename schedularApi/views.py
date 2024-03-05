@@ -610,8 +610,8 @@ def get_batch_calendar(request, batch_id):
         facilitator = Facilitator.objects.filter(
             livesession__batch__id=batch_id
         ).distinct()
-        coaches_serializer = CoachBasicDetailsSerializer(coaches, many=True)
-        facilitator_serializer = FacilitatorBasicDetailsSerializer(
+        coaches_serializer = CoachSerializer(coaches, many=True)
+        facilitator_serializer = FacilitatorSerializer(
             facilitator, many=True
         )
 
@@ -4152,23 +4152,17 @@ class GetAllBatchesCoachDetails(APIView):
 
             for batch in batches:
                 for coach in batch.coaches.all():
+                    coach_serializer = CoachSerializer(coach)
                     coach_data = {
-                        "id": coach.id,
-                        "first_name": coach.first_name,
-                        "last_name": coach.last_name,
-                        "email": coach.email,
+                        **coach_serializer.data, 
                         "batchNames": [batch.name],
-                        "phone": coach.phone,
                     }
                     all_coaches.append(coach_data)
                 for facilitator in Facilitator.objects.filter(livesession__batch=batch):
+                    facilitator_serializer = FacilitatorSerializer(facilitator)
                     facilitator_data = {
-                        "id": facilitator.id,
-                        "first_name": facilitator.first_name,
-                        "last_name": facilitator.last_name,
-                        "email": facilitator.email,
+                       **facilitator_serializer.data, 
                         "batchNames": [batch.name],
-                        "phone": facilitator.phone,
                     }
                     all_facilitator.append(facilitator_data)
 
