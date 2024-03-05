@@ -1697,6 +1697,15 @@ def get_user_data(user):
         }
     elif user_profile_role == "hr":
         serializer = HrDepthOneSerializer(user.profile.hr)
+        is_caas_allowed = Project.objects.filter(hr=user.profile.hr).exists()
+        is_seeq_allowed = SchedularProject.objects.filter(hr=user.profile.hr).exists()
+        return {
+            **serializer.data,
+            "roles": roles,
+            "is_caas_allowed": is_caas_allowed,
+            "is_seeq_allowed": is_seeq_allowed,
+            "user": {**serializer.data["user"], "type": user_profile_role},
+        }
     else:
         return None
     return {
@@ -8375,7 +8384,10 @@ def get_api_logs(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def get_skill_training_projects(request):
+    hr_id = request.query_params.get("hr", None)
     projects = SchedularProject.objects.all()
+    if hr_id:
+        projects=projects.filter(hr__id=hr_id)
     project_serializer = SchedularProjectSerializer(projects, many=True)
 
     # Modify the reminder status directly in the serialized data

@@ -4347,17 +4347,22 @@ def update_project_status(request):
 @permission_classes([IsAuthenticated])
 def get_skill_dashboard_card_data(request, project_id):
     try:
+        hr_id = request.query_params.get("hr", None)
         if project_id == "all":
-
             start_timestamp, end_timestamp = get_current_date_timestamps()
             # schedular sessions scheduled today
             today_sessions = SchedularSessions.objects.filter(
                 availibility__start_time__lte=end_timestamp,
                 availibility__end_time__gte=start_timestamp,
             )
+            if hr_id:
+                today_sessions = today_sessions.filter(coaching_session__batch__project__hr__id=hr_id)
 
             today = timezone.now().date()
             today_live_sessions = LiveSession.objects.filter(date_time__date=today)
+
+            if hr_id:
+                today_live_sessions=today_live_sessions.filter(batch__project__hr__id=hr_id)
 
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="ongoing"
@@ -4385,12 +4390,16 @@ def get_skill_dashboard_card_data(request, project_id):
                 status="ongoing",
                 assessment_modal__lesson__course__batch__project__id=int(project_id),
             )
+            if hr_id:
+                ongoing_assessment=ongoing_assessment.filter(hr__id=hr_id)
 
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False,
                 status="completed",
                 assessment_modal__lesson__course__batch__project__id=int(project_id),
             )
+            if hr_id:
+                completed_assessments=completed_assessments.filter(hr__id=hr_id)
         return Response(
             {
                 "today_coaching_sessions": len(today_sessions),
@@ -4414,6 +4423,7 @@ def get_skill_dashboard_card_data(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_upcoming_coaching_session_dashboard_data(request, project_id):
     try:
+        hr_id = request.query_params.get("hr", None)
         current_time_seeq = timezone.now()
         timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
         if project_id == "all":
@@ -4422,6 +4432,9 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
             schedular_session = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=int(project_id)
             )
+        if hr_id:
+            schedular_session = schedular_session.filter(coaching_session__batch__project__hr__id=hr_id)
+
         upcoming_schedular_sessions = get_coaching_session_according_to_time(
             schedular_session, "upcoming"
         )
@@ -4453,6 +4466,7 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_past_coaching_session_dashboard_data(request, project_id):
     try:
+        hr_id = request.query_params.get("hr", "")
         current_time_seeq = timezone.now()
         timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
         if project_id == "all":
@@ -4461,6 +4475,8 @@ def get_past_coaching_session_dashboard_data(request, project_id):
             schedular_session = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=int(project_id)
             )
+        if hr_id:
+            schedular_session = schedular_session.filter(coaching_session__batch__project__hr__id=hr_id)
 
         past_schedular_sessions = get_coaching_session_according_to_time(
             schedular_session, "past"
@@ -4494,6 +4510,7 @@ def get_past_coaching_session_dashboard_data(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_upcoming_live_session_dashboard_data(request, project_id):
     try:
+        hr_id = request.query_params.get("hr", None)
         current_time_seeq = timezone.now()
         if project_id == "all":
             live_sessions = LiveSession.objects.all()
@@ -4501,15 +4518,17 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
             live_sessions = LiveSession.objects.filter(
                 batch__project__id=int(project_id)
             )
+        
+        if hr_id:
+            live_sessions=live_sessions.filter(batch__project__hr__id=hr_id)
         upcoming_live_sessions = live_sessions.filter(date_time__gt=current_time_seeq)
 
         upcoming_live_session_data = []
 
         for live_session in upcoming_live_sessions:
             facilitator_names = [
-                f"{facilitator.first_name} {facilitator.last_name}"
-                for facilitator in live_session.batch.facilitator.all()
-            ]
+                f"{live_session.facilitator.first_name} {live_session.facilitator.last_name}"
+            ] if live_session.facilitator else []
             coach_names = [
                 f"{coach.first_name} {coach.last_name}"
                 for coach in live_session.batch.coaches.all()
@@ -4540,6 +4559,7 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_past_live_session_dashboard_data(request, project_id):
     try:
+        hr_id = request.query_params.get("hr", None)
         current_time_seeq = timezone.now()
         if project_id == "all":
             live_sessions = LiveSession.objects.all()
@@ -4547,15 +4567,16 @@ def get_past_live_session_dashboard_data(request, project_id):
             live_sessions = LiveSession.objects.filter(
                 batch__project__id=int(project_id)
             )
+        if hr_id:
+            live_sessions=live_sessions.filter(batch__project__hr__id=hr_id)
         past_live_sessions = live_sessions.filter(date_time__lt=current_time_seeq)
 
         past_live_session_data = []
 
         for live_session in past_live_sessions:
             facilitator_names = [
-                f"{facilitator.first_name} {facilitator.last_name}"
-                for facilitator in live_session.batch.facilitator.all()
-            ]
+                f"{live_session.facilitator.first_name} {live_session.facilitator.last_name}"
+            ] if live_session.facilitator else []
             coach_names = [
                 f"{coach.first_name} {coach.last_name}"
                 for coach in live_session.batch.coaches.all()

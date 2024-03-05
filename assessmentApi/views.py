@@ -4562,12 +4562,15 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
 
     def get(self, request, project_id):
         try:
+            hr_id = request.query_params.get("hr", None)
             schedular_projects = []
             assessment_list = []
             if project_id == "all":
                 schedular_projects = SchedularProject.objects.all()
             else:
                 schedular_projects = SchedularProject.objects.filter(id=int(project_id))
+            if hr_id:
+                schedular_projects=schedular_projects.filter(hr__id=hr_id)
             for schedular_project in schedular_projects:
                 batches = SchedularBatch.objects.filter(project=schedular_project)
 
