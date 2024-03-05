@@ -4683,7 +4683,8 @@ def get_all_coach_of_project_or_batch(request, project_id, batch_id):
 
             for batch in batches:
                 for coach in batch.coaches.all():
-                    all_coach.add(coach)
+                    if  coach.active_inactive:
+                        all_coach.add(coach)
 
         serialize = CoachSerializer(list(all_coach), many=True)
         return Response(serialize.data)
