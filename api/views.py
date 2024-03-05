@@ -1649,20 +1649,23 @@ def get_user_data(user):
     for role in user.profile.roles.all():
         roles.append(role.name)
     if user_profile_role == "coach":
-        serializer = CoachDepthOneSerializer(user.profile.coach)
-        is_caas_allowed = Project.objects.filter(
-            coaches_status__coach=user.profile.coach
-        ).exists()
-        is_seeq_allowed = SchedularBatch.objects.filter(
-            coaches=user.profile.coach
-        ).exists()
-        return {
-            **serializer.data,
-            "is_caas_allowed": is_caas_allowed,
-            "is_seeq_allowed": is_seeq_allowed,
-            "roles": roles,
-            "user": {**serializer.data["user"], "type": user_profile_role},
-        }
+        if user.profile.coach.active_inactive:
+            serializer = CoachDepthOneSerializer(user.profile.coach)
+            is_caas_allowed = Project.objects.filter(
+                coaches_status__coach=user.profile.coach
+            ).exists()
+            is_seeq_allowed = SchedularBatch.objects.filter(
+                coaches=user.profile.coach
+            ).exists()
+            return {
+                **serializer.data,
+                "is_caas_allowed": is_caas_allowed,
+                "is_seeq_allowed": is_seeq_allowed,
+                "roles": roles,
+                "user": {**serializer.data["user"], "type": user_profile_role},
+            }
+        else:
+            return None
     elif user_profile_role == "facilitator":
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
         return {
@@ -7764,24 +7767,27 @@ def change_user_role(request, user_id):
     for role in user.profile.roles.all():
         roles.append(role.name)
     if user_profile_role == "coach":
-        serializer = CoachDepthOneSerializer(user.profile.coach)
-        is_caas_allowed = Project.objects.filter(
-            coaches_status__coach=user.profile.coach
-        ).exists()
-        is_seeq_allowed = SchedularBatch.objects.filter(
-            coaches=user.profile.coach
-        ).exists()
-        return Response(
-            {
-                **serializer.data,
-                "is_caas_allowed": is_caas_allowed,
-                "is_seeq_allowed": is_seeq_allowed,
-                "roles": roles,
-                "user": {**serializer.data["user"], "type": user_profile_role},
-                "last_login": user.last_login,
-                "message": "Role changed to Coach",
-            }
-        )
+        if user.profile.coach.active_inactive:
+            serializer = CoachDepthOneSerializer(user.profile.coach)
+            is_caas_allowed = Project.objects.filter(
+                coaches_status__coach=user.profile.coach
+            ).exists()
+            is_seeq_allowed = SchedularBatch.objects.filter(
+                coaches=user.profile.coach
+            ).exists()
+            return Response(
+                {
+                    **serializer.data,
+                    "is_caas_allowed": is_caas_allowed,
+                    "is_seeq_allowed": is_seeq_allowed,
+                    "roles": roles,
+                    "user": {**serializer.data["user"], "type": user_profile_role},
+                    "last_login": user.last_login,
+                    "message": "Role changed to Coach",
+                }
+            )
+        else:
+            return None
     elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "superadmin":
