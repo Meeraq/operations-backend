@@ -166,6 +166,27 @@
               </table>
 
               {% endif %} {% endfor %}
+              <h4>Assessments</h4>
+              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Response Status</th>
+                    <th>Reminder</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for assessment in Assessments %}
+                  <tr>
+                    <td>{{ assessment.name }}</td>
+                    <td>{{ assessment.type }}</td>
+                    <td>{{ assessment.response_status }}</td>
+                    <td>{{ assessment.reminder }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
               <br/>
                <br/>
               <p>
