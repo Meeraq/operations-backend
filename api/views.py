@@ -864,17 +864,17 @@ def approve_facilitator(request):
         send_mail_templates(
             "coach_templates/pmo_approves_profile.html",
             [coach.email],
-            "Congratulations! Your Coach Registration is Approved",
+            "Congratulations! Your Facilitator Registration is Approved",
             {
                 "name": f"{coach.first_name} {coach.last_name}",
             },
             [],
         )
-        return Response({"message": "Coach approved successfully."}, status=200)
+        return Response({"message": "Facilitator approved successfully."}, status=200)
 
     except Coach.DoesNotExist:
         # Return error response if Coach with the provided ID does not exist
-        return Response({"error": "Coach does not exist."}, status=404)
+        return Response({"error": "Facilitator does not exist."}, status=404)
 
     except Exception as e:
         # Return error response if any other exception occurs
@@ -6727,12 +6727,12 @@ class AddRegisteredFacilitator(APIView):
                 create_notification(
                     pmo_user,
                     f"/registeredcoach",
-                    f"{facilitator.first_name} {facilitator.last_name} has registered as a coach. Please go through his Profile.",
+                    f"{facilitator.first_name} {facilitator.last_name} has registered as a Facilitator. Please go through his Profile.",
                 )
                 send_mail_templates(
                     "pmo_emails/facilitator_register.html",
                     [pmo_user.username],
-                    f"{facilitator.first_name} {facilitator.last_name} has Registered as a Coach",
+                    f"{facilitator.first_name} {facilitator.last_name} has Registered as a Facilitator",
                     {
                         "name": pmo.name,
                         "facilitatorName": f"{facilitator.first_name} {facilitator.last_name} ",
