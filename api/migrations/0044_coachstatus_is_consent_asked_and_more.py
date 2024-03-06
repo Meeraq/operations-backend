@@ -13,10 +13,13 @@ def populate_project_structure_in_coach_status(apps, schema):
 
             for project in projects:
                 project_structure = project.project_structure
-                if project_structure:
-                    for coach_status in project.coaches_status.all():
+                
+                for coach_status in project.coaches_status.all():
+                    if project.steps["project_structure"]["status"] == "complete":
                         coach_status.project_structure = project_structure
-                        coach_status.save()
+                    else:
+                        coach_status.project_structure = []
+                    coach_status.save()
 
     except Exception as e:
         print(str(e))
