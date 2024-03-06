@@ -305,11 +305,11 @@ urlpatterns = [
         GetProjectWiseReport.as_view(),
     ),
     path(
-        "assessments-download-respose-status/",
-        AssessmentsResponseStatusDownload.as_view(),
-    ),
-    path(
         "get-all-assessments-of-schedular-project/<str:project_id>/",
         GetAllAssessmentsOfSchedularProjects.as_view(),
+    ),
+    path(
+        "assessments-download-respose-status/",
+        AssessmentsResponseStatusDownload.as_view(),
     ),
 ]
