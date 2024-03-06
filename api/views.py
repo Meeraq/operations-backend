@@ -69,6 +69,7 @@ from .serializers import (
     FinanceDepthOneSerializer,
     PmoSerializer,
     FacilitatorDepthOneSerializer,
+    FacilitatorSerializer,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor
@@ -807,6 +808,46 @@ def approve_coach(request):
         unapproved_coach = request.data["coach"]
         room_id = request.data["room_id"]
         coach = Coach.objects.get(id=unapproved_coach["id"])
+
+        # Change the is_approved field to True
+        coach.is_approved = True
+        coach.room_id = room_id
+        coach.save()
+
+        path = f"/profile"
+
+        message = f"Congratulations ! Your profile has been approved. You will be notified for projects that match your profile. Thank You !"
+
+        create_notification(coach.user.user, path, message)
+        # Return success response
+        # Send approval email to the coach
+        send_mail_templates(
+            "coach_templates/pmo_approves_profile.html",
+            [coach.email],
+            "Congratulations! Your Coach Registration is Approved",
+            {
+                "name": f"{coach.first_name} {coach.last_name}",
+            },
+            [],
+        )
+        return Response({"message": "Coach approved successfully."}, status=200)
+
+    except Coach.DoesNotExist:
+        # Return error response if Coach with the provided ID does not exist
+        return Response({"error": "Coach does not exist."}, status=404)
+
+    except Exception as e:
+        # Return error response if any other exception occurs
+        return Response({"error": str(e)}, status=500)
+    
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def approve_facilitator(request):
+    try:
+        # Get the Coach object
+        unapproved_coach = request.data["coach"]
+        room_id = request.data["room_id"]
+        coach = Facilitator.objects.get(id=unapproved_coach["id"])
 
         # Change the is_approved field to True
         coach.is_approved = True
@@ -6606,6 +6647,125 @@ class AddRegisteredCoach(APIView):
             )
 
 
+class AddRegisteredFacilitator(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        # Get data from request
+
+        first_name = request.data.get("first_name")
+        last_name = request.data.get("last_name")
+        email = request.data.get("email")
+        phone = request.data.get("phone")
+        is_approved = request.data.get("is_approved")
+        phone_country_code = request.data.get("phone_country_code")
+
+        if not all([first_name, last_name, email, phone, phone_country_code]):
+            return Response(
+                {"error": "All required fields must be provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # Create the Django User
+            if Facilitator.objects.filter(email=email).exists():
+                return Response(
+                    {"error": "User with this email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            with transaction.atomic():
+                # Check if the user already exists
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    temp_password = "".join(
+                        random.choices(
+                            string.ascii_uppercase
+                            + string.ascii_lowercase
+                            + string.digits,
+                            k=8,
+                        )
+                    )
+                    user = User.objects.create_user(
+                        username=email, password=temp_password, email=email
+                    )
+                    profile = Profile.objects.create(user=user)
+                    print("createing new user and profile.")
+                else:
+                    print("hello.")
+                    profile = Profile.objects.get(user=user)
+
+                facilitator_role, created = Role.objects.get_or_create(name="facilitator")
+                profile.roles.add(facilitator_role)
+                profile.save()
+
+                # Create the Facilitator User using the Profile
+                facilitator_user = Facilitator.objects.create(
+                    user=profile,
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=email,
+                    phone=phone,
+                    phone_country_code=phone_country_code,
+                    is_approved=is_approved,
+                )
+                # Approve facilitator
+                facilitator = Facilitator.objects.get(id=facilitator_user.id)
+                # Change the is_approved field to True
+                facilitator.is_approved = False
+                facilitator.save()
+                name = facilitator_user.first_name + " " + facilitator_user.last_name
+                add_contact_in_wati("facilitator", name, facilitator_user.phone)
+                facilitator_serializer = FacilitatorSerializer(facilitator)
+
+                path = f"/profile"
+                message = f"Welcome to Meeraq. As next step, you need to fill out your details. Admin will look into your profile and contact you for profile approval. Thank You!"
+
+                create_notification(facilitator.user.user, path, message)
+                pmo_user = User.objects.filter(profile__roles__name="pmo").first()
+                pmo = Pmo.objects.get(email=pmo_user.username)
+                create_notification(
+                    pmo_user,
+                    f"/registeredcoach",
+                    f"{facilitator.first_name} {facilitator.last_name} has registered as a coach. Please go through his Profile.",
+                )
+                send_mail_templates(
+                    "pmo_emails/coach_register.html",
+                    [pmo_user.username],
+                    f"{facilitator.first_name} {facilitator.last_name} has Registered as a Coach",
+                    {
+                        "name": pmo.name,
+                        "facilitatorName": f"{facilitator.first_name} {facilitator.last_name} ",
+                    },
+                    json.loads(env("BCC_EMAIL_RAJAT_SUJATA")),
+                )
+                # Send profile completion tips to the coach
+                send_mail_templates(
+                    "facilitator_templates/profile_creation_tips_facilitator.html",
+                    [facilitator.email],
+                    "Profile Completion Tips for Success on Meeraq Platform",
+                    {
+                        "name": f"{facilitator.first_name} {facilitator.last_name}",
+                    },
+                    [],
+                )
+
+            return Response({"coach": facilitator_serializer.data})
+
+        except IntegrityError as e:
+            return Response(
+                {"error": "A user with this email already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        except Exception as e:
+            # Return error response if any other exception occurs
+            print(e)
+            return Response(
+                {"error": "An error occurred while registering."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_registered_coaches(request):
@@ -6617,6 +6777,23 @@ def get_registered_coaches(request):
         serializer = CoachSerializer(unapproved_coaches, many=True)
 
         # Return the serialized unapproved coaches as the response
+        return Response(serializer.data, status=200)
+
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({"error": str(e)}, status=500)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_registered_facilitators(request):
+    try:
+        # Filter facilitators where isapproved is False
+        unapproved_facilitators = Facilitator.objects.filter(is_approved=False)
+
+        # Serialize the unapproved facilitators
+        serializer = FacilitatorSerializer(unapproved_facilitators, many=True)
+
+        # Return the serialized unapproved facilitators as the response
         return Response(serializer.data, status=200)
 
     except Exception as e:

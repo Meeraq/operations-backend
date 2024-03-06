@@ -3106,9 +3106,19 @@ def add_facilitator(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_facilitators(request):
-    facilitators = Facilitator.objects.all()
-    serializer = FacilitatorSerializer(facilitators, many=True)
-    return Response(serializer.data)
+    try:
+        # Get all the Coach objects
+        facilitators = Facilitator.objects.filter(is_approved=True)
+
+        # Serialize the Coach objects
+        serializer = FacilitatorSerializer(facilitators, many=True)
+
+        # Return the serialized Coach objects as the response
+        return Response(serializer.data, status=200)
+
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({"error": str(e)}, status=500)
 
 
 # @api_view(["POST"])
