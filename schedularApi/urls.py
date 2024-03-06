@@ -278,4 +278,22 @@ urlpatterns = [
         views.update_price_in_project_structure,
     ),
     path("batches/facilitators/<str:batch_id>/", views.show_facilitator_inside_courses),
+    path(
+        "projects/facilitators-and-pricing/<str:project_id>/",
+        views.get_facilitators_and_pricing_for_project,
+    ),
+    path(
+        "projects/coaches-and-pricing/<str:project_id>/",
+        views.get_coaches_and_pricing_for_project,
+    ),
+    path(
+        "facilitator_pricing/",
+        views.add_facilitator_pricing,
+        name="add_facilitator_pricing",
+    ),
+    path(
+        "facilitator_pricing/<int:facilitator_pricing_id>/",
+        views.edit_facilitator_pricing,
+        name="edit_facilitator_pricing",
+    ),
 ]

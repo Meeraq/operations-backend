@@ -144,6 +144,8 @@ import re
 from rest_framework.views import APIView
 from api.views import get_user_data
 from zohoapi.models import Vendor
+from zohoapi.views import fetch_purchase_orders
+from zohoapi.tasks import organization_id
 
 env = environ.Env()
 
@@ -268,6 +270,7 @@ def create_project_schedular(request):
             calendar_invites=request.data["calendar_invites"],
             nudges=request.data["nudges"],
             pre_post_assessment=request.data["pre_post_assessment"],
+            is_finance_enabled = request.data["finance"]
         )
         schedularProject.save()
     except IntegrityError:
@@ -741,22 +744,6 @@ def update_live_session(request, live_session_id):
     try:
         with transaction.atomic():
             live_session = LiveSession.objects.get(id=live_session_id)
-
-            facilitator_for_check = Facilitator.objects.filter(
-                id=request.data.get("facilitator")
-            ).first()
-            prev_facilitator = live_session.facilitator
-            if facilitator_for_check != prev_facilitator:
-                facilitator_pricing = FacilitatorPricing.objects.filter(
-                    project=live_session.batch.project,
-                    facilitator=prev_facilitator,
-                    session_type=live_session.session_type,
-                    live_session_number=live_session.live_session_number,
-                    order=live_session.order,
-                ).first()
-
-                facilitator_pricing.facilitator = facilitator_for_check
-                facilitator_pricing.save()
 
             existing_date_time = live_session.date_time
             serializer = LiveSessionSerializer(
@@ -3645,6 +3632,7 @@ def edit_schedular_project(request, project_id):
     project.calendar_invites = request.data.get("calendar_invites")
     project.nudges = request.data.get("nudges")
     project.pre_post_assessment = request.data.get("pre_post_assessment")
+    project.is_finance_enabled = request.data.get("finance")
     project.save()
     if not project.pre_post_assessment:
         batches = SchedularBatch.objects.filter(project=project)
@@ -4415,24 +4403,29 @@ def delete_coach_from_that_batch(request):
             batch = get_object_or_404(SchedularBatch, pk=batch_id)
             coach = get_object_or_404(Coach, pk=coach_id)
             batch.coaches.remove(coach)
-            for session in batch.project.project_structure:
-                if session["session_type"] in [
-                    "laser_coaching_session",
-                    "mentoring_session",
-                ]:
-                    coaching_session = CoachingSession.objects.filter(
-                        batch=batch,
-                        order=session["order"],
-                        session_type=session["session_type"],
-                    ).first()
-                    coach_pricing = CoachPricing.objects.filter(
-                        project=batch.project,
-                        coach=coach,
-                        session_type=coaching_session.session_type,
-                        coaching_session_number=coaching_session.coaching_session_number,
-                        order=coaching_session.order,
-                        price=session["price"],
-                    ).delete()
+            batch.save()
+            is_coach_existing_in_other_batched = Coach.objects.filter(
+                schedularbatch__project__id=batch.project.id
+            ).exists()
+            if not is_coach_existing_in_other_batched:
+                for session in batch.project.project_structure:
+                    if session["session_type"] in [
+                        "laser_coaching_session",
+                        "mentoring_session",
+                    ]:
+                        coaching_session = CoachingSession.objects.filter(
+                            batch=batch,
+                            order=session["order"],
+                            session_type=session["session_type"],
+                        ).first()
+                        coach_pricing = CoachPricing.objects.filter(
+                            project=batch.project,
+                            coach=coach,
+                            session_type=coaching_session.session_type,
+                            coaching_session_number=coaching_session.coaching_session_number,
+                            order=coaching_session.order,
+                            price=session["price"],
+                        ).delete()
 
             return Response({"message": f"Coach successfully removed from this batch."})
     except SchedularBatch.DoesNotExist:
@@ -4446,7 +4439,6 @@ def delete_coach_from_that_batch(request):
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_facilitator_from_that_batch(request):
-
     try:
         batch_id = request.data.get("batch_id")
         facilitator_id = request.data.get("facilitator_id")
@@ -4456,7 +4448,6 @@ def delete_facilitator_from_that_batch(request):
         for live_session in live_sessions:
             live_session.facilitator = None
             live_session.save()
-        delete_facilitator_pricing(batch, facilitator)
         return Response(
             {"message": f"Facilitator successfully removed from this batch."}
         )
@@ -4783,7 +4774,7 @@ def add_facilitator_to_batch(request, batch_id):
             live_session.facilitator = facilitator
             live_session.save()
 
-        create_facilitator_pricing(batch, facilitator)
+        # create_facilitator_pricing(batch, facilitator)
 
         return Response({"message": "Facilitator added successfully."}, status=201)
 
@@ -5104,3 +5095,112 @@ def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def get_purchase_order(purchase_orders, purchase_order_id):
+    for po in purchase_orders:
+        if po.get("purchaseorder_id") == purchase_order_id:
+            return po
+    return None
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_facilitators_and_pricing_for_project(request, project_id):
+    try:
+        facilitators = Facilitator.objects.filter(
+            livesession__batch__project__id=project_id
+        ).distinct()
+        facilitators_pricing = FacilitatorPricing.objects.filter(project__id=project_id)
+        facilitators_data = []
+        purchase_orders = fetch_purchase_orders(organization_id)
+        for facilitator in facilitators:
+            serializer = FacilitatorBasicDetailsSerializer(facilitator)
+            is_vendor = facilitator.user.roles.filter(name="vendor").exists()
+            vendor_id = None
+            if is_vendor:
+                vendor_id = Vendor.objects.get(user=facilitator.user).vendor_id
+            facilitator_data = serializer.data
+            pricing = facilitators_pricing.filter(facilitator__id=facilitator.id)
+            purchase_order = None
+            if pricing.exists():
+                pricing_serializer = FacilitatorPricingSerializer(pricing.first())
+                if pricing_serializer.data["purchase_order_id"]:
+                    purchase_order = get_purchase_order(
+                        purchase_orders, pricing_serializer.data["purchase_order_id"]
+                    )
+            else:
+                pricing_serializer = None
+            facilitator_data["pricing_details"] = (
+                pricing_serializer.data if pricing_serializer else None
+            )
+            facilitator_data["vendor_id"] = vendor_id
+            facilitator_data["purchase_order"] = purchase_order
+            facilitators_data.append(facilitator_data)
+        return Response(facilitators_data)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coaches_and_pricing_for_project(request, project_id):
+    try:
+        coaches = Coach.objects.filter(
+            schedularbatch__project__id=project_id
+        ).distinct()
+        coaches_data = []
+        purchase_orders = fetch_purchase_orders(organization_id)
+        for coach in coaches:
+            coaches_pricing = CoachPricing.objects.filter(project__id=project_id, coach=coach)
+            serializer = CoachBasicDetailsSerializer(coach)
+            is_vendor = coach.user.roles.filter(name="vendor").exists()
+            vendor_id = None
+            if is_vendor:
+                vendor_id = Vendor.objects.get(user=coach.user).vendor_id
+            coach_data = serializer.data
+            pricing = coaches_pricing.filter(coach__id=coach.id)
+            all_pricings_serializer = CoachPricingSerializer(coaches_pricing, many=True)
+            purchase_order = None
+            if pricing.exists():
+                pricing_serializer = CoachPricingSerializer(pricing.first())
+                if pricing_serializer.data["purchase_order_id"]:
+                    purchase_order = get_purchase_order(
+                        purchase_orders, pricing_serializer.data["purchase_order_id"]
+                    )
+            else:
+                pricing_serializer = None
+            coach_data["pricing_details"] = (
+                pricing_serializer.data if pricing_serializer else None
+            )
+
+            coach_data["vendor_id"] = vendor_id
+            coach_data["purchase_order"] = purchase_order
+            coach_data["all_pricings"] = all_pricings_serializer.data
+            coaches_data.append(coach_data)
+        return Response(coaches_data)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_facilitator_pricing(request):
+    serializer = FacilitatorPricingSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_facilitator_pricing(request, facilitator_pricing_id):
+    pricing_instance = get_object_or_404(FacilitatorPricing, id=facilitator_pricing_id)
+    serializer = FacilitatorPricingSerializer(pricing_instance, data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=200)
+    return Response(serializer.errors, status=400)

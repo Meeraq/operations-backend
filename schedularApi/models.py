@@ -33,6 +33,7 @@ class SchedularProject(models.Model):
     email_reminder = models.BooleanField(blank=True, default=True)
     whatsapp_reminder = models.BooleanField(blank=True, default=True)
     calendar_invites = models.BooleanField(blank=True, default=True)
+    is_finance_enabled = models.BooleanField(blank=True, default=False)
 
     class Meta:
         ordering = ["-created_at"]
@@ -213,6 +214,8 @@ class CoachPricing(models.Model):
     )
     coaching_session_number = models.IntegerField(blank=True, default=None, null=True)
     order = models.IntegerField(blank=True, default=None, null=True)
+    purchase_order_id = models.CharField(max_length=200, default="", blank=True)
+    purchase_order_no = models.CharField(max_length=200, default="", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -221,26 +224,13 @@ class CoachPricing(models.Model):
 
 
 class FacilitatorPricing(models.Model):
-
-    SESSION_CHOICES = [
-        ("live_session", "Live Session"),
-        ("check_in_session", "Check In Session"),
-        ("in_person_session", "In Person Session"),
-        ("kickoff_session", "Kickoff Session"),
-        ("virtual_session", "Virtual Session"),
-    ]
-
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
     facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE)
     price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    purchase_order_id = models.CharField(max_length=200, default="", blank=True)
+    purchase_order_no = models.CharField(max_length=200, default="", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    session_type = models.CharField(
-        max_length=50, choices=SESSION_CHOICES, default="virtual_session"
-    )
-    duration = models.CharField(max_length=50, default=None)
-    live_session_number = models.IntegerField(blank=True, default=None, null=True)
-    order = models.IntegerField(blank=True, default=None, null=True)
 
     def __str__(self):
-        return f"{self.session_type} {self.live_session_number} in {self.project.name} for {self.facilitator.first_name} {self.facilitator.last_name}"
+        return f"{self.facilitator.first_name} {self.facilitator.last_name} pricing for {self.project.name} "

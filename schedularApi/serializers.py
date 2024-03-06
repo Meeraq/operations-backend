@@ -28,7 +28,9 @@ class SessionItemSerializer(serializers.Serializer):
     duration = serializers.IntegerField()
     order = serializers.IntegerField(required=False, allow_null=True)
     description = serializers.CharField(required=False)
-    price = serializers.DecimalField(max_digits=10, decimal_places=2)
+    price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, allow_null=True, required=False
+    )
 
 
 class SchedularBatchSerializer(serializers.ModelSerializer):
@@ -104,7 +106,14 @@ class BatchSerializer(serializers.ModelSerializer):
 class CoachBasicDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coach
-        fields = ["id", "first_name", "last_name", "email", "phone"]
+        fields = [
+            "id",
+            "first_name",
+            "last_name",
+            "email",
+            "phone",
+            "phone_country_code",
+        ]
 
 
 class AvailabilitySerializer(serializers.ModelSerializer):
