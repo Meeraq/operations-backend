@@ -9,8 +9,8 @@ from .models import (
     CoachSchedularAvailibilty,
     RequestAvailibilty,
     SchedularSessions,
-    
     SchedularUpdate,
+    Expense,
 )
 from api.models import Coach
 
@@ -143,7 +143,6 @@ class RequestAvailibiltySerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-
 class UpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularUpdate
@@ -162,3 +161,17 @@ class SchedularBatchDepthTwoSerializer(serializers.ModelSerializer):
         model = SchedularBatch
         fields = "__all__"
         depth = 2
+
+
+class ExpenseSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = Expense
+        fields = "__all__"
+        depth = 1
+
+
+class ExpenseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Expense
+        fields = "__all__"
+        

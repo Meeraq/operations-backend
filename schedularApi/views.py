@@ -65,6 +65,8 @@ from .serializers import (
     UpdateSerializer,
     SchedularUpdateDepthOneSerializer,
     SchedularBatchDepthSerializer,
+    ExpenseSerializerDepthOne,
+    ExpenseSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -79,12 +81,13 @@ from .models import (
     SchedularBatch,
     SchedularUpdate,
     CalendarInvites,
+    Expense,
 )
 from api.serializers import (
     FacilitatorSerializer,
     FacilitatorBasicDetailsSerializer,
     CoachSerializer,
-    FacilitatorDepthOneSerializer
+    FacilitatorDepthOneSerializer,
 )
 
 from courses.models import (
@@ -451,7 +454,9 @@ def get_schedular_batches(request):
         else:
             batches = SchedularBatch.objects.filter(project__id=project_id)
         if facilitator_id:
-            batches = batches.filter(livesession__facilitator__id=facilitator_id).distinct()
+            batches = batches.filter(
+                livesession__facilitator__id=facilitator_id
+            ).distinct()
         serializer = SchedularBatchSerializer(batches, many=True)
         return Response(serializer.data)
     except SchedularBatch.DoesNotExist:
@@ -2719,7 +2724,6 @@ def send_live_session_link_whatsapp(request):
                         {
                             "name": "description",
                             "value": (
-                      
                                 (
                                     live_session.description
                                     if live_session.description
@@ -2762,7 +2766,7 @@ def update_session_status(request, session_id):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def project_batch_wise_report_download(request, project_id,session_to_download):
+def project_batch_wise_report_download(request, project_id, session_to_download):
     project = get_object_or_404(SchedularProject, pk=project_id)
     batches = SchedularBatch.objects.filter(project=project)
     # Create a Pandas DataFrame for each batch
@@ -2785,8 +2789,7 @@ def project_batch_wise_report_download(request, project_id,session_to_download):
         elif session_to_download == "coaching":
             coaching_sessions = CoachingSession.objects.filter(batch=batch)
             sessions = list(coaching_sessions)
-        
-        
+
         sorted_sessions = sorted(sessions, key=lambda x: x.order)
         for session in sorted_sessions:
             if isinstance(session, LiveSession):
@@ -2816,7 +2819,7 @@ def project_batch_wise_report_download(request, project_id,session_to_download):
             total_participants = batch.learners.count()
             percentage = None
             if not total_participants:
-                percentage ="0%"
+                percentage = "0%"
             else:
                 percentage = str(int((attendance / total_participants) * 100)) + " %"
             data["Session name"].append(session_name)
@@ -2943,7 +2946,6 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
         print(str(e))
 
 
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_facilitator(request):
@@ -2960,7 +2962,9 @@ def add_facilitator(request):
     area_of_expertise = json.loads(request.data["area_of_expertise"])
     profile_pic = request.data.get("profile_pic", None)
     education = json.loads(request.data["education"])
-    years_of_corporate_experience = request.data.get("years_of_corporate_experience", "")
+    years_of_corporate_experience = request.data.get(
+        "years_of_corporate_experience", ""
+    )
     language = json.loads(request.data["language"])
     job_roles = json.loads(request.data["job_roles"])
     city = json.loads(request.data["city"])
@@ -2970,7 +2974,7 @@ def add_facilitator(request):
     other_certification = json.loads(request.data["other_certification"])
     currency = request.data.get("currency", "")
     client_companies = json.loads(request.data["client_companies"])
-    educational_qualification = json.loads(request.data["educational_qualification"])    
+    educational_qualification = json.loads(request.data["educational_qualification"])
     fees_per_hour = request.data.get("fees_per_hour", "")
     fees_per_day = request.data.get("fees_per_day", "")
     topic = json.loads(request.data["topic"])
@@ -3051,7 +3055,7 @@ def add_facilitator(request):
                 educational_qualification=educational_qualification,
                 corporate_experience=corporate_experience,
                 coaching_experience=coaching_experience,
-                education_pic=education_pic,  
+                education_pic=education_pic,
                 # education_upload_file=education_upload_file,
             )
 
@@ -3315,11 +3319,13 @@ def update_facilitator_profile(request, id):
                 for role in user.profile.roles.all():
                     roles.append(role.name)
                 serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
-                return Response({
-                    **serializer.data,
-                    "roles": roles,
-                    "user": {**serializer.data["user"], "type": "facilitator"},
-                })
+                return Response(
+                    {
+                        **serializer.data,
+                        "roles": roles,
+                        "user": {**serializer.data["user"], "type": "facilitator"},
+                    }
+                )
                 # user_data = get_user_data(facilitator.user.user)
                 # return Response(user_data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -3589,8 +3595,10 @@ def get_live_sessions_by_status(request):
 
     facilitator_id = request.query_params.get("facilitator_id", None)
     if facilitator_id:
-        batches = SchedularBatch.objects.filter(livesession__facilitator__id = facilitator_id)
-        queryset = queryset.filter(batch__in = batches)
+        batches = SchedularBatch.objects.filter(
+            livesession__facilitator__id=facilitator_id
+        )
+        queryset = queryset.filter(batch__in=batches)
 
     res = []
     for live_session in queryset:
@@ -4641,21 +4649,23 @@ def add_facilitator_to_batch(request, batch_id):
 def show_facilitator_inside_courses(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
-        all_live_session=LiveSession.objects.filter(batch=batch)
+        all_live_session = LiveSession.objects.filter(batch=batch)
         facilitators = set()
         for live_session in all_live_session:
             if live_session.facilitator:
                 facilitators.add(live_session.facilitator)
 
         facilitator_serializer = FacilitatorSerializer(list(facilitators), many=True)
-        return Response({"facilitators": facilitator_serializer.data}, status=status.HTTP_200_OK)
+        return Response(
+            {"facilitators": facilitator_serializer.data}, status=status.HTTP_200_OK
+        )
 
     except SchedularBatch.DoesNotExist:
         return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -4743,8 +4753,7 @@ def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_
     try:
         range_start_date = request.query_params.get("start_date")
         range_end_date = request.query_params.get("end_date")
- 
-        
+
         current_time = timezone.now()
         timestamp_milliseconds = current_time.timestamp() * 1000
 
@@ -4798,7 +4807,9 @@ def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_
                         start_timestamp = str(
                             max((int(start_timestamp)), int(range_start_date))
                         )
-                        end_timestamp = str(min((int(end_timestamp)), int(range_end_date)))
+                        end_timestamp = str(
+                            min((int(end_timestamp)), int(range_end_date))
+                        )
                     else:
 
                         start_timestamp = str(
@@ -4838,3 +4849,98 @@ def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_expense(request):
+    try:
+        name = request.data.get("name")
+        description = request.data.get("description")
+        date_of_expense = request.data.get("date_of_expense")
+        live_session = request.data.get("live_session")
+        batch = request.data.get("batch")
+        facilitator = request.data.get("facilitator")
+        file = request.data.get("file")
+
+        if not file:
+            return Response(
+                {"error": "Please upload file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        if not batch or not facilitator:
+            return Response(
+                {"error": "Failed to create expense."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        if name and date_of_expense and description:
+            facilitator = Facilitator.objects.get(id=int(facilitator))
+            batch = SchedularBatch.objects.get(id=int(batch))
+            if live_session:
+                live_session = LiveSession.objects.filter(id=int(live_session)).first()
+            expense = Expense.objects.create(
+                name=name,
+                description=description,
+                date_of_expense=date_of_expense,
+                live_session=live_session,
+                batch=batch,
+                facilitator=facilitator,
+                file=file,
+            )
+
+            return Response({"message": "Expense created successfully!"}, status=201)
+        else:
+            return Response(
+                {"error": "Fill in all the required feild"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to create expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_expense_for_facilitator(request, batch_id, usertype, user_id):
+    try:
+        expenses = []
+        if usertype == "facilitator":
+            expenses = Expense.objects.filter(
+                batch__id=batch_id, facilitator__id=user_id
+            )
+
+        elif usertype == "pmo":
+            expenses = Expense.objects.filter(batch__id=batch_id)
+
+        serializer = ExpenseSerializerDepthOne(expenses, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to create expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_status_expense(request):
+    try:
+        status = request.data.get("status")
+        expense_id = request.data.get("expense_id")
+
+        expenses = Expense.objects.get(id=int(expense_id))
+        expenses.status = status
+        expenses.save()
+        return Response(
+            {"success": f"Expense {status.title()} successfully!"},
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to {status.title()} the expense."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

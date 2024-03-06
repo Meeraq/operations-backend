@@ -245,7 +245,6 @@ urlpatterns = [
         views.get_past_coaching_session_dashboard_data,
     ),
     path(
-
         "pre-post-assessment-or-nudge-update-in-project/",
         views.pre_post_assessment_or_nudge_update_in_project,
     ),
@@ -259,5 +258,13 @@ urlpatterns = [
     ),
     path("batch/add-facilitator/<int:batch_id>/", views.add_facilitator_to_batch),
     path("batches/facilitators/<str:batch_id>/", views.show_facilitator_inside_courses),
-    
+    path("create-expense/", views.create_expense),
+    path(
+        "expenses/<int:batch_id>/<str:usertype>/<int:user_id>/",
+        views.get_expense_for_facilitator,
+    ),
+     path(
+        "edit-status-expense/",
+        views.edit_status_expense,
+    ),
 ]
