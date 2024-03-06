@@ -6730,7 +6730,7 @@ class AddRegisteredFacilitator(APIView):
                     f"{facilitator.first_name} {facilitator.last_name} has registered as a coach. Please go through his Profile.",
                 )
                 send_mail_templates(
-                    "pmo_emails/coach_register.html",
+                    "pmo_emails/facilitator_register.html",
                     [pmo_user.username],
                     f"{facilitator.first_name} {facilitator.last_name} has Registered as a Coach",
                     {
