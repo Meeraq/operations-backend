@@ -2103,6 +2103,9 @@ def get_all_feedbacks_report(request):
     hr_id = request.query_params.get("hr", None)
     if hr_id:
         feedbacks = feedbacks.filter(lesson__course__batch__project__hr__id=hr_id)
+    facilitator_id = request.query_params.get("facilitator_id")
+    if facilitator_id:
+        feedbacks = feedbacks.filter(live_session__facilitator__id=facilitator_id)
     for feedback in feedbacks:
         course_enrollments = CourseEnrollment.objects.filter(
             course=feedback.lesson.course
@@ -2179,6 +2182,15 @@ def get_consolidated_feedback_report(request):
                         feedback_lesson = FeedbackLesson.objects.filter(
                             lesson__course=course, live_session=live_session
                         ).first()
+                        facilitator_id = request.query_params.get("facilitator_id")
+                        if facilitator_id:
+                            if (
+                                feedback_lesson
+                                and feedback_lesson.live_session
+                                and feedback_lesson.live_session.facilitator
+                                and not feedback_lesson.live_session.facilitator.id == int(facilitator_id)
+                            ):
+                                continue
                         if feedback_lesson:
                             total_responses = FeedbackLessonResponse.objects.filter(
                                 feedback_lesson=feedback_lesson
@@ -2278,11 +2290,14 @@ def get_consolidated_feedback_report_response(request, lesson_id):
         live_session = LiveSession.objects.get(id=lesson_id)
         # Dictionary to store aggregated feedback data for each question
         question_data = {}
+        facilitator_id = request.query_params.get("facilitator_id")
         feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
             feedback_lesson__lesson__course__batch__project=live_session.batch.project,
             feedback_lesson__live_session__session_type=live_session.session_type,
             feedback_lesson__live_session__live_session_number=live_session.live_session_number,
         )
+        if facilitator_id:
+            feedback_lesson_responses = feedback_lesson_responses.filter(feedback_lesson__live_session__facilitator__id=facilitator_id)
         for response in feedback_lesson_responses:
             for answer in response.answers.all():
                 question_text = answer.question.text
@@ -2367,16 +2382,18 @@ class AssignCourseTemplateToBatch(APIView):
                 assessment_creation = False
                 if not original_lessons.filter(lesson_type="assessment").exists():
                     if batch.project.pre_post_assessment:
-                        assessment_creation =  True
+                        assessment_creation = True
                         lesson1 = Lesson.objects.create(
-                                course=new_course,
-                                name="Pre Assessment",
-                                status="draft",
-                                lesson_type="assessment",
-                                # Duplicate specific lesson types
-                                order=2,
-                            )
-                        assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+                            course=new_course,
+                            name="Pre Assessment",
+                            status="draft",
+                            lesson_type="assessment",
+                            # Duplicate specific lesson types
+                            order=2,
+                        )
+                        assessment1 = Assessment.objects.create(
+                            lesson=lesson1, type="pre"
+                        )
                 for original_lesson in original_lessons:
                     new_lesson = None
                     # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
@@ -2548,19 +2565,19 @@ class AssignCourseTemplateToBatch(APIView):
 
                 if assessment_creation:
                     max_order = (
-                        Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
-                            "order__max"
-                        ]
+                        Lesson.objects.filter(course=new_course).aggregate(
+                            Max("order")
+                        )["order__max"]
                         or 0
                     )
-                    
+
                     lesson2 = Lesson.objects.create(
                         course=new_course,
                         name="Post Assessment",
                         status="draft",
                         lesson_type="assessment",
                         # Duplicate specific lesson types
-                        order=max_order+1,
+                        order=max_order + 1,
                     )
 
                     assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
@@ -3289,6 +3306,9 @@ def get_consolidated_feedback_download_report(request, live_session_id):
         feedback_lesson__live_session__live_session_number=live_session.live_session_number,
         feedback_lesson__live_session__session_type=live_session.session_type,
     )
+    facilitator_id = request.query_params.get("facilitator_id")
+    if facilitator_id:
+        feedback_lesson_responses = feedback_lesson_responses.filter(feedback_lesson__live_session__facilitator__id=facilitator_id)
     total_participants_in_project = Learner.objects.filter(
         schedularbatch__project__id=live_session.batch.project.id
     ).distinct()
@@ -3354,6 +3374,9 @@ def feedback_reports_project_wise_consolidated(request):
         feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
             feedback_lesson__lesson__course__batch__project=project
         )
+        facilitator_id = request.query_params.get("facilitator_id")
+        if facilitator_id:
+            feedback_lesson_responses = feedback_lesson_responses.filter(feedback_lesson__live_session__facilitator__id=facilitator_id)
         if feedback_lesson_responses.exists():
             total_participants_count = (
                 Learner.objects.filter(schedularbatch__project=project)
@@ -3391,6 +3414,9 @@ def download_consolidated_project_report(request, project_id):
     feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
         feedback_lesson__lesson__course__batch__project__id=project_id
     )
+    facilitator_id = request.query_params.get("facilitator_id")
+    if facilitator_id:
+        feedback_lesson_responses = feedback_lesson_responses.filter(feedback_lesson__live_session__facilitator__id=facilitator_id)
     total_participants_in_project = Learner.objects.filter(
         schedularbatch__project__id=project_id
     ).distinct()
@@ -3742,6 +3768,18 @@ class UpdateAssignmentLessonFile(APIView):
         except Exception as e:
             print(str(e))
             return Response(
+                {"message": f"Failed to update file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+class FacilitatorWiseFeedback(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self,request,feedback_id):
+        try:
+            feedback=FeedbackLesson.objects.get(id=feedback_id)
+        except Exception as e:
+            return Response (
                 {"message": f"Failed to update file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )

@@ -4557,6 +4557,22 @@ class GetProjectWiseReport(APIView):
             print(str(e))
 
 
+class AssessmentsResponseStatusDownload(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            assessment_ids = request.data.get("assessment_ids")
+
+            response_data_for_assessments = {}
+            for assessment_id in assessment_ids:
+                assessment = Assessment.objects.get(id=assessment_id)
+                response_data = getParticipantsResponseStatusForAssessment(assessment)
+                response_data_for_assessments[assessment.name] = response_data
+            return Response(response_data_for_assessments)
+        except Exception as e:
+            print(str(e))
+
 class GetAllAssessmentsOfSchedularProjects(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -4607,22 +4623,3 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": "Failed to get data"}, status=500)
-
-
-class AssessmentsResponseStatusDownload(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:
-            assessment_ids = request.data.get("assessment_ids")
-
-            response_data_for_assessments = {}
-            for assessment_id in assessment_ids:
-                assessment = Assessment.objects.get(id=assessment_id)
-                response_data = getParticipantsResponseStatusForAssessment(assessment)
-                response_data_for_assessments[assessment.name] = response_data
-            return Response(response_data_for_assessments)
-        except Exception as e:
-            print(str(e))
-
-
