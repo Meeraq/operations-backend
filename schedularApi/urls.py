@@ -205,7 +205,7 @@ urlpatterns = [
         GetAllBatchesParticipantDetails.as_view(),
     ),
     path(
-        "coach-inside-skill-training-or-not/<str:batch_id>/",
+        "coach-inside-skill-training-or-not/<int:project_id>/<str:batch_id>/",
         views.coach_inside_skill_training_or_not,
     ),
     path(
