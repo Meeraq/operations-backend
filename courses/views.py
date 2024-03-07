@@ -2101,16 +2101,19 @@ def get_all_feedbacks_report(request):
         lesson__status="public", lesson__course__status="public"
     )
     hr_id = request.query_params.get("hr", None)
+    facilitator_id = request.query_params.get("facilitator_id")
     if hr_id:
         feedbacks = feedbacks.filter(lesson__course__batch__project__hr__id=hr_id)
-    facilitator_id = request.query_params.get("facilitator_id")
     if facilitator_id:
         feedbacks = feedbacks.filter(live_session__facilitator__id=facilitator_id)
     for feedback in feedbacks:
-        course_enrollments = CourseEnrollment.objects.filter(
-            course=feedback.lesson.course
-        )
-        total_participants = course_enrollments.count()
+        facilitator_name = ""
+        if feedback.live_session and feedback.live_session.facilitator:
+            facilitator_name = feedback.live_session.facilitator.first_name + " " + feedback.live_session.facilitator.last_name
+        # course_enrollments = CourseEnrollment.objects.filter(
+        #     course=feedback.lesson.course
+        # )
+        total_participants = feedback.lesson.course.batch.learners.count()
         feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
             feedback_lesson=feedback
         )
@@ -2120,31 +2123,13 @@ def get_all_feedbacks_report(request):
             if total_participants > 0
             else 0
         )
-        questions_serializer = QuestionSerializer(feedback.questions, many=True)
-        question_data = {
-            question["id"]: {**question, "descriptive_answers": [], "ratings": []}
-            for question in questions_serializer.data
-        }
-        for response in feedback_lesson_responses:
-            for answer in response.answers.all():
-                question_id = answer.question.id
-                if answer.question.type.startswith("rating"):
-                    question_data[question_id]["ratings"].append(answer.rating)
-                elif answer.question.type == "descriptive_answer":
-                    question_data[question_id]["descriptive_answers"].append(
-                        answer.text_answer
-                    )
         nps = None
-        for question_id, data in question_data.items():
-            # Calculate average rating for each question
-            ratings = data["ratings"]
-            if ratings:
-                if data["type"] == "rating_0_to_10":
-                    # Calculate NPS
-
-                    data["nps"] = calculate_nps(ratings)
-                    nps = data["nps"]
-                    break
+        answers = Answer.objects.filter(question__type = "rating_0_to_10", question__feedbacklesson=feedback)
+        answer_ratings = []
+        for answer in answers:
+            answer_ratings.append(answer.rating)
+        if len(answer_ratings) > 0:
+            nps = calculate_nps(answer_ratings) 
         res.append(
             {
                 "id": feedback.id,
@@ -2155,6 +2140,7 @@ def get_all_feedbacks_report(request):
                 "total_responses": total_responses,
                 "response_percentage": response_percentage,
                 "nps": nps,
+                "facilitator_name":facilitator_name
             }
         )
 
@@ -2172,7 +2158,6 @@ def get_consolidated_feedback_report(request):
             total_participant_count = 0
             for batch in all_batches:
                 total_participant_count += batch.learners.count()
-            for batch in all_batches:
                 # Get live sessions for the current batch
                 live_sessions = LiveSession.objects.filter(batch=batch)
                 for live_session in live_sessions:
@@ -3320,6 +3305,7 @@ def get_consolidated_feedback_download_report(request, live_session_id):
     headers_list = list(headers)
     headers_list.insert(0, "Participant Name")
     headers_list.insert(1, "Feedback Batch")
+    headers_list.insert(2, "Facilitator")
 
     for col_num, header in enumerate(headers_list, 1):
         ws.cell(row=1, column=col_num, value=header)
@@ -3328,10 +3314,24 @@ def get_consolidated_feedback_download_report(request, live_session_id):
         data = ["-" for _ in headers_list]
         participant_index = headers_list.index("Participant Name")
         feedback_batch_index = headers_list.index("Feedback Batch")
+        facilitator_index=headers_list.index("Facilitator")
         data[participant_index] = feedback_lesson_response.learner.name
         data[feedback_batch_index] = (
             feedback_lesson_response.feedback_lesson.lesson.course.batch.name
         )
+        # if (
+        #     feedback_lesson_response
+        #     and feedback_lesson_response.feedback_lesson
+        #     and feedback_lesson_response.feedback_lesson.live_session
+        #     and feedback_lesson_response.feedback_lesson.live_session.facilitator
+        # ):
+        #     data[facilitator_index] = (
+        #         feedback_lesson_response.feedback_lesson.live_session.facilitator.first_name
+        #         + " "
+        #         + feedback_lesson_response.feedback_lesson.live_session.facilitator.last_name
+        #     )
+        # else:
+        #     data[facilitator_index] = "N/A"
         for answer in feedback_lesson_response.answers.all():
             question_index_in_headers = headers_list.index(answer.question.text)
             if answer.question.type == "descriptive_answer":

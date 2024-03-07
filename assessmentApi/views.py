@@ -4625,5 +4625,3 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
             return Response({"error": "Failed to get data"}, status=500)
 
 
-class AssessmentsResponseStatusDownload(APIView):
-
