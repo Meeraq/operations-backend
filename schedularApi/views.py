@@ -84,7 +84,7 @@ from api.serializers import (
     FacilitatorSerializer,
     FacilitatorBasicDetailsSerializer,
     CoachSerializer,
-    FacilitatorDepthOneSerializer
+    FacilitatorDepthOneSerializer,
 )
 
 from courses.models import (
@@ -451,7 +451,9 @@ def get_schedular_batches(request):
         else:
             batches = SchedularBatch.objects.filter(project__id=project_id)
         if facilitator_id:
-            batches = batches.filter(livesession__facilitator__id=facilitator_id).distinct()
+            batches = batches.filter(
+                livesession__facilitator__id=facilitator_id
+            ).distinct()
         serializer = SchedularBatchSerializer(batches, many=True)
         return Response(serializer.data)
     except SchedularBatch.DoesNotExist:
@@ -610,10 +612,8 @@ def get_batch_calendar(request, batch_id):
         facilitator = Facilitator.objects.filter(
             livesession__batch__id=batch_id
         ).distinct()
-        coaches_serializer = CoachBasicDetailsSerializer(coaches, many=True)
-        facilitator_serializer = FacilitatorBasicDetailsSerializer(
-            facilitator, many=True
-        )
+        coaches_serializer = CoachSerializer(coaches, many=True)
+        facilitator_serializer = FacilitatorSerializer(facilitator, many=True)
 
         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
@@ -2719,7 +2719,6 @@ def send_live_session_link_whatsapp(request):
                         {
                             "name": "description",
                             "value": (
-                      
                                 (
                                     live_session.description
                                     if live_session.description
@@ -2762,7 +2761,7 @@ def update_session_status(request, session_id):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def project_batch_wise_report_download(request, project_id,session_to_download):
+def project_batch_wise_report_download(request, project_id, session_to_download):
     project = get_object_or_404(SchedularProject, pk=project_id)
     batches = SchedularBatch.objects.filter(project=project)
     # Create a Pandas DataFrame for each batch
@@ -2785,8 +2784,7 @@ def project_batch_wise_report_download(request, project_id,session_to_download):
         elif session_to_download == "coaching":
             coaching_sessions = CoachingSession.objects.filter(batch=batch)
             sessions = list(coaching_sessions)
-        
-        
+
         sorted_sessions = sorted(sessions, key=lambda x: x.order)
         for session in sorted_sessions:
             if isinstance(session, LiveSession):
@@ -2816,7 +2814,7 @@ def project_batch_wise_report_download(request, project_id,session_to_download):
             total_participants = batch.learners.count()
             percentage = None
             if not total_participants:
-                percentage ="0%"
+                percentage = "0%"
             else:
                 percentage = str(int((attendance / total_participants) * 100)) + " %"
             data["Session name"].append(session_name)
@@ -2943,7 +2941,6 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
         print(str(e))
 
 
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_facilitator(request):
@@ -2960,7 +2957,9 @@ def add_facilitator(request):
     area_of_expertise = json.loads(request.data["area_of_expertise"])
     profile_pic = request.data.get("profile_pic", None)
     education = json.loads(request.data["education"])
-    years_of_corporate_experience = request.data.get("years_of_corporate_experience", "")
+    years_of_corporate_experience = request.data.get(
+        "years_of_corporate_experience", ""
+    )
     language = json.loads(request.data["language"])
     job_roles = json.loads(request.data["job_roles"])
     city = json.loads(request.data["city"])
@@ -2970,7 +2969,7 @@ def add_facilitator(request):
     other_certification = json.loads(request.data["other_certification"])
     currency = request.data.get("currency", "")
     client_companies = json.loads(request.data["client_companies"])
-    educational_qualification = json.loads(request.data["educational_qualification"])    
+    educational_qualification = json.loads(request.data["educational_qualification"])
     fees_per_hour = request.data.get("fees_per_hour", "")
     fees_per_day = request.data.get("fees_per_day", "")
     topic = json.loads(request.data["topic"])
@@ -3051,7 +3050,7 @@ def add_facilitator(request):
                 educational_qualification=educational_qualification,
                 corporate_experience=corporate_experience,
                 coaching_experience=coaching_experience,
-                education_pic=education_pic,  
+                education_pic=education_pic,
                 # education_upload_file=education_upload_file,
             )
 
@@ -3315,11 +3314,13 @@ def update_facilitator_profile(request, id):
                 for role in user.profile.roles.all():
                     roles.append(role.name)
                 serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
-                return Response({
-                    **serializer.data,
-                    "roles": roles,
-                    "user": {**serializer.data["user"], "type": "facilitator"},
-                })
+                return Response(
+                    {
+                        **serializer.data,
+                        "roles": roles,
+                        "user": {**serializer.data["user"], "type": "facilitator"},
+                    }
+                )
                 # user_data = get_user_data(facilitator.user.user)
                 # return Response(user_data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -3589,8 +3590,10 @@ def get_live_sessions_by_status(request):
 
     facilitator_id = request.query_params.get("facilitator_id", None)
     if facilitator_id:
-        batches = SchedularBatch.objects.filter(livesession__facilitator__id = facilitator_id)
-        queryset = queryset.filter(batch__in = batches)
+        batches = SchedularBatch.objects.filter(
+            livesession__facilitator__id=facilitator_id
+        )
+        queryset = queryset.filter(batch__in=batches)
 
     res = []
     for live_session in queryset:
@@ -4152,23 +4155,17 @@ class GetAllBatchesCoachDetails(APIView):
 
             for batch in batches:
                 for coach in batch.coaches.all():
+                    coach_serializer = CoachSerializer(coach)
                     coach_data = {
-                        "id": coach.id,
-                        "first_name": coach.first_name,
-                        "last_name": coach.last_name,
-                        "email": coach.email,
+                        **coach_serializer.data,
                         "batchNames": [batch.name],
-                        "phone": coach.phone,
                     }
                     all_coaches.append(coach_data)
                 for facilitator in Facilitator.objects.filter(livesession__batch=batch):
+                    facilitator_serializer = FacilitatorSerializer(facilitator)
                     facilitator_data = {
-                        "id": facilitator.id,
-                        "first_name": facilitator.first_name,
-                        "last_name": facilitator.last_name,
-                        "email": facilitator.email,
+                        **facilitator_serializer.data,
                         "batchNames": [batch.name],
-                        "phone": facilitator.phone,
                     }
                     all_facilitator.append(facilitator_data)
 
@@ -4245,10 +4242,13 @@ class GetAllBatchesParticipantDetails(APIView):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def coach_inside_skill_training_or_not(request, batch_id):
+def coach_inside_skill_training_or_not(request, project_id, batch_id):
     try:
-        batch = get_object_or_404(SchedularBatch, pk=batch_id)
-        sessions = SchedularSessions.objects.filter(coaching_session__batch=batch)
+        if batch_id == "all":
+            sessions = SchedularSessions.objects.filter(coaching_session__batch__project__id=project_id)
+        else:
+            batch = get_object_or_404(SchedularBatch, pk=batch_id)
+            sessions = SchedularSessions.objects.filter(coaching_session__batch=batch)
         coach_status_list = []
         for session in sessions:
             coach_detail = session.availibility.coach
@@ -4347,17 +4347,26 @@ def update_project_status(request):
 @permission_classes([IsAuthenticated])
 def get_skill_dashboard_card_data(request, project_id):
     try:
+        hr_id = request.query_params.get("hr", None)
         if project_id == "all":
-
             start_timestamp, end_timestamp = get_current_date_timestamps()
             # schedular sessions scheduled today
             today_sessions = SchedularSessions.objects.filter(
                 availibility__start_time__lte=end_timestamp,
                 availibility__end_time__gte=start_timestamp,
             )
+            if hr_id:
+                today_sessions = today_sessions.filter(
+                    coaching_session__batch__project__hr__id=hr_id
+                )
 
             today = timezone.now().date()
             today_live_sessions = LiveSession.objects.filter(date_time__date=today)
+
+            if hr_id:
+                today_live_sessions = today_live_sessions.filter(
+                    batch__project__hr__id=hr_id
+                )
 
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="ongoing"
@@ -4385,12 +4394,16 @@ def get_skill_dashboard_card_data(request, project_id):
                 status="ongoing",
                 assessment_modal__lesson__course__batch__project__id=int(project_id),
             )
+            if hr_id:
+                ongoing_assessment = ongoing_assessment.filter(hr__id=hr_id)
 
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False,
                 status="completed",
                 assessment_modal__lesson__course__batch__project__id=int(project_id),
             )
+            if hr_id:
+                completed_assessments = completed_assessments.filter(hr__id=hr_id)
         return Response(
             {
                 "today_coaching_sessions": len(today_sessions),
@@ -4414,6 +4427,7 @@ def get_skill_dashboard_card_data(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_upcoming_coaching_session_dashboard_data(request, project_id):
     try:
+        hr_id = request.query_params.get("hr", None)
         current_time_seeq = timezone.now()
         timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
         if project_id == "all":
@@ -4422,6 +4436,11 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
             schedular_session = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=int(project_id)
             )
+        if hr_id:
+            schedular_session = schedular_session.filter(
+                coaching_session__batch__project__hr__id=hr_id
+            )
+
         upcoming_schedular_sessions = get_coaching_session_according_to_time(
             schedular_session, "upcoming"
         )
@@ -4453,6 +4472,7 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_past_coaching_session_dashboard_data(request, project_id):
     try:
+        hr_id = request.query_params.get("hr", "")
         current_time_seeq = timezone.now()
         timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
         if project_id == "all":
@@ -4460,6 +4480,10 @@ def get_past_coaching_session_dashboard_data(request, project_id):
         else:
             schedular_session = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=int(project_id)
+            )
+        if hr_id:
+            schedular_session = schedular_session.filter(
+                coaching_session__batch__project__hr__id=hr_id
             )
 
         past_schedular_sessions = get_coaching_session_according_to_time(
@@ -4494,6 +4518,7 @@ def get_past_coaching_session_dashboard_data(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_upcoming_live_session_dashboard_data(request, project_id):
     try:
+        hr_id = request.query_params.get("hr", None)
         current_time_seeq = timezone.now()
         if project_id == "all":
             live_sessions = LiveSession.objects.all()
@@ -4501,15 +4526,21 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
             live_sessions = LiveSession.objects.filter(
                 batch__project__id=int(project_id)
             )
+
+        if hr_id:
+            live_sessions = live_sessions.filter(batch__project__hr__id=hr_id)
         upcoming_live_sessions = live_sessions.filter(date_time__gt=current_time_seeq)
 
         upcoming_live_session_data = []
 
         for live_session in upcoming_live_sessions:
-            facilitator_names = [
-                f"{facilitator.first_name} {facilitator.last_name}"
-                for facilitator in live_session.batch.facilitator.all()
-            ]
+            facilitator_names = (
+                [
+                    f"{live_session.facilitator.first_name} {live_session.facilitator.last_name}"
+                ]
+                if live_session.facilitator
+                else []
+            )
             coach_names = [
                 f"{coach.first_name} {coach.last_name}"
                 for coach in live_session.batch.coaches.all()
@@ -4540,6 +4571,7 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_past_live_session_dashboard_data(request, project_id):
     try:
+        hr_id = request.query_params.get("hr", None)
         current_time_seeq = timezone.now()
         if project_id == "all":
             live_sessions = LiveSession.objects.all()
@@ -4547,15 +4579,20 @@ def get_past_live_session_dashboard_data(request, project_id):
             live_sessions = LiveSession.objects.filter(
                 batch__project__id=int(project_id)
             )
+        if hr_id:
+            live_sessions = live_sessions.filter(batch__project__hr__id=hr_id)
         past_live_sessions = live_sessions.filter(date_time__lt=current_time_seeq)
 
         past_live_session_data = []
 
         for live_session in past_live_sessions:
-            facilitator_names = [
-                f"{facilitator.first_name} {facilitator.last_name}"
-                for facilitator in live_session.batch.facilitator.all()
-            ]
+            facilitator_names = (
+                [
+                    f"{live_session.facilitator.first_name} {live_session.facilitator.last_name}"
+                ]
+                if live_session.facilitator
+                else []
+            )
             coach_names = [
                 f"{coach.first_name} {coach.last_name}"
                 for coach in live_session.batch.coaches.all()
@@ -4641,21 +4678,23 @@ def add_facilitator_to_batch(request, batch_id):
 def show_facilitator_inside_courses(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
-        all_live_session=LiveSession.objects.filter(batch=batch)
+        all_live_session = LiveSession.objects.filter(batch=batch)
         facilitators = set()
         for live_session in all_live_session:
             if live_session.facilitator:
                 facilitators.add(live_session.facilitator)
 
         facilitator_serializer = FacilitatorSerializer(list(facilitators), many=True)
-        return Response({"facilitators": facilitator_serializer.data}, status=status.HTTP_200_OK)
+        return Response(
+            {"facilitators": facilitator_serializer.data}, status=status.HTTP_200_OK
+        )
 
     except SchedularBatch.DoesNotExist:
         return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -4743,8 +4782,7 @@ def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_
     try:
         range_start_date = request.query_params.get("start_date")
         range_end_date = request.query_params.get("end_date")
- 
-        
+
         current_time = timezone.now()
         timestamp_milliseconds = current_time.timestamp() * 1000
 
@@ -4798,7 +4836,9 @@ def get_slots_based_on_project_batch_coach(request, project_id, batch_id, coach_
                         start_timestamp = str(
                             max((int(start_timestamp)), int(range_start_date))
                         )
-                        end_timestamp = str(min((int(end_timestamp)), int(range_end_date)))
+                        end_timestamp = str(
+                            min((int(end_timestamp)), int(range_end_date))
+                        )
                     else:
 
                         start_timestamp = str(
