@@ -23,6 +23,7 @@ from .models import (
     Nudge,
     AssignmentLesson,
     AssignmentLessonResponse,
+    FacilitatorLesson,
 )
 
 
@@ -76,7 +77,7 @@ class TextLessonCreateSerializer(serializers.ModelSerializer):
         lesson_instance.drip_date = lesson_data.get(
             "drip_date", lesson_instance.drip_date
         )
-    
+
         lesson_instance.lesson_type = lesson_data.get(
             "lesson_type", lesson_instance.lesson_type
         )
@@ -268,6 +269,13 @@ class DownloadableLessonSerializer(serializers.ModelSerializer):
 class AssignmentSerializerDepthOne(serializers.ModelSerializer):
     class Meta:
         model = AssignmentLesson
+        fields = "__all__"
+        depth = 1
+
+
+class FacilitatorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FacilitatorLesson
         fields = "__all__"
         depth = 1
 

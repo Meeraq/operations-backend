@@ -301,6 +301,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.update_lesson_status_according_to_drip_dates",
         "schedule": crontab(hour=1, minute=30, day_of_week="*"),  #  7 AM
     },
+    "send_tomorrow_action_items_data": {
+        "task": "schedularApi.tasks.send_tomorrow_action_items_data",
+        "schedule": crontab(hour=12, minute=30, day_of_week="*"),
+    },
 }
 
 
