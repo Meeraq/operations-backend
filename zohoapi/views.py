@@ -1271,15 +1271,15 @@ def get_invoices_by_status_for_founders(request, status):
         res = []
         for invoice_data in all_invoices:
             if status == "in_review":
-                if not invoice_data["bill"] and invoice_data["bill"]["status"] == "in_review":
-                    res.append(invoice_data)
+                if not invoice_data["bill"] and invoice_data["status"] == "in_review":
+                        res.append(invoice_data)
             elif status == "approved":
-                if not invoice_data["bill"] and invoice_data["bill"]["status"] == "approved":
+                if not invoice_data["bill"] and invoice_data["status"] == "approved":
                     res.append(invoice_data)
             elif status == "rejected":
-                if not invoice_data["bill"] and invoice_data["bill"]["status"] == "rejected":
+                if not invoice_data["bill"] and invoice_data["status"] == "rejected":
                     res.append(invoice_data)        
-            if status == "approved":
+            if status == "accepted":
                 if invoice_data["bill"]:
                     if (
                         "status" in invoice_data["bill"]
