@@ -8320,6 +8320,7 @@ def add_extra_session_in_caas(request, learner_id, project_id):
             billable_session_number=(max_billable_session_number + 1),
             status="pending",
             order=(max_order + 1),
+            is_extra = True
         )
         return Response(
             {"detail": "Extra session added successfully"},
