@@ -4573,9 +4573,6 @@ class AssessmentsResponseStatusDownload(APIView):
         except Exception as e:
             print(str(e))
 
-
-
-
 class GetAllAssessmentsOfSchedularProjects(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -4623,7 +4620,3 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": "Failed to get data"}, status=500)
-
-
-class AssessmentsResponseStatusDownload(APIView):
-
