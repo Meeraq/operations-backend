@@ -1,4 +1,5 @@
-{% extends "table_parent_template.html" %} {% block title %}{% endblock %} {% block content %}
+{% extends "table_parent_template.html" %} {% block title %}{% endblock %} {%
+block content %}
 <tr style="border: 0">
   <td style="padding: 20px; background: #f8f7f8; border: 0">
     <div align="center">
@@ -25,8 +26,9 @@
           >
             <td style="padding: 15pt 15pt 15pt 15pt">
               <p>
-								<strong><span style="font-size: 14px">Dear&nbsp;</span></strong><b>Pmo</b><strong>,</strong>
-							</p>
+                <strong><span style="font-size: 14px">Dear&nbsp;</span></strong
+                ><b>Pmo</b><strong>,</strong>
+              </p>
               <p>
                 We hope this message finds you well. As part of our commitment
                 to keeping you informed about ongoing projects and initiatives,
@@ -34,17 +36,33 @@
                 activities and updates.
               </p>
 
-              {% for project_name, project_data in projects_data.items %} 
-              {% if  project_data.live_sessions or project_data.laser_coaching_sessions or project_data.mentoring_sessions or project_data.nudges or project_data.assessments %}
-              <br/>
-               <br/>
+              {% for project_name, project_data in projects_data.items %} {% if
+              project_data.live_sessions or project_data.laser_coaching_sessions
+              or project_data.mentoring_sessions or project_data.nudges or
+              project_data.assessments %}
+              <br />
+              <br />
               <h3>Project Name: {{ project_name }}</h3>
-              <p style="font-size: 10pt;">Email Reminder: {{project_data.email_reminder}}</p>
-              <p style="font-size: 10pt;">Whatsapp Reminder: {{project_data.whatsapp_reminder}}</p>
-              <p style="font-size: 10pt;">Calendar Invites: {{project_data.calendar_invites}}</p>
+              <p style="font-size: 10pt">
+                Email Reminder: {{project_data.email_reminder}}
+              </p>
+              <p style="font-size: 10pt">
+                Whatsapp Reminder: {{project_data.whatsapp_reminder}}
+              </p>
+              <p style="font-size: 10pt">
+                Calendar Invites: {{project_data.calendar_invites}}
+              </p>
               {% endif %} {% if project_data.live_sessions %}
               <h4>Live Sessions</h4>
-              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+              <table
+                border="1"
+                style="
+                  border-collapse: collapse;
+                  width: 100%;
+                  padding: 8px;
+                  text-align: center;
+                "
+              >
                 <thead>
                   <tr>
                     <th>Session Name</th>
@@ -68,7 +86,15 @@
               </table>
               {% endif %} {% if project_data.laser_coaching_sessions %}
               <h4>Laser Coaching sessions</h4>
-              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+              <table
+                border="1"
+                style="
+                  border-collapse: collapse;
+                  width: 100%;
+                  padding: 8px;
+                  text-align: center;
+                "
+              >
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -95,7 +121,15 @@
 
               {% endif %} {% if project_data.mentoring_sessions %}
               <h4>Mentoring sessions</h4>
-              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+              <table
+                border="1"
+                style="
+                  border-collapse: collapse;
+                  width: 100%;
+                  padding: 8px;
+                  text-align: center;
+                "
+              >
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -123,7 +157,15 @@
 
               {% endif %} {% if project_data.nudges %}
               <h4>Nudges</h4>
-              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+              <table
+                border="1"
+                style="
+                  border-collapse: collapse;
+                  width: 100%;
+                  padding: 8px;
+                  text-align: center;
+                "
+              >
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -144,7 +186,15 @@
 
               {% endif %} {% if project_data.assessments %}
               <h4>Assessments</h4>
-              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+              <table
+                border="1"
+                style="
+                  border-collapse: collapse;
+                  width: 100%;
+                  padding: 8px;
+                  text-align: center;
+                "
+              >
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -166,8 +216,16 @@
               </table>
 
               {% endif %} {% endfor %}
-              <h4>Assessments</h4>
-              <table border="1" style="border-collapse: collapse; width: 100%; padding: 8px; text-align: center;">
+              <h4>Standalone Assessments</h4>
+              <table
+                border="1"
+                style="
+                  border-collapse: collapse;
+                  width: 100%;
+                  padding: 8px;
+                  text-align: center;
+                "
+              >
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -187,8 +245,8 @@
                   {% endfor %}
                 </tbody>
               </table>
-              <br/>
-               <br/>
+              <br />
+              <br />
               <p>
                 <a href="https://caas.meeraq.com">Click here</a> to login to
                 Meeraq platform.
