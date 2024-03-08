@@ -64,6 +64,7 @@ from .serializers import (
     AssignmentResponseSerializerDepthSix,
     AssignmentResponseSerializer,
     FacilitatorSerializer,
+    LessonSerializerForLiveSessionDateTime
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
@@ -75,6 +76,7 @@ from schedularApi.models import (
     SchedularProject,
     LiveSession as LiveSessionSchedular,
 )
+from schedularApi.serializers import LiveSessionSerializer as LiveSessionSchedularSerializer
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
 )
@@ -515,7 +517,7 @@ class TextLessonEditView(generics.RetrieveUpdateAPIView):
 class LessonListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Lesson.objects.all()
-    serializer_class = LessonSerializer
+    serializer_class = LessonSerializerForLiveSessionDateTime
 
     def get_queryset(self):
         # Retrieve lessons for a specific course based on the course ID in the URL
@@ -1220,7 +1222,7 @@ def get_course_enrollment(request, course_id, learner_id):
             Q(status="public"),
             ~Q(lesson_type="feedback"),
         )
-        lessons_serializer = LessonSerializer(lessons, many=True)
+        lessons_serializer = LessonSerializerForLiveSessionDateTime(lessons, many=True)
 
         return Response(
             {
@@ -1244,7 +1246,7 @@ def get_course_enrollment_for_pmo_preview(request, course_id):
             Q(status="public"),
             ~Q(lesson_type="feedback"),
         )
-        lessons_serializer = LessonSerializer(lessons, many=True)
+        lessons_serializer = LessonSerializerForLiveSessionDateTime(lessons, many=True)
         completed_lessons = []
         return Response(
             {
@@ -2649,6 +2651,11 @@ def create_pdf_lesson(request):
             if course_id:
                 course_instance = Course.objects.get(id=course_id)
                 course_template_instance = course_instance.course_template
+                live_session_id = lesson_data['live_session']
+                live_session = None
+                print(live_session_id)
+                if live_session_id:
+                    live_session = LiveSessionSchedular.objects.get(id = live_session_id)
 
                 lesson_instance = Lesson.objects.create(
                     course=course_instance,
@@ -2657,6 +2664,7 @@ def create_pdf_lesson(request):
                     lesson_type=lesson_data["lesson_type"],
                     order=lesson_data["order"],
                     drip_date=lesson_data["drip_date"],
+                    live_session=live_session
                 )
 
                 pdf_lesson_instance = PdfLesson.objects.create(
@@ -3623,6 +3631,10 @@ class CreateAssignmentLesson(APIView):
                 )
             elif course_id != "null":
                 course = Course.objects.get(id=int(course_id))
+                live_session_id = request.data["live_session"]
+                live_session = None
+                if live_session_id != "null":
+                    live_session = LiveSessionSchedular.objects.get(id = live_session_id)
                 lesson = Lesson.objects.create(
                     course=course,
                     name=request.data["name"],
@@ -3630,8 +3642,8 @@ class CreateAssignmentLesson(APIView):
                     lesson_type="assignment",
                     drip_date=request.data["drip_date"],
                     order=int(request.data["order"]),
+                    live_session=live_session
                 )
-
             assignment_lesson = AssignmentLesson.objects.create(
                 lesson=lesson,
                 name=request.data["name"],
@@ -3664,6 +3676,11 @@ class UpdateAssignmentLesson(APIView):
             lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
             lesson.name = request.data["name"]
             lesson.drip_date = request.data["drip_date"]
+            live_session_id = request.data["live_session"]
+            live_session = None
+            if live_session_id != "null":
+                live_session = LiveSessionSchedular.objects.get(id = live_session_id)
+            lesson.live_session = live_session
             lesson.save()
             return Response(
                 {"message": f"Assignment Lesson Updated."}, status=status.HTTP_200_OK
@@ -3795,3 +3812,10 @@ class FacilitatorWiseFeedback(APIView):
                 {"message": f"Failed to update file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_live_sessions_by_course(request, course_id):
+    live_sessions = LiveSession.objects.filter(batch__course__id=course_id)
+    live_sessions_serializer = LiveSessionSchedularSerializer(live_sessions, many=True)
+    return Response(live_sessions_serializer.data)

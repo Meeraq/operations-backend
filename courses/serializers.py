@@ -25,6 +25,7 @@ from .models import (
     AssignmentLessonResponse,
     FacilitatorLesson,
 )
+from schedularApi.models import LiveSession
 
 
 class CourseSerializer(serializers.ModelSerializer):
@@ -77,6 +78,9 @@ class TextLessonCreateSerializer(serializers.ModelSerializer):
         lesson_instance.drip_date = lesson_data.get(
             "drip_date", lesson_instance.drip_date
         )
+        live_session = lesson_data.get("live_session")
+        if live_session:
+            lesson_instance.live_session = live_session
 
         lesson_instance.lesson_type = lesson_data.get(
             "lesson_type", lesson_instance.lesson_type
@@ -107,7 +111,32 @@ class LessonSerializer(serializers.ModelSerializer):
             "order",
             "course_template",
             "drip_date",
+            "live_session",
         ]
+
+
+class LessonSerializerForLiveSessionDateTime(serializers.ModelSerializer):
+    live_session_date_time = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Lesson
+        fields = [
+            "id",
+            "course",
+            "name",
+            "status",
+            "lesson_type",
+            "order",
+            "course_template",
+            "drip_date",
+            "live_session",
+            "live_session_date_time",
+        ]
+
+    def get_live_session_date_time(self, obj):
+        if obj.live_session:
+            return obj.live_session.date_time
+        return None
 
 
 class QuestionSerializer(serializers.ModelSerializer):
@@ -249,21 +278,31 @@ class DownloadableLessonSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         lesson_data = validated_data.pop("lesson", None)
+        try:
+            if lesson_data:
+                lesson_instance = instance.lesson
+                course_template = lesson_data.pop("course_template", None)
+                course = lesson_data.pop("course", None)
+                lesson_data["live_session"] = (
+                    lesson_data["live_session"].id
+                    if lesson_data["live_session"]
+                    else None
+                )
+                lesson_serializer = LessonSerializer(
+                    lesson_instance, data=lesson_data, partial=True
+                )
+                lesson_serializer.is_valid(raise_exception=True)
+                lesson_serializer.save()
 
-        if lesson_data:
-            lesson_instance = instance.lesson
-            course_template = lesson_data.pop("course_template", None)
-            course = lesson_data.pop("course", None)
-            lesson_serializer = LessonSerializer(
-                lesson_instance, data=lesson_data, partial=True
+            instance.description = validated_data.get(
+                "description", instance.description
             )
-            lesson_serializer.is_valid(raise_exception=True)
-            lesson_serializer.save()
-
-        instance.description = validated_data.get("description", instance.description)
-        instance.file = validated_data.get("file", instance.file)
-        instance.save()
-        return instance
+            instance.file = validated_data.get("file", instance.file)
+            instance.save()
+            return instance
+        except Exception as e:
+            print(str(e))
+            return instance
 
 
 class AssignmentSerializerDepthOne(serializers.ModelSerializer):
