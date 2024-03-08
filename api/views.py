@@ -8331,9 +8331,9 @@ def add_extra_session_in_caas(request, learner_id, project_id):
         # Handle the exception as per your application's requirements
         return Response(
             {"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        ) @ api_view(["POST"])
+        ) 
 
-
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_coaches_to_project(request):
     try:
