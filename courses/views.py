@@ -31,6 +31,8 @@ from .models import (
     AssignmentLesson,
     AssignmentLessonResponse,
     FacilitatorLesson,
+    Feedback,
+    CoachingSessionsFeedbackResponse,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -64,11 +66,12 @@ from .serializers import (
     AssignmentResponseSerializerDepthSix,
     AssignmentResponseSerializer,
     FacilitatorSerializer,
+    FeedbackDepthOneSerializer,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 from rest_framework.views import APIView
-from api.models import User, Learner, Profile, Role, Coach
+from api.models import User, Learner, Profile, Role, Coach, SessionRequestCaas
 from schedularApi.models import (
     LiveSession,
     SchedularBatch,
@@ -2367,7 +2370,7 @@ class AssignCourseTemplateToBatch(APIView):
                 assessment_creation = False
                 if not original_lessons.filter(lesson_type="assessment").exists():
                     if batch.project.pre_post_assessment:
-                        assessment_creation = True
+                        assessment_creation = True 
                         lesson1 = Lesson.objects.create(
                             course=new_course,
                             name="Pre Assessment",
@@ -2566,7 +2569,7 @@ class AssignCourseTemplateToBatch(APIView):
                     )
 
                     assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
-                    
+
             return Response(
                 {
                     "message": "Course assigned successfully.",
@@ -3574,13 +3577,15 @@ class GetAllNudgesOfSchedularProjects(APIView):
 
     def get(self, request, project_id):
         try:
-
+            hr_id = request.query_params.get("hr", None)
             data = []
             courses = None
             if project_id == "all":
                 courses = Course.objects.all()
             else:
                 courses = Course.objects.filter(batch__project__id=int(project_id))
+            if hr_id:
+                courses=courses.filter(batch__project__hr__id=hr_id)
             for course in courses:
                 nudges = get_nudges_of_course(course)
                 data = list(data) + list(nudges)
@@ -3589,7 +3594,6 @@ class GetAllNudgesOfSchedularProjects(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": "Failed to get data"}, status=500)
-
 
 
 class CreateAssignmentLesson(APIView):
@@ -3769,6 +3773,160 @@ class UpdateAssignmentLessonFile(APIView):
                 {"message": f"Failed to update file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def submit_feedback(request, feedback_id, learner_id):
+    try:
+    
+        feedback = get_object_or_404(Feedback, id=feedback_id)
+        learner = get_object_or_404(Learner, id=learner_id)
+    except (
+        Feedback.DoesNotExist,
+        Learner.DoesNotExist,
+    ) as e:
+        return Response(
+            {"error": "Failed to submit feedback."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    caas_session_id = request.data.get("caas_session_id", "")
+    schedular_session_id = request.data.get("schedular_session_id", "")
+    caas_session = None
+    schedular_session = None
+    if caas_session_id:
+        caas_session = SessionRequestCaas.objects.get(id=caas_session_id)
+    if schedular_session_id:
+        schedular_session = SchedularSessions.objects.get(id=schedular_session_id)
+    if caas_session or schedular_session:
+        answers_data = request.data.get("answers", )
+        serializer = AnswerSerializer(data=answers_data, many=True)
+        if serializer.is_valid():
+            answers = serializer.save()
+            coaching_session_response = CoachingSessionsFeedbackResponse.objects.create(
+                feedback=feedback,
+                learner=learner,
+                caas_session=caas_session,
+                schedular_session=schedular_session,
+            )
+            coaching_session_response.answers.set(answers)
+            coaching_session_response.save()
+            return Response(
+                {"detail": "Feedback submitted successfully"}, status=status.HTTP_200_OK
+            )
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        return Response(
+            {"error": "Failed to submit feedback"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_feedback(request, feedback_id):
+    feedback = Feedback.objects.get(id=feedback_id)
+    serializer = FeedbackDepthOneSerializer(feedback)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_end_meeting_feedback_response_data(request):
+
+    try:
+        coach_session_feedback_responses = (
+            CoachingSessionsFeedbackResponse.objects.all()
+        )
+        data = []
+        for coach_session_feedback_response in coach_session_feedback_responses:
+            temp = {}
+            cass_session = coach_session_feedback_response.caas_session
+            if cass_session:
+                if cass_session.coach:
+                    coach_name = (
+                        cass_session.coach.first_name
+                        + " "
+                        + cass_session.coach.last_name
+                    )
+
+                else:
+                    coach_name = None
+
+                temp = {
+                    "feedback_responses_id": coach_session_feedback_response.id,
+                    "coach_name": coach_name,
+                    "project_name": cass_session.project.name,
+                    "org_name": cass_session.project.organisation.name,
+                    "coachee_name": cass_session.learner.name,
+                    "session_type": cass_session.session_type,
+                    "session_number": cass_session.session_number,
+                    "type": "CAAS",
+                }
+            else:
+                seeq_session = coach_session_feedback_response.schedular_session
+
+                temp = {
+                    "feedback_responses_id": coach_session_feedback_response.id,
+                    "coach_name": seeq_session.availibility.coach.first_name
+                    + " "
+                    + seeq_session.availibility.coach.last_name,
+                    "project_name": seeq_session.coaching_session.batch.project.name,
+                    "org_name": seeq_session.coaching_session.batch.project.organisation.name,
+                    "coachee_name": seeq_session.learner.name,
+                    "session_type": seeq_session.coaching_session.session_type,
+                    "session_number": seeq_session.coaching_session.coaching_session_number,
+                    "type": "SEEQ",
+                }
+
+            for answer in coach_session_feedback_response.answers.all():
+                if answer.question.type == "rating_1_to_5":
+                    temp["sesson_rating"] = answer.rating
+                    break
+
+            data.append(temp)
+
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_session_feedback_response_data(request, feedback_response_id):
+
+    try:
+        coach_session_feedback_responses = CoachingSessionsFeedbackResponse.objects.get(
+            id=feedback_response_id
+        )
+
+        data = []
+
+        for answer in coach_session_feedback_responses.answers.all():
+
+            temp = {
+                "question": answer.question.text,
+                "rating": answer.rating,
+                "selected_answer": answer.selected_options,
+                "type": answer.question.type,
+            }
+
+            data.append(temp)
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+        
+
 
 class FacilitatorWiseFeedback(APIView):
     permission_classes = [IsAuthenticated]
