@@ -31,6 +31,13 @@
 	</div>
 	<div style="clear:both;"></div> <!-- Clear floats -->
 	<h3 style="margin-top: 20pt; font-size: 20pt;">{{ org_name }} - {{ project_name }}</h3>
+
+	{% if batch_name %}
+    
+	<h3 style="margin-top: 20pt; font-size: 15pt;">Batch - {{ batch_name }}</h3>
+       
+    {% endif %} 
+
 	<p>Total Participant - {{total_participant}}</p>
 	<p>Attended Pre Assessment - {{attended_pre_participant}}</p>
 	<p>Attended Post Assesment - {{attended_post_participant}}</p>
