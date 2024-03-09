@@ -181,6 +181,8 @@ import pandas as pd
 from django.http import HttpResponse
 import environ
 from time import sleep
+from django.db.models import Max
+
 
 env = environ.Env()
 
@@ -1697,6 +1699,15 @@ def get_user_data(user):
         }
     elif user_profile_role == "hr":
         serializer = HrDepthOneSerializer(user.profile.hr)
+        is_caas_allowed = Project.objects.filter(hr=user.profile.hr).exists()
+        is_seeq_allowed = SchedularProject.objects.filter(hr=user.profile.hr).exists()
+        return {
+            **serializer.data,
+            "roles": roles,
+            "is_caas_allowed": is_caas_allowed,
+            "is_seeq_allowed": is_seeq_allowed,
+            "user": {**serializer.data["user"], "type": user_profile_role},
+        }
     else:
         return None
     return {
@@ -8237,7 +8248,10 @@ def get_api_logs(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def get_skill_training_projects(request):
+    hr_id = request.query_params.get("hr", None)
     projects = SchedularProject.objects.all()
+    if hr_id:
+        projects = projects.filter(hr__id=hr_id)
     project_serializer = SchedularProjectSerializer(projects, many=True)
 
     # Modify the reminder status directly in the serialized data
@@ -8275,6 +8289,49 @@ def update_reminders_of_project(request):
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_extra_session_in_caas(request, learner_id, project_id):
+    try:
+
+        session_data = request.data
+        learner = Learner.objects.get(id=learner_id)
+        project = Project.objects.get(id=project_id)
+        sessions = SessionRequestCaas.objects.filter(
+            project__id=project_id, learner__id=learner_id
+        ).order_by("order")
+        filtered_sessions = sessions.filter(session_type=session_data["session_type"])
+        max_session_number = (
+            filtered_sessions.aggregate(Max("session_number"))["session_number__max"]
+            if filtered_sessions.count() > 0
+            else 0
+        )
+        max_billable_session_number = sessions.aggregate(
+            Max("billable_session_number")
+        )["billable_session_number__max"]
+        max_order = sessions.aggregate(Max("order"))["order__max"]
+        session_data = SessionRequestCaas.objects.create(
+            learner=learner,
+            project=project,
+            session_duration=session_data["session_duration"],
+            session_number=(max_session_number + 1),
+            session_type=session_data["session_type"],
+            billable_session_number=(max_billable_session_number + 1),
+            status="pending",
+            order=(max_order + 1),
+            is_extra = True
+        )
+        return Response(
+            {"detail": "Extra session added successfully"},
+            status=status.HTTP_201_CREATED,
+        )
+
+    except Exception as e:
+        # Handle the exception as per your application's requirements
+        return Response(
+            {"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        ) 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
