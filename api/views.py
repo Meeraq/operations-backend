@@ -1104,7 +1104,9 @@ def create_project_cass(request):
             ),
             status="presales",
             masked_coach_profile=request.data["masked_coach_profile"],
-            automated_reminder=request.data["automated_reminder"],
+            email_reminder=request.data["email_reminder"],
+            whatsapp_reminder=request.data["whatsapp_reminder"],
+            calendar_invites=request.data["calendar_invites"]
         )
 
         project.save()
@@ -2409,26 +2411,6 @@ def book_session_caas(request):
     session_request.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session_request.save()
 
-    # if serializer.is_valid():
-    #     session = serializer.save()
-    #     # Mark the session request as booked
-    #     session_request = session.session_request
-    #     session_request.is_booked = True
-    #     session_request.save()
-
-    #     coach=session.coach
-    #     coach_email=coach.email
-    #     hr=session.session_request.hr
-    #     he_email= hr.email
-    # else:
-    #     print(serializer.errors)
-    #     return Response(serializer.errors,status=400)
-
-    # Send email notification to the coach
-    # subject = 'Hello coach your session is booked.'
-    # message = f'Dear {session_request.coach.first_name},\n\nThank you booking slots of hr.Please be ready on date and time to complete session. Best of luck!'
-    # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [session_request.coach.email])
-
     # # Send email notification to the learner
     if session_request.session_type == "interview":
         subject = "Hello hr your session is booked."
@@ -2502,7 +2484,6 @@ def book_session_caas(request):
                 one_off=True,
             )
             periodic_task.save()
-
             # after 3 minutes whatsapp message
             # increase 5 minutes
             three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(
@@ -2524,7 +2505,6 @@ def book_session_caas(request):
             booking_id = coach.room_id
 
             if coachee:
-
                 if session_request.project.enable_emails_to_hr_and_coachee:
                     send_mail_templates(
                         "coachee_emails/session_booked.html",
@@ -2544,39 +2524,11 @@ def book_session_caas(request):
                         [],  # no bcc
                     )
                 # add microsoft auth url before uncommenting
-
-                # send_mail_templates(
-                #     "pmo_emails/session_scheduled.html",
-                #     [pmo.email],
-                #     "Meeraq Coaching | Session Booked",
-                #     {
-                #         "projectName": session_request.project.name,
-                #         "name": pmo.name,
-                #         "coachee_name": coachee.name,
-                #         "coach_name": coach_name,
-                #         "sessionName": SESSION_TYPE_VALUE[session_request.session_type],
-                #         "slot_date": session_date,
-                #         "slot_time": session_time,
-                # "email": pmo.email,
-                #     },
-                #     [],  # no bcc
-                # )
                 try:
                     if existing_calendar_invite:
                         delete_outlook_calendar_invite(existing_calendar_invite)
-
                     attendees = []
-
                     # Adding learners to attendees list
-                    for invitee in session_request.invitees:
-                        attendee = {
-                            "emailAddress": {
-                                "address": invitee,
-                            },
-                            "type": "required",
-                        }
-                        attendees.append(attendee)
-
                     attendees.append(
                         {
                             "emailAddress": {
@@ -2585,7 +2537,16 @@ def book_session_caas(request):
                             "type": "required",
                         }
                     )
-                    if session_request.project.enable_emails_to_hr_and_coachee:
+                    if session_request.project.enable_emails_to_hr_and_coachee and session_request.project.calendar_invites:
+                        for invitee in session_request.invitees:
+                            attendee = {
+                                "emailAddress": {
+                                    "address": invitee,
+                                },
+                                "type": "required",
+                            }
+                            attendees.append(attendee)
+
                         attendees.append(
                             {
                                 "emailAddress": {
@@ -5454,7 +5415,6 @@ def schedule_session_directly(request, session_id):
             # WHATSAPP MESSAGE CHECK
 
             if session.project.enable_emails_to_hr_and_coachee:
-
                 send_mail_templates(
                     "coachee_emails/session_booked.html",
                     [coachee.email],
@@ -5480,17 +5440,6 @@ def schedule_session_directly(request, session_id):
                         delete_outlook_calendar_invite(existing_calendar_invite)
 
                     attendees = []
-
-                    # Adding learners to attendees list
-                    for invitee in session.invitees:
-                        attendee = {
-                            "emailAddress": {
-                                "address": invitee,
-                            },
-                            "type": "required",
-                        }
-                        attendees.append(attendee)
-
                     if request.data["user_type"] == "coach":
                         attendees.append(
                             {
@@ -5509,14 +5458,23 @@ def schedule_session_directly(request, session_id):
                                 "type": "required",
                             }
                         )
-                    attendees.append(
-                        {
-                            "emailAddress": {
-                                "address": coachee.email,
-                            },
-                            "type": "required",
-                        }
-                    )
+                    if session.project.calendar_invites:
+                        for invitee in session.invitees:
+                            attendee = {
+                                "emailAddress": {
+                                    "address": invitee,
+                                },
+                                "type": "required",
+                            }
+                            attendees.append(attendee)
+                        attendees.append(
+                            {
+                                "emailAddress": {
+                                    "address": coachee.email,
+                                },
+                                "type": "required",
+                            }
+                        )
                     create_outlook_calendar_invite(
                         f"{SESSION_TYPE_VALUE[session.session_type]} Session",
                         "Session Scheduled",
@@ -6655,9 +6613,14 @@ def edit_project_caas(request, project_id):
         project.masked_coach_profile = request.data.get(
             "masked_coach_profile", project.masked_coach_profile
         )
-
-        project.automated_reminder = request.data.get(
-            "automated_reminder", project.automated_reminder
+        project.email_reminder = request.data.get(
+            "email_reminder", project.email_reminder
+        )
+        project.whatsapp_reminder = request.data.get(
+            "whatsapp_reminder", project.whatsapp_reminder
+        )
+        project.calendar_invites = request.data.get(
+            "calendar_invites", project.calendar_invites
         )
 
         project.hr.clear()

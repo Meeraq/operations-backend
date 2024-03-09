@@ -123,7 +123,7 @@ class Profile(models.Model):
         ("hr", "hr"),
         ("superadmin", "superadmin"),
         ("facilitator", "facilitator"),
-        ("finance", "finance")
+        ("finance", "finance"),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)
@@ -140,6 +140,7 @@ class SuperAdmin(models.Model):
     def __str__(self):
         return self.name
 
+
 class Finance(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -149,6 +150,7 @@ class Finance(models.Model):
 
     def __str__(self):
         return self.name
+
 
 class Pmo(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
@@ -364,7 +366,9 @@ class Project(models.Model):
     coach_consent_mandatory = models.BooleanField(default=True)
     enable_emails_to_hr_and_coachee = models.BooleanField(default=True)
     masked_coach_profile = models.BooleanField(default=False)
-    automated_reminder = models.BooleanField(blank=True, default=True)
+    email_reminder = models.BooleanField(blank=True, default=False)
+    whatsapp_reminder = models.BooleanField(blank=True, default=False)
+    calendar_invites = models.BooleanField(blank=True, default=False)
 
     class Meta:
         ordering = ["-created_at"]
