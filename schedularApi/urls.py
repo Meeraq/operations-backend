@@ -262,4 +262,12 @@ urlpatterns = [
         "get-project-wise-progress-data/<int:project_id>/",
         views.get_project_wise_progress_data,
     ),
+    path(
+        "get-session-progress-data-for-dashboard/<int:project_id>/",
+        views.get_session_progress_data_for_dashboard,
+    ),
+    path(
+        "get-coach-session-progress-data-for-skill-training-project/<int:batch_id>/",
+        views.get_coach_session_progress_data_for_skill_training_project,
+    ),
 ]

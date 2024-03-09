@@ -378,4 +378,8 @@ urlpatterns = [
         views.update_coach_project_structure,
         name="update_coach_project_structure",
     ),
+    path(
+        "blacklist-coach/",
+        views.blacklist_coach,
+    ),
 ]
