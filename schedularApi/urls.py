@@ -205,7 +205,7 @@ urlpatterns = [
         GetAllBatchesParticipantDetails.as_view(),
     ),
     path(
-        "coach-inside-skill-training-or-not/<str:batch_id>/",
+        "coach-inside-skill-training-or-not/<int:project_id>/<str:batch_id>/",
         views.coach_inside_skill_training_or_not,
     ),
     path(
@@ -278,6 +278,18 @@ urlpatterns = [
         views.update_price_in_project_structure,
     ),
     path("batches/facilitators/<str:batch_id>/", views.show_facilitator_inside_courses),
+    path(
+        "get-project-wise-progress-data/<int:project_id>/",
+        views.get_project_wise_progress_data,
+    ),
+    path(
+        "get-session-progress-data-for-dashboard/<int:project_id>/",
+        views.get_session_progress_data_for_dashboard,
+    ),
+    path(
+        "get-coach-session-progress-data-for-skill-training-project/<int:batch_id>/",
+        views.get_coach_session_progress_data_for_skill_training_project,
+    ),
     path(
         "projects/facilitators-and-pricing/<str:project_id>/",
         views.get_facilitators_and_pricing_for_project,

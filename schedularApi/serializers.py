@@ -111,7 +111,7 @@ class CoachBasicDetailsSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "email",
-            "phone",
+            "phone","active_inactive",
             "phone_country_code",
         ]
 

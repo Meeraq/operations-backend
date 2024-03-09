@@ -68,11 +68,31 @@ urlpatterns = [
         name="get_all_purchase_orders",
     ),
     path(
+        "pmo/purchase-orders/",
+        views.get_all_purchase_orders_for_pmo,
+        name="get_all_purchase_orders",
+    ),
+    path(
         "get-all-invoices/",
         views.get_all_invoices,
         name="get_all_invoices",
     ),
+    path(
+        "pmo/invoices/",
+        views.get_invoices_for_pmo,
+        name="get_all_invoices",
+    ),
     path("vendors/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
+    path(
+        "invoices/<str:status>/",
+        views.get_invoices_by_status,
+        name="get_invoices_by_status",
+    ),
+    path(
+        "invoices/founders/<str:status>/",
+        views.get_invoices_by_status_for_founders,
+        name="get_invoices_by_status_for_founders",
+    ),
     path(
         "invoices/<int:invoice_id>/update_status/",
         views.update_invoice_status,
