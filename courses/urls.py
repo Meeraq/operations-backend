@@ -39,6 +39,7 @@ from .views import (
     CreateAssignmentLessonResponse,
     GetAssignmentsResponses,
     UpdateAssignmentLessonFile,
+    FacilitatorWiseFeedback,
 )
 import environ
 
@@ -374,6 +375,10 @@ urlpatterns = [
     path(
         "update_assignments_responses/",
         UpdateAssignmentLessonFile.as_view(),
+    ),
+    path(
+        "facilitator-wise-feedback/",
+        FacilitatorWiseFeedback.as_view(),
     ),
     path(
         "get-feedback/<int:feedback_id>/",

@@ -102,7 +102,7 @@ class BatchSerializer(serializers.ModelSerializer):
 class CoachBasicDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coach
-        fields = ["id", "first_name", "last_name", "email", "phone"]
+        fields = ["id", "first_name", "last_name", "email", "phone","active_inactive"]
 
 
 class AvailabilitySerializer(serializers.ModelSerializer):

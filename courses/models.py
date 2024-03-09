@@ -63,6 +63,7 @@ class Lesson(models.Model):
         ("ppt", "PPT"),
         ("downloadable_file", "Downloadable File"),
         ("assignment", "Assignment"),
+        ("facilitator","Facilitator Lesson"),
     )
     STATUS_CHOICES = (
         ("draft", "Draft"),
@@ -286,6 +287,9 @@ class Nudge(models.Model):
 
     def __str__(self):
         return self.name
+    
+class FacilitatorLesson(models.Model):
+    lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
 
 class Feedback(models.Model):
     questions = models.ManyToManyField(Question)
