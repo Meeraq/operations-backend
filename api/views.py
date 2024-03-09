@@ -920,17 +920,18 @@ def approve_facilitator(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_coach_profile(request, id):
+    
     try:
         coach = Coach.objects.get(id=id)
-        mutable_data = request.data.copy()
-
+      
+        
     except Coach.DoesNotExist:
         return Response(status=404)
 
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email", "").strip().lower()
+    new_email = request.data.get("email", "").strip().lower()
     #  other user exists with the new email
     if (
         new_email
@@ -976,7 +977,7 @@ def update_coach_profile(request, id):
         user=coach.user.user,
         timestamp=timezone.now(),
     )
-    serializer = CoachSerializer(coach, data=mutable_data, partial=True)
+    serializer = CoachSerializer(coach, data=request.data, partial=True)
 
     name = coach.first_name + " " + coach.last_name
     add_contact_in_wati("coach", name, coach.phone)
