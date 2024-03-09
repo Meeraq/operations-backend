@@ -23,6 +23,8 @@ from .models import (
     Nudge,
     AssignmentLesson,
     AssignmentLessonResponse,
+    FacilitatorLesson,
+    Feedback
 )
 
 
@@ -263,6 +265,14 @@ class AssignmentSerializerDepthOne(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+class FacilitatorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FacilitatorLesson
+        fields = "__all__"
+        depth = 1
+
+
+
 class AssignmentResponseSerializerDepthSix(serializers.ModelSerializer):
     class Meta:
         model = AssignmentLessonResponse
@@ -273,3 +283,11 @@ class AssignmentResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssignmentLessonResponse
         fields = "__all__"
+
+
+class FeedbackDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Feedback
+        fields = "__all__"
+        depth = 1
+
