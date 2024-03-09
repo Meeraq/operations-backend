@@ -46,7 +46,6 @@ class SchedularBatch(models.Model):
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
     coaches = models.ManyToManyField(Coach, blank=True)
     learners = models.ManyToManyField(Learner, blank=True)
-    facilitator = models.ManyToManyField(Facilitator, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
 
@@ -106,7 +105,9 @@ class SchedularSessions(models.Model):
     )
     coaching_session = models.ForeignKey(CoachingSession, on_delete=models.CASCADE)
     status = models.CharField(max_length=50, default="pending", blank=True)
-    auto_generated_status = models.CharField(max_length=50, default="pending", blank=True)
+    auto_generated_status = models.CharField(
+        max_length=50, default="pending", blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
 
@@ -121,6 +122,9 @@ class LiveSession(models.Model):
     ]
 
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
     live_session_number = models.IntegerField(blank=True, default=None, null=True)
     order = models.IntegerField(blank=True, default=None, null=True)
     date_time = models.DateTimeField(blank=True, null=True)

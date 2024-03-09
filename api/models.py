@@ -220,6 +220,7 @@ class Coach(models.Model):
     def __str__(self):
         return self.first_name + " " + self.last_name
 
+
 class Facilitator(models.Model):
     user = models.OneToOneField(
         Profile, on_delete=models.CASCADE, blank=True, default=""
@@ -237,6 +238,8 @@ class Facilitator(models.Model):
     area_of_expertise = models.JSONField(default=list, blank=True)
     profile_pic = models.ImageField(upload_to="post_images", blank=True)
     education = models.JSONField(default=list, blank=True)
+    corporate_experience = models.TextField(blank=True)
+    coaching_experience = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
     city = models.JSONField(default=list, blank=True)
     language = models.JSONField(default=list, blank=True)
@@ -250,6 +253,11 @@ class Facilitator(models.Model):
     other_certification = models.JSONField(default=list, blank=True)
     currency = models.CharField(max_length=100, blank=True, default="")
     client_companies = models.JSONField(default=list, blank=True)
+    education_pic = models.ImageField(upload_to="post_images", blank=True)
+    # education_upload_file = models.ImageField(upload_to="post_images", blank=True)
+    education_upload_file = models.FileField(
+        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+    )
     educational_qualification = models.JSONField(default=list, blank=True)
     fees_per_hour = models.CharField(max_length=20, blank=True)
     fees_per_day = models.CharField(max_length=20, blank=True)
@@ -257,7 +265,7 @@ class Facilitator(models.Model):
 
     def __str__(self):
         return self.first_name + " " + self.last_name
-    
+
 
 class Learner(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
@@ -300,9 +308,11 @@ class HR(models.Model):
 class CoachStatus(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     status = models.JSONField(default=dict, blank=True)
+    project_structure = models.JSONField(default=list, blank=True)
     learner_id = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     consent_expiry_date = models.DateField(blank=True, null=True)
+    is_consent_asked = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.id} {self.coach.first_name} {self.coach.last_name}"
@@ -449,6 +459,7 @@ class SessionRequestCaas(models.Model):
     session_duration = models.IntegerField(blank=True, default=None, null=True)
     status_updated_at = models.DateTimeField(blank=True, null=True, default=None)
     billable_session_number = models.IntegerField(blank=True, default=None, null=True)
+    is_extra = models.BooleanField(blank=True, default=False)
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
@@ -460,17 +471,6 @@ class SessionRequestCaas(models.Model):
             )
         else:
             return f"{self.session_type} = Learner: {self.learner.name}"
-
-
-# class SessionCaas(models.Model):
-#     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-#     confirmed_availability = models.ForeignKey(Availibility, on_delete=models.CASCADE)
-#     session_request = models.ForeignKey(SessionRequestCaas, on_delete=models.CASCADE)
-#     status = models.CharField(max_length=20,default='pending')
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     coach_joined = models.BooleanField(blank=True,default=False)
-#     learner_joined = models.BooleanField(blank=True,default=False)
-#     hr_joined = models.BooleanField(blank=True,default=False)
 
 
 class Notification(models.Model):
@@ -621,8 +621,10 @@ class StandardizedFieldRequest(models.Model):
         ("accepted", "Accepted"),
         ("rejected", "Rejected"),
     )
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True , null=True)
-    facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE, blank=True , null=True)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True, null=True)
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.CASCADE, blank=True, null=True
+    )
     standardized_field_name = models.ForeignKey(
         StandardizedField, on_delete=models.CASCADE, blank=True
     )
