@@ -61,6 +61,10 @@ urlpatterns = [
         views.create_coach_schedular_availibilty,
     ),
     path(
+        "edit-slot-request/<int:request_id>/",
+        views.edit_slot_request,
+    ),
+    path(
         "schedular-availabilities/",
         views.get_all_schedular_availabilities,
     ),
@@ -281,6 +285,11 @@ urlpatterns = [
     path(
         "get-project-wise-progress-data/<int:project_id>/",
         views.get_project_wise_progress_data,
+    ),
+    path(
+        "requests/delete/<int:request_id>/",
+        views.delete_request_with_availabilities,
+        name="delete_request_with_availabilities",
     ),
     path(
         "get-session-progress-data-for-dashboard/<int:project_id>/",

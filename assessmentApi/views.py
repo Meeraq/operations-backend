@@ -3183,6 +3183,45 @@ def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp
 
     return encoded_image
 
+def generate_spider_web_for_pre_assessment(competency_percentage, total_for_each_comp):
+    comp_labels = list(competency_percentage.keys())
+    percentage_values = list(competency_percentage.values())
+    
+    categories = comp_labels
+    values = percentage_values
+    
+    angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
+    values += values[:1]
+    angles += angles[:1]
+
+    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
+
+    # Plot the background polygons
+    ax.fill(angles, [100] * len(angles), color='lightgray', alpha=0.7)
+
+    # Plot the data
+    ax.plot(angles, values, linewidth=2, linestyle='solid', color='#eb0081', label="Your Competency")
+
+    # Add labels with padding
+    ax.set_thetagrids(np.degrees(angles[:-1]), labels=comp_labels, fontweight='bold', fontsize=6, rotation=45, ha='right')
+
+    # Add percentage values with padding
+    for angle, value, label in zip(angles, values[:-1], comp_labels):
+        ax.text(np.degrees(angle), value + 3, f"{value}%", ha='center', va='center', fontsize=6)
+
+    # Add a title with adjusted position
+    plt.title("Your Competency Chart", size=10, color='#eb0081', y=1.1, fontweight='bold')
+
+    # Adjust layout for better visibility and centering
+    plt.subplots_adjust(left=0.15, right=0.85, top=0.9, bottom=0.1)
+
+    image_stream = io.BytesIO()
+    plt.savefig(image_stream, format="png")
+    plt.close()
+
+    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
+
+    return encoded_image
 
 def generate_graph_for_pre_post_assessment(
     pre_competency_percentage, competency_percentage, total_for_each_comp
@@ -3259,6 +3298,46 @@ def generate_graph_for_pre_post_assessment(
 
     return encoded_image
 
+
+def generate_spider_web_for_pre_post_assessment(
+    pre_competency_percentage, competency_percentage, total_for_each_comp
+):
+    comp_labels = list(competency_percentage.keys())
+    pre_percentage_values = list(pre_competency_percentage.values())
+    post_percentage_values = list(competency_percentage.values())
+
+    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
+
+    # Plot pre-assessment values
+    angles = np.linspace(0, 2 * np.pi, len(comp_labels), endpoint=False).tolist()
+    angles += angles[:1]
+    pre_bars = ax.plot(angles, pre_percentage_values + pre_percentage_values[:1], label="Pre-Assessment", color="#eb0081", marker='o')
+
+    # Plot post-assessment values
+    post_bars = ax.plot(angles, post_percentage_values + post_percentage_values[:1], label="Post-Assessment", color="#374e9c", marker='o')
+
+    ax.set_thetagrids(np.degrees(angles[:-1]), labels=comp_labels, fontweight='bold', fontsize=5.5, rotation=45, ha='right')
+
+    # Add percentage values on top of the lines
+    for angle, pre_value, post_value in zip(angles, pre_percentage_values, post_percentage_values):
+        ax.text(np.degrees(angle), pre_value, f"{pre_value}%", ha='center', va='center', color='#eb0081', fontsize=8)
+        ax.text(np.degrees(angle), post_value, f"{post_value}%", ha='center', va='center', color='#374e9c', fontsize=8)
+
+    ax.legend(loc='upper right')
+
+    plt.title("Your Awareness Level", fontweight="bold", fontsize=12)
+    plt.tight_layout()
+
+    # Adjust layout for better visibility and centering
+    plt.subplots_adjust(left=0.15, right=0.85, top=0.85, bottom=0.2)
+
+    image_stream = io.BytesIO()
+    plt.savefig(image_stream, format="png")
+    plt.close()
+
+    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
+
+    return encoded_image
 
 def generate_graph_for_participant(
     participant, assessment_id, assessment, project_wise=False
@@ -4266,11 +4345,14 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                         )
 
                         for lesson in lessons:
+
                             assessment_lesson = AssessmentLesson.objects.filter(
                                 lesson=lesson
                             ).first()
 
                             if assessment_lesson.type == "pre":
+                                lesson.drip_date = pre_assessment.assessment_start_date
+                                lesson.save()
                                 assessment_lesson.assessment_modal = pre_assessment
 
                                 assessment_lesson.save()
@@ -4283,6 +4365,8 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                                 pre_assessment.save()
 
                             elif assessment_lesson.type == "post":
+                                lesson.drip_date = post_assessment.assessment_start_date
+                                lesson.save()
                                 post_assessment = Assessment.objects.get(
                                     id=post_assessment_id
                                 )
@@ -4423,7 +4507,8 @@ class GetProjectWiseReport(APIView):
 
     def get(self, request, project_id, report_to_download):
         try:
-         
+            spider = self.request.query_params.get("spider", None)
+
             project = SchedularProject.objects.get(id=project_id)
             batch_id =  request.query_params.get("batch_id", None)
     
@@ -4511,10 +4596,15 @@ class GetProjectWiseReport(APIView):
                 pre_average_percentage = get_average_for_all_compentency(
                     pre_compentency_percentages
                 )
-
-                pre_encoded_image = generate_graph_for_pre_assessment(
-                    pre_average_percentage, None
-                )
+                pre_encoded_image=None
+                if spider:
+                    pre_encoded_image = generate_spider_web_for_pre_assessment(
+                        pre_average_percentage, None
+                    )
+                else:
+                    pre_encoded_image = generate_graph_for_pre_assessment(
+                        pre_average_percentage, None
+                    )
                 content["image_base64"] = pre_encoded_image
                 content["competency_with_description"] = (
                     get_competency_with_description(pre_average_percentage)
@@ -4525,9 +4615,15 @@ class GetProjectWiseReport(APIView):
                 post_average_percentage = get_average_for_all_compentency(
                     post_compentency_percentages
                 )
-                post_encoded_image = generate_graph_for_pre_assessment(
-                    post_average_percentage, None
-                )
+                post_encoded_image=None
+                if spider:
+                    post_encoded_image = generate_spider_web_for_pre_assessment(
+                        post_average_percentage, None
+                    )
+                else:
+                    post_encoded_image = generate_graph_for_pre_assessment(
+                        post_average_percentage, None
+                    )
 
                 content["image_base64"] = post_encoded_image
                 content["competency_with_description"] = (
@@ -4542,9 +4638,15 @@ class GetProjectWiseReport(APIView):
                 post_average_percentage = get_average_for_all_compentency(
                     post_compentency_percentages
                 )
-                post_encoded_image = generate_graph_for_pre_post_assessment(
-                    pre_average_percentage, post_average_percentage, None
-                )
+                post_encoded_image=None
+                if spider:
+                    post_encoded_image = generate_spider_web_for_pre_post_assessment(
+                        pre_average_percentage, post_average_percentage, None
+                    )
+                else:
+                    post_encoded_image = generate_graph_for_pre_post_assessment(
+                        pre_average_percentage, post_average_percentage, None
+                    )
 
                 content["image_base64"] = post_encoded_image
                 content["competency_with_description"] = (

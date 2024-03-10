@@ -773,9 +773,19 @@ def update_live_session(request, live_session_id):
                         live_session.pt_30_min_before = periodic_task
                         live_session.save()
                     except Exception as e:
-                        # Handle any exceptions that may occur during task creation
                         print(str(e))
                         pass
+                live_session_lesson = LiveSessionLesson.objects.filter(
+                    live_session=live_session
+                ).first()
+                lesson = live_session_lesson.lesson
+
+                lesson.drip_date = live_session.date_time + timedelta(
+                    hours=5, minutes=30
+                )
+
+                lesson.save()
+
                 AIR_INDIA_PROJECT_ID = 3
                 if (
                     not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
@@ -876,7 +886,8 @@ def update_live_session(request, live_session_id):
     except Exception as e:
         print(str(e))
         return Response(
-            {"error": "Failed to update session"}, status=status.HTTP_400_BAD_REQUEST
+            {"error": "Failed to updated live session"},
+            status=status.HTTP_404_NOT_FOUND,
         )
 
 
@@ -884,19 +895,29 @@ def update_live_session(request, live_session_id):
 @permission_classes([IsAuthenticated])
 def update_coaching_session(request, coaching_session_id):
     try:
-        coaching_session = CoachingSession.objects.get(id=coaching_session_id)
-    except CoachingSession.DoesNotExist:
-        return Response(
-            {"error": "Coaching session not found"}, status=status.HTTP_404_NOT_FOUND
-        )
-    serializer = CoachingSessionSerializer(
-        coaching_session, data=request.data, partial=True
-    )
+        with transaction.atomic():
+            coaching_session = CoachingSession.objects.get(id=coaching_session_id)
 
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            serializer = CoachingSessionSerializer(
+                coaching_session, data=request.data, partial=True
+            )
+
+            if serializer.is_valid():
+                serializer.save()
+                coaching_session_lesson = LaserCoachingSession.objects.filter(
+                    coaching_session=coaching_session
+                ).first()
+                lesson = coaching_session_lesson.lesson
+                lesson.drip_date = coaching_session.start_date
+                lesson.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to updated coaching session"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
 
 @api_view(["GET"])
@@ -1168,6 +1189,51 @@ def create_coach_schedular_availibilty(request):
                 recipient_list = [coach.email]
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_slot_request(request, request_id):
+    request_availability = RequestAvailibilty.objects.get(id=request_id)
+    serializer = RequestAvailibiltySerializer(
+        request_availability, data=request.data, partial=True
+    )
+    if serializer.is_valid():
+        request_availability = serializer.save()
+        request_availability.provided_by = []
+        request_availability.save()
+        # Get the list of selected coaches from the serializer data
+        selected_coaches = serializer.validated_data.get("coach")
+        availability_data = request_availability.availability
+        dates = list(availability_data.keys())
+        date_str_arr = []
+        for date in dates:
+            formatted_date = datetime.strptime(date, "%Y-%m-%d").strftime("%d-%B-%Y")
+            date_str_arr.append(formatted_date)
+        exp = datetime.strptime(
+            str(request_availability.expiry_date), "%Y-%m-%d"
+        ).strftime("%d-%B-%Y")
+        for coach in selected_coaches:
+            send_mail_templates(
+                "create_coach_schedular_availibilty.html",
+                [coach.email],
+                "Meeraq -Book Coaching Session",
+                {
+                    "name": coach.first_name + " " + coach.last_name,
+                    "dates": date_str_arr,
+                    "expiry_date": exp,
+                },
+                [],
+            )
+            create_notification(
+                coach.user.user,
+                "/slot-request",
+                "Admin has asked your availability!",
+            )
+            from_email = settings.DEFAULT_FROM_EMAIL
+            recipient_list = [coach.email]
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["POST"])
@@ -5245,6 +5311,34 @@ def get_project_wise_progress_data(request, project_id):
             {"error": "Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_request_with_availabilities(request, request_id):
+    try:
+        request_obj = RequestAvailibilty.objects.get(pk=request_id)
+    except RequestAvailibilty.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    # Check if any confirmed availability exists
+    confirmed_availabilities_exist = CoachSchedularAvailibilty.objects.filter(
+        request=request_obj, is_confirmed=True
+    ).exists()
+    if confirmed_availabilities_exist:
+        return Response(
+            {"error": "Cannot delete request, confirmed availabilities exist."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    # Delete associated availabilities where is_confirmed = False
+    unconfirmed_availabilities = CoachSchedularAvailibilty.objects.filter(
+        request=request_obj, is_confirmed=False
+    )
+    unconfirmed_availabilities.delete()
+    # Delete the request
+    request_obj.delete()
+    return Response(
+        {"message": "Request deleted successfully."}, status=status.HTTP_204_NO_CONTENT
+    )
 
 
 @api_view(["GET"])
