@@ -1093,6 +1093,53 @@ def create_coach_schedular_availibilty(request):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_slot_request(request, request_id):
+    request_availability = RequestAvailibilty.objects.get(id = request_id)
+    serializer = RequestAvailibiltySerializer(request_availability, data=request.data,partial=True)
+    if serializer.is_valid():
+        request_availability = serializer.save()
+        request_availability.provided_by = []
+        request_availability.save()
+        # Get the list of selected coaches from the serializer data
+        selected_coaches = serializer.validated_data.get("coach")
+        availability_data = request_availability.availability
+        dates = list(availability_data.keys())
+        date_str_arr = []
+        for date in dates:
+            formatted_date = datetime.strptime(date, "%Y-%m-%d").strftime(
+                "%d-%B-%Y"
+            )
+            date_str_arr.append(formatted_date)
+        exp = datetime.strptime(
+            str(request_availability.expiry_date), "%Y-%m-%d"
+        ).strftime("%d-%B-%Y")
+        for coach in selected_coaches:
+            send_mail_templates(
+                "create_coach_schedular_availibilty.html",
+                [coach.email],
+                "Meeraq -Book Coaching Session",
+                {
+                    "name": coach.first_name + " " + coach.last_name,
+                    "dates": date_str_arr,
+                    "expiry_date": exp,
+                },
+                [],
+            )
+            create_notification(
+                coach.user.user,
+                "/slot-request",
+                "Admin has asked your availability!",
+            )
+            from_email = settings.DEFAULT_FROM_EMAIL
+            recipient_list = [coach.email]
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_batch(request, project_id):
@@ -4981,3 +5028,22 @@ def get_project_wise_progress_data(request, project_id):
             {"error": "Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_request_with_availabilities(request, request_id):
+    try:
+        request_obj = RequestAvailibilty.objects.get(pk=request_id)
+    except RequestAvailibilty.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    # Check if any confirmed availability exists
+    confirmed_availabilities_exist = CoachSchedularAvailibilty.objects.filter(request=request_obj, is_confirmed=True).exists()
+    if confirmed_availabilities_exist:
+        return Response({"error": "Cannot delete request, confirmed availabilities exist."}, status=status.HTTP_400_BAD_REQUEST)
+    # Delete associated availabilities where is_confirmed = False
+    unconfirmed_availabilities = CoachSchedularAvailibilty.objects.filter(request=request_obj, is_confirmed=False)
+    unconfirmed_availabilities.delete()
+    # Delete the request
+    request_obj.delete()
+    return Response({"message": "Request deleted successfully."},status=status.HTTP_204_NO_CONTENT)
