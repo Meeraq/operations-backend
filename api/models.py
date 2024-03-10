@@ -262,6 +262,7 @@ class Facilitator(models.Model):
     fees_per_hour = models.CharField(max_length=20, blank=True)
     fees_per_day = models.CharField(max_length=20, blank=True)
     topic = models.JSONField(default=list, blank=True)
+    is_approved = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return self.first_name + " " + self.last_name

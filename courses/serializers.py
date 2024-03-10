@@ -24,6 +24,7 @@ from .models import (
     AssignmentLesson,
     AssignmentLessonResponse,
     FacilitatorLesson,
+    Feedback
 )
 
 
@@ -282,3 +283,11 @@ class AssignmentResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssignmentLessonResponse
         fields = "__all__"
+
+
+class FeedbackDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Feedback
+        fields = "__all__"
+        depth = 1
+
