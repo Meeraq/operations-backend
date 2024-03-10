@@ -69,6 +69,8 @@ from .serializers import (
     FinanceDepthOneSerializer,
     PmoSerializer,
     FacilitatorDepthOneSerializer,
+    FacilitatorSerializer,
+    APILogSerializer,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor
@@ -130,7 +132,7 @@ from .models import (
     APILog,
     Facilitator,
 )
-
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
@@ -873,21 +875,63 @@ def approve_coach(request):
     except Exception as e:
         # Return error response if any other exception occurs
         return Response({"error": str(e)}, status=500)
+    
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def approve_facilitator(request):
+    try:
+        # Get the Coach object
+        unapproved_coach = request.data["coach"]
+        room_id = request.data["room_id"]
+        coach = Facilitator.objects.get(id=unapproved_coach["id"])
+
+        # Change the is_approved field to True
+        coach.is_approved = True
+        coach.room_id = room_id
+        coach.save()
+
+        path = f"/profile"
+
+        message = f"Congratulations ! Your profile has been approved. You will be notified for projects that match your profile. Thank You !"
+
+        create_notification(coach.user.user, path, message)
+        # Return success response
+        # Send approval email to the coach
+        send_mail_templates(
+            "coach_templates/pmo_approves_profile.html",
+            [coach.email],
+            "Congratulations! Your Facilitator Registration is Approved",
+            {
+                "name": f"{coach.first_name} {coach.last_name}",
+            },
+            [],
+        )
+        return Response({"message": "Facilitator approved successfully."}, status=200)
+
+    except Coach.DoesNotExist:
+        # Return error response if Coach with the provided ID does not exist
+        return Response({"error": "Facilitator does not exist."}, status=404)
+
+    except Exception as e:
+        # Return error response if any other exception occurs
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_coach_profile(request, id):
+    
     try:
         coach = Coach.objects.get(id=id)
-        mutable_data = request.data.copy()
+      
+        
     except Coach.DoesNotExist:
         return Response(status=404)
 
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
-    new_email = mutable_data.get("email", "").strip().lower()
+    new_email = request.data.get("email", "").strip().lower()
     #  other user exists with the new email
     if (
         new_email
@@ -933,7 +977,7 @@ def update_coach_profile(request, id):
         user=coach.user.user,
         timestamp=timezone.now(),
     )
-    serializer = CoachSerializer(coach, data=mutable_data, partial=True)
+    serializer = CoachSerializer(coach, data=request.data, partial=True)
 
     name = coach.first_name + " " + coach.last_name
     add_contact_in_wati("coach", name, coach.phone)
@@ -970,7 +1014,7 @@ def update_coach_profile(request, id):
 def get_coaches(request):
     try:
         # Get all the Coach objects
-        coaches = Coach.objects.filter(is_approved=True)
+        coaches = Coach.objects.filter(is_approved=True, active_inactive=True)
 
         # Serialize the Coach objects
         serializer = CoachSerializer(coaches, many=True)
@@ -1689,20 +1733,23 @@ def get_user_data(user):
     for role in user.profile.roles.all():
         roles.append(role.name)
     if user_profile_role == "coach":
-        serializer = CoachDepthOneSerializer(user.profile.coach)
-        is_caas_allowed = Project.objects.filter(
-            coaches_status__coach=user.profile.coach
-        ).exists()
-        is_seeq_allowed = SchedularBatch.objects.filter(
-            coaches=user.profile.coach
-        ).exists()
-        return {
-            **serializer.data,
-            "is_caas_allowed": is_caas_allowed,
-            "is_seeq_allowed": is_seeq_allowed,
-            "roles": roles,
-            "user": {**serializer.data["user"], "type": user_profile_role},
-        }
+        if user.profile.coach.active_inactive:
+            serializer = CoachDepthOneSerializer(user.profile.coach)
+            is_caas_allowed = Project.objects.filter(
+                coaches_status__coach=user.profile.coach
+            ).exists()
+            is_seeq_allowed = SchedularBatch.objects.filter(
+                coaches=user.profile.coach
+            ).exists()
+            return {
+                **serializer.data,
+                "is_caas_allowed": is_caas_allowed,
+                "is_seeq_allowed": is_seeq_allowed,
+                "roles": roles,
+                "user": {**serializer.data["user"], "type": user_profile_role},
+            }
+        else:
+            return None
     elif user_profile_role == "facilitator":
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
         return {
@@ -6379,6 +6426,125 @@ class AddRegisteredCoach(APIView):
             )
 
 
+class AddRegisteredFacilitator(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        # Get data from request
+
+        first_name = request.data.get("first_name")
+        last_name = request.data.get("last_name")
+        email = request.data.get("email")
+        phone = request.data.get("phone")
+        is_approved = request.data.get("is_approved")
+        phone_country_code = request.data.get("phone_country_code")
+
+        if not all([first_name, last_name, email, phone, phone_country_code]):
+            return Response(
+                {"error": "All required fields must be provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # Create the Django User
+            if Facilitator.objects.filter(email=email).exists():
+                return Response(
+                    {"error": "User with this email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            with transaction.atomic():
+                # Check if the user already exists
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    temp_password = "".join(
+                        random.choices(
+                            string.ascii_uppercase
+                            + string.ascii_lowercase
+                            + string.digits,
+                            k=8,
+                        )
+                    )
+                    user = User.objects.create_user(
+                        username=email, password=temp_password, email=email
+                    )
+                    profile = Profile.objects.create(user=user)
+                    print("createing new user and profile.")
+                else:
+                    print("hello.")
+                    profile = Profile.objects.get(user=user)
+
+                facilitator_role, created = Role.objects.get_or_create(name="facilitator")
+                profile.roles.add(facilitator_role)
+                profile.save()
+
+                # Create the Facilitator User using the Profile
+                facilitator_user = Facilitator.objects.create(
+                    user=profile,
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=email,
+                    phone=phone,
+                    phone_country_code=phone_country_code,
+                    is_approved=is_approved,
+                )
+                # Approve facilitator
+                facilitator = Facilitator.objects.get(id=facilitator_user.id)
+                # Change the is_approved field to True
+                facilitator.is_approved = False
+                facilitator.save()
+                name = facilitator_user.first_name + " " + facilitator_user.last_name
+                add_contact_in_wati("facilitator", name, facilitator_user.phone)
+                facilitator_serializer = FacilitatorSerializer(facilitator)
+
+                path = f"/profile"
+                message = f"Welcome to Meeraq. As next step, you need to fill out your details. Admin will look into your profile and contact you for profile approval. Thank You!"
+
+                create_notification(facilitator.user.user, path, message)
+                pmo_user = User.objects.filter(profile__roles__name="pmo").first()
+                pmo = Pmo.objects.get(email=pmo_user.username)
+                create_notification(
+                    pmo_user,
+                    f"/registeredcoach",
+                    f"{facilitator.first_name} {facilitator.last_name} has registered as a Facilitator. Please go through his Profile.",
+                )
+                send_mail_templates(
+                    "pmo_emails/facilitator_register.html",
+                    [pmo_user.username],
+                    f"{facilitator.first_name} {facilitator.last_name} has Registered as a Facilitator",
+                    {
+                        "name": pmo.name,
+                        "facilitatorName": f"{facilitator.first_name} {facilitator.last_name} ",
+                    },
+                    json.loads(env("BCC_EMAIL_RAJAT_SUJATA")),
+                )
+                # Send profile completion tips to the coach
+                send_mail_templates(
+                    "facilitator_templates/profile_creation_tips_facilitator.html",
+                    [facilitator.email],
+                    "Profile Completion Tips for Success on Meeraq Platform",
+                    {
+                        "name": f"{facilitator.first_name} {facilitator.last_name}",
+                    },
+                    [],
+                )
+
+            return Response({"coach": facilitator_serializer.data})
+
+        except IntegrityError as e:
+            return Response(
+                {"error": "A user with this email already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        except Exception as e:
+            # Return error response if any other exception occurs
+            print(e)
+            return Response(
+                {"error": "An error occurred while registering."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_registered_coaches(request):
@@ -6390,6 +6556,23 @@ def get_registered_coaches(request):
         serializer = CoachSerializer(unapproved_coaches, many=True)
 
         # Return the serialized unapproved coaches as the response
+        return Response(serializer.data, status=200)
+
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({"error": str(e)}, status=500)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_registered_facilitators(request):
+    try:
+        # Filter facilitators where isapproved is False
+        unapproved_facilitators = Facilitator.objects.filter(is_approved=False)
+
+        # Serialize the unapproved facilitators
+        serializer = FacilitatorSerializer(unapproved_facilitators, many=True)
+
+        # Return the serialized unapproved facilitators as the response
         return Response(serializer.data, status=200)
 
     except Exception as e:
@@ -7547,24 +7730,27 @@ def change_user_role(request, user_id):
     for role in user.profile.roles.all():
         roles.append(role.name)
     if user_profile_role == "coach":
-        serializer = CoachDepthOneSerializer(user.profile.coach)
-        is_caas_allowed = Project.objects.filter(
-            coaches_status__coach=user.profile.coach
-        ).exists()
-        is_seeq_allowed = SchedularBatch.objects.filter(
-            coaches=user.profile.coach
-        ).exists()
-        return Response(
-            {
-                **serializer.data,
-                "is_caas_allowed": is_caas_allowed,
-                "is_seeq_allowed": is_seeq_allowed,
-                "roles": roles,
-                "user": {**serializer.data["user"], "type": user_profile_role},
-                "last_login": user.last_login,
-                "message": "Role changed to Coach",
-            }
-        )
+        if user.profile.coach.active_inactive:
+            serializer = CoachDepthOneSerializer(user.profile.coach)
+            is_caas_allowed = Project.objects.filter(
+                coaches_status__coach=user.profile.coach
+            ).exists()
+            is_seeq_allowed = SchedularBatch.objects.filter(
+                coaches=user.profile.coach
+            ).exists()
+            return Response(
+                {
+                    **serializer.data,
+                    "is_caas_allowed": is_caas_allowed,
+                    "is_seeq_allowed": is_seeq_allowed,
+                    "roles": roles,
+                    "user": {**serializer.data["user"], "type": user_profile_role},
+                    "last_login": user.last_login,
+                    "message": "Role changed to Coach",
+                }
+            )
+        else:
+            return None
     elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "superadmin":
@@ -8353,3 +8539,39 @@ def update_coach_project_structure(request, coach_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update project structure."}, status=401)
+    
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def blacklist_coach(request):
+    try:
+        coach_id = request.data.get("coach_id")
+        coach = Coach.objects.get(id=int(coach_id))
+        if coach.active_inactive:
+            coach.active_inactive = False
+        else:
+            coach.active_inactive = True
+        coach.save()
+        return Response(
+            {
+                "message": f"Coach {'whitelist' if coach.active_inactive else 'blacklisted'} successfully"
+            },
+            status=200,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to blacklist coach"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_api_logs(request):
+    paginator = PageNumberPagination()
+    paginator.page_size = 200
+    logs = APILog.objects.exclude(path__startswith="/admin").order_by("-created_at")
+    result_page = paginator.paginate_queryset(logs, request)
+    serializer = APILogSerializer(result_page, many=True)
+    return paginator.get_paginated_response(serializer.data)

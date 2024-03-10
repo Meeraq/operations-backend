@@ -2210,3 +2210,27 @@ def send_tomorrow_action_items_data():
 
     except Exception as e:
         print(str(e))
+
+
+@shared_task
+def update_lesson_status_according_to_drip_dates():
+    try:
+        today = date.today()
+        lessons = Lesson.objects.filter(Q(drip_date=today) | Q(live_session__date_time__date=today))
+        for lesson in lessons:
+            if lesson.lesson_type == "assessment":
+                assessment = Assessment.objects.filter(lesson=lesson).first()
+
+                assessment_modal = Assessment.objects.get(
+                    id=assessment.assessment_modal.id
+                )
+                lesson.status == "public"
+                assessment_modal.status = "ongoing"
+                lesson.save()
+                assessment_modal.save()
+            else:
+
+                lesson.status = "public"
+                lesson.save()
+    except Exception as e:
+        print(str(e))
