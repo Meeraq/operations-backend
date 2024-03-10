@@ -69,6 +69,8 @@ from .serializers import (
     FinanceDepthOneSerializer,
     PmoSerializer,
     FacilitatorDepthOneSerializer,
+    FacilitatorSerializer,
+    APILogSerializer,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor
@@ -130,7 +132,7 @@ from .models import (
     APILog,
     Facilitator,
 )
-
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
@@ -523,7 +525,8 @@ def create_outlook_calendar_invite(
 ):
     event_create_url = "https://graph.microsoft.com/v1.0/me/events"
     try:
-        user_token = UserToken.objects.get(user_profile__user__email=user_email)
+
+        user_token = UserToken.objects.get(user_profile__user__username=user_email)
         new_access_token = refresh_microsoft_access_token(user_token)
         if not new_access_token:
             new_access_token = user_token.access_token
@@ -609,6 +612,38 @@ def delete_outlook_calendar_invite(calendar_invite):
 
     except Exception as e:
         return {"error": "An error occurred", "details": str(e)}
+
+
+def update_outlook_attendees(calendar_invite, new_attendees):
+    try:
+        user_token = UserToken.objects.get(
+            user_profile__user__username=calendar_invite.creator
+        )
+        new_access_token = refresh_microsoft_access_token(user_token)
+        if not new_access_token:
+            new_access_token = user_token.access_token
+
+        graph_api_url = (
+            f"https://graph.microsoft.com/v1.0/me/events/{calendar_invite.event_id}"
+        )
+
+        headers = {
+            "Authorization": f"Bearer {new_access_token}",
+            "Content-Type": "application/json",
+        }
+
+        response = requests.patch(
+            graph_api_url, json={"attendees": new_attendees}, headers=headers
+        )
+
+        if response.status_code == 200:
+            print("Attendees updated successfully.")
+
+        else:
+            print(f"Failed to update attendees: {response.text}")
+
+    except Exception as e:
+        print(str(e))
 
 
 def create_notification(user, path, message):
@@ -840,6 +875,46 @@ def approve_coach(request):
     except Exception as e:
         # Return error response if any other exception occurs
         return Response({"error": str(e)}, status=500)
+    
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def approve_facilitator(request):
+    try:
+        # Get the Coach object
+        unapproved_coach = request.data["coach"]
+        room_id = request.data["room_id"]
+        coach = Facilitator.objects.get(id=unapproved_coach["id"])
+
+        # Change the is_approved field to True
+        coach.is_approved = True
+        coach.room_id = room_id
+        coach.save()
+
+        path = f"/profile"
+
+        message = f"Congratulations ! Your profile has been approved. You will be notified for projects that match your profile. Thank You !"
+
+        create_notification(coach.user.user, path, message)
+        # Return success response
+        # Send approval email to the coach
+        send_mail_templates(
+            "coach_templates/pmo_approves_profile.html",
+            [coach.email],
+            "Congratulations! Your Facilitator Registration is Approved",
+            {
+                "name": f"{coach.first_name} {coach.last_name}",
+            },
+            [],
+        )
+        return Response({"message": "Facilitator approved successfully."}, status=200)
+
+    except Coach.DoesNotExist:
+        # Return error response if Coach with the provided ID does not exist
+        return Response({"error": "Facilitator does not exist."}, status=404)
+
+    except Exception as e:
+        # Return error response if any other exception occurs
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["PUT"])
@@ -938,7 +1013,7 @@ def update_coach_profile(request, id):
 def get_coaches(request):
     try:
         # Get all the Coach objects
-        coaches = Coach.objects.filter(is_approved=True)
+        coaches = Coach.objects.filter(is_approved=True, active_inactive=True)
 
         # Serialize the Coach objects
         serializer = CoachSerializer(coaches, many=True)
@@ -1655,20 +1730,23 @@ def get_user_data(user):
     for role in user.profile.roles.all():
         roles.append(role.name)
     if user_profile_role == "coach":
-        serializer = CoachDepthOneSerializer(user.profile.coach)
-        is_caas_allowed = Project.objects.filter(
-            coaches_status__coach=user.profile.coach
-        ).exists()
-        is_seeq_allowed = SchedularBatch.objects.filter(
-            coaches=user.profile.coach
-        ).exists()
-        return {
-            **serializer.data,
-            "is_caas_allowed": is_caas_allowed,
-            "is_seeq_allowed": is_seeq_allowed,
-            "roles": roles,
-            "user": {**serializer.data["user"], "type": user_profile_role},
-        }
+        if user.profile.coach.active_inactive:
+            serializer = CoachDepthOneSerializer(user.profile.coach)
+            is_caas_allowed = Project.objects.filter(
+                coaches_status__coach=user.profile.coach
+            ).exists()
+            is_seeq_allowed = SchedularBatch.objects.filter(
+                coaches=user.profile.coach
+            ).exists()
+            return {
+                **serializer.data,
+                "is_caas_allowed": is_caas_allowed,
+                "is_seeq_allowed": is_seeq_allowed,
+                "roles": roles,
+                "user": {**serializer.data["user"], "type": user_profile_role},
+            }
+        else:
+            return None
     elif user_profile_role == "facilitator":
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
         return {
@@ -2360,11 +2438,8 @@ def book_session_caas(request):
         id=request.data.get("session_request")
     )
 
-    google_calendar_event = CalendarEvent.objects.filter(
-        session=session_request, account_type="google"
-    ).first()
-    microsoft_calendar_event = CalendarEvent.objects.filter(
-        session=session_request, account_type="microsoft"
+    existing_calendar_invite = CalendarInvites.objects.filter(
+        caas_session=session_request
     ).first()
 
     session_request.confirmed_availability = Availibility.objects.get(
@@ -2495,18 +2570,7 @@ def book_session_caas(request):
             booking_id = coach.room_id
 
             if coachee:
-                microsoft_auth_url = (
-                    f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
-                )
-                user_token_present = False
-                try:
-                    user_token = UserToken.objects.get(
-                        user_profile__user__username=coachee.email
-                    )
-                    if user_token:
-                        user_token_present = True
-                except Exception as e:
-                    pass
+
                 if session_request.project.enable_emails_to_hr_and_coachee:
                     send_mail_templates(
                         "coachee_emails/session_booked.html",
@@ -2522,8 +2586,6 @@ def book_session_caas(request):
                             "slot_time": session_time,
                             "booking_id": booking_id,
                             "email": coachee.email,
-                            "microsoft_auth_url": microsoft_auth_url,
-                            "user_token_present": user_token_present,
                         },
                         [],  # no bcc
                     )
@@ -2545,95 +2607,54 @@ def book_session_caas(request):
                 #     },
                 #     [],  # no bcc
                 # )
-
-                event_detail = {
-                    "title": f"{SESSION_TYPE_VALUE[session_request.session_type]} Session",
-                    "description": "Session Scheduled",
-                    "startDate": session_date,
-                    "startTime": start_time,
-                    "endDate": session_date,
-                    "endTime": end_time,
-                }
                 try:
-                    coach_user_token = UserToken.objects.get(
-                        user_profile__user__username=coach.email
+                    if existing_calendar_invite:
+                        delete_outlook_calendar_invite(existing_calendar_invite)
+
+                    attendees = []
+
+                    # Adding learners to attendees list
+                    for invitee in session_request.invitees:
+                        attendee = {
+                            "emailAddress": {
+                                "address": invitee,
+                            },
+                            "type": "required",
+                        }
+                        attendees.append(attendee)
+
+                    attendees.append(
+                        {
+                            "emailAddress": {
+                                "address": coach.email,
+                            },
+                            "type": "required",
+                        }
                     )
-                    coach_access_token = coach_user_token.access_token
-                    if coach_user_token.account_type == "google":
-                        coach_access_token = refresh_google_access_token(
-                            coach_user_token
+                    if session_request.project.enable_emails_to_hr_and_coachee:
+                        attendees.append(
+                            {
+                                "emailAddress": {
+                                    "address": coachee.email,
+                                },
+                                "type": "required",
+                            }
                         )
-
-                        if google_calendar_event:
-                            delete_google_calendar_event(
-                                coach_access_token, google_calendar_event.event_id
-                            )
-                            google_calendar_event.delete()
-
-                        create_google_calendar_event(
-                            coach_access_token,
-                            event_detail,
-                            coachee.email,
-                            session_request,
-                        )
-                    else:
-                        coach_access_token = refresh_microsoft_access_token(
-                            coach_user_token
-                        )
-                        if microsoft_calendar_event:
-                            delete_microsoft_calendar_event(
-                                coach_access_token, microsoft_calendar_event.event_id
-                            )
-                            microsoft_calendar_event.delete()
-
-                        create_microsoft_calendar_event(
-                            coach_access_token,
-                            event_detail,
-                            {"address": coachee.email, "name": coachee.name},
-                            session_request,
-                        )
+                    create_outlook_calendar_invite(
+                        f"{SESSION_TYPE_VALUE[session_request.session_type]} Session",
+                        "Session Scheduled",
+                        int(session_request.confirmed_availability.start_time),
+                        int(session_request.confirmed_availability.end_time),
+                        attendees,
+                        env("COACHING_CALENDAR_INVITATION_ORGANIZER"),
+                        session_request,
+                        None,
+                        None,
+                        f'{env("CAAS_APP_URL")}/call/{coach.room_id}',
+                    )
 
                 except Exception as e:
-                    print(f"Coach calendar error {str(e)}")
-                if session_request.project.enable_emails_to_hr_and_coachee:
-                    try:
-                        coachee_user_token = UserToken.objects.get(
-                            user_profile__user__username=coachee.email
-                        )
-                        coachee_access_token = coachee_user_token.access_token
-                        if coachee_user_token.account_type == "google":
-                            coachee_access_token = refresh_google_access_token(
-                                coachee_user_token
-                            )
-                            if google_calendar_event:
-                                delete_google_calendar_event(
-                                    coachee_access_token, google_calendar_event.event_id
-                                )
-                                google_calendar_event.delete()
-                            create_google_calendar_event(
-                                coachee_access_token,
-                                event_detail,
-                                coach.email,
-                                session_request,
-                            )
-                        else:
-                            coachee_access_token = refresh_microsoft_access_token(
-                                coachee_user_token
-                            )
-                            if microsoft_calendar_event:
-                                delete_microsoft_calendar_event(
-                                    coachee_access_token,
-                                    microsoft_calendar_event.event_id,
-                                )
-                                microsoft_calendar_event.delete()
-                            create_microsoft_calendar_event(
-                                coachee_access_token,
-                                event_detail,
-                                {"address": coach.email, "name": coach_name},
-                                session_request,
-                            )
-                    except Exception as e:
-                        print(f"Coachee calendar error {str(e)}")
+                    print(f"Calendar error {str(e)}")
 
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
@@ -4594,22 +4615,18 @@ def edit_session_availability(request, session_id):
     try:
         # changing availability - edit request.
         session = SessionRequestCaas.objects.get(id=session_id)
-        google_calendar_event = CalendarEvent.objects.filter(
-            session=session, account_type="google"
+
+        existing_calendar_invite = CalendarInvites.objects.filter(
+            caas_session=session
         ).first()
-        microsoft_calendar_event = CalendarEvent.objects.filter(
-            session=session, account_type="microsoft"
-        ).first()
+
         if session.is_booked:
             return Response({"message": "Session edit failed."}, status=401)
         session.availibility.set(time_arr)
         session.save()
-        if google_calendar_event:
-            google_calendar_event.session = session
-            google_calendar_event.save()
-        if microsoft_calendar_event:
-            microsoft_calendar_event.session = session
-            microsoft_calendar_event.save()
+        if existing_calendar_invite:
+            existing_calendar_invite.caas_session = session
+
         return Response({"message": "Session updated successfully."}, status=201)
     except:
         return Response({"message": "Session edit failed."}, status=401)
@@ -5386,245 +5403,183 @@ def get_current_session_of_stakeholder(request, room_id):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def schedule_session_directly(request, session_id):
-    try:
-        session = SessionRequestCaas.objects.get(id=session_id)
-    except SessionRequestCaas.DoesNotExist:
-        return Response({"error": "Session not found."}, status=404)
+    with transaction.atomic():
+        try:
+            session = SessionRequestCaas.objects.get(id=session_id)
+        except SessionRequestCaas.DoesNotExist:
+            return Response({"error": "Session not found."}, status=404)
 
-    google_calendar_event = CalendarEvent.objects.filter(
-        session=session, account_type="google"
-    ).first()
-    microsoft_calendar_event = CalendarEvent.objects.filter(
-        session=session, account_type="microsoft"
-    ).first()
+        existing_calendar_invite = CalendarInvites.objects.filter(
+            caas_session=session
+        ).first()
 
-    if session.learner:
-        coachee = session.learner
+        if session.learner:
+            coachee = session.learner
 
-        sessionName = str(session.session_type).replace("_", " ")
-        if sessionName == "stakeholder without coach":
-            sessionName = "tripartite without coach"
-    time_arr = create_time_arr(request.data.get("availability", []))
-    if len(time_arr) == 0:
-        return Response({"error": "Please provide the availability."}, status=404)
+            sessionName = str(session.session_type).replace("_", " ")
+            if sessionName == "stakeholder without coach":
+                sessionName = "tripartite without coach"
+        time_arr = create_time_arr(request.data.get("availability", []))
+        if len(time_arr) == 0:
+            return Response({"error": "Please provide the availability."}, status=404)
 
-    availability = Availibility.objects.get(id=time_arr[0])
-    if request.data["user_type"] == "pmo":
-        pmo = Pmo.objects.get(id=request.data["user_id"])
-        session.pmo = pmo
-
-    if request.data["user_type"] == "coach":
-        coach = Coach.objects.get(id=request.data["user_id"])
-        session.coach = coach
-
-    if session.session_type == "stakeholder_interview":
-        engagement = Engagement.objects.get(
-            learner=session.learner, project=session.project
-        )
-        session.coach = engagement.coach
-        session.hr = session.project.hr.first()
-
-    session.availibility.add(availability)
-    session.confirmed_availability = availability
-    start_time = format_timestamp(int(session.confirmed_availability.start_time))
-    end_time = format_timestamp(int(session.confirmed_availability.end_time))
-    slot_message = f"{start_time} - {end_time}"
-
-    session_date = get_date(int(session.confirmed_availability.start_time))
-    start_time = get_time(int(session.confirmed_availability.start_time))
-    end_time = get_time(int(session.confirmed_availability.end_time))
-
-    session_time = f"{start_time} - {end_time} IST"
-
-    session.is_booked = True
-
-    session.status = "booked"
-    session.invitees = get_trimmed_emails(request.data.get("invitees", []))
-    session.save()
-    coach = None
-    if request.data["user_type"] == "coach":
-        coach = Coach.objects.get(id=request.data["user_id"])
-    if coachee:
-        event_detail = {
-            "title": f"{SESSION_TYPE_VALUE[session.session_type]} Session",
-            "description": "Session Scheduled",
-            "startDate": session_date,
-            "startTime": start_time,
-            "endDate": session_date,
-            "endTime": end_time,
-        }
-
-        # WHATSAPP MESSAGE CHECK
-        start_datetime_obj = datetime.fromtimestamp(
-            int(session.confirmed_availability.start_time) / 1000
-        )
-        # Decrease 5 minutes
-        five_minutes_prior_start_datetime = start_datetime_obj - timedelta(minutes=5)
-        clocked = ClockedSchedule.objects.create(
-            clocked_time=five_minutes_prior_start_datetime
-        )
-        periodic_task = PeriodicTask.objects.create(
-            name=uuid.uuid1(),
-            task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_caas",
-            args=[session_id],
-            clocked=clocked,
-            one_off=True,
-        )
-        periodic_task.save()
-
-        # after 3 minutes
-        three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(minutes=3)
-        clocked = ClockedSchedule.objects.create(
-            clocked_time=three_minutes_ahead_start_datetime
-        )
-        periodic_task = PeriodicTask.objects.create(
-            name=uuid.uuid1(),
-            task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_caas",
-            args=[session_id],
-            clocked=clocked,
-            one_off=True,
-        )
-        periodic_task.save()
-        # WHATSAPP MESSAGE CHECK
-        booking_id = coach.room_id
-
-        if session.project.enable_emails_to_hr_and_coachee:
-            microsoft_auth_url = (
-                f'{env("BACKEND_URL")}/api/microsoft/oauth/{coachee.email}/'
-            )
-            user_token_present = False
-            try:
-                user_token = UserToken.objects.get(
-                    user_profile__user__username=coachee.email
-                )
-                if user_token:
-                    user_token_present = True
-            except Exception as e:
-                pass
-
-            send_mail_templates(
-                "coachee_emails/session_booked.html",
-                [coachee.email],
-                "Meeraq Coaching | Session Booked",
-                {
-                    "projectName": session.project.name,
-                    "name": coachee.name,
-                    "sessionName": SESSION_TYPE_VALUE[session.session_type],
-                    "slot_date": session_date,
-                    "slot_time": session_time,
-                    "booking_id": booking_id,
-                    "email": coachee.email,
-                    "microsoft_auth_url": microsoft_auth_url,
-                    "user_token_present": user_token_present,
-                },
-                [],  # no bcc
-            )
-
-            try:
-                coachee_user_token = UserToken.objects.get(
-                    user_profile__user__username=coachee.email
-                )
-
-                coachee_access_token = coachee_user_token.access_token
-                if coachee_user_token.account_type == "google":
-                    coachee_access_token = refresh_google_access_token(
-                        coachee_user_token
-                    )
-
-                    if google_calendar_event:
-                        delete_google_calendar_event(
-                            coachee_access_token, google_calendar_event.event_id
-                        )
-                        google_calendar_event.delete()
-
-                    if request.data["user_type"] == "coach":
-                        create_google_calendar_event(
-                            coachee_access_token,
-                            event_detail,
-                            coach.email,
-                            session,
-                        )
-                    else:
-                        create_google_calendar_event(
-                            coachee_access_token,
-                            event_detail,
-                            "No Data",
-                            session,
-                        )
-                else:
-                    coachee_access_token = refresh_microsoft_access_token(
-                        coachee_user_token
-                    )
-
-                    if microsoft_calendar_event:
-                        delete_microsoft_calendar_event(
-                            coachee_access_token, microsoft_calendar_event.event_id
-                        )
-                        microsoft_calendar_event.delete()
-
-                    if request.data["user_type"] == "coach":
-                        create_microsoft_calendar_event(
-                            coachee_access_token,
-                            event_detail,
-                            {
-                                "address": coach.email,
-                                "name": coach.first_name + " " + coach.last_name,
-                            },
-                            session,
-                        )
-                    else:
-                        create_microsoft_calendar_event(
-                            coachee_access_token,
-                            event_detail,
-                            {"address": "No Data", "name": "No Data"},
-                            session,
-                        )
-            except Exception as e:
-                print(f"Coachee calendar error {str(e)}")
+        availability = Availibility.objects.get(id=time_arr[0])
+        if request.data["user_type"] == "pmo":
+            pmo = Pmo.objects.get(id=request.data["user_id"])
+            session.pmo = pmo
 
         if request.data["user_type"] == "coach":
             coach = Coach.objects.get(id=request.data["user_id"])
+            session.coach = coach
 
-            try:
-                coach_user_token = UserToken.objects.get(
-                    user_profile__user__username=coach.email
+        if session.session_type == "stakeholder_interview":
+            engagement = Engagement.objects.get(
+                learner=session.learner, project=session.project
+            )
+            session.coach = engagement.coach
+            session.hr = session.project.hr.first()
+
+        session.availibility.add(availability)
+        session.confirmed_availability = availability
+        start_time = format_timestamp(int(session.confirmed_availability.start_time))
+        end_time = format_timestamp(int(session.confirmed_availability.end_time))
+        slot_message = f"{start_time} - {end_time}"
+
+        session_date = get_date(int(session.confirmed_availability.start_time))
+        start_time = get_time(int(session.confirmed_availability.start_time))
+        end_time = get_time(int(session.confirmed_availability.end_time))
+
+        session_time = f"{start_time} - {end_time} IST"
+
+        session.is_booked = True
+
+        session.status = "booked"
+        session.invitees = get_trimmed_emails(request.data.get("invitees", []))
+        session.save()
+        coach = None
+        if request.data["user_type"] == "coach":
+            coach = Coach.objects.get(id=request.data["user_id"])
+        if coachee:
+
+            # print(,start_time,end_time)
+            # WHATSAPP MESSAGE CHECK
+            start_datetime_obj = datetime.fromtimestamp(
+                int(session.confirmed_availability.start_time) / 1000
+            )
+            # Decrease 5 minutes
+            five_minutes_prior_start_datetime = start_datetime_obj - timedelta(
+                minutes=5
+            )
+            clocked = ClockedSchedule.objects.create(
+                clocked_time=five_minutes_prior_start_datetime
+            )
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_caas",
+                args=[session_id],
+                clocked=clocked,
+                one_off=True,
+            )
+            periodic_task.save()
+
+            # after 3 minutes
+            three_minutes_ahead_start_datetime = start_datetime_obj + timedelta(
+                minutes=3
+            )
+            clocked = ClockedSchedule.objects.create(
+                clocked_time=three_minutes_ahead_start_datetime
+            )
+            periodic_task = PeriodicTask.objects.create(
+                name=uuid.uuid1(),
+                task="schedularApi.tasks.send_whatsapp_reminder_to_users_after_3mins_in_caas",
+                args=[session_id],
+                clocked=clocked,
+                one_off=True,
+            )
+            periodic_task.save()
+            # WHATSAPP MESSAGE CHECK
+
+            if session.project.enable_emails_to_hr_and_coachee:
+
+                send_mail_templates(
+                    "coachee_emails/session_booked.html",
+                    [coachee.email],
+                    "Meeraq Coaching | Session Booked",
+                    {
+                        "projectName": session.project.name,
+                        "name": coachee.name,
+                        "sessionName": SESSION_TYPE_VALUE[session.session_type],
+                        "slot_date": session_date,
+                        "slot_time": session_time,
+                        "booking_id": (
+                            coach.room_id
+                            if request.data["user_type"] == "coach"
+                            else pmo.room_id
+                        ),
+                        "email": coachee.email,
+                    },
+                    [],  # no bcc
                 )
-                coach_access_token = coach_user_token.access_token
-                if coach_user_token.account_type == "google":
-                    coach_access_token = refresh_google_access_token(coach_user_token)
 
-                    if google_calendar_event:
-                        delete_google_calendar_event(
-                            coach_access_token, google_calendar_event.event_id
+                try:
+                    if existing_calendar_invite:
+                        delete_outlook_calendar_invite(existing_calendar_invite)
+
+                    attendees = []
+
+                    # Adding learners to attendees list
+                    for invitee in session.invitees:
+                        attendee = {
+                            "emailAddress": {
+                                "address": invitee,
+                            },
+                            "type": "required",
+                        }
+                        attendees.append(attendee)
+
+                    if request.data["user_type"] == "coach":
+                        attendees.append(
+                            {
+                                "emailAddress": {
+                                    "address": coach.email,
+                                },
+                                "type": "required",
+                            }
                         )
-                        google_calendar_event.delete()
-
-                    create_google_calendar_event(
-                        coach_access_token,
-                        event_detail,
-                        coachee.email,
-                        session,
-                    )
-                else:
-                    coach_access_token = refresh_microsoft_access_token(
-                        coach_user_token
-                    )
-                    if microsoft_calendar_event:
-                        delete_microsoft_calendar_event(
-                            coach_access_token, microsoft_calendar_event.event_id
+                    else:
+                        attendees.append(
+                            {
+                                "emailAddress": {
+                                    "address": pmo.email,
+                                },
+                                "type": "required",
+                            }
                         )
-                        microsoft_calendar_event.delete()
-
-                    create_microsoft_calendar_event(
-                        coach_access_token,
-                        event_detail,
-                        {"address": coachee.email, "name": coachee.name},
-                        session,
+                    attendees.append(
+                        {
+                            "emailAddress": {
+                                "address": coachee.email,
+                            },
+                            "type": "required",
+                        }
                     )
-            except Exception as e:
-                print(f"Coach calendar error {str(e)}")
+                    create_outlook_calendar_invite(
+                        f"{SESSION_TYPE_VALUE[session.session_type]} Session",
+                        "Session Scheduled",
+                        int(session.confirmed_availability.start_time),
+                        int(session.confirmed_availability.end_time),
+                        attendees,
+                        env("COACHING_CALENDAR_INVITATION_ORGANIZER"),
+                        session,
+                        None,
+                        None,
+                        f'{env("CAAS_APP_URL")}/call/{coach.room_id if request.data["user_type"] == "coach" else pmo.room_id}',
+                    )
 
-    return Response({"message": "Session booked successfully."})
+                except Exception as e:
+                    print(f"Calendar error {str(e)}")
+
+        return Response({"message": "Session booked successfully."})
 
 
 @api_view(["POST"])
@@ -6000,9 +5955,57 @@ class UpdateInviteesView(APIView):
 
         try:
             invitee_emails = request.data.get("inviteeEmails", [])
-            print(invitee_emails)
+
+            existing_calendar_invite = CalendarInvites.objects.filter(
+                caas_session=session_request
+            ).first()
+
             session_request.invitees = get_trimmed_emails(invitee_emails)
             session_request.save()
+            try:
+                attendees = []
+
+                for invitee in session_request.invitees:
+                    attendee = {
+                        "emailAddress": {
+                            "address": invitee,
+                        },
+                        "type": "required",
+                    }
+                    attendees.append(attendee)
+                if session_request.coach:
+                    attendees.append(
+                        {
+                            "emailAddress": {
+                                "address": session_request.coach.email,
+                            },
+                            "type": "required",
+                        }
+                    )
+                if session_request.learner:
+                    attendees.append(
+                        {
+                            "emailAddress": {
+                                "address": session_request.learner.email,
+                            },
+                            "type": "required",
+                        }
+                    )
+                if session_request.pmo:
+                    attendees.append(
+                        {
+                            "emailAddress": {
+                                "address": session_request.pmo.email,
+                            },
+                            "type": "required",
+                        }
+                    )
+
+                update_outlook_attendees(existing_calendar_invite, attendees)
+
+            except Exception as e:
+                print(str(e))
+
             return Response(
                 {"message": " Invitees Updated Sucessfully"}, status=status.HTTP_200_OK
             )
@@ -6464,6 +6467,125 @@ class AddRegisteredCoach(APIView):
             )
 
 
+class AddRegisteredFacilitator(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        # Get data from request
+
+        first_name = request.data.get("first_name")
+        last_name = request.data.get("last_name")
+        email = request.data.get("email")
+        phone = request.data.get("phone")
+        is_approved = request.data.get("is_approved")
+        phone_country_code = request.data.get("phone_country_code")
+
+        if not all([first_name, last_name, email, phone, phone_country_code]):
+            return Response(
+                {"error": "All required fields must be provided."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # Create the Django User
+            if Facilitator.objects.filter(email=email).exists():
+                return Response(
+                    {"error": "User with this email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            with transaction.atomic():
+                # Check if the user already exists
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    temp_password = "".join(
+                        random.choices(
+                            string.ascii_uppercase
+                            + string.ascii_lowercase
+                            + string.digits,
+                            k=8,
+                        )
+                    )
+                    user = User.objects.create_user(
+                        username=email, password=temp_password, email=email
+                    )
+                    profile = Profile.objects.create(user=user)
+                    print("createing new user and profile.")
+                else:
+                    print("hello.")
+                    profile = Profile.objects.get(user=user)
+
+                facilitator_role, created = Role.objects.get_or_create(name="facilitator")
+                profile.roles.add(facilitator_role)
+                profile.save()
+
+                # Create the Facilitator User using the Profile
+                facilitator_user = Facilitator.objects.create(
+                    user=profile,
+                    first_name=first_name,
+                    last_name=last_name,
+                    email=email,
+                    phone=phone,
+                    phone_country_code=phone_country_code,
+                    is_approved=is_approved,
+                )
+                # Approve facilitator
+                facilitator = Facilitator.objects.get(id=facilitator_user.id)
+                # Change the is_approved field to True
+                facilitator.is_approved = False
+                facilitator.save()
+                name = facilitator_user.first_name + " " + facilitator_user.last_name
+                add_contact_in_wati("facilitator", name, facilitator_user.phone)
+                facilitator_serializer = FacilitatorSerializer(facilitator)
+
+                path = f"/profile"
+                message = f"Welcome to Meeraq. As next step, you need to fill out your details. Admin will look into your profile and contact you for profile approval. Thank You!"
+
+                create_notification(facilitator.user.user, path, message)
+                pmo_user = User.objects.filter(profile__roles__name="pmo").first()
+                pmo = Pmo.objects.get(email=pmo_user.username)
+                create_notification(
+                    pmo_user,
+                    f"/registeredcoach",
+                    f"{facilitator.first_name} {facilitator.last_name} has registered as a Facilitator. Please go through his Profile.",
+                )
+                send_mail_templates(
+                    "pmo_emails/facilitator_register.html",
+                    [pmo_user.username],
+                    f"{facilitator.first_name} {facilitator.last_name} has Registered as a Facilitator",
+                    {
+                        "name": pmo.name,
+                        "facilitatorName": f"{facilitator.first_name} {facilitator.last_name} ",
+                    },
+                    json.loads(env("BCC_EMAIL_RAJAT_SUJATA")),
+                )
+                # Send profile completion tips to the coach
+                send_mail_templates(
+                    "facilitator_templates/profile_creation_tips_facilitator.html",
+                    [facilitator.email],
+                    "Profile Completion Tips for Success on Meeraq Platform",
+                    {
+                        "name": f"{facilitator.first_name} {facilitator.last_name}",
+                    },
+                    [],
+                )
+
+            return Response({"coach": facilitator_serializer.data})
+
+        except IntegrityError as e:
+            return Response(
+                {"error": "A user with this email already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        except Exception as e:
+            # Return error response if any other exception occurs
+            print(e)
+            return Response(
+                {"error": "An error occurred while registering."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_registered_coaches(request):
@@ -6475,6 +6597,23 @@ def get_registered_coaches(request):
         serializer = CoachSerializer(unapproved_coaches, many=True)
 
         # Return the serialized unapproved coaches as the response
+        return Response(serializer.data, status=200)
+
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({"error": str(e)}, status=500)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_registered_facilitators(request):
+    try:
+        # Filter facilitators where isapproved is False
+        unapproved_facilitators = Facilitator.objects.filter(is_approved=False)
+
+        # Serialize the unapproved facilitators
+        serializer = FacilitatorSerializer(unapproved_facilitators, many=True)
+
+        # Return the serialized unapproved facilitators as the response
         return Response(serializer.data, status=200)
 
     except Exception as e:
@@ -7627,24 +7766,27 @@ def change_user_role(request, user_id):
     for role in user.profile.roles.all():
         roles.append(role.name)
     if user_profile_role == "coach":
-        serializer = CoachDepthOneSerializer(user.profile.coach)
-        is_caas_allowed = Project.objects.filter(
-            coaches_status__coach=user.profile.coach
-        ).exists()
-        is_seeq_allowed = SchedularBatch.objects.filter(
-            coaches=user.profile.coach
-        ).exists()
-        return Response(
-            {
-                **serializer.data,
-                "is_caas_allowed": is_caas_allowed,
-                "is_seeq_allowed": is_seeq_allowed,
-                "roles": roles,
-                "user": {**serializer.data["user"], "type": user_profile_role},
-                "last_login": user.last_login,
-                "message": "Role changed to Coach",
-            }
-        )
+        if user.profile.coach.active_inactive:
+            serializer = CoachDepthOneSerializer(user.profile.coach)
+            is_caas_allowed = Project.objects.filter(
+                coaches_status__coach=user.profile.coach
+            ).exists()
+            is_seeq_allowed = SchedularBatch.objects.filter(
+                coaches=user.profile.coach
+            ).exists()
+            return Response(
+                {
+                    **serializer.data,
+                    "is_caas_allowed": is_caas_allowed,
+                    "is_seeq_allowed": is_seeq_allowed,
+                    "roles": roles,
+                    "user": {**serializer.data["user"], "type": user_profile_role},
+                    "last_login": user.last_login,
+                    "message": "Role changed to Coach",
+                }
+            )
+        else:
+            return None
     elif user_profile_role == "pmo":
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "superadmin":
@@ -8320,7 +8462,7 @@ def add_extra_session_in_caas(request, learner_id, project_id):
             billable_session_number=(max_billable_session_number + 1),
             status="pending",
             order=(max_order + 1),
-            is_extra = True
+            is_extra=True,
         )
         return Response(
             {"detail": "Extra session added successfully"},
@@ -8331,9 +8473,10 @@ def add_extra_session_in_caas(request, learner_id, project_id):
         # Handle the exception as per your application's requirements
         return Response(
             {"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        ) @ api_view(["POST"])
+        )
 
 
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_coaches_to_project(request):
     try:
@@ -8432,3 +8575,39 @@ def update_coach_project_structure(request, coach_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update project structure."}, status=401)
+    
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def blacklist_coach(request):
+    try:
+        coach_id = request.data.get("coach_id")
+        coach = Coach.objects.get(id=int(coach_id))
+        if coach.active_inactive:
+            coach.active_inactive = False
+        else:
+            coach.active_inactive = True
+        coach.save()
+        return Response(
+            {
+                "message": f"Coach {'whitelist' if coach.active_inactive else 'blacklisted'} successfully"
+            },
+            status=200,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to blacklist coach"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_api_logs(request):
+    paginator = PageNumberPagination()
+    paginator.page_size = 200
+    logs = APILog.objects.exclude(path__startswith="/admin").order_by("-created_at")
+    result_page = paginator.paginate_queryset(logs, request)
+    serializer = APILogSerializer(result_page, many=True)
+    return paginator.get_paginated_response(serializer.data)

@@ -24,12 +24,14 @@ from .views import (
     UserTokenAvaliableCheck,
     SessionData,
     DownloadCoachContract,
+    AddRegisteredFacilitator,
 )
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
     path("coaches/all/", views.get_coaches),
     path("coaches/approve/", views.approve_coach),
+    path("facilitators/approve/", views.approve_facilitator),
     path(
         "password_reset/",
         include("django_rest_passwordreset.urls", namespace="password_reset"),
@@ -279,8 +281,10 @@ urlpatterns = [
         "coaches-which-are-included-in-projects/",
         views.coaches_which_are_included_in_projects,
     ),
-    path("add_registered_coach/", AddRegisteredCoach.as_view()),
+    path("add_registered_coach/", AddRegisteredCoach.as_view()),    
+    path("add-registered-facilitator/", AddRegisteredFacilitator.as_view()),
     path("get-registered-coaches/", views.get_registered_coaches),
+    path("get-registered-facilitators/", views.get_registered_facilitators),
     path("edit-project-caas/<int:project_id>/", views.edit_project_caas),
     path(
         "pmo-dashboard/",
@@ -378,4 +382,9 @@ urlpatterns = [
         views.update_coach_project_structure,
         name="update_coach_project_structure",
     ),
+    path(
+        "blacklist-coach/",
+        views.blacklist_coach,
+    ),
+    path("api-logs/", views.get_all_api_logs, name="api-logs"),
 ]

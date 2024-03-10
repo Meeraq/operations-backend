@@ -10,9 +10,10 @@ from .models import (
     EmailTemplate,
     SentEmail,
     RequestAvailibilty,
- 
+    CoachPricing,
     SchedularUpdate,
     CalendarInvites,
+    FacilitatorPricing,
 )
 
 # Register your models here.
@@ -29,3 +30,5 @@ admin.site.register(SentEmail)
 admin.site.register(RequestAvailibilty)
 admin.site.register(SchedularUpdate)
 admin.site.register(CalendarInvites)
+admin.site.register(CoachPricing)
+admin.site.register(FacilitatorPricing)
