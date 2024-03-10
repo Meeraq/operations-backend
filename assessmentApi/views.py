@@ -2015,51 +2015,54 @@ class AddMultipleQuestions(APIView):
 
                 for question in questions:
                     behavior, created = Behavior.objects.get_or_create(
-                        name=question["behaviour"],
+                        name=question["behaviour"].strip(),
                         description="This is a demo description",
                     )
                     behavior.save()
                     competency, created = Competency.objects.get_or_create(
-                        name=question["compentency_name"]
+                        name=question["compentency_name"].strip()
                     )
 
                     competency.behaviors.add(behavior)
                     competency.save()
 
-                    if question["rating_type"] == "1-5":
+                    if question["rating_type"].strip() == "1-5":
                         labels = {
-                            "1": question["label1"],
-                            "2": question["label2"],
-                            "3": question["label3"],
-                            "4": question["label4"],
-                            "5": question["label5"],
+                            "1": question["label1"].strip(),
+                            "2": question["label2"].strip(),
+                            "3": question["label3"].strip(),
+                            "4": question["label4"].strip(),
+                            "5": question["label5"].strip(),
                         }
                     elif question["rating_type"] == "1-10":
                         labels = {
-                            "1": question["label1"],
-                            "2": question["label2"],
-                            "3": question["label3"],
-                            "4": question["label4"],
-                            "5": question["label5"],
-                            "6": question["label6"],
-                            "7": question["label7"],
-                            "8": question["label8"],
-                            "9": question["label9"],
-                            "10": question["label10"],
+                            "1": question["label1"].strip(),
+                            "2": question["label2"].strip(),
+                            "3": question["label3"].strip(),
+                            "4": question["label4"].strip(),
+                            "5": question["label5"].strip(),
+                            "6": question["label6"].strip(),
+                            "7": question["label7"].strip(),
+                            "8": question["label8"].strip(),
+                            "9": question["label9"].strip(),
+                            "10": question["label10"].strip(),
                         }
 
                     new_question, created = Question.objects.get_or_create(
-                        type=question["type"],
+                        type=question["type"].strip(),
                         reverse_question=(
-                            True if question["reverse_question"] == "Yes" else False
+                            True
+                            if question["reverse_question"].strip() == "Yes"
+                            else False
                         ),
                         behavior=behavior,
                         competency=competency,
-                        self_question=question["self_question"],
-                        observer_question=question["observer_question"],
-                        rating_type=question["rating_type"],
+                        self_question=question["self_question"].strip(),
+                        observer_question=question["observer_question"].strip(),
+                        rating_type=question["rating_type"].strip(),
                         label=labels,
                         correct_answer=question["correct_answer"],
+                        response_type=question["response_type"].strip(),
                     )
                     new_question.save()
 
@@ -3480,7 +3483,7 @@ def generate_graph_for_participant_for_post_assessment(
                     str(question.id)
                 )
             )
-         
+
             if question.response_type == "correct_answer":
 
                 correct_answer = (
@@ -3488,9 +3491,9 @@ def generate_graph_for_participant_for_post_assessment(
                     .first()
                     .correct_answer
                 )
-              
+
                 if str(pre_assessment_participant_response_value) in correct_answer:
-              
+
                     pre_competency_object[question.competency.name] = (
                         pre_competency_object[question.competency.name] + 1
                     )
@@ -3509,7 +3512,6 @@ def generate_graph_for_participant_for_post_assessment(
                     if pre_assessment_participant_response_value:
                         if question.reverse_question:
 
-                            
                             pre_competency_object[
                                 question.competency.name
                             ] = pre_competency_object[question.competency.name] + (
@@ -4501,9 +4503,16 @@ class GetProjectWiseReport(APIView):
     def get(self, request, project_id, report_to_download):
         try:
             spider = self.request.query_params.get("spider", None)
-            print("spider",spider)
+
             project = SchedularProject.objects.get(id=project_id)
-            batches = SchedularBatch.objects.filter(project__id=project.id)
+            batch_id =  request.query_params.get("batch_id", None)
+    
+            if batch_id:
+                batches = SchedularBatch.objects.filter(id=int(batch_id))
+                batch_name =None
+            else:
+                
+                batches = SchedularBatch.objects.filter(project__id=project.id)
 
             pre_compentency_percentages = []
             post_compentency_percentages = []
@@ -4511,6 +4520,8 @@ class GetProjectWiseReport(APIView):
             total_participant = 0
             total_attended_both_assessments = 0
             for batch in batches:
+                if batch_id:
+                    batch_name =batch.name
                 total_participant = total_participant + len(batch.learners.all())
                 assessments = Assessment.objects.filter(
                     assessment_modal__lesson__course__batch=batch
@@ -4572,6 +4583,7 @@ class GetProjectWiseReport(APIView):
                 "attended_pre_participant": len(pre_compentency_percentages),
                 "attended_post_participant": len(post_compentency_percentages),
                 "attended_both_assessments": total_attended_both_assessments,
+                "batch_name": batch_name if batch_id else None,
             }
 
             if report_to_download == "pre":
@@ -4652,7 +4664,7 @@ class GetProjectWiseReport(APIView):
 
         except Exception as e:
             print(str(e))
-
+            return Response({"error": "Failed to download report"}, status=500)
 
 class AssessmentsResponseStatusDownload(APIView):
     permission_classes = [IsAuthenticated]
@@ -4720,3 +4732,5 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": "Failed to get data"}, status=500)
+
+
