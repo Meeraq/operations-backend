@@ -9,7 +9,8 @@ from .models import (
     CoachSchedularAvailibilty,
     RequestAvailibilty,
     SchedularSessions,
-    
+    FacilitatorPricing,
+    CoachPricing,
     SchedularUpdate,
 )
 from api.models import Coach
@@ -27,6 +28,9 @@ class SessionItemSerializer(serializers.Serializer):
     duration = serializers.IntegerField()
     order = serializers.IntegerField(required=False, allow_null=True)
     description = serializers.CharField(required=False)
+    price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, allow_null=True, required=False
+    )
 
 
 class SchedularBatchSerializer(serializers.ModelSerializer):
@@ -102,7 +106,14 @@ class BatchSerializer(serializers.ModelSerializer):
 class CoachBasicDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coach
-        fields = ["id", "first_name", "last_name", "email", "phone"]
+        fields = [
+            "id",
+            "first_name",
+            "last_name",
+            "email",
+            "phone","active_inactive",
+            "phone_country_code",
+        ]
 
 
 class AvailabilitySerializer(serializers.ModelSerializer):
@@ -143,7 +154,6 @@ class RequestAvailibiltySerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-
 class UpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularUpdate
@@ -162,3 +172,15 @@ class SchedularBatchDepthTwoSerializer(serializers.ModelSerializer):
         model = SchedularBatch
         fields = "__all__"
         depth = 2
+
+
+class FacilitatorPricingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FacilitatorPricing
+        fields = "__all__"
+
+
+class CoachPricingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachPricing
+        fields = "__all__"
