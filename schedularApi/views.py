@@ -794,7 +794,7 @@ def update_live_session(request, live_session_id):
                 ):
                     try:
                         learners = live_session.batch.learners.all()
-                        facilitators = live_session.batch.facilitator.all()
+                        facilitators = [live_session.facilitator]
                         attendees = []
 
                         # Adding learners to attendees list
