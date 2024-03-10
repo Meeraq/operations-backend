@@ -2191,7 +2191,7 @@ def send_tomorrow_action_items_data():
                             "nudge_scheduled_for"
                         ].strftime("%d-%m-%Y %H:%M")
                         projects_data[project.name]["nudges"].append(nudge)
-        
+
         assessments = Assessment.objects.filter(
             assessment_end_date__gt=current_date,
             status="ongoing",
@@ -2199,7 +2199,9 @@ def send_tomorrow_action_items_data():
         )
         assessment_data = []
         for assessment in assessments:
-            assessment_lesson = AssessmentLesson.objects.filter(assessment_modal =assessment ).first()
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
             if not assessment_lesson:
                 total_responses_count = ParticipantResponse.objects.filter(
                     assessment=assessment
@@ -2224,5 +2226,29 @@ def send_tomorrow_action_items_data():
             json.loads(env("ACTION_ITEMS_MAIL_CC_EMAILS")),
         )
 
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def update_lesson_status_according_to_drip_dates():
+    try:
+        today = date.today()
+        lessons = Lesson.objects.filter(Q(drip_date=today) | Q(live_session__date_time__date=today))
+        for lesson in lessons:
+            if lesson.lesson_type == "assessment":
+                assessment = Assessment.objects.filter(lesson=lesson).first()
+
+                assessment_modal = Assessment.objects.get(
+                    id=assessment.assessment_modal.id
+                )
+                lesson.status == "public"
+                assessment_modal.status = "ongoing"
+                lesson.save()
+                assessment_modal.save()
+            else:
+
+                lesson.status = "public"
+                lesson.save()
     except Exception as e:
         print(str(e))
