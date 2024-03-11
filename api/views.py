@@ -746,6 +746,61 @@ def add_contact_in_wati(user_type, name, phone):
         pass
 
 
+
+
+def get_booked_session_of_user_confirmed_avalibility(user_type, user_id, date):
+    date_obj = datetime.strptime(date, "%Y-%m-%d")
+    start_time = date_obj.replace(hour=0, minute=0, second=0)
+    # Set the end time of the given date at 23:59:59
+    end_time = date_obj.replace(hour=23, minute=59, second=59)
+    # Convert the datetime objects to timestamps
+    start_timestamp = int(start_time.timestamp())
+    end_timestamp = int(end_time.timestamp())
+
+    if user_type == "hr":
+        session_requests = SessionRequestCaas.objects.filter(
+            hr__id=user_id,
+            confirmed_availability__start_time__range=(start_timestamp, end_timestamp),
+        )
+    elif user_type == "learner":
+        session_requests = SessionRequestCaas.objects.filter(
+            learner__id=user_id,
+            confirmed_availability__start_time__range=(start_timestamp, end_timestamp),
+        )
+    elif user_type == "coach":
+        session_requests = SessionRequestCaas.objects.filter(
+            coach__id=user_id,
+            confirmed_availability__start_time__range=(start_timestamp, end_timestamp),
+        )
+    return session_requests
+
+def check_if_the_avalibility_is_already_booked(user_id, availability):
+
+    availability_start_time = datetime.fromtimestamp(
+        int(availability.start_time) / 1000
+    )
+
+    availability_end_time = datetime.fromtimestamp(int(availability.end_time) / 1000)
+
+    booked_sessions = get_booked_session_of_user_confirmed_avalibility(
+        "coach", user_id, availability_start_time.strftime("%Y-%m-%d")
+    )
+
+    for session_request in booked_sessions:
+    
+        session_start_time = datetime.fromtimestamp(
+            int(session_request.confirmed_availability.start_time) / 1000
+        )
+        session_end_time = datetime.fromtimestamp(
+            int(session_request.confirmed_availability.end_time) / 1000
+        )
+        if (
+            availability_start_time <= session_end_time
+            and availability_end_time >= session_start_time
+        ):
+            return True
+    return False
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def create_pmo(request):
@@ -2366,7 +2421,19 @@ def book_session_caas(request):
     microsoft_calendar_event = CalendarEvent.objects.filter(
         session=session_request, account_type="microsoft"
     ).first()
-
+    confirmed_availability = Availibility.objects.get(id=request.data.get("confirmed_availability"))
+    check_booking = check_if_the_avalibility_is_already_booked(
+            request.data["coach"], confirmed_availability
+        )
+  
+    if check_booking:
+        return Response(
+            {
+                "error": "Sorry, this time is already booked. Please choose a different time.."
+            },
+            status=500,
+        )
+    
     session_request.confirmed_availability = Availibility.objects.get(
         id=request.data.get("confirmed_availability")
     )
@@ -5409,6 +5476,17 @@ def schedule_session_directly(request, session_id):
         return Response({"error": "Please provide the availability."}, status=404)
 
     availability = Availibility.objects.get(id=time_arr[0])
+    if request.data["user_type"] == "coach":
+        check_booking = check_if_the_avalibility_is_already_booked(
+            request.data["user_id"], availability
+        )
+    if check_booking:
+        return Response(
+            {
+                "error": "Sorry, this time is already booked. Please choose a different time.."
+            },
+            status=500,
+        )
     if request.data["user_type"] == "pmo":
         pmo = Pmo.objects.get(id=request.data["user_id"])
         session.pmo = pmo
