@@ -281,6 +281,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.update_schedular_session_status",
         "schedule": crontab(hour=16, minute=30, day_of_week="*"),  # 10 PM Night
     },
+    "update_caas_session_status": {
+        "task": "schedularApi.tasks.update_caas_session_status",
+        "schedule": crontab(hour=16, minute=30, day_of_week="*"),  # 10 PM Night
+    },
     "generate_invoice_reminder_on_first_of_month": {
         "task": "schedularApi.tasks.generate_invoice_reminder_on_first_of_month",
         "schedule": crontab(hour=3, minute=30, day_of_month="25"),  # 10 AM IST

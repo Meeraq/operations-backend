@@ -882,12 +882,10 @@ def approve_facilitator(request):
     try:
         # Get the Coach object
         unapproved_coach = request.data["coach"]
-        room_id = request.data["room_id"]
         coach = Facilitator.objects.get(id=unapproved_coach["id"])
 
         # Change the is_approved field to True
         coach.is_approved = True
-        coach.room_id = room_id
         coach.save()
 
         path = f"/profile"
