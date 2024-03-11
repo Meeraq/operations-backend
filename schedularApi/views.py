@@ -67,6 +67,8 @@ from .serializers import (
     SchedularBatchDepthSerializer,
     FacilitatorPricingSerializer,
     CoachPricingSerializer,
+    ExpenseSerializerDepthOne,
+    ExpenseSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -83,6 +85,7 @@ from .models import (
     CalendarInvites,
     CoachPricing,
     FacilitatorPricing,
+    Expense,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -5486,3 +5489,98 @@ def edit_facilitator_pricing(request, facilitator_pricing_id):
         serializer.save()
         return Response(serializer.data, status=200)
     return Response(serializer.errors, status=400)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_expense(request):
+    try:
+        name = request.data.get("name")
+        description = request.data.get("description")
+        date_of_expense = request.data.get("date_of_expense")
+        live_session = request.data.get("live_session")
+        batch = request.data.get("batch")
+        facilitator = request.data.get("facilitator")
+        file = request.data.get("file")
+
+        if not file:
+            return Response(
+                {"error": "Please upload file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        if not batch or not facilitator:
+            return Response(
+                {"error": "Failed to create expense."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        if name and date_of_expense and description:
+            facilitator = Facilitator.objects.get(id=int(facilitator))
+            batch = SchedularBatch.objects.get(id=int(batch))
+            if live_session:
+                live_session = LiveSession.objects.filter(id=int(live_session)).first()
+            expense = Expense.objects.create(
+                name=name,
+                description=description,
+                date_of_expense=date_of_expense,
+                live_session=live_session,
+                batch=batch,
+                facilitator=facilitator,
+                file=file,
+            )
+
+            return Response({"message": "Expense created successfully!"}, status=201)
+        else:
+            return Response(
+                {"error": "Fill in all the required feild"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to create expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_expense_for_facilitator(request, batch_id, usertype, user_id):
+    try:
+        expenses = []
+        if usertype == "facilitator":
+            expenses = Expense.objects.filter(
+                batch__id=batch_id, facilitator__id=user_id
+            )
+
+        elif usertype == "pmo":
+            expenses = Expense.objects.filter(batch__id=batch_id)
+
+        serializer = ExpenseSerializerDepthOne(expenses, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to create expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_status_expense(request):
+    try:
+        status = request.data.get("status")
+        expense_id = request.data.get("expense_id")
+
+        expenses = Expense.objects.get(id=int(expense_id))
+        expenses.status = status
+        expenses.save()
+        return Response(
+            {"success": f"Expense {status.title()} successfully!"},
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to {status.title()} the expense."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

@@ -240,3 +240,31 @@ class FacilitatorPricing(models.Model):
 
     def __str__(self):
         return f"{self.facilitator.first_name} {self.facilitator.last_name} pricing for {self.project.name} "
+
+
+class Expense(models.Model):
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("accepted", "Accepted"),
+        ("rejected", "Rejected"),
+    ]
+
+    name = models.CharField(max_length=255)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    facilitator = models.ForeignKey(
+        Facilitator,
+        on_delete=models.CASCADE,
+    )
+    date_of_expense = models.DateField(blank=True, null=True)
+    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    live_session = models.ForeignKey(
+        LiveSession, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    file = models.FileField(upload_to="expenses/", blank=True, null=True)
+    status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="pending")
+    update_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name}"
