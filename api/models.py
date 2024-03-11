@@ -123,7 +123,7 @@ class Profile(models.Model):
         ("hr", "hr"),
         ("superadmin", "superadmin"),
         ("facilitator", "facilitator"),
-        ("finance", "finance")
+        ("finance", "finance"),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)
@@ -140,6 +140,7 @@ class SuperAdmin(models.Model):
     def __str__(self):
         return self.name
 
+
 class Finance(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -150,11 +151,19 @@ class Finance(models.Model):
     def __str__(self):
         return self.name
 
+
 class Pmo(models.Model):
+
+    SUB_ROLE_CHOICES = [
+        ("manager", "Manager"),
+        ("junior_pmo", "Junior PMO"),
+    ]
+
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
+    sub_role = models.CharField(max_length=50, choices=SUB_ROLE_CHOICES, blank=True,default="manager")
     room_id = models.CharField(max_length=50, blank=True)
 
     def __str__(self):
@@ -262,6 +271,7 @@ class Facilitator(models.Model):
     fees_per_hour = models.CharField(max_length=20, blank=True)
     fees_per_day = models.CharField(max_length=20, blank=True)
     topic = models.JSONField(default=list, blank=True)
+    is_approved = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -365,6 +375,12 @@ class Project(models.Model):
     enable_emails_to_hr_and_coachee = models.BooleanField(default=True)
     masked_coach_profile = models.BooleanField(default=False)
     automated_reminder = models.BooleanField(blank=True, default=True)
+    junior_pmo = models.ForeignKey(
+        Pmo,
+        null=True,
+        on_delete=models.SET_NULL,
+        blank=True,
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -374,7 +390,7 @@ class Project(models.Model):
 
 
 class Update(models.Model):
-    pmo = models.ForeignKey(Pmo, on_delete=models.CASCADE)
+    pmo = models.ForeignKey(Pmo, on_delete=models.SET_NULL, null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     message = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)

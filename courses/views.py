@@ -31,6 +31,8 @@ from .models import (
     AssignmentLesson,
     AssignmentLessonResponse,
     FacilitatorLesson,
+    Feedback,
+    CoachingSessionsFeedbackResponse,
 )
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
@@ -64,11 +66,12 @@ from .serializers import (
     AssignmentResponseSerializerDepthSix,
     AssignmentResponseSerializer,
     FacilitatorSerializer,
+    FeedbackDepthOneSerializer,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 from rest_framework.views import APIView
-from api.models import User, Learner, Profile, Role, Coach
+from api.models import User, Learner, Profile, Role, Coach, SessionRequestCaas
 from schedularApi.models import (
     LiveSession,
     SchedularBatch,
@@ -2101,16 +2104,19 @@ def get_all_feedbacks_report(request):
         lesson__status="public", lesson__course__status="public"
     )
     hr_id = request.query_params.get("hr", None)
+    facilitator_id = request.query_params.get("facilitator_id")
     if hr_id:
         feedbacks = feedbacks.filter(lesson__course__batch__project__hr__id=hr_id)
-    facilitator_id = request.query_params.get("facilitator_id")
     if facilitator_id:
         feedbacks = feedbacks.filter(live_session__facilitator__id=facilitator_id)
     for feedback in feedbacks:
-        course_enrollments = CourseEnrollment.objects.filter(
-            course=feedback.lesson.course
-        )
-        total_participants = course_enrollments.count()
+        facilitator_name = ""
+        if feedback.live_session and feedback.live_session.facilitator:
+            facilitator_name = feedback.live_session.facilitator.first_name + " " + feedback.live_session.facilitator.last_name
+        # course_enrollments = CourseEnrollment.objects.filter(
+        #     course=feedback.lesson.course
+        # )
+        total_participants = feedback.lesson.course.batch.learners.count()
         feedback_lesson_responses = FeedbackLessonResponse.objects.filter(
             feedback_lesson=feedback
         )
@@ -2120,31 +2126,13 @@ def get_all_feedbacks_report(request):
             if total_participants > 0
             else 0
         )
-        questions_serializer = QuestionSerializer(feedback.questions, many=True)
-        question_data = {
-            question["id"]: {**question, "descriptive_answers": [], "ratings": []}
-            for question in questions_serializer.data
-        }
-        for response in feedback_lesson_responses:
-            for answer in response.answers.all():
-                question_id = answer.question.id
-                if answer.question.type.startswith("rating"):
-                    question_data[question_id]["ratings"].append(answer.rating)
-                elif answer.question.type == "descriptive_answer":
-                    question_data[question_id]["descriptive_answers"].append(
-                        answer.text_answer
-                    )
         nps = None
-        for question_id, data in question_data.items():
-            # Calculate average rating for each question
-            ratings = data["ratings"]
-            if ratings:
-                if data["type"] == "rating_0_to_10":
-                    # Calculate NPS
-
-                    data["nps"] = calculate_nps(ratings)
-                    nps = data["nps"]
-                    break
+        answers = Answer.objects.filter(question__type = "rating_0_to_10", question__feedbacklesson=feedback)
+        answer_ratings = []
+        for answer in answers:
+            answer_ratings.append(answer.rating)
+        if len(answer_ratings) > 0:
+            nps = calculate_nps(answer_ratings) 
         res.append(
             {
                 "id": feedback.id,
@@ -2155,6 +2143,7 @@ def get_all_feedbacks_report(request):
                 "total_responses": total_responses,
                 "response_percentage": response_percentage,
                 "nps": nps,
+                "facilitator_name":facilitator_name
             }
         )
 
@@ -2172,7 +2161,6 @@ def get_consolidated_feedback_report(request):
             total_participant_count = 0
             for batch in all_batches:
                 total_participant_count += batch.learners.count()
-            for batch in all_batches:
                 # Get live sessions for the current batch
                 live_sessions = LiveSession.objects.filter(batch=batch)
                 for live_session in live_sessions:
@@ -2382,7 +2370,7 @@ class AssignCourseTemplateToBatch(APIView):
                 assessment_creation = False
                 if not original_lessons.filter(lesson_type="assessment").exists():
                     if batch.project.pre_post_assessment:
-                        assessment_creation = True
+                        assessment_creation = True 
                         lesson1 = Lesson.objects.create(
                             course=new_course,
                             name="Pre Assessment",
@@ -2581,7 +2569,7 @@ class AssignCourseTemplateToBatch(APIView):
                     )
 
                     assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
-                    
+
             return Response(
                 {
                     "message": "Course assigned successfully.",
@@ -3320,6 +3308,7 @@ def get_consolidated_feedback_download_report(request, live_session_id):
     headers_list = list(headers)
     headers_list.insert(0, "Participant Name")
     headers_list.insert(1, "Feedback Batch")
+    headers_list.insert(2, "Facilitator")
 
     for col_num, header in enumerate(headers_list, 1):
         ws.cell(row=1, column=col_num, value=header)
@@ -3328,10 +3317,24 @@ def get_consolidated_feedback_download_report(request, live_session_id):
         data = ["-" for _ in headers_list]
         participant_index = headers_list.index("Participant Name")
         feedback_batch_index = headers_list.index("Feedback Batch")
+        facilitator_index=headers_list.index("Facilitator")
         data[participant_index] = feedback_lesson_response.learner.name
         data[feedback_batch_index] = (
             feedback_lesson_response.feedback_lesson.lesson.course.batch.name
         )
+        # if (
+        #     feedback_lesson_response
+        #     and feedback_lesson_response.feedback_lesson
+        #     and feedback_lesson_response.feedback_lesson.live_session
+        #     and feedback_lesson_response.feedback_lesson.live_session.facilitator
+        # ):
+        #     data[facilitator_index] = (
+        #         feedback_lesson_response.feedback_lesson.live_session.facilitator.first_name
+        #         + " "
+        #         + feedback_lesson_response.feedback_lesson.live_session.facilitator.last_name
+        #     )
+        # else:
+        #     data[facilitator_index] = "N/A"
         for answer in feedback_lesson_response.answers.all():
             question_index_in_headers = headers_list.index(answer.question.text)
             if answer.question.type == "descriptive_answer":
@@ -3593,7 +3596,6 @@ class GetAllNudgesOfSchedularProjects(APIView):
             return Response({"error": "Failed to get data"}, status=500)
 
 
-
 class CreateAssignmentLesson(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -3771,6 +3773,160 @@ class UpdateAssignmentLessonFile(APIView):
                 {"message": f"Failed to update file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def submit_feedback(request, feedback_id, learner_id):
+    try:
+    
+        feedback = get_object_or_404(Feedback, id=feedback_id)
+        learner = get_object_or_404(Learner, id=learner_id)
+    except (
+        Feedback.DoesNotExist,
+        Learner.DoesNotExist,
+    ) as e:
+        return Response(
+            {"error": "Failed to submit feedback."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    caas_session_id = request.data.get("caas_session_id", "")
+    schedular_session_id = request.data.get("schedular_session_id", "")
+    caas_session = None
+    schedular_session = None
+    if caas_session_id:
+        caas_session = SessionRequestCaas.objects.get(id=caas_session_id)
+    if schedular_session_id:
+        schedular_session = SchedularSessions.objects.get(id=schedular_session_id)
+    if caas_session or schedular_session:
+        answers_data = request.data.get("answers", )
+        serializer = AnswerSerializer(data=answers_data, many=True)
+        if serializer.is_valid():
+            answers = serializer.save()
+            coaching_session_response = CoachingSessionsFeedbackResponse.objects.create(
+                feedback=feedback,
+                learner=learner,
+                caas_session=caas_session,
+                schedular_session=schedular_session,
+            )
+            coaching_session_response.answers.set(answers)
+            coaching_session_response.save()
+            return Response(
+                {"detail": "Feedback submitted successfully"}, status=status.HTTP_200_OK
+            )
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        return Response(
+            {"error": "Failed to submit feedback"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_feedback(request, feedback_id):
+    feedback = Feedback.objects.get(id=feedback_id)
+    serializer = FeedbackDepthOneSerializer(feedback)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_end_meeting_feedback_response_data(request):
+
+    try:
+        coach_session_feedback_responses = (
+            CoachingSessionsFeedbackResponse.objects.all()
+        )
+        data = []
+        for coach_session_feedback_response in coach_session_feedback_responses:
+            temp = {}
+            cass_session = coach_session_feedback_response.caas_session
+            if cass_session:
+                if cass_session.coach:
+                    coach_name = (
+                        cass_session.coach.first_name
+                        + " "
+                        + cass_session.coach.last_name
+                    )
+
+                else:
+                    coach_name = None
+
+                temp = {
+                    "feedback_responses_id": coach_session_feedback_response.id,
+                    "coach_name": coach_name,
+                    "project_name": cass_session.project.name,
+                    "org_name": cass_session.project.organisation.name,
+                    "coachee_name": cass_session.learner.name,
+                    "session_type": cass_session.session_type,
+                    "session_number": cass_session.session_number,
+                    "type": "CAAS",
+                }
+            else:
+                seeq_session = coach_session_feedback_response.schedular_session
+
+                temp = {
+                    "feedback_responses_id": coach_session_feedback_response.id,
+                    "coach_name": seeq_session.availibility.coach.first_name
+                    + " "
+                    + seeq_session.availibility.coach.last_name,
+                    "project_name": seeq_session.coaching_session.batch.project.name,
+                    "org_name": seeq_session.coaching_session.batch.project.organisation.name,
+                    "coachee_name": seeq_session.learner.name,
+                    "session_type": seeq_session.coaching_session.session_type,
+                    "session_number": seeq_session.coaching_session.coaching_session_number,
+                    "type": "SEEQ",
+                }
+
+            for answer in coach_session_feedback_response.answers.all():
+                if answer.question.type == "rating_1_to_5":
+                    temp["sesson_rating"] = answer.rating
+                    break
+
+            data.append(temp)
+
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_session_feedback_response_data(request, feedback_response_id):
+
+    try:
+        coach_session_feedback_responses = CoachingSessionsFeedbackResponse.objects.get(
+            id=feedback_response_id
+        )
+
+        data = []
+
+        for answer in coach_session_feedback_responses.answers.all():
+
+            temp = {
+                "question": answer.question.text,
+                "rating": answer.rating,
+                "selected_answer": answer.selected_options,
+                "type": answer.question.type,
+            }
+
+            data.append(temp)
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+        
+
 
 class FacilitatorWiseFeedback(APIView):
     permission_classes = [IsAuthenticated]
