@@ -4734,3 +4734,35 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
             return Response({"error": "Failed to get data"}, status=500)
 
 
+
+
+
+class GetAssessmentBatchAndProject(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, assessment_id):
+        assessment = get_object_or_404(Assessment, id=assessment_id)
+        try:
+            # get batch and project of assessment
+            assessment_lessons =  AssessmentLesson.objects.filter(assessment_modal__id = assessment_id)
+            if assessment_lessons.exists():
+                assessment_lesson = assessment_lessons.first()
+                batch = assessment_lesson.lesson.course.batch
+                project = batch.project
+                return Response({
+                    "batch" : {
+                        "id" : batch.id
+                    },"project" : {
+                        "id" : project.id
+                    }
+                })
+            else:
+                return Response(
+                {"error": "Batch and project not found for the assessment"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        except Exception as e:
+            # Handle specific exceptions if needed
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
