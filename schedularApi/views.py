@@ -67,6 +67,8 @@ from .serializers import (
     SchedularBatchDepthSerializer,
     FacilitatorPricingSerializer,
     CoachPricingSerializer,
+    ExpenseSerializerDepthOne,
+    ExpenseSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -83,6 +85,7 @@ from .models import (
     CalendarInvites,
     CoachPricing,
     FacilitatorPricing,
+    Expense,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -251,6 +254,9 @@ def create_project_schedular(request):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_name"]
     ).first()
+    junior_pmo = None
+    if "junior_pmo" in request.data:
+        junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
     if not organisation:
         organisation = Organisation(
             name=request.data["organisation_name"], image_url=request.data["image_url"]
@@ -271,6 +277,7 @@ def create_project_schedular(request):
             nudges=request.data["nudges"],
             pre_post_assessment=request.data["pre_post_assessment"],
             is_finance_enabled=request.data["finance"],
+            junior_pmo=junior_pmo,
         )
         schedularProject.save()
     except IntegrityError:
@@ -317,12 +324,20 @@ def create_project_schedular(request):
 @permission_classes([IsAuthenticated])
 def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
+    pmo_id  = request.query_params.get("pmo")
+    projects = None
+    if pmo_id:
+        pmo = Pmo.objects.get(id = int(pmo_id) )
+        if pmo.sub_role == "junior_pmo":
+            projects = SchedularProject.objects.filter(junior_pmo=pmo)
+        else:
+            projects = SchedularProject.objects.all() 
 
     if status:
 
-        projects = SchedularProject.objects.exclude(status="completed")
+        projects = projects.exclude(status="completed")
     else:
-        projects = SchedularProject.objects.all()
+        projects = projects
 
     serializer = SchedularProjectSerializer(projects, many=True)
     for project_data in serializer.data:
@@ -3677,6 +3692,9 @@ def edit_schedular_project(request, project_id):
         return Response(
             {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
         )
+    junior_pmo = None
+    if "junior_pmo" in request.data:
+        junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
     # Assuming 'request.data' contains the updated project information
     project_name = request.data.get("project_name")
     organisation_id = request.data.get("organisation_id")
@@ -3709,6 +3727,7 @@ def edit_schedular_project(request, project_id):
     project.nudges = request.data.get("nudges")
     project.pre_post_assessment = request.data.get("pre_post_assessment")
     project.is_finance_enabled = request.data.get("finance")
+    project.junior_pmo = junior_pmo
     project.save()
     if not project.pre_post_assessment:
         batches = SchedularBatch.objects.filter(project=project)
@@ -3776,6 +3795,15 @@ def get_live_sessions_by_status(request):
 
     else:
         queryset = LiveSession.objects.all()
+
+    pmo_id = request.query_params.get("pmo", None)
+
+    if pmo_id:
+        pmo = Pmo.objects.get(id = int(pmo_id))
+        if pmo.sub_role == "junior_pmo":
+            queryset = queryset.filter(batch__project__junior_pmo=pmo)
+        else:
+            queryset = LiveSession.objects.all()
     hr_id = request.query_params.get("hr", None)
     if hr_id:
         queryset = queryset.filter(batch__project__hr__id=hr_id)
@@ -5558,3 +5586,98 @@ def edit_facilitator_pricing(request, facilitator_pricing_id):
         serializer.save()
         return Response(serializer.data, status=200)
     return Response(serializer.errors, status=400)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_expense(request):
+    try:
+        name = request.data.get("name")
+        description = request.data.get("description")
+        date_of_expense = request.data.get("date_of_expense")
+        live_session = request.data.get("live_session")
+        batch = request.data.get("batch")
+        facilitator = request.data.get("facilitator")
+        file = request.data.get("file")
+
+        if not file:
+            return Response(
+                {"error": "Please upload file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        if not batch or not facilitator:
+            return Response(
+                {"error": "Failed to create expense."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        if name and date_of_expense and description:
+            facilitator = Facilitator.objects.get(id=int(facilitator))
+            batch = SchedularBatch.objects.get(id=int(batch))
+            if live_session:
+                live_session = LiveSession.objects.filter(id=int(live_session)).first()
+            expense = Expense.objects.create(
+                name=name,
+                description=description,
+                date_of_expense=date_of_expense,
+                live_session=live_session,
+                batch=batch,
+                facilitator=facilitator,
+                file=file,
+            )
+
+            return Response({"message": "Expense created successfully!"}, status=201)
+        else:
+            return Response(
+                {"error": "Fill in all the required feild"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to create expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_expense_for_facilitator(request, batch_id, usertype, user_id):
+    try:
+        expenses = []
+        if usertype == "facilitator":
+            expenses = Expense.objects.filter(
+                batch__id=batch_id, facilitator__id=user_id
+            )
+
+        elif usertype == "pmo":
+            expenses = Expense.objects.filter(batch__id=batch_id)
+
+        serializer = ExpenseSerializerDepthOne(expenses, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to create expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_status_expense(request):
+    try:
+        status = request.data.get("status")
+        expense_id = request.data.get("expense_id")
+
+        expenses = Expense.objects.get(id=int(expense_id))
+        expenses.status = status
+        expenses.save()
+        return Response(
+            {"success": f"Expense {status.title()} successfully!"},
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to {status.title()} the expense."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

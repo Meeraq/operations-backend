@@ -153,10 +153,17 @@ class Finance(models.Model):
 
 
 class Pmo(models.Model):
+
+    SUB_ROLE_CHOICES = [
+        ("manager", "Manager"),
+        ("junior_pmo", "Junior PMO"),
+    ]
+
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
+    sub_role = models.CharField(max_length=50, choices=SUB_ROLE_CHOICES, blank=True,default="manager")
     room_id = models.CharField(max_length=50, blank=True)
 
     def __str__(self):
@@ -370,6 +377,12 @@ class Project(models.Model):
     email_reminder = models.BooleanField(blank=True, default=False)
     whatsapp_reminder = models.BooleanField(blank=True, default=False)
     calendar_invites = models.BooleanField(blank=True, default=False)
+    junior_pmo = models.ForeignKey(
+        Pmo,
+        null=True,
+        on_delete=models.SET_NULL,
+        blank=True,
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -379,7 +392,7 @@ class Project(models.Model):
 
 
 class Update(models.Model):
-    pmo = models.ForeignKey(Pmo, on_delete=models.CASCADE)
+    pmo = models.ForeignKey(Pmo, on_delete=models.SET_NULL, null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     message = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
