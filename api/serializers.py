@@ -38,6 +38,7 @@ from .models import (
     FinalizeCoachActivity,
     SuperAdmin,
     Facilitator,
+    APILog
 )
 from django.contrib.auth.models import User
 
@@ -464,3 +465,12 @@ class FacilitatorBasicDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coach
         fields = ["id", "first_name", "last_name", "email", "phone"]
+
+
+
+class APILogSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', required=False)
+
+    class Meta:
+        model = APILog
+        fields = ['path', 'username', 'created_at', 'method']

@@ -262,6 +262,7 @@ class Facilitator(models.Model):
     fees_per_hour = models.CharField(max_length=20, blank=True)
     fees_per_day = models.CharField(max_length=20, blank=True)
     topic = models.JSONField(default=list, blank=True)
+    is_approved = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -459,6 +460,7 @@ class SessionRequestCaas(models.Model):
     session_duration = models.IntegerField(blank=True, default=None, null=True)
     status_updated_at = models.DateTimeField(blank=True, null=True, default=None)
     billable_session_number = models.IntegerField(blank=True, default=None, null=True)
+    is_extra = models.BooleanField(blank=True, default=False)
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
