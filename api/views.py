@@ -2125,7 +2125,22 @@ def add_project_struture(request):
         return Response({"message": "Project does not exist"}, status=400)
     project.project_structure = request.data.get("project_structure", [])
     project.currency = request.data.get("currency", "")
+    project.steps["project_structure"]["status"] = "complete"
     project.save()
+
+    #  adding project structure for coach if project structure not added yet.
+    for coach_status in project.coaches_status.all():
+        coach_status.project_structure = project.project_structure
+        coach_status.save()
+
+    if not project.coach_consent_mandatory:
+        for coach_status in project.coaches_status.filter(is_consent_asked=True):
+            if not coach_status.status["consent"]["status"] == "reject":
+                coach_status.status["consent"]["status"] = "select"
+                if project.steps["project_structure"]["status"] == "complete":
+                    coach_status.status["project_structure"]["status"] = "select"
+            coach_status.save()
+            
     return Response({"message": "Structure added", "details": ""}, status=200)
 
 
