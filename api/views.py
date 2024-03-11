@@ -5594,8 +5594,8 @@ def schedule_session_directly(request, session_id):
                 status=500,
             )
         if request.data["user_type"] == "pmo":
-                pmo = Pmo.objects.get(id=request.data["user_id"])
-                session.pmo = pmo
+            pmo = Pmo.objects.get(id=request.data["user_id"])
+            session.pmo = pmo
 
         if request.data["user_type"] == "coach":
             coach = Coach.objects.get(id=request.data["user_id"])
