@@ -12,6 +12,7 @@ from .models import (
     FacilitatorPricing,
     CoachPricing,
     SchedularUpdate,
+    Expense,
 )
 from api.models import Coach
 
@@ -184,3 +185,18 @@ class CoachPricingSerializer(serializers.ModelSerializer):
     class Meta:
         model = CoachPricing
         fields = "__all__"
+
+
+
+class ExpenseSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = Expense
+        fields = "__all__"
+        depth = 1
+
+
+class ExpenseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Expense
+        fields = "__all__"
+        
