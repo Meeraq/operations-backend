@@ -276,7 +276,7 @@ def create_project_schedular(request):
             calendar_invites=request.data["calendar_invites"],
             nudges=request.data["nudges"],
             pre_post_assessment=request.data["pre_post_assessment"],
-            is_finance_enabled = request.data["finance"]
+            is_finance_enabled = request.data["finance"],
             junior_pmo=junior_pmo,
         )
         schedularProject.save()
@@ -325,7 +325,7 @@ def create_project_schedular(request):
 def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
     pmo_id  = request.query_params.get("pmo")
-
+    projects = None
     if pmo_id:
         pmo = Pmo.objects.get(id = int(pmo_id) )
         if pmo.sub_role == "junior_pmo":

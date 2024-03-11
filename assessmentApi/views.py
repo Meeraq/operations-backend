@@ -45,7 +45,7 @@ import json
 import string
 import random
 from django.contrib.auth.models import User
-from api.models import Profile, Learner, Organisation, HR, SentEmailActivity, Role
+from api.models import Profile, Learner, Organisation, HR, SentEmailActivity, Role, Pmo
 from api.serializers import OrganisationSerializer
 from django.core.mail import EmailMessage, BadHeaderError
 from api.serializers import LearnerSerializer
@@ -3183,13 +3183,14 @@ def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp
 
     return encoded_image
 
+
 def generate_spider_web_for_pre_assessment(competency_percentage, total_for_each_comp):
     comp_labels = list(competency_percentage.keys())
     percentage_values = list(competency_percentage.values())
-    
+
     categories = comp_labels
     values = percentage_values
-    
+
     angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
     values += values[:1]
     angles += angles[:1]
@@ -3197,20 +3198,43 @@ def generate_spider_web_for_pre_assessment(competency_percentage, total_for_each
     fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
 
     # Plot the background polygons
-    ax.fill(angles, [100] * len(angles), color='lightgray', alpha=0.7)
+    ax.fill(angles, [100] * len(angles), color="lightgray", alpha=0.7)
 
     # Plot the data
-    ax.plot(angles, values, linewidth=2, linestyle='solid', color='#eb0081', label="Your Competency")
+    ax.plot(
+        angles,
+        values,
+        linewidth=2,
+        linestyle="solid",
+        color="#eb0081",
+        label="Your Competency",
+    )
 
     # Add labels with padding
-    ax.set_thetagrids(np.degrees(angles[:-1]), labels=comp_labels, fontweight='bold', fontsize=6, rotation=45, ha='right')
+    ax.set_thetagrids(
+        np.degrees(angles[:-1]),
+        labels=comp_labels,
+        fontweight="bold",
+        fontsize=6,
+        rotation=45,
+        ha="right",
+    )
 
     # Add percentage values with padding
     for angle, value, label in zip(angles, values[:-1], comp_labels):
-        ax.text(np.degrees(angle), value + 3, f"{value}%", ha='center', va='center', fontsize=6)
+        ax.text(
+            np.degrees(angle),
+            value + 3,
+            f"{value}%",
+            ha="center",
+            va="center",
+            fontsize=6,
+        )
 
     # Add a title with adjusted position
-    plt.title("Your Competency Chart", size=10, color='#eb0081', y=1.1, fontweight='bold')
+    plt.title(
+        "Your Competency Chart", size=10, color="#eb0081", y=1.1, fontweight="bold"
+    )
 
     # Adjust layout for better visibility and centering
     plt.subplots_adjust(left=0.15, right=0.85, top=0.9, bottom=0.1)
@@ -3222,6 +3246,7 @@ def generate_spider_web_for_pre_assessment(competency_percentage, total_for_each
     encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
 
     return encoded_image
+
 
 def generate_graph_for_pre_post_assessment(
     pre_competency_percentage, competency_percentage, total_for_each_comp
@@ -3311,19 +3336,56 @@ def generate_spider_web_for_pre_post_assessment(
     # Plot pre-assessment values
     angles = np.linspace(0, 2 * np.pi, len(comp_labels), endpoint=False).tolist()
     angles += angles[:1]
-    pre_bars = ax.plot(angles, pre_percentage_values + pre_percentage_values[:1], label="Pre-Assessment", color="#eb0081", marker='o')
+    pre_bars = ax.plot(
+        angles,
+        pre_percentage_values + pre_percentage_values[:1],
+        label="Pre-Assessment",
+        color="#eb0081",
+        marker="o",
+    )
 
     # Plot post-assessment values
-    post_bars = ax.plot(angles, post_percentage_values + post_percentage_values[:1], label="Post-Assessment", color="#374e9c", marker='o')
+    post_bars = ax.plot(
+        angles,
+        post_percentage_values + post_percentage_values[:1],
+        label="Post-Assessment",
+        color="#374e9c",
+        marker="o",
+    )
 
-    ax.set_thetagrids(np.degrees(angles[:-1]), labels=comp_labels, fontweight='bold', fontsize=5.5, rotation=45, ha='right')
+    ax.set_thetagrids(
+        np.degrees(angles[:-1]),
+        labels=comp_labels,
+        fontweight="bold",
+        fontsize=5.5,
+        rotation=45,
+        ha="right",
+    )
 
     # Add percentage values on top of the lines
-    for angle, pre_value, post_value in zip(angles, pre_percentage_values, post_percentage_values):
-        ax.text(np.degrees(angle), pre_value, f"{pre_value}%", ha='center', va='center', color='#eb0081', fontsize=8)
-        ax.text(np.degrees(angle), post_value, f"{post_value}%", ha='center', va='center', color='#374e9c', fontsize=8)
+    for angle, pre_value, post_value in zip(
+        angles, pre_percentage_values, post_percentage_values
+    ):
+        ax.text(
+            np.degrees(angle),
+            pre_value,
+            f"{pre_value}%",
+            ha="center",
+            va="center",
+            color="#eb0081",
+            fontsize=8,
+        )
+        ax.text(
+            np.degrees(angle),
+            post_value,
+            f"{post_value}%",
+            ha="center",
+            va="center",
+            color="#374e9c",
+            fontsize=8,
+        )
 
-    ax.legend(loc='upper right')
+    ax.legend(loc="upper right")
 
     plt.title("Your Awareness Level", fontweight="bold", fontsize=12)
     plt.tight_layout()
@@ -3338,6 +3400,7 @@ def generate_spider_web_for_pre_post_assessment(
     encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
 
     return encoded_image
+
 
 def generate_graph_for_participant(
     participant, assessment_id, assessment, project_wise=False
@@ -4199,7 +4262,13 @@ class GetAllAssessments(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        assessments = Assessment.objects.all()
+        pmo = Pmo.objects.filter(email=request.user.username).first()
+        if pmo.sub_role == "junior_pmo":
+            assessments = Assessment.objects.filter(
+                assessment_modal__lesson__course__batch__project__pmo=pmo
+            )
+        else:
+            assessments = Assessment.objects.all()
         assessment_list = []
         for assessment in assessments:
             total_responses_count = ParticipantResponse.objects.filter(
@@ -4208,6 +4277,7 @@ class GetAllAssessments(APIView):
             assessment_lesson = AssessmentLesson.objects.filter(
                 assessment_modal=assessment
             ).first()
+
             assessment_data = {
                 "id": assessment.id,
                 "name": assessment.name,
@@ -4505,13 +4575,13 @@ class GetProjectWiseReport(APIView):
             spider = self.request.query_params.get("spider", None)
 
             project = SchedularProject.objects.get(id=project_id)
-            batch_id =  request.query_params.get("batch_id", None)
-    
+            batch_id = request.query_params.get("batch_id", None)
+
             if batch_id:
                 batches = SchedularBatch.objects.filter(id=int(batch_id))
-                batch_name =None
+                batch_name = None
             else:
-                
+
                 batches = SchedularBatch.objects.filter(project__id=project.id)
 
             pre_compentency_percentages = []
@@ -4521,7 +4591,7 @@ class GetProjectWiseReport(APIView):
             total_attended_both_assessments = 0
             for batch in batches:
                 if batch_id:
-                    batch_name =batch.name
+                    batch_name = batch.name
                 total_participant = total_participant + len(batch.learners.all())
                 assessments = Assessment.objects.filter(
                     assessment_modal__lesson__course__batch=batch
@@ -4591,7 +4661,7 @@ class GetProjectWiseReport(APIView):
                 pre_average_percentage = get_average_for_all_compentency(
                     pre_compentency_percentages
                 )
-                pre_encoded_image=None
+                pre_encoded_image = None
                 if spider:
                     pre_encoded_image = generate_spider_web_for_pre_assessment(
                         pre_average_percentage, None
@@ -4610,7 +4680,7 @@ class GetProjectWiseReport(APIView):
                 post_average_percentage = get_average_for_all_compentency(
                     post_compentency_percentages
                 )
-                post_encoded_image=None
+                post_encoded_image = None
                 if spider:
                     post_encoded_image = generate_spider_web_for_pre_assessment(
                         post_average_percentage, None
@@ -4633,7 +4703,7 @@ class GetProjectWiseReport(APIView):
                 post_average_percentage = get_average_for_all_compentency(
                     post_compentency_percentages
                 )
-                post_encoded_image=None
+                post_encoded_image = None
                 if spider:
                     post_encoded_image = generate_spider_web_for_pre_post_assessment(
                         pre_average_percentage, post_average_percentage, None
@@ -4666,6 +4736,7 @@ class GetProjectWiseReport(APIView):
             print(str(e))
             return Response({"error": "Failed to download report"}, status=500)
 
+
 class AssessmentsResponseStatusDownload(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -4682,6 +4753,7 @@ class AssessmentsResponseStatusDownload(APIView):
         except Exception as e:
             print(str(e))
 
+
 class GetAllAssessmentsOfSchedularProjects(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -4695,7 +4767,7 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
             else:
                 schedular_projects = SchedularProject.objects.filter(id=int(project_id))
             if hr_id:
-                schedular_projects=schedular_projects.filter(hr__id=hr_id)
+                schedular_projects = schedular_projects.filter(hr__id=hr_id)
             for schedular_project in schedular_projects:
                 batches = SchedularBatch.objects.filter(project=schedular_project)
 
@@ -4732,5 +4804,3 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": "Failed to get data"}, status=500)
-
-

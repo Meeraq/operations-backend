@@ -163,7 +163,7 @@ class Pmo(models.Model):
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
-    sub_role = models.CharField(max_length=50, choices=SUB_ROLE_CHOICES, blank=True)
+    sub_role = models.CharField(max_length=50, choices=SUB_ROLE_CHOICES, blank=True,default="manager")
     room_id = models.CharField(max_length=50, blank=True)
 
     def __str__(self):
