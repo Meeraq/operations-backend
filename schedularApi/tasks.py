@@ -23,9 +23,10 @@ from api.views import (
     generateManagementToken,
 )
 from schedularApi.serializers import AvailabilitySerializer
-from datetime import timedelta, time, datetime
+from datetime import timedelta, time, datetime, date
 import pytz
 import json
+
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
 from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
@@ -208,33 +209,53 @@ def get_coaching_session_according_to_time(
     current_time = timezone.now()
 
     if time_period == "upcoming":
-        filter_criteria = {"availibility__end_time__gt": current_time.timestamp() * 1000}
+        filter_criteria = {
+            "availibility__end_time__gt": current_time.timestamp() * 1000
+        }
     elif time_period == "past":
-        filter_criteria = {"availibility__end_time__lt": current_time.timestamp() * 1000}
+        filter_criteria = {
+            "availibility__end_time__lt": current_time.timestamp() * 1000
+        }
     elif time_period == "today":
-        start_of_day = current_time.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000
+        start_of_day = (
+            current_time.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            * 1000
+        )
 
-        end_of_day = current_time.replace(
-            hour=23, minute=59, second=59, microsecond=999999
-        ).timestamp() * 1000
+        end_of_day = (
+            current_time.replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            ).timestamp()
+            * 1000
+        )
         filter_criteria = {"availibility__end_time__range": (start_of_day, end_of_day)}
     elif time_period == "tomorrow":
         tomorrow = current_time + timedelta(days=1)
-        start_of_tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000
-        end_of_tomorrow = tomorrow.replace(
-            hour=23, minute=59, second=59, microsecond=999999
-        ).timestamp() * 1000
+        start_of_tomorrow = (
+            tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            * 1000
+        )
+        end_of_tomorrow = (
+            tomorrow.replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            ).timestamp()
+            * 1000
+        )
         filter_criteria = {
             "availibility__end_time__range": (start_of_tomorrow, end_of_tomorrow)
         }
     elif time_period == "yesterday":
         yesterday = current_time - timedelta(days=1)
-        start_of_yesterday = yesterday.replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ).timestamp() * 1000
-        end_of_yesterday = yesterday.replace(
-            hour=23, minute=59, second=59, microsecond=999999
-        ).timestamp() * 1000
+        start_of_yesterday = (
+            yesterday.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            * 1000
+        )
+        end_of_yesterday = (
+            yesterday.replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            ).timestamp()
+            * 1000
+        )
         filter_criteria = {
             "availibility__end_time__range": (start_of_yesterday, end_of_yesterday)
         }
@@ -2069,6 +2090,7 @@ def reminder_to_pmo_bank_details_unavailable():
 def send_tomorrow_action_items_data():
     try:
         current_date_time = timezone.now()
+        current_date = date.today()
         schedular_projects = SchedularProject.objects.all()
 
         projects_data = {}
@@ -2096,7 +2118,9 @@ def send_tomorrow_action_items_data():
                     "date_time": get_date_time(
                         int(schedular_session.availibility.start_time)
                     ),
-                    "coach": schedular_session.availibility.coach.first_name + " " + schedular_session.availibility.coach.last_name,
+                    "coach": schedular_session.availibility.coach.first_name
+                    + " "
+                    + schedular_session.availibility.coach.last_name,
                     "coach_phone_number": schedular_session.availibility.coach.phone,
                     "batch_name": schedular_session.coaching_session.batch.name,
                     "learner": schedular_session.learner.name,
@@ -2110,7 +2134,6 @@ def send_tomorrow_action_items_data():
                 else:
                     projects_data[project.name]["mentoring_sessions"].append(temp)
 
-          
             live_sessions = get_live_session_according_to_time(
                 LiveSession.objects.filter(batch__project=project), "tomorrow"
             )
@@ -2131,7 +2154,7 @@ def send_tomorrow_action_items_data():
 
             # Filter ongoing assessments
             assessments = Assessment.objects.filter(
-                assessment_end_date__gt=current_date_time,
+                assessment_end_date__gt=current_date,
                 status="ongoing",
                 assessment_modal__lesson__course__batch__project=project,
             )
@@ -2168,12 +2191,36 @@ def send_tomorrow_action_items_data():
                             "nudge_scheduled_for"
                         ].strftime("%d-%m-%Y %H:%M")
                         projects_data[project.name]["nudges"].append(nudge)
+        
+        assessments = Assessment.objects.filter(
+            assessment_end_date__gt=current_date,
+            status="ongoing",
+            assessment_timing="none",
+        )
+        assessment_data = []
+        for assessment in assessments:
+            assessment_lesson = AssessmentLesson.objects.filter(assessment_modal =assessment ).first()
+            if not assessment_lesson:
+                total_responses_count = ParticipantResponse.objects.filter(
+                    assessment=assessment
+                ).count()
+
+                assessment_lesson = AssessmentLesson.objects.filter(
+                    assessment_modal=assessment
+                ).first()
+                temp = {
+                    "name": assessment.name,
+                    "response_status": f"{total_responses_count} / {assessment.participants_observers.count()}",
+                    "reminder": "On" if assessment.automated_reminder else "Off",
+                    "type": assessment.assessment_type,
+                }
+                assessment_data.append(temp)
 
         send_mail_templates(
             "pmo_emails/tomorrow_action_items_mail.html",
             json.loads(env("ACTION_ITEMS_MAIL")),
             "Tomorrow's Project Updates for PMO Review",
-            {"projects_data": projects_data},
+            {"projects_data": projects_data, "Assessments": assessment_data},
             json.loads(env("ACTION_ITEMS_MAIL_CC_EMAILS")),
         )
 

@@ -271,6 +271,7 @@ class Facilitator(models.Model):
     fees_per_hour = models.CharField(max_length=20, blank=True)
     fees_per_day = models.CharField(max_length=20, blank=True)
     topic = models.JSONField(default=list, blank=True)
+    is_approved = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -317,9 +318,11 @@ class HR(models.Model):
 class CoachStatus(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     status = models.JSONField(default=dict, blank=True)
+    project_structure = models.JSONField(default=list, blank=True)
     learner_id = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     consent_expiry_date = models.DateField(blank=True, null=True)
+    is_consent_asked = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.id} {self.coach.first_name} {self.coach.last_name}"
@@ -472,6 +475,7 @@ class SessionRequestCaas(models.Model):
     session_duration = models.IntegerField(blank=True, default=None, null=True)
     status_updated_at = models.DateTimeField(blank=True, null=True, default=None)
     billable_session_number = models.IntegerField(blank=True, default=None, null=True)
+    is_extra = models.BooleanField(blank=True, default=False)
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
@@ -483,17 +487,6 @@ class SessionRequestCaas(models.Model):
             )
         else:
             return f"{self.session_type} = Learner: {self.learner.name}"
-
-
-# class SessionCaas(models.Model):
-#     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-#     confirmed_availability = models.ForeignKey(Availibility, on_delete=models.CASCADE)
-#     session_request = models.ForeignKey(SessionRequestCaas, on_delete=models.CASCADE)
-#     status = models.CharField(max_length=20,default='pending')
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     coach_joined = models.BooleanField(blank=True,default=False)
-#     learner_joined = models.BooleanField(blank=True,default=False)
-#     hr_joined = models.BooleanField(blank=True,default=False)
 
 
 class Notification(models.Model):
