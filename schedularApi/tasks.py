@@ -2216,7 +2216,7 @@ def send_tomorrow_action_items_data():
 def update_lesson_status_according_to_drip_dates():
     try:
         today = date.today()
-        lessons = Lesson.objects.filter(Q(drip_date=today) | Q(live_session__date_time__date=today))
+        lessons = Lesson.objects.filter(Q(live_session__date_time__date=today) | Q(drip_date=today))
         for lesson in lessons:
             if lesson.lesson_type == "assessment":
                 assessment = Assessment.objects.filter(lesson=lesson).first()

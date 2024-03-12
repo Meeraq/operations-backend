@@ -1922,7 +1922,7 @@ def get_all_courses_progress(request):
                 **course_serializer.data,
                 "batch_name": course.batch.name,
                 "total_learners": course_enrollments.count(),
-                "completion_percentage": completion_percentage,
+                "completion_percentage": round(completion_percentage),
             }
         )
     return Response(res)
@@ -2028,7 +2028,7 @@ def get_all_quizes_report(request):
                 "batch_name": quiz.lesson.course.batch.name,
                 "total_participants": total_participants,
                 "total_responses": total_responses,
-                "average_percentage": average_percentage,
+                "average_percentage": round(average_percentage),
             }
         )
 
@@ -2151,7 +2151,7 @@ def get_all_feedbacks_report(request):
                 "batch_name": feedback.lesson.course.batch.name,
                 "total_participants": total_participants,
                 "total_responses": total_responses,
-                "response_percentage": response_percentage,
+                "response_percentage": round(response_percentage),
                 "nps": nps,
                 "facilitator_name": facilitator_name,
             }

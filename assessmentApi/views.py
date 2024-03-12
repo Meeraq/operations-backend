@@ -4435,12 +4435,12 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                                 pre_assessment.save()
 
                             elif assessment_lesson.type == "post":
-                                lesson.drip_date = post_assessment.assessment_start_date
-                                lesson.save()
+                                
                                 post_assessment = Assessment.objects.get(
                                     id=post_assessment_id
                                 )
-
+                                lesson.drip_date = post_assessment.assessment_start_date
+                                lesson.save()
                                 assessment_lesson.assessment_modal = post_assessment
                                 assessment_lesson.save()
 
