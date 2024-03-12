@@ -270,7 +270,7 @@ def create_project_schedular(request):
             calendar_invites=request.data["calendar_invites"],
             nudges=request.data["nudges"],
             pre_post_assessment=request.data["pre_post_assessment"],
-            is_finance_enabled = request.data["finance"]
+            is_finance_enabled=request.data["finance"],
         )
         schedularProject.save()
     except IntegrityError:
@@ -677,7 +677,7 @@ def get_batch_calendar(request, batch_id):
         coaches = Coach.objects.filter(schedularbatch__id=batch_id)
         facilitator = Facilitator.objects.filter(
             livesession__batch__id=batch_id
-        ).distinct()
+        ).distinct()    
         coaches_serializer = CoachSerializer(coaches, many=True)
         facilitator_serializer = FacilitatorSerializer(facilitator, many=True)
 
@@ -4333,7 +4333,10 @@ class GetAllBatchesParticipantDetails(APIView):
     def get(self, request, project_id):
         try:
             batches = SchedularBatch.objects.filter(project__id=project_id)
-
+            facilitator_id = request.query_params.get("facilitator_id")
+            print("facilitator_id",facilitator_id)
+            if facilitator_id:
+                batches = SchedularBatch.objects.filter(livesession__facilitator__id = facilitator_id)
             learner_data_dict = {}
 
             for batch in batches:
@@ -4369,7 +4372,9 @@ class GetAllBatchesParticipantDetails(APIView):
 def coach_inside_skill_training_or_not(request, project_id, batch_id):
     try:
         if batch_id == "all":
-            sessions = SchedularSessions.objects.filter(coaching_session__batch__project__id=project_id)
+            sessions = SchedularSessions.objects.filter(
+                coaching_session__batch__project__id=project_id
+            )
         else:
             batch = get_object_or_404(SchedularBatch, pk=batch_id)
             sessions = SchedularSessions.objects.filter(coaching_session__batch=batch)
@@ -4974,7 +4979,7 @@ def get_all_coach_of_project_or_batch(request, project_id, batch_id):
 
             for batch in batches:
                 for coach in batch.coaches.all():
-                    if  coach.active_inactive:
+                    if coach.active_inactive:
                         all_coach.add(coach)
 
         serialize = CoachSerializer(list(all_coach), many=True)
@@ -5410,7 +5415,9 @@ def get_coaches_and_pricing_for_project(request, project_id):
         coaches_data = []
         purchase_orders = fetch_purchase_orders(organization_id)
         for coach in coaches:
-            coaches_pricing = CoachPricing.objects.filter(project__id=project_id, coach=coach)
+            coaches_pricing = CoachPricing.objects.filter(
+                project__id=project_id, coach=coach
+            )
             serializer = CoachBasicDetailsSerializer(coach)
             is_vendor = coach.user.roles.filter(name="vendor").exists()
             vendor_id = None
@@ -5461,3 +5468,26 @@ def edit_facilitator_pricing(request, facilitator_pricing_id):
         serializer.save()
         return Response(serializer.data, status=200)
     return Response(serializer.errors, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_courses_for_all_batches(request):
+    try:
+        facilitator_id = request.query_params.get("facilitator_id", None)
+        batches = SchedularBatch.objects.filter(livesession__facilitator__id=facilitator_id)
+        courses = Course.objects.filter(batch__in=batches)
+        course_serializer=CourseSerializer(courses, many=True)
+        return Response(course_serializer.data)
+    except SchedularBatch.DoesNotExist:
+        return Response(
+            {"error": "Couldn't find batches with the specified facilitator."},
+            status=400
+        )
+    except Course.DoesNotExist:
+        return Response(
+            {"error": "Couldn't find courses for the specified batch and facilitator."},
+            status=400
+        )
+    except Exception as e:
+        print(str(e))

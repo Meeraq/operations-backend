@@ -308,4 +308,9 @@ urlpatterns = [
         views.edit_facilitator_pricing,
         name="edit_facilitator_pricing",
     ),
+    path(
+        "get-all-courses-for-all-batches/",
+        views.get_all_courses_for_all_batches,
+        name="get_all_courses_for_all_batches",
+    ),
 ]
