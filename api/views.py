@@ -782,8 +782,6 @@ def add_contact_in_wati(user_type, name, phone):
         pass
 
 
-
-
 def get_booked_session_of_user_confirmed_avalibility(user_type, user_id, date):
     date_obj = datetime.strptime(date, "%Y-%m-%d")
     start_time = date_obj.replace(hour=0, minute=0, second=0)
@@ -810,6 +808,7 @@ def get_booked_session_of_user_confirmed_avalibility(user_type, user_id, date):
         )
     return session_requests
 
+
 def check_if_the_avalibility_is_already_booked(user_id, availability):
 
     availability_start_time = datetime.fromtimestamp(
@@ -823,7 +822,7 @@ def check_if_the_avalibility_is_already_booked(user_id, availability):
     )
 
     for session_request in booked_sessions:
-    
+
         session_start_time = datetime.fromtimestamp(
             int(session_request.confirmed_availability.start_time) / 1000
         )
@@ -836,6 +835,7 @@ def check_if_the_avalibility_is_already_booked(user_id, availability):
         ):
             return True
     return False
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -974,7 +974,8 @@ def approve_coach(request):
     except Exception as e:
         # Return error response if any other exception occurs
         return Response({"error": str(e)}, status=500)
-    
+
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def approve_facilitator(request):
@@ -1019,11 +1020,10 @@ def approve_facilitator(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_coach_profile(request, id):
-    
+
     try:
         coach = Coach.objects.get(id=id)
-      
-        
+
     except Coach.DoesNotExist:
         return Response(status=404)
 
@@ -2563,11 +2563,13 @@ def book_session_caas(request):
         caas_session=session_request
     ).first()
 
-    confirmed_availability = Availibility.objects.get(id=request.data.get("confirmed_availability"))
+    confirmed_availability = Availibility.objects.get(
+        id=request.data.get("confirmed_availability")
+    )
     check_booking = check_if_the_avalibility_is_already_booked(
-            request.data["coach"], confirmed_availability
-        )
-  
+        request.data["coach"], confirmed_availability
+    )
+
     if check_booking:
         return Response(
             {
@@ -2575,9 +2577,7 @@ def book_session_caas(request):
             },
             status=500,
         )
-    
-    
-    
+
     session_request.confirmed_availability = Availibility.objects.get(
         id=request.data.get("confirmed_availability")
     )
@@ -2717,7 +2717,10 @@ def book_session_caas(request):
                             "type": "required",
                         }
                     )
-                    if session_request.project.enable_emails_to_hr_and_coachee and session_request.project.calendar_invites:
+                    if (
+                        session_request.project.enable_emails_to_hr_and_coachee
+                        and session_request.project.calendar_invites
+                    ):
                         for invitee in session_request.invitees:
                             attendee = {
                                 "emailAddress": {
@@ -6651,7 +6654,7 @@ class AddRegisteredFacilitator(APIView):
                 {"error": "All required fields must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
+ 
         try:
             # Create the Django User
             if Facilitator.objects.filter(email=email).exists():
@@ -6681,7 +6684,9 @@ class AddRegisteredFacilitator(APIView):
                     print("hello.")
                     profile = Profile.objects.get(user=user)
 
-                facilitator_role, created = Role.objects.get_or_create(name="facilitator")
+                facilitator_role, created = Role.objects.get_or_create(
+                    name="facilitator"
+                )
                 profile.roles.add(facilitator_role)
                 profile.save()
 
@@ -6738,12 +6743,7 @@ class AddRegisteredFacilitator(APIView):
 
             return Response({"coach": facilitator_serializer.data})
 
-        except IntegrityError as e:
-            return Response(
-                {"error": "A user with this email already exists."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
+    
         except Exception as e:
             # Return error response if any other exception occurs
             print(e)
@@ -6751,6 +6751,7 @@ class AddRegisteredFacilitator(APIView):
                 {"error": "An error occurred while registering."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -6768,6 +6769,7 @@ def get_registered_coaches(request):
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -8595,7 +8597,7 @@ def get_skill_training_projects(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminders_of_project(request):
-    print("data", request.data)
+    
     try:
         project_id = request.data.get("id")
         reminder_type = request.data.get("reminder_type")
@@ -8617,6 +8619,35 @@ def update_reminders_of_project(request):
         )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_reminders_of_caas_project(request):
+  
+    try:
+        project_id = request.data.get("id")
+        reminder_type = request.data.get("reminder_type")
+        changes_status = request.data.get("changed_status")
+        project = Project.objects.get(id=project_id)
+
+        if reminder_type == "email_reminder":
+            project.email_reminder = changes_status
+        elif reminder_type == "whatsapp_reminder":
+            project.whatsapp_reminder = changes_status
+        elif reminder_type == "calendar_invites":
+            project.calendar_invites = changes_status
+
+        project.save()
+        return Response({"message": "Reminders updated successfully"})
+    except SchedularProject.DoesNotExist:
+        return Response(
+            {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 @api_view(["POST"])
@@ -8762,7 +8793,8 @@ def update_coach_project_structure(request, coach_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update project structure."}, status=401)
-    
+
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def blacklist_coach(request):
@@ -8788,16 +8820,27 @@ def blacklist_coach(request):
         )
 
 
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_api_logs(request):
     paginator = PageNumberPagination()
     paginator.page_size = 200
     logs = APILog.objects.exclude(path__startswith="/admin").order_by("-created_at")
+
+    start_date = request.query_params.get("start_date")
+    end_date = request.query_params.get("end_date")
+
+    if start_date and end_date:
+      
+        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+        logs = logs.filter(created_at__date__range=(start_date, end_date))
+
     result_page = paginator.paginate_queryset(logs, request)
     serializer = APILogSerializer(result_page, many=True)
     return paginator.get_paginated_response(serializer.data)
+
+
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_pmo(request):
