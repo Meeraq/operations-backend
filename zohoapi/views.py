@@ -17,7 +17,8 @@ from openpyxl import Workbook
 import json
 
 from rest_framework.views import APIView
-
+import string
+import random
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -68,7 +69,6 @@ wkhtmltopdf_path = os.environ.get(
 )
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
-
 
 
 def get_line_items_details(invoices):
@@ -273,6 +273,7 @@ def generate_otp(request):
         )
 
     except Exception as e:
+        print(str(e))
         # Handle any other exceptions
         return Response({"error": str(e)}, status=500)
 
@@ -315,6 +316,7 @@ def generate_otp_send_mail_fixed(request, email):
         )
 
     except Exception as e:
+        print(str(e))
         # Handle any other exceptions
         return Response({"error": str(e)}, status=500)
 
@@ -709,6 +711,7 @@ def delete_invoice(request, invoice_id):
     except InvoiceData.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
+        print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1088,8 +1091,21 @@ def add_vendor(request):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-                user = User.objects.create_user(email, email=email)
-                user.set_unusable_password()
+                
+                temp_password = "".join(
+                        random.choices(
+                            string.ascii_uppercase
+                            + string.ascii_lowercase
+                            + string.digits,
+                            k=8,
+                        )
+                    )
+                user = User.objects.create_user(
+                        username=email,
+                        password=temp_password,
+                        email=email,
+                    )
+                # user.set_unusable_password()
                 user.save()
                 vendor_role, created = Role.objects.get_or_create(name="vendor")
                 profile = Profile.objects.create(user=user)
@@ -1126,6 +1142,7 @@ def get_all_vendors(request):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     except Exception as e:
+        print(str(e))
         return Response(
             {"detail": f"Error fetching vendors: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1171,6 +1188,7 @@ def get_all_purchase_orders(request):
         all_purchase_orders = fetch_purchase_orders(organization_id)
         return Response(all_purchase_orders, status=status.HTTP_200_OK)
     except Exception as e:
+        print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1191,6 +1209,7 @@ def get_all_purchase_orders_for_pmo(request):
         # filter based on the conditions
         return Response(all_purchase_orders, status=status.HTTP_200_OK)
     except Exception as e:
+        print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1220,6 +1239,7 @@ def get_all_invoices(request):
         all_invoices = fetch_invoices(organization_id)
         return Response(all_invoices, status=status.HTTP_200_OK)
     except Exception as e:
+        print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1237,6 +1257,7 @@ def get_invoices_for_pmo(request):
             ]
         return Response(all_invoices, status=status.HTTP_200_OK)
     except Exception as e:
+        print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1266,23 +1287,24 @@ def get_invoices_by_status(request, status):
         print(str(e))
         return Response({"error": "Failed to load"}, status=400)
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_invoices_by_status_for_founders(request, status):
-    
+
     try:
         all_invoices = fetch_invoices(organization_id)
         res = []
         for invoice_data in all_invoices:
             if status == "in_review":
                 if not invoice_data["bill"] and invoice_data["status"] == "in_review":
-                        res.append(invoice_data)
+                    res.append(invoice_data)
             elif status == "approved":
                 if not invoice_data["bill"] and invoice_data["status"] == "approved":
                     res.append(invoice_data)
             elif status == "rejected":
                 if not invoice_data["bill"] and invoice_data["status"] == "rejected":
-                    res.append(invoice_data)        
+                    res.append(invoice_data)
             if status == "accepted":
                 if invoice_data["bill"]:
                     if (
@@ -1304,15 +1326,35 @@ def get_invoices_by_status_for_founders(request, status):
 def edit_vendor(request, vendor_id):
     try:
         vendor = Vendor.objects.get(id=vendor_id)
-    except Vendor.DoesNotExist:
-        return Response(status=status.HTTP_404_NOT_FOUND)
+    
+        data = request.data
+        name = data.get("name", "")
+        email = data.get("email", "").strip().lower()
+        vendor_id = data.get("vendor", "")
+        phone = data.get("phone", "")
+        existing_user = (
+            User.objects.filter(username=email).exclude(username=vendor.email).first()
+        )
+        if existing_user:
+            return Response(
+                {"error": "User with this email already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        vendor.user.user.username = email
+        vendor.user.user.email = email
+        vendor.user.user.save()
+        vendor.email = email
+        vendor.name = name
+        vendor.phone = phone
+        vendor.vendor_id = vendor_id
 
-    if request.method == "PUT":
-        serializer = VendorEditSerializer(vendor, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        vendor.save()
+
+        return Response( {"message": "Vendor updated successfully!"},status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response( {"error": "Failed to update vendor"},status=status.HTTP_404_NOT_FOUND)
+    
 
 
 @api_view(["PUT"])
@@ -1380,12 +1422,13 @@ def get_invoice_updates(request, invoice_id):
         return Response(status=404)
 
 
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_vendor_details_from_zoho(request, vendor_id):
     try:
+        print(vendor_id)
         vendor = Vendor.objects.get(vendor_id=vendor_id)
+        print(vendor)
         user = vendor.user.user
         user_data = get_user_data(user)
         if user_data:
@@ -1397,10 +1440,10 @@ def get_vendor_details_from_zoho(request, vendor_id):
                 "zoho_vendor": zoho_vendor,
             }
             return Response(res)
-        else:
-            return Response({"error": "Failed to get data."}, status=404)
+        
     except Exception as e:
-        return Response({"error": "Failed to get data."}, status=404)
+        print(str(e))
+        return Response({"error": "Failed to get data."}, status=500)
 
 
 # creating a PO in zoho and adding the create po id and number in either coach pricing or facilitator pricing
@@ -1446,6 +1489,7 @@ def create_purchase_order(request, user_type, facilitator_pricing_id):
                     coach_pricing.save()
             return Response({"message": "Purchase Order created successfully."})
         else:
+            print(response.json())
             return Response(status=401)
     except Exception as e:
         print(str(e))
@@ -1518,3 +1562,4 @@ def update_purchase_order_status(request, purchase_order_id, status):
     except Exception as e:
         print(str(e))
         return Response(status=404)
+
