@@ -1091,20 +1091,17 @@ def add_vendor(request):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-                
                 temp_password = "".join(
-                        random.choices(
-                            string.ascii_uppercase
-                            + string.ascii_lowercase
-                            + string.digits,
-                            k=8,
-                        )
+                    random.choices(
+                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
+                        k=8,
                     )
+                )
                 user = User.objects.create_user(
-                        username=email,
-                        password=temp_password,
-                        email=email,
-                    )
+                    username=email,
+                    password=temp_password,
+                    email=email,
+                )
                 # user.set_unusable_password()
                 user.save()
                 vendor_role, created = Role.objects.get_or_create(name="vendor")
@@ -1326,7 +1323,7 @@ def get_invoices_by_status_for_founders(request, status):
 def edit_vendor(request, vendor_id):
     try:
         vendor = Vendor.objects.get(id=vendor_id)
-    
+
         data = request.data
         name = data.get("name", "")
         email = data.get("email", "").strip().lower()
@@ -1350,11 +1347,14 @@ def edit_vendor(request, vendor_id):
 
         vendor.save()
 
-        return Response( {"message": "Vendor updated successfully!"},status=status.HTTP_200_OK)
+        return Response(
+            {"message": "Vendor updated successfully!"}, status=status.HTTP_200_OK
+        )
     except Exception as e:
         print(str(e))
-        return Response( {"error": "Failed to update vendor"},status=status.HTTP_404_NOT_FOUND)
-    
+        return Response(
+            {"error": "Failed to update vendor"}, status=status.HTTP_404_NOT_FOUND
+        )
 
 
 @api_view(["PUT"])
@@ -1426,9 +1426,9 @@ def get_invoice_updates(request, invoice_id):
 @permission_classes([IsAuthenticated])
 def get_vendor_details_from_zoho(request, vendor_id):
     try:
-        print(vendor_id)
+
         vendor = Vendor.objects.get(vendor_id=vendor_id)
-        print(vendor)
+
         user = vendor.user.user
         user_data = get_user_data(user)
         if user_data:
@@ -1440,7 +1440,7 @@ def get_vendor_details_from_zoho(request, vendor_id):
                 "zoho_vendor": zoho_vendor,
             }
             return Response(res)
-        
+
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data."}, status=500)
@@ -1562,4 +1562,3 @@ def update_purchase_order_status(request, purchase_order_id, status):
     except Exception as e:
         print(str(e))
         return Response(status=404)
-

@@ -3965,7 +3965,7 @@ def add_new_session_in_project_structure(request):
                 "description": description,
                 "price": price,
             }
-            print(new_session)
+         
             # Update the project structure
             prev_structure.append(new_session)
             project.project_structure = prev_structure
@@ -5597,7 +5597,7 @@ def create_expense(request):
         batch = request.data.get("batch")
         facilitator = request.data.get("facilitator")
         file = request.data.get("file")
-        print(file)
+       
         if not file:
             return Response(
                 {"error": "Please upload file."},
@@ -5649,7 +5649,7 @@ def edit_expense(request):
         facilitator = request.data.get("facilitator")
         file = request.data.get("file")
         expense_id = request.data.get("expense_id")
-        print(file, type(file))
+
         if not file:
             return Response(
                 {"error": "Please upload file."},

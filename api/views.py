@@ -6654,7 +6654,7 @@ class AddRegisteredFacilitator(APIView):
                 {"error": "All required fields must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        print(Facilitator.objects.filter(email=email).exists())
+ 
         try:
             # Create the Django User
             if Facilitator.objects.filter(email=email).exists():
@@ -8597,7 +8597,7 @@ def get_skill_training_projects(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminders_of_project(request):
-    print("data", request.data)
+    
     try:
         project_id = request.data.get("id")
         reminder_type = request.data.get("reminder_type")
@@ -8625,7 +8625,7 @@ def update_reminders_of_project(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminders_of_caas_project(request):
-    print("data", request.data)
+  
     try:
         project_id = request.data.get("id")
         reminder_type = request.data.get("reminder_type")
