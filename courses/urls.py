@@ -380,6 +380,7 @@ urlpatterns = [
         "facilitator-wise-feedback/",
         FacilitatorWiseFeedback.as_view(),
     ),
+    path("course/<int:course_id>/live-sessions/", views.get_live_sessions_by_course),
     path(
         "get-feedback/<int:feedback_id>/",
         views.get_feedback,
