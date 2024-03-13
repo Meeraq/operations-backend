@@ -94,10 +94,8 @@ def get_invoice_data_for_pdf(invoice):
     hsn_or_sac = None
     try:
         hsn_or_sac = Vendor.objects.get(vendor_id=invoice.vendor_id).hsn_or_sac
-    except Vendor.DoesNotExist:
-        hsn_or_sac = None
     except Exception as e:
-        hsn_or_sac = None
+        pass
     invoice_data = {
         **serializer.data,
         "invoice_date": invoice_date,
@@ -106,7 +104,7 @@ def get_invoice_data_for_pdf(invoice):
         "sub_total_excluding_tax": get_subtotal_excluding_tax(
             serializer.data["line_items"]
         ),
-        "hsn_or_sac": hsn_or_sac,
+        "hsn_or_sac": hsn_or_sac if hsn_or_sac else "-",
     }
     return invoice_data
 
@@ -525,7 +523,11 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
                     None,
                 )
                 invoice_res.append(
-                    {**invoice, "bill": matching_bill, "hsn_or_sac": hsn_or_sac}
+                    {
+                        **invoice,
+                        "bill": matching_bill,
+                        "hsn_or_sac": hsn_or_sac if hsn_or_sac else "",
+                    }
                 )
             return Response(invoice_res)
         else:
@@ -661,13 +663,15 @@ def add_invoice_data(request):
         vendor_id=request.data["vendor_id"],
         invoice_number=request.data["invoice_number"],
     )
-    hsn_or_sac = request.data["hsn_or_sac"]
-    try:
-        vendor = Vendor.objects.get(vendor_id=request.data["vendor_id"])
-        vendor.hsn_or_sac = hsn_or_sac
-        vendor.save()
-    except Exception as e:
-        return Response({"error": "Vendor not found."}, status=400)
+    hsn_or_sac = request.data.get("hsn_or_sac", None)
+    if hsn_or_sac:
+        try:
+            vendor = Vendor.objects.get(vendor_id=request.data["vendor_id"])
+            vendor.hsn_or_sac = hsn_or_sac
+            vendor.save()
+        except Exception as e:
+            print(str(e))
+            return Response({"error": "Vendor not found."}, status=400)
 
     if invoices.count() > 0:
         return Response({"error": "Invoice number should be unique."}, status=400)
