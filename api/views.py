@@ -6302,36 +6302,44 @@ def remove_coach_from_project(request, project_id):
 @permission_classes([IsAuthenticated])
 def standard_field_request(request, user_id):
     try:
-        value = request.data.get("value").strip()
-        userType = request.data.get("userType")
+        with transaction.atomic():
+            value = request.data.get("value").strip()
+            userType = request.data.get("userType")
 
-        field_name = request.data.get(
-            "field_name"
-        )  # Adjust this based on your field name
-        standardized_field, created = StandardizedField.objects.get_or_create(
-            field=field_name
-        )
-        if userType == "coach":
-            user_instance = Coach.objects.get(id=user_id)
-            standardized_field_request = StandardizedFieldRequest(
-                standardized_field_name=standardized_field,
-                coach=user_instance,
-                value=value,
-                status="pending",
+            field_name = request.data.get(
+                "field_name"
+            )  # Adjust this based on your field name
+            standardized_field, created = StandardizedField.objects.get_or_create(
+                field=field_name
             )
-            standardized_field_request.save()
 
-        elif userType == "facilitator":
-            user_instance = Facilitator.objects.get(id=user_id)
-            standardized_field_request = StandardizedFieldRequest(
-                standardized_field_name=standardized_field,
-                facilitator=user_instance,
-                value=value,
-                status="pending",
-            )
-            standardized_field_request.save()
+            if value not in standardized_field.values:
+                standardized_field.values.append(value)
+                standardized_field.save()
+            else:
+                return Response({"error": "Value already present."}, status=404)
 
-        return Response({"message": "Request sent."}, status=200)
+            if userType == "coach":
+                user_instance = Coach.objects.get(id=user_id)
+                standardized_field_request = StandardizedFieldRequest(
+                    standardized_field_name=standardized_field,
+                    coach=user_instance,
+                    value=value,
+                    status="pending",
+                )
+                standardized_field_request.save()
+
+            elif userType == "facilitator":
+                user_instance = Facilitator.objects.get(id=user_id)
+                standardized_field_request = StandardizedFieldRequest(
+                    standardized_field_name=standardized_field,
+                    facilitator=user_instance,
+                    value=value,
+                    status="pending",
+                )
+                standardized_field_request.save()
+
+            return Response({"message": "Request sent."}, status=200)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to create request."}, status=500)
@@ -6654,7 +6662,7 @@ class AddRegisteredFacilitator(APIView):
                 {"error": "All required fields must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
- 
+
         try:
             # Create the Django User
             if Facilitator.objects.filter(email=email).exists():
@@ -6743,7 +6751,6 @@ class AddRegisteredFacilitator(APIView):
 
             return Response({"coach": facilitator_serializer.data})
 
-    
         except Exception as e:
             # Return error response if any other exception occurs
             print(e)
@@ -7491,6 +7498,37 @@ class StandardFieldEditValue(APIView):
             )
 
 
+models_to_update = {
+    "Coach": [
+        "location",
+        "other_certification",
+        "area_of_expertise",
+        "job_roles",
+        "companies_worked_in",
+        "language",
+        "education",
+        "domain",
+        "client_companies",
+        "educational_qualification",
+    ],
+    "Facilitator": [
+        "location",
+        "other_certification",
+        "area_of_expertise",
+        "job_roles",
+        "companies_worked_in",
+        "language",
+        "education",
+        "domain",
+        "client_companies",
+        "educational_qualification",
+        "city",
+        "country",
+        "topic",
+    ],
+}
+
+
 class StandardizedFieldRequestAcceptReject(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -7500,17 +7538,15 @@ class StandardizedFieldRequestAcceptReject(APIView):
 
         try:
             request_instance = StandardizedFieldRequest.objects.get(id=request_id)
+            field_name = request_instance.standardized_field_name.field
+            value = request_instance.value
 
+            standardized_field, created = StandardizedField.objects.get_or_create(
+                    field=field_name
+                )
             if status == "accepted":
                 request_instance.status = status
                 request_instance.save()
-
-                field_name = request_instance.standardized_field_name.field
-                value = request_instance.value
-
-                standardized_field, created = StandardizedField.objects.get_or_create(
-                    field=field_name
-                )
 
                 if value not in standardized_field.values:
                     standardized_field.values.append(value)
@@ -7521,6 +7557,25 @@ class StandardizedFieldRequestAcceptReject(APIView):
             else:
                 request_instance.status = status
                 request_instance.save()
+
+                if value in standardized_field.values:
+                    standardized_field.values.remove(value)
+                    standardized_field.save()
+
+                for model_name, fields in models_to_update.items():
+                    model_class = globals()[model_name]
+                    instances = model_class.objects.all()
+
+                    for instance in instances:
+                        for field in fields:
+                            field_value = getattr(instance, field, None)
+                            if field_value is not None:
+                                if (
+                                    isinstance(field_value, list)
+                                    and value in field_value
+                                ):
+                                    field_value.remove(value)
+                                    instance.save()
 
                 return Response({"message": f"Request {status}"}, status=200)
         except StandardizedFieldRequest.DoesNotExist:
@@ -8597,7 +8652,7 @@ def get_skill_training_projects(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminders_of_project(request):
-    
+
     try:
         project_id = request.data.get("id")
         reminder_type = request.data.get("reminder_type")
@@ -8621,11 +8676,10 @@ def update_reminders_of_project(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminders_of_caas_project(request):
-  
+
     try:
         project_id = request.data.get("id")
         reminder_type = request.data.get("reminder_type")
@@ -8647,7 +8701,6 @@ def update_reminders_of_caas_project(request):
         )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 @api_view(["POST"])
@@ -8831,7 +8884,7 @@ def get_all_api_logs(request):
     end_date = request.query_params.get("end_date")
 
     if start_date and end_date:
-      
+
         start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
         end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
         logs = logs.filter(created_at__date__range=(start_date, end_date))

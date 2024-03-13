@@ -253,7 +253,6 @@ class Facilitator(models.Model):
     city = models.JSONField(default=list, blank=True)
     language = models.JSONField(default=list, blank=True)
     job_roles = models.JSONField(default=list, blank=True)
-    city = models.JSONField(default=list, blank=True)
     country = models.JSONField(default=list, blank=True)
     created_at = models.DateField(auto_now_add=True)
     edited_at = models.DateField(auto_now=True)
