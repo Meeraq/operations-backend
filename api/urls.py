@@ -24,12 +24,14 @@ from .views import (
     UserTokenAvaliableCheck,
     SessionData,
     DownloadCoachContract,
+    AddRegisteredFacilitator,
 )
 
 urlpatterns = [
     path("pmos/", views.create_pmo),
     path("coaches/all/", views.get_coaches),
     path("coaches/approve/", views.approve_coach),
+    path("facilitators/approve/", views.approve_facilitator),
     path(
         "password_reset/",
         include("django_rest_passwordreset.urls", namespace="password_reset"),
@@ -279,8 +281,10 @@ urlpatterns = [
         "coaches-which-are-included-in-projects/",
         views.coaches_which_are_included_in_projects,
     ),
-    path("add_registered_coach/", AddRegisteredCoach.as_view()),
+    path("add_registered_coach/", AddRegisteredCoach.as_view()),    
+    path("add-registered-facilitator/", AddRegisteredFacilitator.as_view()),
     path("get-registered-coaches/", views.get_registered_coaches),
+    path("get-registered-facilitators/", views.get_registered_facilitators),
     path("edit-project-caas/<int:project_id>/", views.edit_project_caas),
     path(
         "pmo-dashboard/",
@@ -341,6 +345,7 @@ urlpatterns = [
     ),
     path("add/pmo/", views.add_pmo),
     path("get/all/pmo/", views.get_pmo, name="get_pmo"),
+    path("get/junior/pmo/<int:user_id>/", views.get_junior_pmo),
     path(
         "get-learner-of-user-optimized/<str:user_type>/<int:user_id>/",
         views.get_learner_of_user_optimized,
@@ -364,4 +369,33 @@ urlpatterns = [
         views.update_reminders_of_project,
         name="update_reminders_of_project",
     ),
+    path(
+        "update-reminders-of-caas-project/",
+        views.update_reminders_of_caas_project,
+        name="update_reminders_of_project",
+    ),
+    path(
+        "add-session/<int:project_id>/<int:learner_id>/",
+        views.add_extra_session_in_caas,
+    ),
+    path(
+        "project/add-coaches/",
+        views.add_coaches_to_project,
+        name="add_coaches_to_project",
+    ),
+    path(
+        "update-coach-project-structure/<int:coach_id>/",
+        views.update_coach_project_structure,
+        name="update_coach_project_structure",
+    ),
+    path(
+        "blacklist-coach/",
+        views.blacklist_coach,
+    ),
+    path("api-logs/", views.get_all_api_logs, name="api-logs"),
+    path(
+        "delete-pmo/",
+        views.delete_pmo,
+    ),
+    path("edit-pmo/", views.edit_pmo),
 ]

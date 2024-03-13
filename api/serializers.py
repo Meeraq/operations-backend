@@ -5,6 +5,7 @@ from .models import (
     Profile,
     Project,
     HR,
+    Finance,
     Organisation,
     Learner,
     SessionRequestCaas,
@@ -37,6 +38,7 @@ from .models import (
     FinalizeCoachActivity,
     SuperAdmin,
     Facilitator,
+    APILog
 )
 from django.contrib.auth.models import User
 
@@ -57,6 +59,13 @@ class PmoDepthOneSerializer(serializers.ModelSerializer):
 class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = SuperAdmin
+        fields = "__all__"
+        depth = 1
+
+
+class FinanceDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Finance
         fields = "__all__"
         depth = 1
 
@@ -436,8 +445,12 @@ class SessionDataSerializer(serializers.ModelSerializer):
 class PmoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pmo
-        fields = ["name", "email", "phone"]
+        fields = ["name", "email", "phone","sub_role"]
 
+class PmoSerializerAll(serializers.ModelSerializer):
+    class Meta:
+        model = Pmo
+        fields = "__all__"
 
 class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
@@ -455,4 +468,13 @@ class FacilitatorSerializer(serializers.ModelSerializer):
 class FacilitatorBasicDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coach
-        fields = ["id","first_name", "last_name", "email", "phone"]
+        fields = ["id", "first_name", "last_name", "email", "phone"]
+
+
+
+class APILogSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', required=False)
+
+    class Meta:
+        model = APILog
+        fields = ['path', 'username', 'created_at', 'method']

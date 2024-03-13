@@ -14,6 +14,7 @@ from schedularApi.models import (
     SchedularSessions,
     RequestAvailibilty,
     CoachSchedularAvailibilty,
+    SchedularProject,
 )
 from django.utils import timezone
 from api.views import (
@@ -22,8 +23,9 @@ from api.views import (
     generateManagementToken,
 )
 from schedularApi.serializers import AvailabilitySerializer
-from datetime import timedelta, time, datetime
+from datetime import timedelta, time, datetime, date
 import pytz
+import json
 
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
@@ -45,6 +47,8 @@ from zohoapi.models import Vendor, PoReminder
 from zohoapi.views import (
     filter_purchase_order_data,
 )
+from zohoapi.tasks import get_access_token, organization_id, base_url
+
 
 env = environ.Env()
 environ.Env.read_env()
@@ -67,6 +71,35 @@ def get_live_session_name(session_type):
     elif session_type == "virtual_session":
         session_name = "Virtual Session"
     return session_name
+
+
+def get_nudges_of_course(course):
+    try:
+        data = []
+        nudges = Nudge.objects.filter(course__id=course.id).order_by("order")
+
+        desired_time = time(8, 30)
+        if course.nudge_start_date:
+            nudge_scheduled_for = datetime.combine(
+                course.nudge_start_date, desired_time
+            )
+
+            for nudge in nudges:
+                temp = {
+                    "is_sent": nudge.is_sent,
+                    "name": nudge.name,
+                    "learner_count": nudge.course.batch.learners.count(),
+                    "batch_name": nudge.course.batch.name,
+                    "nudge_scheduled_for": nudge_scheduled_for,
+                }
+
+                data.append(temp)
+                nudge_scheduled_for = nudge_scheduled_for + timedelta(
+                    int(course.nudge_frequency)
+                )
+        return data
+    except Exception as e:
+        print(str(e))
 
 
 def generate_slots(start, end, duration):
@@ -170,11 +203,139 @@ def available_slots_count_for_participant(id):
         return 0
 
 
+def get_coaching_session_according_to_time(
+    schedular_session, time_period, start_time=None, end_time=None
+):
+    current_time = timezone.now()
+
+    if time_period == "upcoming":
+        filter_criteria = {
+            "availibility__end_time__gt": current_time.timestamp() * 1000
+        }
+    elif time_period == "past":
+        filter_criteria = {
+            "availibility__end_time__lt": current_time.timestamp() * 1000
+        }
+    elif time_period == "today":
+        start_of_day = (
+            current_time.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            * 1000
+        )
+
+        end_of_day = (
+            current_time.replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            ).timestamp()
+            * 1000
+        )
+        filter_criteria = {"availibility__end_time__range": (start_of_day, end_of_day)}
+    elif time_period == "tomorrow":
+        tomorrow = current_time + timedelta(days=1)
+        start_of_tomorrow = (
+            tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            * 1000
+        )
+        end_of_tomorrow = (
+            tomorrow.replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            ).timestamp()
+            * 1000
+        )
+        filter_criteria = {
+            "availibility__end_time__range": (start_of_tomorrow, end_of_tomorrow)
+        }
+    elif time_period == "yesterday":
+        yesterday = current_time - timedelta(days=1)
+        start_of_yesterday = (
+            yesterday.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            * 1000
+        )
+        end_of_yesterday = (
+            yesterday.replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            ).timestamp()
+            * 1000
+        )
+        filter_criteria = {
+            "availibility__end_time__range": (start_of_yesterday, end_of_yesterday)
+        }
+    elif time_period == "duration":
+        if start_time is None or end_time is None:
+            raise ValueError(
+                "Start time and end time must be provided for duration filter."
+            )
+        filter_criteria = {"availibility__end_time__range": (start_time, end_time)}
+    else:
+        raise ValueError("Invalid time period.")
+
+    # Apply additional filter criteria if necessary
+    if time_period != "duration":
+        upcoming_schedular_sessions = schedular_session.filter(**filter_criteria)
+    else:
+        upcoming_schedular_sessions = schedular_session.filter(
+            availibility__end_time__range=(start_time, end_time), **filter_criteria
+        )
+
+    return upcoming_schedular_sessions
+
+
+def get_live_session_according_to_time(
+    session, time_period, start_time=None, end_time=None
+):
+    current_time = timezone.now()
+
+    if time_period == "upcoming":
+        filter_criteria = {"date_time__gt": current_time}
+    elif time_period == "past":
+        filter_criteria = {"date_time__lt": current_time}
+    elif time_period == "today":
+        start_of_day = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = current_time.replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        )
+        filter_criteria = {"date_time__range": (start_of_day, end_of_day)}
+    elif time_period == "tomorrow":
+        tomorrow = current_time + timedelta(days=1)
+        start_of_tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_tomorrow = tomorrow.replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        )
+        filter_criteria = {"date_time__range": (start_of_tomorrow, end_of_tomorrow)}
+    elif time_period == "yesterday":
+        yesterday = current_time - timedelta(days=1)
+        start_of_yesterday = yesterday.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        end_of_yesterday = yesterday.replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        )
+        filter_criteria = {"date_time__range": (start_of_yesterday, end_of_yesterday)}
+    elif time_period == "duration":
+        if start_time is None or end_time is None:
+            raise ValueError(
+                "Start time and end time must be provided for duration filter."
+            )
+        filter_criteria = {"date_time__range": (start_time, end_time)}
+    else:
+        raise ValueError("Invalid time period.")
+
+    live_sessions = session.filter(**filter_criteria)
+
+    return live_sessions
+
+
 def get_time(timestamp):
     dt = datetime.fromtimestamp(timestamp / 1000) + timedelta(
         hours=5, minutes=30
     )  # Convert milliseconds to seconds
     return dt.strftime("%I:%M %p")
+
+
+def get_date_time(timestamp):
+    dt = datetime.fromtimestamp(timestamp / 1000) + timedelta(
+        hours=5, minutes=30
+    )  # Convert milliseconds to seconds
+    return dt.strftime("%d-%m-%Y %H:%M")
 
 
 def send_whatsapp_message(user_type, participant, assessment, unique_id):
@@ -1061,9 +1222,6 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
                     coach_name = coach.first_name + " " + coach.last_name
                     phone = coach.phone_country_code + coach.phone
                     time = caas_session.confirmed_availability.start_time
-                    # final_time = datetime.fromtimestamp(
-                    #     (int(time) / 1000) + 19800
-                    # ).strftime("%I:%M %p")
                     final_time = get_time(int(time))
                     booking_id = caas_session.coach.room_id
                     print(booking_id)
@@ -1150,14 +1308,11 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_caas():
             ~Q(status="completed"),
         )
         for caas_session in session_requests:
-            if caas_session.project.automated_reminder:
+            if caas_session.project.whatsapp_reminder:
                 learner = caas_session.learner
                 learner_name = learner.name
                 phone = learner.phone
                 time = caas_session.confirmed_availability.start_time
-                # final_time = datetime.fromtimestamp(
-                #     (int(time) / 1000) + 19800
-                # ).strftime("%I:%M %p")
                 final_time = get_time(int(time))
                 booking_id = caas_session.coach.room_id
                 send_whatsapp_message_template(
@@ -1222,35 +1377,33 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
                         "template_name": "session_reminder_5_mins_before_final",
                     },
                 )
-            learner = caas_session.learner
-            caas_learner_name = learner.name
-            caas_learner_phone = learner.phone
-            time = caas_session.confirmed_availability.start_time
-            # caas_learner_final_time = datetime.fromtimestamp(
-            #     (int(time) / 1000) + 19800
-            # ).strftime("%I:%M %p")
-            caas_learner_final_time = get_time(int(time))
-            send_whatsapp_message_template(
-                caas_learner_phone,
-                {
-                    "broadcast_name": "send_whatsapp_reminder_to_users_before_5mins_in_caas_to_learner",
-                    "parameters": [
-                        {
-                            "name": "name",
-                            "value": caas_learner_name,
-                        },
-                        {
-                            "name": "time",
-                            "value": f"{caas_learner_final_time} IST",
-                        },
-                        {
-                            "name": "booking_id",
-                            "value": booking_id,
-                        },
-                    ],
-                    "template_name": "session_reminder_5_mins_before_final",
-                },
-            )
+            if caas_session.project.whatsapp_reminder:
+                learner = caas_session.learner
+                caas_learner_name = learner.name
+                caas_learner_phone = learner.phone
+                time = caas_session.confirmed_availability.start_time
+                caas_learner_final_time = get_time(int(time))
+                send_whatsapp_message_template(
+                    caas_learner_phone,
+                    {
+                        "broadcast_name": "send_whatsapp_reminder_to_users_before_5mins_in_caas_to_learner",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": caas_learner_name,
+                            },
+                            {
+                                "name": "time",
+                                "value": f"{caas_learner_final_time} IST",
+                            },
+                            {
+                                "name": "booking_id",
+                                "value": booking_id,
+                            },
+                        ],
+                        "template_name": "session_reminder_5_mins_before_final",
+                    },
+                )
     except Exception as e:
         print(str(e))
 
@@ -1261,9 +1414,6 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
         # for seeq sessions
         session = SchedularSessions.objects.get(id=session_id)
         if True:
-            # seeq_coach_start_time_for_mail = datetime.fromtimestamp(
-            #     (int(session.availibility.start_time) / 1000) + 19800
-            # ).strftime("%I:%M %p")
             seeq_coach_start_time_for_mail = get_time(
                 int(session.availibility.start_time)
             )
@@ -1300,9 +1450,6 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
             )
             seeq_participant_name = session.learner.name
             seeq_participant_phone = session.learner.phone
-            # seeq_participant_time = datetime.fromtimestamp(
-            #     (int(session.availibility.start_time) / 1000) + 19800
-            # ).strftime("%I:%M %p")
             seeq_participant_time = get_time(int(session.availibility.start_time))
             send_whatsapp_message_template(
                 seeq_participant_phone,
@@ -1374,7 +1521,6 @@ def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
 @shared_task
 def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
     try:
-        # for caas sessions
         caas_session = SessionRequestCaas.objects.get(id=session_id)
         if True:
             if caas_session.coach:
@@ -1382,9 +1528,6 @@ def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
                 caas_coach_name = coach.first_name + " " + coach.last_name
                 caas_coach_phone = coach.phone_country_code + coach.phone
                 time = caas_session.confirmed_availability.start_time
-                # caas_coach_final_time = datetime.fromtimestamp(
-                #     (int(time) / 1000) + 19800
-                # ).strftime("%I:%M %p")
                 caas_coach_final_time = get_time(int(time))
                 send_whatsapp_message_template(
                     caas_coach_phone,
@@ -1785,6 +1928,7 @@ def update_schedular_session_status():
 # Notify vendor by email when the po is in open status, 1st of every month (pending PO)
 @shared_task
 def generate_invoice_reminder_on_first_of_month():
+    return None
     vendors = Vendor.objects.all()
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     for vendor in vendors:
@@ -1836,6 +1980,7 @@ def generate_invoice_reminder_on_first_of_month():
 # Reminder to vendor for new PO, Checks every day if any po without reminder exist and then send the reminder
 @shared_task
 def generate_invoice_reminder_once_when_po_is_created():
+    return None
     vendors = Vendor.objects.all()
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     for vendor in vendors:
@@ -1921,3 +2066,171 @@ def reminder_to_pmo_bank_details_unavailable():
             },
             [env("BCC_EMAIL")],  # no bcc
         )
+
+
+@shared_task
+def send_tomorrow_action_items_data():
+    try:
+        current_date_time = timezone.now()
+        current_date = date.today()
+        schedular_projects = SchedularProject.objects.all()
+
+        projects_data = {}
+        for project in schedular_projects:
+            projects_data[project.name] = {
+                "laser_coaching_sessions": [],
+                "mentoring_sessions": [],
+                "live_sessions": [],
+                "assessments": [],
+                "nudges": [],
+                "email_reminder": "ON" if project.email_reminder else "OFF",
+                "whatsapp_reminder": "ON" if project.whatsapp_reminder else "OFF",
+                "calendar_invites": "ON" if project.calendar_invites else "OFF",
+            }
+
+            schedular_sessions = get_coaching_session_according_to_time(
+                SchedularSessions.objects.filter(
+                    coaching_session__batch__project=project
+                ),
+                "tomorrow",
+            )
+
+            for schedular_session in schedular_sessions:
+                temp = {
+                    "date_time": get_date_time(
+                        int(schedular_session.availibility.start_time)
+                    ),
+                    "coach": schedular_session.availibility.coach.first_name
+                    + " "
+                    + schedular_session.availibility.coach.last_name,
+                    "coach_phone_number": schedular_session.availibility.coach.phone,
+                    "batch_name": schedular_session.coaching_session.batch.name,
+                    "learner": schedular_session.learner.name,
+                    "learner_phone_number": schedular_session.learner.phone,
+                }
+                if (
+                    schedular_session.coaching_session.session_type
+                    == "laser_coaching_session"
+                ):
+                    projects_data[project.name]["laser_coaching_sessions"].append(temp)
+                else:
+                    projects_data[project.name]["mentoring_sessions"].append(temp)
+
+            live_sessions = get_live_session_according_to_time(
+                LiveSession.objects.filter(batch__project=project), "tomorrow"
+            )
+
+            for live_session in live_sessions:
+                temp = {
+                    "date_time": (
+                        live_session.date_time.strftime("%d-%m-%Y %H:%M")
+                        if live_session.date_time
+                        else None
+                    ),
+                    "session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                    "batch_name": live_session.batch.name,
+                    "duration": live_session.duration,
+                    "description": live_session.description,
+                }
+                projects_data[project.name]["live_sessions"].append(temp)
+
+            # Filter ongoing assessments
+            assessments = Assessment.objects.filter(
+                assessment_end_date__gt=current_date,
+                status="ongoing",
+                assessment_modal__lesson__course__batch__project=project,
+            )
+
+            for assessment in assessments:
+                total_responses_count = ParticipantResponse.objects.filter(
+                    assessment=assessment
+                ).count()
+
+                assessment_lesson = AssessmentLesson.objects.filter(
+                    assessment_modal=assessment
+                ).first()
+                temp = {
+                    "name": assessment.name,
+                    "batch_name": (
+                        assessment_lesson.lesson.course.batch.name
+                        if assessment_lesson
+                        else None
+                    ),
+                    "response_status": f"{total_responses_count} / {assessment.participants_observers.count()}",
+                    "reminder": "On" if assessment.automated_reminder else "Off",
+                }
+                projects_data[project.name]["assessments"].append(temp)
+            courses = Course.objects.filter(batch__project=project)
+
+            for course in courses:
+                nudges = get_nudges_of_course(course)
+                for nudge in nudges:
+                    if (
+                        nudge["nudge_scheduled_for"].date()
+                        == (current_date_time + timedelta(days=1)).date()
+                    ):
+                        nudge["nudge_scheduled_for"] = nudge[
+                            "nudge_scheduled_for"
+                        ].strftime("%d-%m-%Y %H:%M")
+                        projects_data[project.name]["nudges"].append(nudge)
+
+        assessments = Assessment.objects.filter(
+            assessment_end_date__gt=current_date,
+            status="ongoing",
+            assessment_timing="none",
+        )
+        assessment_data = []
+        for assessment in assessments:
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+            if not assessment_lesson:
+                total_responses_count = ParticipantResponse.objects.filter(
+                    assessment=assessment
+                ).count()
+
+                assessment_lesson = AssessmentLesson.objects.filter(
+                    assessment_modal=assessment
+                ).first()
+                temp = {
+                    "name": assessment.name,
+                    "response_status": f"{total_responses_count} / {assessment.participants_observers.count()}",
+                    "reminder": "On" if assessment.automated_reminder else "Off",
+                    "type": assessment.assessment_type,
+                }
+                assessment_data.append(temp)
+
+        send_mail_templates(
+            "pmo_emails/tomorrow_action_items_mail.html",
+            json.loads(env("ACTION_ITEMS_MAIL")),
+            "Tomorrow's Project Updates for PMO Review",
+            {"projects_data": projects_data, "Assessments": assessment_data},
+            json.loads(env("ACTION_ITEMS_MAIL_CC_EMAILS")),
+        )
+
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def update_lesson_status_according_to_drip_dates():
+    try:
+        today = date.today()
+        lessons = Lesson.objects.filter(Q(live_session__date_time__date=today) | Q(drip_date=today))
+        for lesson in lessons:
+            if lesson.lesson_type == "assessment":
+                assessment = Assessment.objects.filter(lesson=lesson).first()
+
+                assessment_modal = Assessment.objects.get(
+                    id=assessment.assessment_modal.id
+                )
+                lesson.status == "public"
+                assessment_modal.status = "ongoing"
+                lesson.save()
+                assessment_modal.save()
+            else:
+
+                lesson.status = "public"
+                lesson.save()
+    except Exception as e:
+        print(str(e))

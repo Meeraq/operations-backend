@@ -1,6 +1,6 @@
 from django.urls import path, include
 from . import views
-from .views import DownloadInvoice
+from .views import DownloadInvoice, DownloadAttatchedInvoice
 import environ
 
 env = environ.Env()
@@ -56,16 +56,70 @@ urlpatterns = [
     path("import-invoices/", views.import_invoices_from_zoho),
     path("export-invoice-data/", views.export_invoice_data),
     path("download-invoice/<int:record_id>/", DownloadInvoice.as_view()),
+    path(
+        "download-attatched-invoice/<int:record_id>/",
+        DownloadAttatchedInvoice.as_view(),
+    ),
     path("add/vendor/", views.add_vendor),
-    path("view/vendors/", views.get_all_vendors),
+    path("vendors/", views.get_all_vendors),
     path(
         "get-all-purchase-orders/",
         views.get_all_purchase_orders,
         name="get_all_purchase_orders",
     ),
     path(
+        "pmo/purchase-orders/",
+        views.get_all_purchase_orders_for_pmo,
+        name="get_all_purchase_orders",
+    ),
+    path(
         "get-all-invoices/",
         views.get_all_invoices,
         name="get_all_invoices",
+    ),
+    path(
+        "pmo/invoices/",
+        views.get_invoices_for_pmo,
+        name="get_all_invoices",
+    ),
+    path("vendors/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
+    path(
+        "invoices/<str:status>/",
+        views.get_invoices_by_status,
+        name="get_invoices_by_status",
+    ),
+    path(
+        "invoices/founders/<str:status>/",
+        views.get_invoices_by_status_for_founders,
+        name="get_invoices_by_status_for_founders",
+    ),
+    path(
+        "invoices/<int:invoice_id>/update_status/",
+        views.update_invoice_status,
+    ),
+    path(
+        "invoices/<int:invoice_id>/updates/",
+        views.get_invoice_updates,
+        name="get_invoice_updates",
+    ),
+    path(
+        "vendor/<str:vendor_id>/",
+        views.get_vendor_details_from_zoho,
+        name="get_vendor_details_from_zoho",
+    ),
+    path(
+        "purchase-order/create/<str:user_type>/<int:facilitator_pricing_id>/",
+        views.create_purchase_order,
+        name="create_purchase_order",
+    ),
+    path(
+        "po-number/meeraq/",
+        views.get_po_number_to_create,
+        name="get_po_number_to_create",
+    ),
+    path(
+        "purchase-order/status/<str:purchase_order_id>/<str:status>/",
+        views.update_purchase_order_status,
+        name="update_purchase_order_status",
     ),
 ]
