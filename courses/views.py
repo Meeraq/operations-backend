@@ -67,6 +67,7 @@ from .serializers import (
     AssignmentResponseSerializer,
     FacilitatorSerializer,
     FeedbackDepthOneSerializer,
+    LessonSerializerForLiveSessionDateTime,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
@@ -77,6 +78,9 @@ from schedularApi.models import (
     SchedularBatch,
     SchedularProject,
     LiveSession as LiveSessionSchedular,
+)
+from schedularApi.serializers import (
+    LiveSessionSerializer as LiveSessionSchedularSerializer,
 )
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
@@ -518,7 +522,7 @@ class TextLessonEditView(generics.RetrieveUpdateAPIView):
 class LessonListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Lesson.objects.all()
-    serializer_class = LessonSerializer
+    serializer_class = LessonSerializerForLiveSessionDateTime
 
     def get_queryset(self):
         # Retrieve lessons for a specific course based on the course ID in the URL
@@ -1223,7 +1227,7 @@ def get_course_enrollment(request, course_id, learner_id):
             Q(status="public"),
             ~Q(lesson_type="feedback"),
         )
-        lessons_serializer = LessonSerializer(lessons, many=True)
+        lessons_serializer = LessonSerializerForLiveSessionDateTime(lessons, many=True)
 
         return Response(
             {
@@ -1247,7 +1251,7 @@ def get_course_enrollment_for_pmo_preview(request, course_id):
             Q(status="public"),
             ~Q(lesson_type="feedback"),
         )
-        lessons_serializer = LessonSerializer(lessons, many=True)
+        lessons_serializer = LessonSerializerForLiveSessionDateTime(lessons, many=True)
         completed_lessons = []
         return Response(
             {
@@ -1918,7 +1922,7 @@ def get_all_courses_progress(request):
                 **course_serializer.data,
                 "batch_name": course.batch.name,
                 "total_learners": course_enrollments.count(),
-                "completion_percentage": completion_percentage,
+                "completion_percentage": round(completion_percentage),
             }
         )
     return Response(res)
@@ -2024,7 +2028,7 @@ def get_all_quizes_report(request):
                 "batch_name": quiz.lesson.course.batch.name,
                 "total_participants": total_participants,
                 "total_responses": total_responses,
-                "average_percentage": average_percentage,
+                "average_percentage": round(average_percentage),
             }
         )
 
@@ -2112,7 +2116,11 @@ def get_all_feedbacks_report(request):
     for feedback in feedbacks:
         facilitator_name = ""
         if feedback.live_session and feedback.live_session.facilitator:
-            facilitator_name = feedback.live_session.facilitator.first_name + " " + feedback.live_session.facilitator.last_name
+            facilitator_name = (
+                feedback.live_session.facilitator.first_name
+                + " "
+                + feedback.live_session.facilitator.last_name
+            )
         # course_enrollments = CourseEnrollment.objects.filter(
         #     course=feedback.lesson.course
         # )
@@ -2127,12 +2135,14 @@ def get_all_feedbacks_report(request):
             else 0
         )
         nps = None
-        answers = Answer.objects.filter(question__type = "rating_0_to_10", question__feedbacklesson=feedback)
+        answers = Answer.objects.filter(
+            question__type="rating_0_to_10", question__feedbacklesson=feedback
+        )
         answer_ratings = []
         for answer in answers:
             answer_ratings.append(answer.rating)
         if len(answer_ratings) > 0:
-            nps = calculate_nps(answer_ratings) 
+            nps = calculate_nps(answer_ratings)
         res.append(
             {
                 "id": feedback.id,
@@ -2141,9 +2151,9 @@ def get_all_feedbacks_report(request):
                 "batch_name": feedback.lesson.course.batch.name,
                 "total_participants": total_participants,
                 "total_responses": total_responses,
-                "response_percentage": response_percentage,
+                "response_percentage": round(response_percentage),
                 "nps": nps,
-                "facilitator_name":facilitator_name
+                "facilitator_name": facilitator_name,
             }
         )
 
@@ -2176,7 +2186,8 @@ def get_consolidated_feedback_report(request):
                                 feedback_lesson
                                 and feedback_lesson.live_session
                                 and feedback_lesson.live_session.facilitator
-                                and not feedback_lesson.live_session.facilitator.id == int(facilitator_id)
+                                and not feedback_lesson.live_session.facilitator.id
+                                == int(facilitator_id)
                             ):
                                 continue
                         if feedback_lesson:
@@ -2285,7 +2296,9 @@ def get_consolidated_feedback_report_response(request, lesson_id):
             feedback_lesson__live_session__live_session_number=live_session.live_session_number,
         )
         if facilitator_id:
-            feedback_lesson_responses = feedback_lesson_responses.filter(feedback_lesson__live_session__facilitator__id=facilitator_id)
+            feedback_lesson_responses = feedback_lesson_responses.filter(
+                feedback_lesson__live_session__facilitator__id=facilitator_id
+            )
         for response in feedback_lesson_responses:
             for answer in response.answers.all():
                 question_text = answer.question.text
@@ -2356,13 +2369,13 @@ class AssignCourseTemplateToBatch(APIView):
                 original_lessons = Lesson.objects.filter(
                     course_template=course_template
                 )
-                facilitator_lesson_creation=Lesson.objects.create(
+                facilitator_lesson_creation = Lesson.objects.create(
                     course=new_course,
                     name="Facilitator Lesson",
                     status="draft",
                     lesson_type="facilitator",
                     # Duplicate specific lesson types
-                    order=1
+                    order=1,
                 )
                 FacilitatorLesson.objects.create(
                     lesson=facilitator_lesson_creation,
@@ -2370,7 +2383,7 @@ class AssignCourseTemplateToBatch(APIView):
                 assessment_creation = False
                 if not original_lessons.filter(lesson_type="assessment").exists():
                     if batch.project.pre_post_assessment:
-                        assessment_creation = True 
+                        assessment_creation = True
                         lesson1 = Lesson.objects.create(
                             course=new_course,
                             name="Pre Assessment",
@@ -2389,7 +2402,7 @@ class AssignCourseTemplateToBatch(APIView):
                         "live_session",
                         "laser_coaching",
                     ]:
-                        updated_order = original_lesson.order+1
+                        updated_order = original_lesson.order + 1
                         if assessment_creation:
                             updated_order = original_lesson.order + 2
                         new_lesson = Lesson.objects.create(
@@ -2634,6 +2647,11 @@ def create_pdf_lesson(request):
             if course_id:
                 course_instance = Course.objects.get(id=course_id)
                 course_template_instance = course_instance.course_template
+                live_session_id = lesson_data["live_session"]
+                live_session = None
+                print(live_session_id)
+                if live_session_id:
+                    live_session = LiveSessionSchedular.objects.get(id=live_session_id)
 
                 lesson_instance = Lesson.objects.create(
                     course=course_instance,
@@ -2641,6 +2659,8 @@ def create_pdf_lesson(request):
                     status=lesson_data["status"],
                     lesson_type=lesson_data["lesson_type"],
                     order=lesson_data["order"],
+                    drip_date=lesson_data["drip_date"],
+                    live_session=live_session,
                 )
 
                 pdf_lesson_instance = PdfLesson.objects.create(
@@ -3296,7 +3316,9 @@ def get_consolidated_feedback_download_report(request, live_session_id):
     )
     facilitator_id = request.query_params.get("facilitator_id")
     if facilitator_id:
-        feedback_lesson_responses = feedback_lesson_responses.filter(feedback_lesson__live_session__facilitator__id=facilitator_id)
+        feedback_lesson_responses = feedback_lesson_responses.filter(
+            feedback_lesson__live_session__facilitator__id=facilitator_id
+        )
     total_participants_in_project = Learner.objects.filter(
         schedularbatch__project__id=live_session.batch.project.id
     ).distinct()
@@ -3317,7 +3339,7 @@ def get_consolidated_feedback_download_report(request, live_session_id):
         data = ["-" for _ in headers_list]
         participant_index = headers_list.index("Participant Name")
         feedback_batch_index = headers_list.index("Feedback Batch")
-        facilitator_index=headers_list.index("Facilitator")
+        facilitator_index = headers_list.index("Facilitator")
         data[participant_index] = feedback_lesson_response.learner.name
         data[feedback_batch_index] = (
             feedback_lesson_response.feedback_lesson.lesson.course.batch.name
@@ -3379,7 +3401,9 @@ def feedback_reports_project_wise_consolidated(request):
         )
         facilitator_id = request.query_params.get("facilitator_id")
         if facilitator_id:
-            feedback_lesson_responses = feedback_lesson_responses.filter(feedback_lesson__live_session__facilitator__id=facilitator_id)
+            feedback_lesson_responses = feedback_lesson_responses.filter(
+                feedback_lesson__live_session__facilitator__id=facilitator_id
+            )
         if feedback_lesson_responses.exists():
             total_participants_count = (
                 Learner.objects.filter(schedularbatch__project=project)
@@ -3419,7 +3443,9 @@ def download_consolidated_project_report(request, project_id):
     )
     facilitator_id = request.query_params.get("facilitator_id")
     if facilitator_id:
-        feedback_lesson_responses = feedback_lesson_responses.filter(feedback_lesson__live_session__facilitator__id=facilitator_id)
+        feedback_lesson_responses = feedback_lesson_responses.filter(
+            feedback_lesson__live_session__facilitator__id=facilitator_id
+        )
     total_participants_in_project = Learner.objects.filter(
         schedularbatch__project__id=project_id
     ).distinct()
@@ -3585,7 +3611,7 @@ class GetAllNudgesOfSchedularProjects(APIView):
             else:
                 courses = Course.objects.filter(batch__project__id=int(project_id))
             if hr_id:
-                courses=courses.filter(batch__project__hr__id=hr_id)
+                courses = courses.filter(batch__project__hr__id=hr_id)
             for course in courses:
                 nudges = get_nudges_of_course(course)
                 data = list(data) + list(nudges)
@@ -3616,14 +3642,19 @@ class CreateAssignmentLesson(APIView):
                 )
             elif course_id != "null":
                 course = Course.objects.get(id=int(course_id))
+                live_session_id = request.data["live_session"]
+                live_session = None
+                if live_session_id != "null":
+                    live_session = LiveSessionSchedular.objects.get(id=live_session_id)
                 lesson = Lesson.objects.create(
                     course=course,
                     name=request.data["name"],
                     status=request.data["status"],
                     lesson_type="assignment",
+                    drip_date=request.data["drip_date"],
                     order=int(request.data["order"]),
+                    live_session=live_session,
                 )
-
             assignment_lesson = AssignmentLesson.objects.create(
                 lesson=lesson,
                 name=request.data["name"],
@@ -3655,6 +3686,12 @@ class UpdateAssignmentLesson(APIView):
             assignment_lesson.save()
             lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
             lesson.name = request.data["name"]
+            lesson.drip_date = request.data["drip_date"]
+            live_session_id = request.data["live_session"]
+            live_session = None
+            if live_session_id != "null":
+                live_session = LiveSessionSchedular.objects.get(id=live_session_id)
+            lesson.live_session = live_session
             lesson.save()
             return Response(
                 {"message": f"Assignment Lesson Updated."}, status=status.HTTP_200_OK
@@ -3774,11 +3811,12 @@ class UpdateAssignmentLessonFile(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def submit_feedback(request, feedback_id, learner_id):
     try:
-    
+
         feedback = get_object_or_404(Feedback, id=feedback_id)
         learner = get_object_or_404(Learner, id=learner_id)
     except (
@@ -3798,7 +3836,9 @@ def submit_feedback(request, feedback_id, learner_id):
     if schedular_session_id:
         schedular_session = SchedularSessions.objects.get(id=schedular_session_id)
     if caas_session or schedular_session:
-        answers_data = request.data.get("answers", )
+        answers_data = request.data.get(
+            "answers",
+        )
         serializer = AnswerSerializer(data=answers_data, many=True)
         if serializer.is_valid():
             answers = serializer.save()
@@ -3820,7 +3860,6 @@ def submit_feedback(request, feedback_id, learner_id):
             {"error": "Failed to submit feedback"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
 
 
 @api_view(["GET"])
@@ -3925,17 +3964,23 @@ def get_coach_session_feedback_response_data(request, feedback_response_id):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-        
-
 
 class FacilitatorWiseFeedback(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self,request,feedback_id):
+    def get(self, request, feedback_id):
         try:
-            feedback=FeedbackLesson.objects.get(id=feedback_id)
+            feedback = FeedbackLesson.objects.get(id=feedback_id)
         except Exception as e:
-            return Response (
+            return Response(
                 {"message": f"Failed to update file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_live_sessions_by_course(request, course_id):
+    live_sessions = LiveSession.objects.filter(batch__course__id=course_id)
+    live_sessions_serializer = LiveSessionSchedularSerializer(live_sessions, many=True)
+    return Response(live_sessions_serializer.data)
