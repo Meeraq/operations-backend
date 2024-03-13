@@ -1851,7 +1851,7 @@ def get_user_data(user):
     for role in user.profile.roles.all():
         roles.append(role.name)
     if user_profile_role == "coach":
-        if user.profile.coach.active_inactive:
+        if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
             is_caas_allowed = Project.objects.filter(
                 coaches_status__coach=user.profile.coach
@@ -1867,6 +1867,7 @@ def get_user_data(user):
                 "user": {**serializer.data["user"], "type": user_profile_role},
             }
         else:
+           
             return None
     elif user_profile_role == "facilitator":
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
@@ -1941,13 +1942,14 @@ def generate_otp(request):
                 return Response(
                     {"error": "User with the given email does not exist."}, status=400
                 )
+        print(user)
         try:
             # Check if OTP already exists for the user
             otp_obj = OTP.objects.get(user=user)
             otp_obj.delete()
         except OTP.DoesNotExist:
             pass
-
+        print(otp_obj)
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars="0123456789")
         created_otp = OTP.objects.create(user=user, otp=otp)
@@ -1988,11 +1990,14 @@ def generate_otp(request):
 
     except User.DoesNotExist:
         # Handle the case where the user with the given email does not exist
+        print("hello 2 ",str(e))
+
         return Response(
             {"error": "User with the given email does not exist."}, status=400
         )
 
     except Exception as e:
+        print("hello",str(e))
         # Handle any other exceptions
         return Response({"error": str(e)}, status=500)
 

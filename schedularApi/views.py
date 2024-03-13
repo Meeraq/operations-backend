@@ -102,6 +102,7 @@ from courses.models import (
     LaserCoachingSession,
     LiveSessionLesson,
     Lesson,
+    Answer,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import (
@@ -149,6 +150,7 @@ from api.views import get_user_data
 from zohoapi.models import Vendor
 from zohoapi.views import fetch_purchase_orders
 from zohoapi.tasks import organization_id
+from courses.views import calculate_nps
 
 env = environ.Env()
 
@@ -4587,6 +4589,13 @@ def update_project_status(request):
         )
 
 
+def calculate_nps_from_answers(answers):
+    ratings = [answer.rating for answer in answers]
+    if ratings:
+        return calculate_nps(ratings)
+    return None
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_skill_dashboard_card_data(request, project_id):
@@ -4619,6 +4628,26 @@ def get_skill_dashboard_card_data(request, project_id):
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )
+            if not hr_id:
+                virtual_session_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                    question__feedback_lesson__live_session__session_type="virtual_session",
+                )
+                virtual_nps = calculate_nps_from_answers(virtual_session_answer)
+
+                # In-person session NPS calculation
+                in_person_session_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                    question__feedback_lesson__live_session__session_type="in_person_session",
+                )
+                in_person_nps = calculate_nps_from_answers(in_person_session_answer)
+
+                # Overall NPS calculation
+                overall_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                )
+                overall_nps = calculate_nps_from_answers(overall_answer)
+
         else:
             start_timestamp, end_timestamp = get_current_date_timestamps()
             # schedular sessions scheduled today
@@ -4648,12 +4677,133 @@ def get_skill_dashboard_card_data(request, project_id):
             )
             if hr_id:
                 completed_assessments = completed_assessments.filter(hr__id=hr_id)
+            if not hr_id:
+                virtual_session_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                    question__feedback_lesson__live_session__session_type="virtual_session",
+                    questionfeedback_lessonlive_session__batch__project__id=int(
+                        project_id
+                    ),
+                )
+                virtual_nps = calculate_nps_from_answers(virtual_session_answer)
+
+                # In-person session NPS calculation
+                in_person_session_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                    question__feedback_lesson__live_session__session_type="in_person_session",
+                    question__feedback_lesson__live_session__batch__project__id=int(
+                        project_id
+                    ),
+                )
+                in_person_nps = calculate_nps_from_answers(in_person_session_answer)
+
+                # Overall NPS calculation
+                overall_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                    question__feedback_lesson__live_session__batch__project__id=int(
+                        project_id
+                    ),
+                )
+                overall_nps = calculate_nps_from_answers(overall_answer)
+
         return Response(
             {
                 "today_coaching_sessions": len(today_sessions),
                 "today_live_sessions": len(today_live_sessions),
                 "ongoing_assessments": len(ongoing_assessment),
                 "completed_assessments": len(completed_assessments),
+                "virtual_session_nps": virtual_nps,
+                "in_person_session_nps": in_person_nps,
+                "overall_nps": overall_nps,
+            },
+            status=200,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {
+                "error": "Failed to get data",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitator_id):
+    try:
+        if project_id == "all":
+
+            virtual_session_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedback_lesson__live_session__facilitator__id=int(
+                    facilitator_id
+                ),
+                question__feedback_lesson__live_session__session_type="virtual_session",
+            )
+            virtual_nps = calculate_nps_from_answers(virtual_session_answer)
+
+            # In-person session NPS calculation
+            in_person_session_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedback_lesson__live_session__facilitator__id=int(
+                    facilitator_id
+                ),
+                question__feedback_lesson__live_session__session_type="in_person_session",
+            )
+            in_person_nps = calculate_nps_from_answers(in_person_session_answer)
+
+            # Overall NPS calculation
+            overall_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedback_lesson__live_session__facilitator__id=int(
+                    facilitator_id
+                ),
+            )
+            overall_nps = calculate_nps_from_answers(overall_answer)
+
+        else:
+
+            virtual_session_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedback_lesson__live_session__facilitator__id=int(
+                    facilitator_id
+                ),
+                question__feedback_lesson__live_session__session_type="virtual_session",
+                questionfeedback_lessonlive_session__batch__project__id=int(project_id),
+            )
+            virtual_nps = calculate_nps_from_answers(virtual_session_answer)
+
+            # In-person session NPS calculation
+            in_person_session_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedback_lesson__live_session__facilitator__id=int(
+                    facilitator_id
+                ),
+                question__feedback_lesson__live_session__session_type="in_person_session",
+                question__feedback_lesson__live_session__batch__project__id=int(
+                    project_id
+                ),
+            )
+            in_person_nps = calculate_nps_from_answers(in_person_session_answer)
+
+            # Overall NPS calculation
+            overall_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedback_lesson__live_session__facilitator__id=int(
+                    facilitator_id
+                ),
+                question__feedback_lesson__live_session__batch__project__id=int(
+                    project_id
+                ),
+            )
+            overall_nps = calculate_nps_from_answers(overall_answer)
+
+        return Response(
+            {
+                "virtual_session_nps": virtual_nps,
+                "in_person_session_nps": in_person_nps,
+                "overall_nps": overall_nps,
             },
             status=200,
         )

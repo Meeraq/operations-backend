@@ -233,6 +233,10 @@ urlpatterns = [
         views.get_skill_dashboard_card_data,
     ),
     path(
+        "get-skill-dashboard-card-data-for-facilitator/<str:project_id>/<int:facilitator_id>/",
+        views.get_skill_dashboard_card_data_for_facilitator,
+    ),
+    path(
         "get-past-live-session-dashboard-data/<str:project_id>/",
         views.get_past_live_session_dashboard_data,
     ),
