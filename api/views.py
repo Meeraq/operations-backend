@@ -1851,7 +1851,7 @@ def get_user_data(user):
     for role in user.profile.roles.all():
         roles.append(role.name)
     if user_profile_role == "coach":
-        if user.profile.coach.active_inactive:
+        if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
             is_caas_allowed = Project.objects.filter(
                 coaches_status__coach=user.profile.coach
@@ -7944,7 +7944,7 @@ def change_user_role(request, user_id):
     for role in user.profile.roles.all():
         roles.append(role.name)
     if user_profile_role == "coach":
-        if user.profile.coach.active_inactive:
+        if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
             is_caas_allowed = Project.objects.filter(
                 coaches_status__coach=user.profile.coach
