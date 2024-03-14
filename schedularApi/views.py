@@ -4439,9 +4439,11 @@ class GetAllBatchesParticipantDetails(APIView):
         try:
             batches = SchedularBatch.objects.filter(project__id=project_id)
             facilitator_id = request.query_params.get("facilitator_id")
-            print("facilitator_id",facilitator_id)
+
             if facilitator_id:
-                batches = SchedularBatch.objects.filter(livesession__facilitator__id = facilitator_id)
+                batches = SchedularBatch.objects.filter(
+                    livesession__facilitator__id=facilitator_id
+                )
             learner_data_dict = {}
 
             for batch in batches:
@@ -4452,15 +4454,18 @@ class GetAllBatchesParticipantDetails(APIView):
                             "id": learner_id,
                             "name": learner.name,
                             "email": learner.email,
-                            "batchNames": [
+                            "batchNames": {
                                 batch.name
-                            ],  # Initialize with list containing batch name
+                            },  # Initialize with list containing batch name
                             "phone": learner.phone,
                         }
                     else:
-                        learner_data_dict[learner_id]["batchNames"].append(batch.name)
+                        learner_data_dict[learner_id]["batchNames"].add(batch.name)
 
-            unique_learner_data = list(learner_data_dict.values())
+            unique_learner_data = [
+                {**data, "batchNames": list(data["batchNames"])}  # Convert set to list
+                for data in learner_data_dict.values()
+            ]
 
             return Response(unique_learner_data, status=status.HTTP_200_OK)
 
@@ -5611,7 +5616,7 @@ def create_expense(request):
         batch = request.data.get("batch")
         facilitator = request.data.get("facilitator")
         file = request.data.get("file")
-       
+
         if not file:
             return Response(
                 {"error": "Please upload file."},
@@ -5749,7 +5754,6 @@ def edit_status_expense(request):
             {"error": f"Failed to {status.title()} the expense."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-    
 
 
 @api_view(["GET"])
@@ -5757,19 +5761,21 @@ def edit_status_expense(request):
 def get_all_courses_for_all_batches(request):
     try:
         facilitator_id = request.query_params.get("facilitator_id", None)
-        batches = SchedularBatch.objects.filter(livesession__facilitator__id=facilitator_id)
+        batches = SchedularBatch.objects.filter(
+            livesession__facilitator__id=facilitator_id
+        )
         courses = Course.objects.filter(batch__in=batches)
-        course_serializer=CourseSerializer(courses, many=True)
+        course_serializer = CourseSerializer(courses, many=True)
         return Response(course_serializer.data)
     except SchedularBatch.DoesNotExist:
         return Response(
             {"error": "Couldn't find batches with the specified facilitator."},
-            status=400
+            status=400,
         )
     except Course.DoesNotExist:
         return Response(
             {"error": "Couldn't find courses for the specified batch and facilitator."},
-            status=400
+            status=400,
         )
     except Exception as e:
         print(str(e))
