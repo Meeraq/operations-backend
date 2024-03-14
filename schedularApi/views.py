@@ -324,20 +324,15 @@ def create_project_schedular(request):
 @permission_classes([IsAuthenticated])
 def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
-    pmo_id  = request.query_params.get("pmo")
-    projects = None
+    pmo_id = request.query_params.get("pmo")
+    projects = SchedularProject.objects.all()
     if pmo_id:
-        pmo = Pmo.objects.get(id = int(pmo_id) )
+        pmo = Pmo.objects.get(id=int(pmo_id))
         if pmo.sub_role == "junior_pmo":
             projects = SchedularProject.objects.filter(junior_pmo=pmo)
-        else:
-            projects = SchedularProject.objects.all() 
 
     if status:
-
         projects = projects.exclude(status="completed")
-    else:
-        projects = projects
 
     serializer = SchedularProjectSerializer(projects, many=True)
     for project_data in serializer.data:
@@ -1449,6 +1444,18 @@ def update_batch(request, batch_id):
         return Response(
             {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
         )
+    
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = SchedularBatchSerializer(batch)
+    return Response({**serializer.data, "is_nudge_enabled": batch.project.nudges})
 
 
 @api_view(["GET"])
@@ -3136,7 +3143,6 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
             status=500,
         )
 
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_facilitator(request):
@@ -3247,6 +3253,7 @@ def add_facilitator(request):
                 corporate_experience=corporate_experience,
                 coaching_experience=coaching_experience,
                 education_pic=education_pic,
+                is_approved=True,
                 # education_upload_file=education_upload_file,
             )
 
@@ -3436,6 +3443,7 @@ def add_multiple_facilitator(request):
                     fees_per_day=facilitator_data.get("fees_per_day", ""),
                     topic=facilitator_data.get("topic", []),
                     other_certification=facilitator_data.get("other_certification", []),
+                    is_approved=True,
                 )
                 facilitators.append(facilitator)
 
@@ -3799,7 +3807,7 @@ def get_live_sessions_by_status(request):
     pmo_id = request.query_params.get("pmo", None)
 
     if pmo_id:
-        pmo = Pmo.objects.get(id = int(pmo_id))
+        pmo = Pmo.objects.get(id=int(pmo_id))
         if pmo.sub_role == "junior_pmo":
             queryset = queryset.filter(batch__project__junior_pmo=pmo)
         else:
@@ -3952,7 +3960,7 @@ def add_new_session_in_project_structure(request):
             session_type = request.data.get("session_type")
             duration = request.data.get("duration")
             description = request.data.get("description")
-
+            price = request.data.get("price")
             # Get the project and batches
             project = get_object_or_404(SchedularProject, id=project_id)
             batches = SchedularBatch.objects.filter(project=project)
@@ -3966,8 +3974,9 @@ def add_new_session_in_project_structure(request):
                 "duration": duration,
                 "session_type": session_type,
                 "description": description,
+                "price": price,
             }
-
+         
             # Update the project structure
             prev_structure.append(new_session)
             project.project_structure = prev_structure
@@ -5438,7 +5447,7 @@ def get_session_progress_data_for_dashboard(request, project_id):
                         ] = "Pending"
 
             progress = yes_count / total_count if total_count > 0 else 0
-            temp["progress"] = progress * 100
+            temp["progress"] = round(progress * 100)
             data.append(temp)
         return Response(data)
     except Exception as e:
@@ -5599,7 +5608,7 @@ def create_expense(request):
         batch = request.data.get("batch")
         facilitator = request.data.get("facilitator")
         file = request.data.get("file")
-
+       
         if not file:
             return Response(
                 {"error": "Please upload file."},
@@ -5624,6 +5633,62 @@ def create_expense(request):
                 facilitator=facilitator,
                 file=file,
             )
+
+            return Response({"message": "Expense created successfully!"}, status=201)
+        else:
+            return Response(
+                {"error": "Fill in all the required feild"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to create expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_expense(request):
+    try:
+        name = request.data.get("name")
+        description = request.data.get("description")
+        date_of_expense = request.data.get("date_of_expense")
+        live_session = request.data.get("live_session")
+        batch = request.data.get("batch")
+        facilitator = request.data.get("facilitator")
+        file = request.data.get("file")
+        expense_id = request.data.get("expense_id")
+
+        if not file:
+            return Response(
+                {"error": "Please upload file."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        if not batch or not facilitator:
+            return Response(
+                {"error": "Failed to create expense."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        if name and date_of_expense and description:
+            facilitator = Facilitator.objects.get(id=int(facilitator))
+            batch = SchedularBatch.objects.get(id=int(batch))
+            if live_session:
+                live_session = LiveSession.objects.filter(id=int(live_session)).first()
+
+            expense = Expense.objects.get(id=int(expense_id))
+
+            expense.name = name
+            expense.description = description
+            expense.date_of_expense = date_of_expense
+            expense.live_session = live_session
+            expense.batch = batch
+            expense.facilitator = facilitator
+            if not file == "null":
+                expense.file = file
+
+            expense.save()
 
             return Response({"message": "Expense created successfully!"}, status=201)
         else:

@@ -56,6 +56,7 @@ urlpatterns = [
     ),
     path("coaches/", views.get_coaches),
     path("batch/<int:batch_id>/", views.update_batch),
+    path("batches/get/<int:batch_id>/", views.get_batch),
     path(
         "create-coach-availibilty/",
         views.create_coach_schedular_availibilty,
@@ -318,11 +319,12 @@ urlpatterns = [
         name="edit_facilitator_pricing",
     ),
     path("create-expense/", views.create_expense),
+    path("edit-expense/", views.edit_expense),
     path(
         "expenses/<int:batch_id>/<str:usertype>/<int:user_id>/",
         views.get_expense_for_facilitator,
     ),
-     path(
+    path(
         "edit-status-expense/",
         views.edit_status_expense,
     ),

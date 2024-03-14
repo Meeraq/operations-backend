@@ -370,6 +370,11 @@ urlpatterns = [
         name="update_reminders_of_project",
     ),
     path(
+        "update-reminders-of-caas-project/",
+        views.update_reminders_of_caas_project,
+        name="update_reminders_of_project",
+    ),
+    path(
         "add-session/<int:project_id>/<int:learner_id>/",
         views.add_extra_session_in_caas,
     ),

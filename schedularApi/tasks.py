@@ -15,6 +15,7 @@ from schedularApi.models import (
     RequestAvailibilty,
     CoachSchedularAvailibilty,
     SchedularProject,
+    SchedularBatch,
 )
 from django.utils import timezone
 from api.views import (
@@ -76,26 +77,24 @@ def get_live_session_name(session_type):
 def get_nudges_of_course(course):
     try:
         data = []
-        nudges = Nudge.objects.filter(course__id=course.id).order_by("order")
-
+        nudges = Nudge.objects.filter(batch__id=course.batch.id).order_by("order")
         desired_time = time(8, 30)
-        if course.nudge_start_date:
+        if course.batch.nudge_start_date:
             nudge_scheduled_for = datetime.combine(
-                course.nudge_start_date, desired_time
+                course.batch.nudge_start_date, desired_time
             )
-
             for nudge in nudges:
                 temp = {
                     "is_sent": nudge.is_sent,
                     "name": nudge.name,
-                    "learner_count": nudge.course.batch.learners.count(),
-                    "batch_name": nudge.course.batch.name,
+                    "learner_count": nudge.batch.learners.count(),
+                    "batch_name": nudge.batch.name,
                     "nudge_scheduled_for": nudge_scheduled_for,
                 }
 
                 data.append(temp)
                 nudge_scheduled_for = nudge_scheduled_for + timedelta(
-                    int(course.nudge_frequency)
+                    int(course.batch.nudge_frequency)
                 )
         return data
     except Exception as e:
@@ -1655,17 +1654,13 @@ def coach_has_to_give_slots_availability_reminder():
 
 
 @shared_task
-def schedule_nudges(course_id):
-    course = Course.objects.get(id=course_id)
-    nudges = Nudge.objects.filter(course__id=course_id).order_by("order")
-
+def schedule_nudges(batch_id):
+    batch = SchedularBatch.objects.get(id=batch_id)
+    nudges = Nudge.objects.filter(batch__id=batch_id).order_by("order")
     desired_time = time(8, 30)
-    nudge_scheduled_for = datetime.combine(course.nudge_start_date, desired_time)
+    nudge_scheduled_for = datetime.combine(batch_id.nudge_start_date, desired_time)
     for nudge in nudges:
-        if (
-            nudge.course.batch.project.nudges
-            and nudge.course.batch.project.status == "ongoing"
-        ):
+        if nudge.batch.project.nudges and nudge.batch.project.status == "ongoing":
             clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
             periodic_task = PeriodicTask.objects.create(
                 name=uuid.uuid1(),
@@ -1675,7 +1670,7 @@ def schedule_nudges(course_id):
                 one_off=True,
             )
             nudge_scheduled_for = nudge_scheduled_for + timedelta(
-                int(course.nudge_frequency)
+                int(batch.nudge_frequency)
             )
 
 
@@ -1697,10 +1692,7 @@ def get_file_extension(url):
 @shared_task
 def send_nudge(nudge_id):
     nudge = Nudge.objects.get(id=nudge_id)
-    if (
-        nudge.course.batch.project.nudges
-        and nudge.course.batch.project.status == "ongoing"
-    ):
+    if nudge.batch.project.nudges and nudge.batch.project.status == "ongoing":
         subject = f"New Nudge: {nudge.name}"
         if nudge.is_sent:
             return
@@ -1712,7 +1704,7 @@ def send_nudge(nudge_id):
             attachment_path = nudge.file.url
             file_content = get_file_content(nudge.file.url)
 
-        for learner in nudge.course.batch.learners.all():
+        for learner in nudge.batch.learners.all():
             email = EmailMessage(
                 subject,
                 email_message,
@@ -2216,7 +2208,7 @@ def send_tomorrow_action_items_data():
 def update_lesson_status_according_to_drip_dates():
     try:
         today = date.today()
-        lessons = Lesson.objects.filter(Q(drip_date=today) | Q(live_session__date_time__date=today))
+        lessons = Lesson.objects.filter(Q(live_session__date_time__date=today) | Q(drip_date=today))
         for lesson in lessons:
             if lesson.lesson_type == "assessment":
                 assessment = Assessment.objects.filter(lesson=lesson).first()
