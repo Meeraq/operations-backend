@@ -3229,6 +3229,7 @@ class GetAssessmentsOfBatch(APIView):
                         "questionnaire": assessment.questionnaire.id,
                         "organisation": assessment.organisation.id,
                         "hr": list(assessment.hr.all().values_list("id", flat=True)),
+                        "instructions":assessment.instructions,
                         "pre_assessment": (
                             assessment.pre_assessment.id
                             if assessment.assessment_timing == "post"

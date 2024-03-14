@@ -167,6 +167,7 @@ class Assessment(models.Model):
 
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    instructions = models.TextField(blank=True,default="")
 
     def __str__(self):
         return self.name

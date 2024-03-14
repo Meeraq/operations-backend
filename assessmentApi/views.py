@@ -661,6 +661,7 @@ class AssessmentView(APIView):
             assessment.assessment_start_date = request.data.get("assessment_start_date")
             assessment.automated_reminder = request.data.get("automated_reminder")
             assessment.assessment_timing = request.data.get("assessment_timing")
+            assessment.instructions=request.data.get("instructions")
             if request.data.get("assessment_timing") == "post":
                 assessment.pre_assessment = pre_assessment
             else:
@@ -4307,6 +4308,7 @@ class GetAllAssessments(APIView):
                     else None
                 ),
                 "created_at": assessment.created_at,
+                "instructions":assessment.instructions,
             }
 
             assessment_list.append(assessment_data)
