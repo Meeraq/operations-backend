@@ -327,4 +327,8 @@ urlpatterns = [
         "edit-status-expense/",
         views.edit_status_expense,
     ),
+    path(
+        "projects/<int:project_id>/check-project-structure-edit-allowed/",
+        views.check_if_project_structure_edit_allowed,
+    ),
 ]
