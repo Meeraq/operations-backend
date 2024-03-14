@@ -1335,9 +1335,13 @@ def create_learners(learners_data):
                         learner.phone = learner_data.get("phone")
                         try:
                             if learner_data.get("area_of_expertise", ""):
-                                learner.area_of_expertise = learner_data.get("area_of_expertise")
+                                learner.area_of_expertise = learner_data.get(
+                                    "area_of_expertise"
+                                )
                             if learner_data.get("years_of_experience", ""):
-                                learner.years_of_experience = learner_data.get("years_of_experience")
+                                learner.years_of_experience = learner_data.get(
+                                    "years_of_experience"
+                                )
                         except Exception as e:
                             print(str(e))
                         learner.save()
@@ -2911,10 +2915,16 @@ def accept_coach_caas_hr(request):
             #     print(coach.status)
             # else:
             #     return Response({"error": "Status Already Updated"}, status=400)
+            if request.data.get("status") == "select":
+                particular_coach_all_contract = CoachContract.objects.filter(
+                    coach=coach.coach, project=project
+                )
 
+                for all_contract in particular_coach_all_contract:
+                    all_contract.is_archived = True
+                    all_contract.save()
         if coach.status["hr"]["status"] == "select":
             coaches_selected_count += 1
-
     project.save()
     try:
         userId = request.data.get("user_id")
@@ -2933,7 +2943,7 @@ def accept_coach_caas_hr(request):
 
         finalizeCoach.save()
     except Exception as e:
-        pass
+        print(str(e))
     # for i in range(0,len(project.coaches_status)):
     #     print(project.coaches_status[i])
     #     status=project.coaches_status[i].status.hr.status
@@ -6236,6 +6246,12 @@ def remove_coach_from_project(request, project_id):
         )
 
     engagements_with_coach = Engagement.objects.filter(project=project, coach=coach)
+    particular_coach_all_contract = CoachContract.objects.filter(
+        coach=coach, project=project
+    )
+    for all_contract in particular_coach_all_contract:
+        all_contract.is_archived = True
+        all_contract.save()
 
     for engagement in engagements_with_coach:
         sessions = SessionRequestCaas.objects.filter(
@@ -6648,7 +6664,7 @@ class AddRegisteredFacilitator(APIView):
                 {"error": "All required fields must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
- 
+
         try:
             # Create the Django User
             if Facilitator.objects.filter(email=email).exists():
@@ -6737,7 +6753,6 @@ class AddRegisteredFacilitator(APIView):
 
             return Response({"coach": facilitator_serializer.data})
 
-    
         except Exception as e:
             # Return error response if any other exception occurs
             print(e)
@@ -7730,7 +7745,7 @@ class UpdateCoachContract(APIView):
         project_id = request.data.get("project")
         try:
             contract = CoachContract.objects.get(
-                coach__id=coach_id, project__id=project_id
+                coach__id=coach_id, project__id=project_id, is_archived=False
             )
         except CoachContract.DoesNotExist:
             return Response(
@@ -7840,7 +7855,10 @@ class ApprovedCoachContract(APIView):
     def get(self, request, project_id, coach_id, format=None):
         try:
             coach_contract = CoachContract.objects.get(
-                project__id=project_id, coach__id=coach_id, status="approved"
+                project__id=project_id,
+                coach__id=coach_id,
+                status="approved",
+                is_archived=False,
             )
         except CoachContract.DoesNotExist:
             return Response(
@@ -8591,7 +8609,7 @@ def get_skill_training_projects(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminders_of_project(request):
-    
+
     try:
         project_id = request.data.get("id")
         reminder_type = request.data.get("reminder_type")
@@ -8615,11 +8633,10 @@ def update_reminders_of_project(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminders_of_caas_project(request):
-  
+
     try:
         project_id = request.data.get("id")
         reminder_type = request.data.get("reminder_type")
@@ -8641,7 +8658,6 @@ def update_reminders_of_caas_project(request):
         )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 @api_view(["POST"])
@@ -8825,7 +8841,7 @@ def get_all_api_logs(request):
     end_date = request.query_params.get("end_date")
 
     if start_date and end_date:
-      
+
         start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
         end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
         logs = logs.filter(created_at__date__range=(start_date, end_date))

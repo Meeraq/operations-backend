@@ -737,6 +737,7 @@ class CoachContract(models.Model):
     send_date = models.DateField(auto_now_add=True, blank=True)
     response_date = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True, blank=True)
+    is_archived = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return f"{self.coach.first_name}'s Contract for {self.project.name}"
