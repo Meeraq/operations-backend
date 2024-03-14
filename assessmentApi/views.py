@@ -4847,6 +4847,7 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
             return Response({"error": "Failed to get data"}, status=500)
 
 
+
 class GetAssessmentBatchAndProject(APIView):
     permission_classes = [IsAuthenticated]
 

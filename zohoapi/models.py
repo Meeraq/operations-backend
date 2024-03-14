@@ -14,6 +14,7 @@ class Vendor(models.Model):
     phone = models.CharField(max_length=25)
     email = models.EmailField()
     vendor_id = models.CharField(max_length=255, blank=True, default="")
+    hsn_or_sac = models.IntegerField(blank=True, default=0, null=True)
     is_upload_invoice_allowed = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 

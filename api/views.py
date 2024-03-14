@@ -982,12 +982,10 @@ def approve_facilitator(request):
     try:
         # Get the Coach object
         unapproved_coach = request.data["coach"]
-        room_id = request.data["room_id"]
         coach = Facilitator.objects.get(id=unapproved_coach["id"])
 
         # Change the is_approved field to True
         coach.is_approved = True
-        coach.room_id = room_id
         coach.save()
 
         path = f"/profile"
@@ -1333,6 +1331,13 @@ def create_learners(learners_data):
                     if learner:
                         learner.name = learner_data.get("name").strip()
                         learner.phone = learner_data.get("phone")
+                        try:
+                            if learner_data.get("area_of_expertise", ""):
+                                learner.area_of_expertise = learner_data.get("area_of_expertise")
+                            if learner_data.get("years_of_experience", ""):
+                                learner.years_of_experience = learner_data.get("years_of_experience")
+                        except Exception as e:
+                            print(str(e))
                         learner.save()
                         learners.append(learner)
                         continue
@@ -1851,7 +1856,7 @@ def get_user_data(user):
     for role in user.profile.roles.all():
         roles.append(role.name)
     if user_profile_role == "coach":
-        if user.profile.coach.active_inactive:
+        if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
             is_caas_allowed = Project.objects.filter(
                 coaches_status__coach=user.profile.coach
@@ -2247,6 +2252,17 @@ def add_project_struture(request):
     project.project_structure = request.data.get("project_structure", [])
     project.currency = request.data.get("currency", "")
     project.save()
+    if project.steps["project_structure"]["status"] == "complete":
+        #  update project structure for  all coaches
+        for coach_status in project.coaches_status.all():
+            coach_status.project_structure = project.project_structure
+            coach_status.save()
+        if not project.coach_consent_mandatory:
+            for coach_status in project.coaches_status.filter(is_consent_asked=True):
+                if not coach_status.status["consent"]["status"] == "reject":
+                    coach_status.status["consent"]["status"] = "select"
+                    coach_status.status["project_structure"]["status"] = "select"
+                coach_status.save()
     return Response({"message": "Structure added", "details": ""}, status=200)
 
 
@@ -3050,18 +3066,7 @@ def add_learner_to_project(request):
                     message = f"You have been added to Project - {project.name}"
                     create_notification(learner.user.user, path, message)
                     coacheeCounts = coacheeCounts + 1
-                    microsoft_auth_url = (
-                        f'{env("BACKEND_URL")}/api/microsoft/oauth/{learner.email}/'
-                    )
-                    user_token_present = False
-                    try:
-                        user_token = UserToken.objects.get(
-                            user_profile__user__username=learner.email
-                        )
-                        if user_token:
-                            user_token_present = True
-                    except Exception as e:
-                        pass
+
                     send_mail_templates(
                         "coachee_emails/add_coachee.html",
                         [learner.email],
@@ -3070,8 +3075,6 @@ def add_learner_to_project(request):
                             "name": learner.name,
                             "orgname": project.organisation.name,
                             "email": learner.email,
-                            "microsoft_auth_url": microsoft_auth_url,
-                            "user_token_present": user_token_present,
                         },
                         [],
                     )
@@ -7944,7 +7947,7 @@ def change_user_role(request, user_id):
     for role in user.profile.roles.all():
         roles.append(role.name)
     if user_profile_role == "coach":
-        if user.profile.coach.active_inactive:
+        if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
             is_caas_allowed = Project.objects.filter(
                 coaches_status__coach=user.profile.coach

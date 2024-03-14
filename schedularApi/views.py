@@ -687,7 +687,7 @@ def get_batch_calendar(request, batch_id):
         coaches = Coach.objects.filter(schedularbatch__id=batch_id)
         facilitator = Facilitator.objects.filter(
             livesession__batch__id=batch_id
-        ).distinct()
+        ).distinct()    
         coaches_serializer = CoachSerializer(coaches, many=True)
         facilitator_serializer = FacilitatorSerializer(facilitator, many=True)
 
@@ -1444,6 +1444,18 @@ def update_batch(request, batch_id):
         return Response(
             {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
         )
+    
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = SchedularBatchSerializer(batch)
+    return Response({**serializer.data, "is_nudge_enabled": batch.project.nudges})
 
 
 @api_view(["GET"])
@@ -3131,7 +3143,6 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
             status=500,
         )
 
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_facilitator(request):
@@ -4427,7 +4438,10 @@ class GetAllBatchesParticipantDetails(APIView):
     def get(self, request, project_id):
         try:
             batches = SchedularBatch.objects.filter(project__id=project_id)
-
+            facilitator_id = request.query_params.get("facilitator_id")
+            print("facilitator_id",facilitator_id)
+            if facilitator_id:
+                batches = SchedularBatch.objects.filter(livesession__facilitator__id = facilitator_id)
             learner_data_dict = {}
 
             for batch in batches:
@@ -5735,3 +5749,27 @@ def edit_status_expense(request):
             {"error": f"Failed to {status.title()} the expense."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+    
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_courses_for_all_batches(request):
+    try:
+        facilitator_id = request.query_params.get("facilitator_id", None)
+        batches = SchedularBatch.objects.filter(livesession__facilitator__id=facilitator_id)
+        courses = Course.objects.filter(batch__in=batches)
+        course_serializer=CourseSerializer(courses, many=True)
+        return Response(course_serializer.data)
+    except SchedularBatch.DoesNotExist:
+        return Response(
+            {"error": "Couldn't find batches with the specified facilitator."},
+            status=400
+        )
+    except Course.DoesNotExist:
+        return Response(
+            {"error": "Couldn't find courses for the specified batch and facilitator."},
+            status=400
+        )
+    except Exception as e:
+        print(str(e))
