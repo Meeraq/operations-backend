@@ -32,7 +32,7 @@ def update_nudges_from_course_to_batch(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('schedularApi', '0021_schedularproject_junior_pmo_and_more'),
+        ('schedularApi', '0022_schedularbatch_nudge_frequency_and_more'),
         ('courses', '0018_lesson_drip_date_lesson_live_session'),
     ]
 
