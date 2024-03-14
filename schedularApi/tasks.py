@@ -24,7 +24,7 @@ from api.views import (
     generateManagementToken,
 )
 from schedularApi.serializers import AvailabilitySerializer
-from datetime import timedelta, time, datetime
+from datetime import timedelta, time, datetime, date
 import pytz
 import json
 
@@ -1221,9 +1221,6 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
                     coach_name = coach.first_name + " " + coach.last_name
                     phone = coach.phone_country_code + coach.phone
                     time = caas_session.confirmed_availability.start_time
-                    # final_time = datetime.fromtimestamp(
-                    #     (int(time) / 1000) + 19800
-                    # ).strftime("%I:%M %p")
                     final_time = get_time(int(time))
                     booking_id = caas_session.coach.room_id
                     print(booking_id)
@@ -1310,14 +1307,11 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_caas():
             ~Q(status="completed"),
         )
         for caas_session in session_requests:
-            if caas_session.project.automated_reminder:
+            if caas_session.project.whatsapp_reminder:
                 learner = caas_session.learner
                 learner_name = learner.name
                 phone = learner.phone
                 time = caas_session.confirmed_availability.start_time
-                # final_time = datetime.fromtimestamp(
-                #     (int(time) / 1000) + 19800
-                # ).strftime("%I:%M %p")
                 final_time = get_time(int(time))
                 booking_id = caas_session.coach.room_id
                 send_whatsapp_message_template(
@@ -1382,35 +1376,33 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
                         "template_name": "session_reminder_5_mins_before_final",
                     },
                 )
-            learner = caas_session.learner
-            caas_learner_name = learner.name
-            caas_learner_phone = learner.phone
-            time = caas_session.confirmed_availability.start_time
-            # caas_learner_final_time = datetime.fromtimestamp(
-            #     (int(time) / 1000) + 19800
-            # ).strftime("%I:%M %p")
-            caas_learner_final_time = get_time(int(time))
-            send_whatsapp_message_template(
-                caas_learner_phone,
-                {
-                    "broadcast_name": "send_whatsapp_reminder_to_users_before_5mins_in_caas_to_learner",
-                    "parameters": [
-                        {
-                            "name": "name",
-                            "value": caas_learner_name,
-                        },
-                        {
-                            "name": "time",
-                            "value": f"{caas_learner_final_time} IST",
-                        },
-                        {
-                            "name": "booking_id",
-                            "value": booking_id,
-                        },
-                    ],
-                    "template_name": "session_reminder_5_mins_before_final",
-                },
-            )
+            if caas_session.project.whatsapp_reminder:
+                learner = caas_session.learner
+                caas_learner_name = learner.name
+                caas_learner_phone = learner.phone
+                time = caas_session.confirmed_availability.start_time
+                caas_learner_final_time = get_time(int(time))
+                send_whatsapp_message_template(
+                    caas_learner_phone,
+                    {
+                        "broadcast_name": "send_whatsapp_reminder_to_users_before_5mins_in_caas_to_learner",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": caas_learner_name,
+                            },
+                            {
+                                "name": "time",
+                                "value": f"{caas_learner_final_time} IST",
+                            },
+                            {
+                                "name": "booking_id",
+                                "value": booking_id,
+                            },
+                        ],
+                        "template_name": "session_reminder_5_mins_before_final",
+                    },
+                )
     except Exception as e:
         print(str(e))
 
@@ -1421,9 +1413,6 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
         # for seeq sessions
         session = SchedularSessions.objects.get(id=session_id)
         if True:
-            # seeq_coach_start_time_for_mail = datetime.fromtimestamp(
-            #     (int(session.availibility.start_time) / 1000) + 19800
-            # ).strftime("%I:%M %p")
             seeq_coach_start_time_for_mail = get_time(
                 int(session.availibility.start_time)
             )
@@ -1460,9 +1449,6 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
             )
             seeq_participant_name = session.learner.name
             seeq_participant_phone = session.learner.phone
-            # seeq_participant_time = datetime.fromtimestamp(
-            #     (int(session.availibility.start_time) / 1000) + 19800
-            # ).strftime("%I:%M %p")
             seeq_participant_time = get_time(int(session.availibility.start_time))
             send_whatsapp_message_template(
                 seeq_participant_phone,
@@ -1534,7 +1520,6 @@ def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
 @shared_task
 def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
     try:
-        # for caas sessions
         caas_session = SessionRequestCaas.objects.get(id=session_id)
         if True:
             if caas_session.coach:
@@ -1542,9 +1527,6 @@ def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
                 caas_coach_name = coach.first_name + " " + coach.last_name
                 caas_coach_phone = coach.phone_country_code + coach.phone
                 time = caas_session.confirmed_availability.start_time
-                # caas_coach_final_time = datetime.fromtimestamp(
-                #     (int(time) / 1000) + 19800
-                # ).strftime("%I:%M %p")
                 caas_coach_final_time = get_time(int(time))
                 send_whatsapp_message_template(
                     caas_coach_phone,
@@ -2082,6 +2064,7 @@ def reminder_to_pmo_bank_details_unavailable():
 def send_tomorrow_action_items_data():
     try:
         current_date_time = timezone.now()
+        current_date = date.today()
         schedular_projects = SchedularProject.objects.all()
 
         projects_data = {}
@@ -2145,7 +2128,7 @@ def send_tomorrow_action_items_data():
 
             # Filter ongoing assessments
             assessments = Assessment.objects.filter(
-                assessment_end_date__gt=current_date_time,
+                assessment_end_date__gt=current_date,
                 status="ongoing",
                 assessment_modal__lesson__course__batch__project=project,
             )
@@ -2183,13 +2166,63 @@ def send_tomorrow_action_items_data():
                         ].strftime("%d-%m-%Y %H:%M")
                         projects_data[project.name]["nudges"].append(nudge)
 
+        assessments = Assessment.objects.filter(
+            assessment_end_date__gt=current_date,
+            status="ongoing",
+            assessment_timing="none",
+        )
+        assessment_data = []
+        for assessment in assessments:
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+            if not assessment_lesson:
+                total_responses_count = ParticipantResponse.objects.filter(
+                    assessment=assessment
+                ).count()
+
+                assessment_lesson = AssessmentLesson.objects.filter(
+                    assessment_modal=assessment
+                ).first()
+                temp = {
+                    "name": assessment.name,
+                    "response_status": f"{total_responses_count} / {assessment.participants_observers.count()}",
+                    "reminder": "On" if assessment.automated_reminder else "Off",
+                    "type": assessment.assessment_type,
+                }
+                assessment_data.append(temp)
+
         send_mail_templates(
             "pmo_emails/tomorrow_action_items_mail.html",
             json.loads(env("ACTION_ITEMS_MAIL")),
             "Tomorrow's Project Updates for PMO Review",
-            {"projects_data": projects_data},
+            {"projects_data": projects_data, "Assessments": assessment_data},
             json.loads(env("ACTION_ITEMS_MAIL_CC_EMAILS")),
         )
 
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def update_lesson_status_according_to_drip_dates():
+    try:
+        today = date.today()
+        lessons = Lesson.objects.filter(Q(live_session__date_time__date=today) | Q(drip_date=today))
+        for lesson in lessons:
+            if lesson.lesson_type == "assessment":
+                assessment = Assessment.objects.filter(lesson=lesson).first()
+
+                assessment_modal = Assessment.objects.get(
+                    id=assessment.assessment_modal.id
+                )
+                lesson.status == "public"
+                assessment_modal.status = "ongoing"
+                lesson.save()
+                assessment_modal.save()
+            else:
+
+                lesson.status = "public"
+                lesson.save()
     except Exception as e:
         print(str(e))

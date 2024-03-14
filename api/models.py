@@ -123,7 +123,7 @@ class Profile(models.Model):
         ("hr", "hr"),
         ("superadmin", "superadmin"),
         ("facilitator", "facilitator"),
-        ("finance", "finance")
+        ("finance", "finance"),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)
@@ -140,6 +140,7 @@ class SuperAdmin(models.Model):
     def __str__(self):
         return self.name
 
+
 class Finance(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -150,11 +151,19 @@ class Finance(models.Model):
     def __str__(self):
         return self.name
 
+
 class Pmo(models.Model):
+
+    SUB_ROLE_CHOICES = [
+        ("manager", "Manager"),
+        ("junior_pmo", "Junior PMO"),
+    ]
+
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
+    sub_role = models.CharField(max_length=50, choices=SUB_ROLE_CHOICES, blank=True,default="manager")
     room_id = models.CharField(max_length=50, blank=True)
 
     def __str__(self):
@@ -220,6 +229,7 @@ class Coach(models.Model):
     def __str__(self):
         return self.first_name + " " + self.last_name
 
+
 class Facilitator(models.Model):
     user = models.OneToOneField(
         Profile, on_delete=models.CASCADE, blank=True, default=""
@@ -261,10 +271,11 @@ class Facilitator(models.Model):
     fees_per_hour = models.CharField(max_length=20, blank=True)
     fees_per_day = models.CharField(max_length=20, blank=True)
     topic = models.JSONField(default=list, blank=True)
+    is_approved = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
-    
+
 
 class Learner(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
@@ -307,9 +318,11 @@ class HR(models.Model):
 class CoachStatus(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     status = models.JSONField(default=dict, blank=True)
+    project_structure = models.JSONField(default=list, blank=True)
     learner_id = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     consent_expiry_date = models.DateField(blank=True, null=True)
+    is_consent_asked = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.id} {self.coach.first_name} {self.coach.last_name}"
@@ -361,7 +374,15 @@ class Project(models.Model):
     coach_consent_mandatory = models.BooleanField(default=True)
     enable_emails_to_hr_and_coachee = models.BooleanField(default=True)
     masked_coach_profile = models.BooleanField(default=False)
-    automated_reminder = models.BooleanField(blank=True, default=True)
+    email_reminder = models.BooleanField(blank=True, default=False)
+    whatsapp_reminder = models.BooleanField(blank=True, default=False)
+    calendar_invites = models.BooleanField(blank=True, default=False)
+    junior_pmo = models.ForeignKey(
+        Pmo,
+        null=True,
+        on_delete=models.SET_NULL,
+        blank=True,
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -371,7 +392,7 @@ class Project(models.Model):
 
 
 class Update(models.Model):
-    pmo = models.ForeignKey(Pmo, on_delete=models.CASCADE)
+    pmo = models.ForeignKey(Pmo, on_delete=models.SET_NULL, null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     message = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -456,6 +477,7 @@ class SessionRequestCaas(models.Model):
     session_duration = models.IntegerField(blank=True, default=None, null=True)
     status_updated_at = models.DateTimeField(blank=True, null=True, default=None)
     billable_session_number = models.IntegerField(blank=True, default=None, null=True)
+    is_extra = models.BooleanField(blank=True, default=False)
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
@@ -467,17 +489,6 @@ class SessionRequestCaas(models.Model):
             )
         else:
             return f"{self.session_type} = Learner: {self.learner.name}"
-
-
-# class SessionCaas(models.Model):
-#     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-#     confirmed_availability = models.ForeignKey(Availibility, on_delete=models.CASCADE)
-#     session_request = models.ForeignKey(SessionRequestCaas, on_delete=models.CASCADE)
-#     status = models.CharField(max_length=20,default='pending')
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     coach_joined = models.BooleanField(blank=True,default=False)
-#     learner_joined = models.BooleanField(blank=True,default=False)
-#     hr_joined = models.BooleanField(blank=True,default=False)
 
 
 class Notification(models.Model):
@@ -628,8 +639,10 @@ class StandardizedFieldRequest(models.Model):
         ("accepted", "Accepted"),
         ("rejected", "Rejected"),
     )
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True , null=True)
-    facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE, blank=True , null=True)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True, null=True)
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.CASCADE, blank=True, null=True
+    )
     standardized_field_name = models.ForeignKey(
         StandardizedField, on_delete=models.CASCADE, blank=True
     )

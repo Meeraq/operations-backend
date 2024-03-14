@@ -39,6 +39,7 @@ from .views import (
     CreateAssignmentLessonResponse,
     GetAssignmentsResponses,
     UpdateAssignmentLessonFile,
+    FacilitatorWiseFeedback,
 )
 import environ
 
@@ -374,5 +375,26 @@ urlpatterns = [
     path(
         "update_assignments_responses/",
         UpdateAssignmentLessonFile.as_view(),
+    ),
+    path(
+        "facilitator-wise-feedback/",
+        FacilitatorWiseFeedback.as_view(),
+    ),
+    path("course/<int:course_id>/live-sessions/", views.get_live_sessions_by_course),
+    path(
+        "get-feedback/<int:feedback_id>/",
+        views.get_feedback,
+    ),
+    path(
+        "submit-session-feedback/<int:feedback_id>/<int:learner_id>/",
+        views.submit_feedback,
+    ),
+    path(
+        "get-end-meeting-feedback-response-data/",
+        views.get_end_meeting_feedback_response_data,
+    ),
+    path(
+        "get-coach-session-feedback-response-data/<int:feedback_response_id>/",
+        views.get_coach_session_feedback_response_data,
     ),
 ]
