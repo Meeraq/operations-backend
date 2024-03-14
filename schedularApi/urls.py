@@ -56,9 +56,14 @@ urlpatterns = [
     ),
     path("coaches/", views.get_coaches),
     path("batch/<int:batch_id>/", views.update_batch),
+    path("batches/get/<int:batch_id>/", views.get_batch),
     path(
         "create-coach-availibilty/",
         views.create_coach_schedular_availibilty,
+    ),
+    path(
+        "edit-slot-request/<int:request_id>/",
+        views.edit_slot_request,
     ),
     path(
         "schedular-availabilities/",
@@ -257,9 +262,75 @@ urlpatterns = [
         views.get_slots_based_on_project_batch_coach,
     ),
     path("batch/add-facilitator/<int:batch_id>/", views.add_facilitator_to_batch),
+    path(
+        "get-sessions-pricing-for-a-coach/<int:coach_id>/<int:project_id>/",
+        views.get_sessions_pricing_for_a_coach,
+    ),
+    path(
+        "get-sessions-pricing-for-a-facilitator/<int:facilitator_id>/<int:project_id>/",
+        views.get_sessions_pricing_for_a_facilitator,
+    ),
+    path(
+        "update-facilitator-price/<int:facilitator_price_id>/",
+        views.update_facilitator_price,
+    ),
+    path(
+        "update-coach-price/<int:coach_price_id>/",
+        views.update_coach_price,
+    ),
+    path(
+        "update-price-in-project-structure/",
+        views.update_price_in_project_structure,
+    ),
     path("batches/facilitators/<str:batch_id>/", views.show_facilitator_inside_courses),
     path(
         "get-project-wise-progress-data/<int:project_id>/",
         views.get_project_wise_progress_data,
+    ),
+    path(
+        "requests/delete/<int:request_id>/",
+        views.delete_request_with_availabilities,
+        name="delete_request_with_availabilities",
+    ),
+    path(
+        "get-session-progress-data-for-dashboard/<int:project_id>/",
+        views.get_session_progress_data_for_dashboard,
+    ),
+    path(
+        "get-coach-session-progress-data-for-skill-training-project/<int:batch_id>/",
+        views.get_coach_session_progress_data_for_skill_training_project,
+    ),
+    path(
+        "projects/facilitators-and-pricing/<str:project_id>/",
+        views.get_facilitators_and_pricing_for_project,
+    ),
+    path(
+        "projects/coaches-and-pricing/<str:project_id>/",
+        views.get_coaches_and_pricing_for_project,
+    ),
+    path(
+        "facilitator_pricing/",
+        views.add_facilitator_pricing,
+        name="add_facilitator_pricing",
+    ),
+    path(
+        "facilitator_pricing/<int:facilitator_pricing_id>/",
+        views.edit_facilitator_pricing,
+        name="edit_facilitator_pricing",
+    ),
+    path("create-expense/", views.create_expense),
+    path("edit-expense/", views.edit_expense),
+    path(
+        "expenses/<int:batch_id>/<str:usertype>/<int:user_id>/",
+        views.get_expense_for_facilitator,
+    ),
+    path(
+        "edit-status-expense/",
+        views.edit_status_expense,
+    ),
+    path(
+        "get-all-courses-for-all-batches/",
+        views.get_all_courses_for_all_batches,
+        name="get_all_courses_for_all_batches",
     ),
 ]
