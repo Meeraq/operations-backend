@@ -16,6 +16,7 @@ from schedularApi.models import (
     CoachSchedularAvailibilty,
     SchedularProject,
 )
+from django.db import transaction
 from django.utils import timezone
 from api.views import (
     send_mail_templates,
@@ -2230,77 +2231,83 @@ def send_tomorrow_action_items_data():
 
 @shared_task
 def update_caas_session_status():
-    start_timestamp, end_timestamp = get_current_date_timestamps()
-    start_time, end_time = get_current_date_start_and_end_time_in_string()
-    today_sessions = SessionRequestCaas.objects.filter(
-        confirmed_availability__start_time__lte=end_timestamp,
-        confirmed_availability__end_time__gte=start_timestamp,
-    )
-    memoized_100ms_sessions_today = {}  # <room_id> : [] sessions array
-    for caas_session in today_sessions:
-        is_coach_joined = False
-        is_coachee_joined = False
-        is_both_joined_at_same_time = False
-        caas_session_start_timestamp = int(
-            caas_session.confirmed_availability.start_time
-        )
-        caas_session_end_timestamp = int(caas_session.confirmed_availability.end_time)
-        coach_room_id = caas_session.coach.room_id
-        if coach_room_id in memoized_100ms_sessions_today:
-            todays_sessions_in_100ms = memoized_100ms_sessions_today[coach_room_id]
-        else:
-            todays_sessions_in_100ms = []
-            try:
-                management_token = generateManagementToken()
-                todays_sessions_in_100ms = get_todays_100ms_sessions_of_room_id(
-                    management_token, coach_room_id, start_time, end_time
+    try:
+        with transaction.atomic():
+            start_timestamp, end_timestamp = get_current_date_timestamps()
+            start_time, end_time = get_current_date_start_and_end_time_in_string()
+            today_sessions = SessionRequestCaas.objects.filter(
+                confirmed_availability__start_time__lte=end_timestamp,
+                confirmed_availability__end_time__gte=start_timestamp,
+            )
+            memoized_100ms_sessions_today = {}  
+            for caas_session in today_sessions:
+                is_coach_joined = False
+                is_coachee_joined = False
+                is_both_joined_at_same_time = False
+                caas_session_start_timestamp = int(
+                    caas_session.confirmed_availability.start_time
                 )
-            except Exception as e:
-                print("failed to get coach room 100ms sessions")
-        sessions_in_100ms_at_scheduled_time_of_caas_session = []
+                caas_session_end_timestamp = int(caas_session.confirmed_availability.end_time)
+                coach_room_id = caas_session.coach.room_id
+                if coach_room_id in memoized_100ms_sessions_today:
+                    todays_sessions_in_100ms = memoized_100ms_sessions_today[coach_room_id]
+                else:
+                    todays_sessions_in_100ms = []
+                    try:
+                        management_token = generateManagementToken()
+                        todays_sessions_in_100ms = get_todays_100ms_sessions_of_room_id(
+                            management_token, coach_room_id, start_time, end_time
+                        )
+                    except Exception as e:
+                        print("failed to get coach room 100ms sessions")
+                sessions_in_100ms_at_scheduled_time_of_caas_session = []
 
-        for session in todays_sessions_in_100ms:
-            created_at_in_timestamp = convert_timestr_to_timestamp(
-                session["created_at"]
-            )
-            five_minutes_prior_schedular_start_time = (
-                caas_session_start_timestamp - 5 * 60 * 1000
-            )
-            if (
-                created_at_in_timestamp >= five_minutes_prior_schedular_start_time
-                or created_at_in_timestamp < caas_session_end_timestamp
-            ):
-                sessions_in_100ms_at_scheduled_time_of_caas_session.append(session)
+                for session in todays_sessions_in_100ms:
+                    created_at_in_timestamp = convert_timestr_to_timestamp(
+                        session["created_at"]
+                    )
+                    five_minutes_prior_schedular_start_time = (
+                        caas_session_start_timestamp - 5 * 60 * 1000
+                    )
+                    if (
+                        created_at_in_timestamp >= five_minutes_prior_schedular_start_time
+                        or created_at_in_timestamp < caas_session_end_timestamp
+                    ):
+                        sessions_in_100ms_at_scheduled_time_of_caas_session.append(session)
 
-        for session in sessions_in_100ms_at_scheduled_time_of_caas_session:
-            is_coach_joined_in_current_100ms_session = False
-            is_learner_joined_in_current_100ms_session = False
+                for session in sessions_in_100ms_at_scheduled_time_of_caas_session:
+                    is_coach_joined_in_current_100ms_session = False
+                    is_learner_joined_in_current_100ms_session = False
+                    
+                
+                    for key, peer in session["peers"].items():
+                        if (
+                            caas_session.availibility.coach.first_name
+                            + " "
+                            + caas_session.availibility.coach.last_name
+                        ).lower().strip() == peer["name"].lower().strip():
+                            is_coach_joined = True
+                            is_coach_joined_in_current_100ms_session = True
+                        if (
+                            caas_session.learner.name.lower().strip()
+                            == peer["name"].lower().strip()
+                        ):
+                            is_coachee_joined = True
+                            is_learner_joined_in_current_100ms_session = True
+                        if is_coach_joined_in_current_100ms_session and is_learner_joined_in_current_100ms_session:
+                            is_both_joined_at_same_time = True
+                            break
+
+                if is_both_joined_at_same_time:
+                    caas_session.auto_generated_status = "completed"
             
-           
-            for key, peer in session["peers"].items():
-                if (
-                    caas_session.availibility.coach.first_name
-                    + " "
-                    + caas_session.availibility.coach.last_name
-                ).lower().strip() == peer["name"].lower().strip():
-                    is_coach_joined = True
-                    is_coach_joined_in_current_100ms_session = True
-                if (
-                    caas_session.learner.name.lower().strip()
-                    == peer["name"].lower().strip()
-                ):
-                    is_coachee_joined = True
-                    is_learner_joined_in_current_100ms_session = True
-                if is_coach_joined_in_current_100ms_session and is_learner_joined_in_current_100ms_session:
-                    is_both_joined_at_same_time = True
-                    break
-        if is_both_joined_at_same_time:
-            caas_session.auto_generated_status = "completed"
-        # pending because both joined at the same time
-        elif is_coach_joined and is_coachee_joined:
-            caas_session.auto_generated_status = "pending"
-        elif is_coachee_joined:
-            caas_session.auto_generated_status = "coach_no_show"
-        elif is_coach_joined:
-            caas_session.auto_generated_status = "coachee_no_show"
-        caas_session.save()
+                elif is_coach_joined and is_coachee_joined:
+                    caas_session.auto_generated_status = "pending"
+                elif is_coachee_joined:
+                    caas_session.auto_generated_status = "coach_no_show"
+                elif is_coach_joined:
+                    caas_session.auto_generated_status = "coachee_no_show"
+                caas_session.save()
+
+    except Exception as e:
+        print(str(e))
