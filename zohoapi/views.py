@@ -517,8 +517,11 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
                     (
                         bill
                         for bill in bills
-                        if bill.get(env("INVOICE_FIELD_NAME"))
-                        == invoice["invoice_number"]
+                        if (
+                            bill.get(env("INVOICE_FIELD_NAME"))
+                            == invoice["invoice_number"]
+                            and bill.get("vendor_id") == invoice["vendor_id"]
+                        )
                     ),
                     None,
                 )
@@ -1263,7 +1266,10 @@ def fetch_invoices(organization_id):
             (
                 bill
                 for bill in all_bills
-                if bill.get(env("INVOICE_FIELD_NAME")) == invoice["invoice_number"]
+                if (
+                    bill.get(env("INVOICE_FIELD_NAME")) == invoice["invoice_number"]
+                    and bill.get("vendor_id") == invoice["vendor_id"]
+                )
             ),
             None,
         )
