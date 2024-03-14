@@ -82,6 +82,7 @@ from schedularApi.models import (
 from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
 )
+from schedularApi.serializers import SchedularBatchSerializer
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
 )
@@ -537,13 +538,13 @@ class LessonListView(generics.ListAPIView):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_nudges_and_course(request, course_id):
+def get_nudges_and_batch(request, batch_id):
     try:
-        course = Course.objects.get(id=course_id)
-        course_serializer = CourseSerializer(course)
-        nudges = Nudge.objects.filter(course=course)
+        batch = SchedularBatch.objects.get(id=batch_id)
+        batch_serializer = SchedularBatchSerializer(batch)
+        nudges = Nudge.objects.filter(batch=batch)
         serializer = NudgeSerializer(nudges, many=True)
-        return Response({"nudges": serializer.data, "course": course_serializer.data})
+        return Response({"nudges": serializer.data, "batch": batch_serializer.data})
     except Course.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
@@ -582,33 +583,33 @@ def download_nudge_file(request, nudge_id):
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
-def add_nudges_date_frequency_to_course(request, course_id):
+def add_nudges_date_frequency_to_batch(request, batch_id):
     try:
-        course = Course.objects.get(id=course_id)
+        batch = SchedularBatch.objects.get(id=batch_id)
         nudge_start_date = request.data.get("nudge_start_date")
         nudge_frequency = request.data.get("nudge_frequency")
-        existing_nudge_start_date = course.nudge_start_date
-        course.nudge_start_date = nudge_start_date
-        course.nudge_frequency = nudge_frequency
-        course.save()
-        if course.nudge_periodic_task:
-            course.nudge_periodic_task.enabled = False
-            course.nudge_periodic_task.save()
+        existing_nudge_start_date = batch.nudge_start_date
+        batch.nudge_start_date = nudge_start_date
+        batch.nudge_frequency = nudge_frequency
+        batch.save()
+        if batch.nudge_periodic_task:
+            batch.nudge_periodic_task.enabled = False
+            batch.nudge_periodic_task.save()
         desired_time = time(18, 31)
         datetime_comined = datetime.combine(
-            datetime.strptime(course.nudge_start_date, "%Y-%m-%d"), desired_time
+            datetime.strptime(batch.nudge_start_date, "%Y-%m-%d"), desired_time
         )
         scheduled_for = datetime_comined - timedelta(days=1)
         clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
         periodic_task = PeriodicTask.objects.create(
             name=uuid.uuid1(),
             task="schedularApi.tasks.schedule_nudges",
-            args=[course.id],
+            args=[batch.id],
             clocked=clocked,
             one_off=True,
         )
-        course.nudge_periodic_task = periodic_task
-        course.save()
+        batch.nudge_periodic_task = periodic_task
+        batch.save()
         return Response({"message": "Updated successfully"}, status=201)
     except Course.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
@@ -3500,7 +3501,7 @@ def download_consolidated_project_report(request, project_id):
 @api_view(["GET"])
 def get_nudges_by_project_id(request, project_id):
     # Retrieve nudges filtered by project_id
-    nudges = Nudge.objects.filter(course__batch__project__id=project_id)
+    nudges = Nudge.objects.filter(batch__project__id=project_id)
     serializer = NudgeSerializer(nudges, many=True)
     return Response(serializer.data)
 
@@ -3528,24 +3529,24 @@ def send_nudge_to_email(request, nudge_id):
 
 
 @api_view(["POST"])
-def duplicate_nudge(request, nudge_id, course_id):
+def duplicate_nudge(request, nudge_id, batch_id):
     order = request.data.get("order")
     try:
         original_nudge = Nudge.objects.get(id=nudge_id)
-        course = Course.objects.get(id=course_id)  # Fetch the course instance
+        batch = SchedularBatch.objects.get(id=batch_id)  # Fetch the batch instance
         duplicated_nudge = Nudge.objects.create(
             name=f"{original_nudge.name}",
             content=original_nudge.content,
             file=original_nudge.file,
             order=order,
-            course=course,  # Use the fetched course instance
+            batch=batch,
             is_sent=False,  # Assuming the duplicated nudge is not sent yet
         )
         return Response({"message": "Nudge duplicated successfully."})
     except Nudge.DoesNotExist:
         return Response({"error": "Nudge not found"}, status=404)
-    except Course.DoesNotExist:
-        return Response({"error": "Course not found"}, status=404)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
 
 
 @api_view(["GET"])
