@@ -59,7 +59,9 @@ from django.middleware.csrf import get_token
 from django.db import transaction
 from collections import defaultdict
 import re
-from schedularApi.models import FacilitatorPricing, CoachPricing
+from schedularApi.models import FacilitatorPricing, CoachPricing, SchedularProject
+from decimal import Decimal
+from collections import defaultdict
 
 
 env = environ.Env()
@@ -1604,3 +1606,184 @@ def update_purchase_order_status(request, purchase_order_id, status):
     except Exception as e:
         print(str(e))
         return Response(status=404)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_wise_finances(request):
+    try:
+        # Fetch all invoices and purchase orders
+        all_invoices = fetch_invoices(organization_id)
+        all_purchase_orders = fetch_purchase_orders(organization_id)
+        # Filter vendors who are coaches
+        vendors = Vendor.objects.filter(user__roles__name="coach")
+        # Calculate purchase order amounts
+        vendor_po_amounts = {}
+        for po in all_purchase_orders:
+            if po["status"] not in ["draft", "cancelled"]:
+                vendor_id = po["vendor_id"]
+                total_amount = Decimal(po["total"])
+                if vendor_id in vendor_po_amounts:
+                    vendor_po_amounts[vendor_id] += total_amount
+                else:
+                    vendor_po_amounts[vendor_id] = total_amount
+
+        # Calculate invoice amounts and paid amounts
+        vendor_invoice_amounts = {}
+        for invoice in all_invoices:
+            vendor_id = invoice["vendor_id"]
+            invoiced_amount = Decimal(invoice["total"])
+            paid_amount = (
+                Decimal(invoice["total"])
+                if invoice["bill"] and invoice["bill"]["status"] == "paid"
+                else Decimal(0)
+            )
+            if vendor_id in vendor_invoice_amounts:
+                vendor_invoice_amounts[vendor_id]["invoiced_amount"] += invoiced_amount
+                vendor_invoice_amounts[vendor_id]["paid_amount"] += paid_amount
+                vendor_invoice_amounts[vendor_id]["currency_symbol"] = (
+                    invoice["currency_symbol"]
+                    if not vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                    else vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                )
+            else:
+                vendor_invoice_amounts[vendor_id] = {
+                    "invoiced_amount": invoiced_amount,
+                    "paid_amount": paid_amount,
+                    "currency_symbol": invoice["currency_symbol"],
+                }
+
+        # Prepare response
+        res = []
+        for vendor in vendors:
+            vendor_id = vendor.vendor_id
+            res.append(
+                {
+                    "id": vendor.id,
+                    "vendor_id": vendor_id,
+                    "vendor_name": vendor.name,
+                    "po_amount": vendor_po_amounts.get(vendor_id, Decimal(0)),
+                    "invoiced_amount": vendor_invoice_amounts.get(
+                        vendor_id, {"invoiced_amount": Decimal(0)}
+                    )["invoiced_amount"],
+                    "paid_amount": vendor_invoice_amounts.get(
+                        vendor_id, {"paid_amount": Decimal(0)}
+                    )["paid_amount"],
+                    "currency_symbol": vendor_invoice_amounts[vendor_id][
+                        "currency_symbol"
+                    ],
+                }
+            )
+        return Response(res)
+    except Exception as e:
+        print(str(e))
+        return Response(status=403)
+
+
+def create_purchase_order_project_mapping():
+    coach_pricings = CoachPricing.objects.all()
+    facilitator_pricings = FacilitatorPricing.objects.all()
+
+    # Create a dictionary to store the mapping of purchase_order_id to project_id
+    purchase_order_project_mapping = {}
+
+    # Iterate over CoachPricing instances and add purchase_order_id to project_id mapping
+    for coach_pricing in coach_pricings:
+        purchase_order_id = coach_pricing.purchase_order_id
+        project_id = coach_pricing.project.id
+        purchase_order_project_mapping[purchase_order_id] = project_id
+
+    # Iterate over FacilitatorPricing instances and add purchase_order_id to project_id mapping
+    for facilitator_pricing in facilitator_pricings:
+        purchase_order_id = facilitator_pricing.purchase_order_id
+        project_id = facilitator_pricing.project.id
+        purchase_order_project_mapping[purchase_order_id] = project_id
+
+    return purchase_order_project_mapping
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_project_wise_finances(request):
+    try:
+        purchase_order_project_mapping = create_purchase_order_project_mapping()
+        all_invoices = fetch_invoices(organization_id)
+        all_purchase_orders = fetch_purchase_orders(organization_id)
+
+        # Filter vendors who are coaches
+        schedular_projects = SchedularProject.objects.all()
+
+        # Calculate purchase order amounts
+        project_po_amounts = {}
+        for po in all_purchase_orders:
+
+            if (
+                po["status"] not in ["draft", "cancelled"]
+                and po["purchaseorder_id"] in purchase_order_project_mapping
+            ):
+                project_id = purchase_order_project_mapping[po["purchaseorder_id"]]
+                total_amount = Decimal(po["total"])
+                if project_id in project_po_amounts:
+                    project_po_amounts[project_id] += total_amount
+                else:
+                    project_po_amounts[project_id] = total_amount
+
+        # Calculate invoice amounts and paid amounts
+        project_invoice_amounts = {}
+        for invoice in all_invoices:
+            if invoice["purchase_order_id"] in purchase_order_project_mapping:
+                project_id = purchase_order_project_mapping[
+                    invoice["purchase_order_id"]
+                ]
+                invoiced_amount = Decimal(invoice["total"])
+                paid_amount = (
+                    Decimal(invoice["total"])
+                    if invoice["bill"] and invoice["bill"]["status"] == "paid"
+                    else Decimal(0)
+                )
+                if project_id in project_invoice_amounts:
+                    project_invoice_amounts[project_id][
+                        "invoiced_amount"
+                    ] += invoiced_amount
+                    project_invoice_amounts[project_id]["paid_amount"] += paid_amount
+                    project_invoice_amounts[project_id]["currency_symbol"] = (
+                        invoice["currency_symbol"]
+                        if not project_invoice_amounts[project_id]["currency_symbol"]
+                        else project_invoice_amounts[project_id]["currency_symbol"]
+                    )
+                else:
+                    project_invoice_amounts[project_id] = {
+                        "invoiced_amount": invoiced_amount,
+                        "paid_amount": paid_amount,
+                        "currency_symbol": invoice.get("currency_symbol", ""),
+                    }
+
+        # Prepare response
+        res = []
+        for project in schedular_projects:
+            project_id = project.id
+            if (
+                project_id in project_po_amounts
+                or project_id in project_invoice_amounts
+            ):
+                res.append(
+                    {
+                        "id": project_id,
+                        "project_name": project.name,
+                        "po_amount": project_po_amounts.get(project_id, Decimal(0)),
+                        "invoiced_amount": project_invoice_amounts.get(
+                            project_id, {"invoiced_amount": Decimal(0)}
+                        )["invoiced_amount"],
+                        "paid_amount": project_invoice_amounts.get(
+                            project_id, {"paid_amount": Decimal(0)}
+                        )["paid_amount"],
+                        "currency_symbol": project_invoice_amounts.get(
+                            project_id, {}
+                        ).get("currency_symbol", ""),
+                    }
+                )
+
+        return Response(res)
+    except Exception as e:
+        print(str(e))
+        return Response(status=403)
