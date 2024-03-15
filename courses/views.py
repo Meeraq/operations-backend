@@ -1839,8 +1839,11 @@ def update_video_lesson(request, lesson_id):
         serializer = VideoLessonSerializer(data=video_lesson_data)
 
     if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        video_lesson_instance = serializer.save()
+        video_lesson_depth_serializer = VideoLessonSerializerDepthOne(
+            video_lesson_instance
+        )
+        return Response(video_lesson_depth_serializer.data, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -3694,8 +3697,11 @@ class UpdateAssignmentLesson(APIView):
                 live_session = LiveSessionSchedular.objects.get(id=live_session_id)
             lesson.live_session = live_session
             lesson.save()
+            assignment_lesson_serializer = AssignmentSerializerDepthOne(
+                assignment_lesson
+            )
             return Response(
-                {"message": f"Assignment Lesson Updated."}, status=status.HTTP_200_OK
+                assignment_lesson_serializer.data, status=status.HTTP_200_OK
             )
         except Exception as e:
             print(str(e))
