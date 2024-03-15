@@ -1069,7 +1069,7 @@ def add_vendor(request):
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
-
+        hsn_or_sac = int(data.get("hsn_or_sac", ""))
         try:
             # Check if the user with the given email already exists
             user_profile = Profile.objects.get(user__email=email)
@@ -1078,7 +1078,7 @@ def add_vendor(request):
             # Check if the user has the role 'vendor'
             if user_profile.roles.filter(name="vendor").exists():
                 return Response(
-                    {"detail": "User already exists as a vendor."},
+                    {"error": "User already exists as a vendor."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -1092,20 +1092,21 @@ def add_vendor(request):
                     .exists()
                 ):
                     return Response(
-                        {"detail": "Vendor with the same vendor_id already exists."},
+                        {"error": "Vendor with the same vendor_id already exists."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
                 vendor.name = name
                 vendor.phone = phone
                 vendor.vendor_id = vendor_id
+                vendor.hsn_or_sac = hsn_or_sac
                 vendor.save()
 
             except Vendor.DoesNotExist:
                 # Check if the provided vendor_id already exists for another vendor
                 if Vendor.objects.filter(vendor_id=vendor_id).exists():
                     return Response(
-                        {"detail": "Vendor with the same vendor_id already exists."},
+                        {"error": "Vendor with the same vendor_id already exists."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -1118,11 +1119,14 @@ def add_vendor(request):
                     email=email,
                     vendor_id=vendor_id,
                     phone=phone,
+                    hsn_or_sac=hsn_or_sac,
                 )
                 vendor.save()
-                import_invoice_for_new_vendor.delay(vendor.id)
+                # import_invoice_for_new_vendor.delay(vendor.id)
             return Response(
-                {"detail": 'Role "vendor" assigned to the existing user successfully.'},
+                {
+                    "message": 'Role "vendor" assigned to the existing user successfully.'
+                },
                 status=status.HTTP_200_OK,
             )
 
@@ -1132,7 +1136,7 @@ def add_vendor(request):
                 # Check if the provided vendor_id already exists for another vendor
                 if Vendor.objects.filter(vendor_id=vendor_id).exists():
                     return Response(
-                        {"detail": "Vendor with the same vendor_id already exists."},
+                        {"error": "Vendor with the same vendor_id already exists."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -1160,17 +1164,19 @@ def add_vendor(request):
                     email=email,
                     vendor_id=vendor_id,
                     phone=phone,
+                    hsn_or_sac=hsn_or_sac,
                 )
                 vendor.save()
 
                 return Response(
-                    {"detail": "New vendor created successfully."},
+                    {"message": "New vendor created successfully."},
                     status=status.HTTP_201_CREATED,
                 )
 
             except Exception as e:
+                print(str(e))
                 return Response(
-                    {"detail": f"Error creating vendor: {str(e)}"},
+                    {"error": f"Failed to create vendor."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
@@ -1377,6 +1383,7 @@ def edit_vendor(request, vendor_id):
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
+        hsn_or_sac = int(data.get("hsn_or_sac", ""))
         existing_user = (
             User.objects.filter(username=email).exclude(username=vendor.email).first()
         )
@@ -1391,6 +1398,7 @@ def edit_vendor(request, vendor_id):
         vendor.email = email
         vendor.name = name
         vendor.phone = phone
+        vendor.hsn_or_sac = hsn_or_sac
         vendor.vendor_id = vendor_id
 
         vendor.save()
