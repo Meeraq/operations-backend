@@ -3686,13 +3686,16 @@ class UpdateAssignmentLesson(APIView):
 
             assignment_lesson.save()
             lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
-            lesson.name = request.data["name"]
-            lesson.drip_date = request.data["drip_date"]
-            live_session_id = request.data["live_session"]
-            live_session = None
-            if live_session_id != "null":
-                live_session = LiveSessionSchedular.objects.get(id=live_session_id)
-            lesson.live_session = live_session
+            if lesson.course:
+                lesson.name = request.data["name"]
+                lesson.drip_date = request.data["drip_date"]
+                live_session_id = request.data["live_session"]
+                live_session = None
+                if live_session_id != "null":
+                    live_session = LiveSessionSchedular.objects.get(id=live_session_id)
+                lesson.live_session = live_session
+            else:
+                lesson.name = request.data["name"]
             lesson.save()
             return Response(
                 {"message": f"Assignment Lesson Updated."}, status=status.HTTP_200_OK
