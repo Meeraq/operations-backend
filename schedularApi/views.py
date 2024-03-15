@@ -102,6 +102,7 @@ from courses.models import (
     LaserCoachingSession,
     LiveSessionLesson,
     Lesson,
+    Certificate,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import (
@@ -687,7 +688,7 @@ def get_batch_calendar(request, batch_id):
         coaches = Coach.objects.filter(schedularbatch__id=batch_id)
         facilitator = Facilitator.objects.filter(
             livesession__batch__id=batch_id
-        ).distinct()    
+        ).distinct()
         coaches_serializer = CoachSerializer(coaches, many=True)
         facilitator_serializer = FacilitatorSerializer(facilitator, many=True)
 
@@ -728,6 +729,7 @@ def get_batch_calendar(request, batch_id):
             print(str(e))
             course = None
         batch_for_response = SchedularBatch.objects.filter(id=batch_id).first()
+        certificate = Certificate.objects.filter(courses=course).first()
         return Response(
             {
                 "sessions": sorted_sessions,
@@ -738,6 +740,7 @@ def get_batch_calendar(request, batch_id):
                 "facilitator": facilitator_serializer.data,
                 "batch_name": batch_for_response.name,
                 "project_id": batch_for_response.project.id,
+                "certificate_present": True if certificate else False,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -1444,7 +1447,6 @@ def update_batch(request, batch_id):
         return Response(
             {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
         )
-    
 
 
 @api_view(["GET"])
@@ -3143,6 +3145,7 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
             status=500,
         )
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_facilitator(request):
@@ -3976,7 +3979,7 @@ def add_new_session_in_project_structure(request):
                 "description": description,
                 "price": price,
             }
-         
+
             # Update the project structure
             prev_structure.append(new_session)
             project.project_structure = prev_structure
