@@ -333,4 +333,8 @@ urlpatterns = [
         views.get_all_courses_for_all_batches,
         name="get_all_courses_for_all_batches",
     ),
+    path(
+        "get-card-data-for-coach-in-skill-project/<int:project_id>/<int:coach_id>",
+        views.get_card_data_for_coach_in_skill_project,
+    ),
 ]
