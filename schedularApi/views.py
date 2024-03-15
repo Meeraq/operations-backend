@@ -4631,14 +4631,14 @@ def get_skill_dashboard_card_data(request, project_id):
             if not hr_id:
                 virtual_session_answer = Answer.objects.filter(
                     question__type="rating_0_to_10",
-                    question__feedback_lesson__live_session__session_type="virtual_session",
+                    question__feedbacklesson__live_session__session_type="virtual_session",
                 )
                 virtual_nps = calculate_nps_from_answers(virtual_session_answer)
 
                 # In-person session NPS calculation
                 in_person_session_answer = Answer.objects.filter(
                     question__type="rating_0_to_10",
-                    question__feedback_lesson__live_session__session_type="in_person_session",
+                    question__feedbacklesson__live_session__session_type="in_person_session",
                 )
                 in_person_nps = calculate_nps_from_answers(in_person_session_answer)
 
@@ -4680,8 +4680,8 @@ def get_skill_dashboard_card_data(request, project_id):
             if not hr_id:
                 virtual_session_answer = Answer.objects.filter(
                     question__type="rating_0_to_10",
-                    question__feedback_lesson__live_session__session_type="virtual_session",
-                    questionfeedback_lessonlive_session__batch__project__id=int(
+                    question__feedbacklesson__live_session__session_type="virtual_session",
+                    question__feedbacklesson__live_session__batch__project__id=int(
                         project_id
                     ),
                 )
@@ -4690,8 +4690,8 @@ def get_skill_dashboard_card_data(request, project_id):
                 # In-person session NPS calculation
                 in_person_session_answer = Answer.objects.filter(
                     question__type="rating_0_to_10",
-                    question__feedback_lesson__live_session__session_type="in_person_session",
-                    question__feedback_lesson__live_session__batch__project__id=int(
+                    question__feedbacklesson__live_session__session_type="in_person_session",
+                    question__feedbacklesson__live_session__batch__project__id=int(
                         project_id
                     ),
                 )
@@ -4700,7 +4700,7 @@ def get_skill_dashboard_card_data(request, project_id):
                 # Overall NPS calculation
                 overall_answer = Answer.objects.filter(
                     question__type="rating_0_to_10",
-                    question__feedback_lesson__live_session__batch__project__id=int(
+                    question__feedbacklesson__live_session__batch__project__id=int(
                         project_id
                     ),
                 )
@@ -4739,7 +4739,7 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
                 question__feedback_lesson__live_session__facilitator__id=int(
                     facilitator_id
                 ),
-                question__feedback_lesson__live_session__session_type="virtual_session",
+                question__feedbacklesson__live_session__session_type="virtual_session",
             )
             virtual_nps = calculate_nps_from_answers(virtual_session_answer)
 
@@ -4749,14 +4749,14 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
                 question__feedback_lesson__live_session__facilitator__id=int(
                     facilitator_id
                 ),
-                question__feedback_lesson__live_session__session_type="in_person_session",
+                question__feedbacklesson__live_session__session_type="in_person_session",
             )
             in_person_nps = calculate_nps_from_answers(in_person_session_answer)
 
             # Overall NPS calculation
             overall_answer = Answer.objects.filter(
                 question__type="rating_0_to_10",
-                question__feedback_lesson__live_session__facilitator__id=int(
+                question__feedbacklesson__live_session__facilitator__id=int(
                     facilitator_id
                 ),
             )
@@ -4766,11 +4766,11 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
 
             virtual_session_answer = Answer.objects.filter(
                 question__type="rating_0_to_10",
-                question__feedback_lesson__live_session__facilitator__id=int(
+                question__feedbacklesson__live_session__facilitator__id=int(
                     facilitator_id
                 ),
-                question__feedback_lesson__live_session__session_type="virtual_session",
-                questionfeedback_lessonlive_session__batch__project__id=int(project_id),
+                question__feedbacklesson__live_session__session_type="virtual_session",
+                question__feedbacklesson__live_session__batch__project__id=int(project_id),
             )
             virtual_nps = calculate_nps_from_answers(virtual_session_answer)
 
@@ -4780,8 +4780,8 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
                 question__feedback_lesson__live_session__facilitator__id=int(
                     facilitator_id
                 ),
-                question__feedback_lesson__live_session__session_type="in_person_session",
-                question__feedback_lesson__live_session__batch__project__id=int(
+                question__feedbacklesson__live_session__session_type="in_person_session",
+                question__feedbacklesson__live_session__batch__project__id=int(
                     project_id
                 ),
             )
@@ -4790,10 +4790,10 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
             # Overall NPS calculation
             overall_answer = Answer.objects.filter(
                 question__type="rating_0_to_10",
-                question__feedback_lesson__live_session__facilitator__id=int(
+                question__feedbacklesson__live_session__facilitator__id=int(
                     facilitator_id
                 ),
-                question__feedback_lesson__live_session__batch__project__id=int(
+                question__feedbacklesson__live_session__batch__project__id=int(
                     project_id
                 ),
             )
