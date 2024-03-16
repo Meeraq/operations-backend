@@ -460,10 +460,19 @@ class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
 
 
 class FacilitatorSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Facilitator
         fields = "__all__"
 
+class FacilitatorSerializerIsVendor(serializers.ModelSerializer):
+    is_vendor = serializers.BooleanField()
+    vendor_id = serializers.CharField()
+    purchase_order_id = serializers.CharField()
+    purchase_order_no = serializers.CharField()
+    class Meta:
+        model = Facilitator
+        fields = "__all__"
 
 class FacilitatorBasicDetailsSerializer(serializers.ModelSerializer):
     class Meta:

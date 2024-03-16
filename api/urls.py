@@ -25,6 +25,7 @@ from .views import (
     SessionData,
     DownloadCoachContract,
     AddRegisteredFacilitator,
+    UpdateUserRoles,
 )
 
 urlpatterns = [
@@ -398,4 +399,5 @@ urlpatterns = [
         views.delete_pmo,
     ),
     path("edit-pmo/", views.edit_pmo),
+    path("update-user-roles/", UpdateUserRoles.as_view()),
 ]

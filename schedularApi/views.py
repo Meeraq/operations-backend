@@ -23,7 +23,16 @@ from django.utils import timezone
 from openpyxl import Workbook
 from django.http import HttpResponse
 import pandas as pd
-from django.db.models import Q, F, Case, When, Value, IntegerField
+from django.db.models import (
+    Q,
+    F,
+    Case,
+    When,
+    Value,
+    IntegerField,
+    BooleanField,
+    CharField,
+)
 from time import sleep
 import json
 from django.core.exceptions import ObjectDoesNotExist
@@ -89,6 +98,7 @@ from .models import (
 )
 from api.serializers import (
     FacilitatorSerializer,
+    FacilitatorSerializerIsVendor,
     FacilitatorBasicDetailsSerializer,
     CoachSerializer,
     FacilitatorDepthOneSerializer,
@@ -328,8 +338,11 @@ def get_all_Schedular_Projects(request):
     projects = SchedularProject.objects.all()
     if pmo_id:
         pmo = Pmo.objects.get(id=int(pmo_id))
+
         if pmo.sub_role == "junior_pmo":
             projects = SchedularProject.objects.filter(junior_pmo=pmo)
+        else:
+            projects = SchedularProject.objects.all()
 
     if status:
         projects = projects.exclude(status="completed")
@@ -685,11 +698,53 @@ def get_batch_calendar(request, batch_id):
         participants = Learner.objects.filter(schedularbatch__id=batch_id)
         participants_serializer = LearnerSerializer(participants, many=True)
         coaches = Coach.objects.filter(schedularbatch__id=batch_id)
-        facilitator = Facilitator.objects.filter(
-            livesession__batch__id=batch_id
-        ).distinct()
+        facilitator = (
+            Facilitator.objects.filter(livesession__batch__id=batch_id)
+            .distinct()
+            .annotate(
+                is_vendor=Case(
+                    When(user__vendor__isnull=False, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                ),
+                vendor_id=Case(
+                    When(user__vendor__isnull=False, then=F("user__vendor__vendor_id")),
+                    default=None,
+                    output_field=CharField(max_length=255, null=True),
+                ),
+                purchase_order_id=Case(
+                    When(expense__isnull=False, then=F("expense__purchase_order_id")),
+                    default=None,
+                    output_field=CharField(max_length=200, null=True),
+                ),
+                purchase_order_no=Case(
+                    When(expense__isnull=False, then=F("expense__purchase_order_no")),
+                    default=None,
+                    output_field=CharField(max_length=200, null=True),
+                ),
+            )
+        )
+
         coaches_serializer = CoachSerializer(coaches, many=True)
-        facilitator_serializer = FacilitatorSerializer(facilitator, many=True)
+        facilitator_serializer = FacilitatorSerializerIsVendor(facilitator, many=True)
+
+        try:
+            purchase_orders = fetch_purchase_orders(organization_id)
+            for facilitator_item in facilitator_serializer.data:
+                expense = Expense.objects.filter(batch__id=batch_id , facilitator__id = facilitator_item['id']).first()
+                if expense.purchase_order_id:
+                    facilitator_item['purchase_order_id'] = expense.purchase_order_id
+                    facilitator_item['purchase_order_no'] = expense.purchase_order_no
+                else:
+                    facilitator_item['purchase_order_id'] = expense.purchase_order_id
+                    facilitator_item['purchase_order_no'] = expense.purchase_order_no
+                if facilitator_item['purchase_order_id'] is not None:
+                    purchase_order = get_purchase_order(purchase_orders, facilitator_item['purchase_order_id'])
+                    facilitator_item['purchase_order'] = purchase_order
+                else:
+                    facilitator_item['purchase_order'] = None
+        except Exception as e:
+            print(str(e))
 
         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
@@ -3965,7 +4020,7 @@ def add_new_session_in_project_structure(request):
                 "description": description,
                 "price": price,
             }
-         
+
             # Update the project structure
             prev_structure.append(new_session)
             project.project_structure = prev_structure
@@ -5597,7 +5652,7 @@ def create_expense(request):
         batch = request.data.get("batch")
         facilitator = request.data.get("facilitator")
         file = request.data.get("file")
-       
+        amount = request.data.get("amount")
         if not file:
             return Response(
                 {"error": "Please upload file."},
@@ -5608,7 +5663,7 @@ def create_expense(request):
                 {"error": "Failed to create expense."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        if name and date_of_expense and description:
+        if name and date_of_expense and description and amount:
             facilitator = Facilitator.objects.get(id=int(facilitator))
             batch = SchedularBatch.objects.get(id=int(batch))
             if live_session:
@@ -5621,6 +5676,7 @@ def create_expense(request):
                 batch=batch,
                 facilitator=facilitator,
                 file=file,
+                amount=amount,
             )
 
             return Response({"message": "Expense created successfully!"}, status=201)
@@ -5633,6 +5689,34 @@ def create_expense(request):
         print(str(e))
         return Response(
             {"error": "Failed to create expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_expense_amount(request):
+    try:
+
+        amount = request.data.get("amount")
+        expense_id = int(request.data.get("expense_id"))
+
+        if amount:
+            expense = Expense.objects.get(
+                id=expense_id,
+            )
+            expense.amount = amount
+            expense.save()
+            return Response({"message": "Amount updated successfully!"}, status=201)
+        else:
+            return Response(
+                {"error": "Fill in the required feild"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to update amount"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 

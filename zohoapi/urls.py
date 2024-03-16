@@ -122,4 +122,9 @@ urlpatterns = [
         views.update_purchase_order_status,
         name="update_purchase_order_status",
     ),
+    path(
+        "expense-purchase-order/create/<int:facilitator_id>/<int:batch_id>/",
+        views.expense_purchase_order_create,
+      
+    ),
 ]

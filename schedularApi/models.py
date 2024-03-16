@@ -267,6 +267,10 @@ class Expense(models.Model):
     )
     file = models.FileField(upload_to="expenses/", blank=True, null=True)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="pending")
+
+    amount = models.DecimalField(max_digits=65, decimal_places=2, blank=True, null=True)
+    purchase_order_id = models.CharField(max_length=200, default="", blank=True)
+    purchase_order_no = models.CharField(max_length=200, default="", blank=True)
     update_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

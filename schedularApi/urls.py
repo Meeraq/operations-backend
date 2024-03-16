@@ -327,4 +327,8 @@ urlpatterns = [
         "edit-status-expense/",
         views.edit_status_expense,
     ),
+      path(
+        "edit-amount-expense/",
+        views.edit_expense_amount,
+    ),
 ]
