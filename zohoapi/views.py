@@ -1069,7 +1069,12 @@ def add_vendor(request):
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
-        hsn_or_sac = int(data.get("hsn_or_sac", ""))
+        hsn_or_sac = data.get("hsn_or_sac")
+        
+        if hsn_or_sac is not None and hsn_or_sac.strip() != "":
+            hsn_or_sac = int(hsn_or_sac)  # Convert to integer
+        else:
+            hsn_or_sac = None
         try:
             # Check if the user with the given email already exists
             user_profile = Profile.objects.get(user__email=email)
@@ -1383,10 +1388,16 @@ def edit_vendor(request, vendor_id):
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
-        hsn_or_sac = int(data.get("hsn_or_sac", ""))
+        hsn_or_sac = data.get("hsn_or_sac")
         existing_user = (
             User.objects.filter(username=email).exclude(username=vendor.email).first()
         )
+
+        if hsn_or_sac is not None and hsn_or_sac.strip() != "":
+            hsn_or_sac = int(hsn_or_sac)  # Convert to integer
+        else:
+            hsn_or_sac = None 
+
         if existing_user:
             return Response(
                 {"error": "User with this email already exists."},
