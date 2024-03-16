@@ -3560,7 +3560,7 @@ def get_nps_project_wise(request):
             question__type="rating_0_to_10",
             question__feedbacklesson__lesson__course__batch__project=project,
         )
-        facilitator_id = request.query_params.get("hr", None)
+        facilitator_id = request.query_params.get("facilitator_id", None)
         if facilitator_id:
             answers = answers.filter(
                 question__feedbacklesson__live_session__facilitator=facilitator_id
