@@ -42,6 +42,8 @@ from .tasks import (
     purchase_orders_allowed,
     filter_invoice_data,
     send_mail_templates,
+    fetch_purchase_orders,
+    filter_purchase_order_data,
 )
 from .models import InvoiceData, AccessToken, Vendor, InvoiceStatusUpdate
 import base64
@@ -68,7 +70,6 @@ wkhtmltopdf_path = os.environ.get(
 )
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
-
 
 
 def get_line_items_details(invoices):
@@ -425,27 +426,6 @@ def login_view(request):
     else:
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
-
-
-def filter_purchase_order_data(purchase_orders):
-    try:
-        filtered_purchase_orders = []
-        for order in purchase_orders:
-            purchaseorder_number = order.get("purchaseorder_number", "").strip()
-            created_time_str = order.get("created_time", "").strip()
-            if created_time_str:
-                created_time = datetime.strptime(
-                    created_time_str, "%Y-%m-%dT%H:%M:%S%z"
-                )
-                if (
-                    purchaseorder_number in purchase_orders_allowed
-                    or created_time.year >= 2024
-                ):
-                    filtered_purchase_orders.append(order)
-        return filtered_purchase_orders
-    except Exception as e:
-        print(str(e))
-        return None
 
 
 @api_view(["GET"])
@@ -1132,38 +1112,6 @@ def get_all_vendors(request):
         )
 
 
-def fetch_purchase_orders(organization_id):
-    access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-    if not access_token_purchase_data:
-        raise Exception(
-            "Access token not found. Please generate an access token first."
-        )
-
-    all_purchase_orders = []
-    has_more_page = True
-    page = 1
-
-    while has_more_page:
-        api_url = (
-            f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}"
-        )
-        auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
-        response = requests.get(api_url, headers=auth_header)
-
-        if response.status_code == 200:
-            purchase_orders = response.json().get("purchaseorders", [])
-            purchase_orders = filter_purchase_order_data(purchase_orders)
-            all_purchase_orders.extend(purchase_orders)
-
-            page_context = response.json().get("page_context", {})
-            has_more_page = page_context.get("has_more_page", False)
-            page += 1
-        else:
-            raise Exception("Failed to fetch purchase orders")
-
-    return all_purchase_orders
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_purchase_orders(request):
@@ -1266,23 +1214,24 @@ def get_invoices_by_status(request, status):
         print(str(e))
         return Response({"error": "Failed to load"}, status=400)
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_invoices_by_status_for_founders(request, status):
-    
+
     try:
         all_invoices = fetch_invoices(organization_id)
         res = []
         for invoice_data in all_invoices:
             if status == "in_review":
                 if not invoice_data["bill"] and invoice_data["status"] == "in_review":
-                        res.append(invoice_data)
+                    res.append(invoice_data)
             elif status == "approved":
                 if not invoice_data["bill"] and invoice_data["status"] == "approved":
                     res.append(invoice_data)
             elif status == "rejected":
                 if not invoice_data["bill"] and invoice_data["status"] == "rejected":
-                    res.append(invoice_data)        
+                    res.append(invoice_data)
             if status == "accepted":
                 if invoice_data["bill"]:
                     if (
@@ -1380,7 +1329,6 @@ def get_invoice_updates(request, invoice_id):
         return Response(status=404)
 
 
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_vendor_details_from_zoho(request, vendor_id):
@@ -1446,6 +1394,7 @@ def create_purchase_order(request, user_type, facilitator_pricing_id):
                     coach_pricing.save()
             return Response({"message": "Purchase Order created successfully."})
         else:
+            print(response.json())
             return Response(status=401)
     except Exception as e:
         print(str(e))

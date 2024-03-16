@@ -115,6 +115,59 @@ purchase_orders_allowed = [
 ]
 
 
+def filter_purchase_order_data(purchase_orders):
+    try:
+        filtered_purchase_orders = []
+        for order in purchase_orders:
+            purchaseorder_number = order.get("purchaseorder_number", "").strip()
+            created_time_str = order.get("created_time", "").strip()
+            if created_time_str:
+                created_time = datetime.strptime(
+                    created_time_str, "%Y-%m-%dT%H:%M:%S%z"
+                )
+                if (
+                    purchaseorder_number in purchase_orders_allowed
+                    or created_time.year >= 2024
+                ):
+                    filtered_purchase_orders.append(order)
+        return filtered_purchase_orders
+    except Exception as e:
+        print(str(e))
+        return None
+
+
+def fetch_purchase_orders(organization_id):
+    access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if not access_token_purchase_data:
+        raise Exception(
+            "Access token not found. Please generate an access token first."
+        )
+
+    all_purchase_orders = []
+    has_more_page = True
+    page = 1
+
+    while has_more_page:
+        api_url = (
+            f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}"
+        )
+        auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
+        response = requests.get(api_url, headers=auth_header)
+
+        if response.status_code == 200:
+            purchase_orders = response.json().get("purchaseorders", [])
+            purchase_orders = filter_purchase_order_data(purchase_orders)
+            all_purchase_orders.extend(purchase_orders)
+
+            page_context = response.json().get("page_context", {})
+            has_more_page = page_context.get("has_more_page", False)
+            page += 1
+        else:
+            raise Exception("Failed to fetch purchase orders")
+
+    return all_purchase_orders
+
+
 def generate_access_token_from_refresh_token(refresh_token):
     token_url = env("ZOHO_TOKEN_URL")
     client_id = env("ZOHO_CLIENT_ID")

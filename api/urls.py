@@ -281,7 +281,7 @@ urlpatterns = [
         "coaches-which-are-included-in-projects/",
         views.coaches_which_are_included_in_projects,
     ),
-    path("add_registered_coach/", AddRegisteredCoach.as_view()),    
+    path("add_registered_coach/", AddRegisteredCoach.as_view()),
     path("add-registered-facilitator/", AddRegisteredFacilitator.as_view()),
     path("get-registered-coaches/", views.get_registered_coaches),
     path("get-registered-facilitators/", views.get_registered_facilitators),
@@ -393,4 +393,8 @@ urlpatterns = [
         views.delete_pmo,
     ),
     path("edit-pmo/", views.edit_pmo),
+    path("tasks/", views.get_tasks),
+    path("tasks/add-remark/", views.add_remark_to_task),
+    path("tasks/complete/", views.complete_task),
+
 ]
