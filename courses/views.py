@@ -3556,46 +3556,21 @@ def get_nps_project_wise(request):
     res = {}
     for project in projects:
         nps = 0
-        total_questions = 0  # Track the total number of questions
-        feedback_lessons = FeedbackLesson.objects.filter(
-            lesson__course__batch__project=project
+        answers = Answer.objects.filter(
+            question__type="rating_0_to_10",
+            question__feedbacklesson__lesson__course__batch__project=project,
         )
-        for feedback_lesson in feedback_lessons:
-            feedback_lesson_reponses = FeedbackLessonResponse.objects.filter(
-                feedback_lesson=feedback_lesson
+        facilitator_id = request.query_params.get("hr", None)
+        if facilitator_id:
+            answers = answers.filter(
+                question__feedbacklesson__live_session__facilitator=facilitator_id
             )
-
-            questions_serializer = QuestionSerializer(
-                feedback_lesson.questions, many=True
-            )
-            question_data = {
-                question["id"]: {**question, "descriptive_answers": [], "ratings": []}
-                for question in questions_serializer.data
-            }
-            for response in feedback_lesson_reponses:
-                for answer in response.answers.all():
-                    question_id = answer.question.id
-                    if answer.question.type.startswith("rating"):
-                        question_data[question_id]["ratings"].append(answer.rating)
-                    elif answer.question.type == "descriptive_answer":
-                        question_data[question_id]["descriptive_answers"].append(
-                            answer.text_answer
-                        )
-
-            for question_id, data in question_data.items():
-                ratings = data["ratings"]
-                if ratings:
-                    if data["type"] == "rating_0_to_10":
-
-                        nps += calculate_nps(ratings)
-                        total_questions += 1
-
-        if total_questions > 0:
-            average_nps = nps / total_questions
-        else:
-            average_nps = 0
-
-        res[project.id] = average_nps
+        ratings = []
+        for answer in answers:
+            ratings.append(answer.rating)
+        if ratings:
+            nps = calculate_nps(ratings)
+        res[project.id] = nps
     return Response(res)
 
 
