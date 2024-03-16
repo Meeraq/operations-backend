@@ -3967,7 +3967,7 @@ def add_new_session_in_project_structure(request):
                 "description": description,
                 "price": price,
             }
-         
+
             # Update the project structure
             prev_structure.append(new_session)
             project.project_structure = prev_structure
@@ -4633,6 +4633,7 @@ def get_skill_dashboard_card_data(request, project_id):
                     question__type="rating_0_to_10",
                     question__feedbacklesson__live_session__session_type="virtual_session",
                 )
+                print(virtual_session_answer)
                 virtual_nps = calculate_nps_from_answers(virtual_session_answer)
 
                 # In-person session NPS calculation
@@ -4640,6 +4641,7 @@ def get_skill_dashboard_card_data(request, project_id):
                     question__type="rating_0_to_10",
                     question__feedbacklesson__live_session__session_type="in_person_session",
                 )
+                print(in_person_session_answer)
                 in_person_nps = calculate_nps_from_answers(in_person_session_answer)
 
                 # Overall NPS calculation
@@ -4685,6 +4687,7 @@ def get_skill_dashboard_card_data(request, project_id):
                         project_id
                     ),
                 )
+
                 virtual_nps = calculate_nps_from_answers(virtual_session_answer)
 
                 # In-person session NPS calculation
@@ -4736,9 +4739,7 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
 
             virtual_session_answer = Answer.objects.filter(
                 question__type="rating_0_to_10",
-                question__feedback_lesson__live_session__facilitator__id=int(
-                    facilitator_id
-                ),
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
                 question__feedbacklesson__live_session__session_type="virtual_session",
             )
             virtual_nps = calculate_nps_from_answers(virtual_session_answer)
@@ -4746,9 +4747,7 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
             # In-person session NPS calculation
             in_person_session_answer = Answer.objects.filter(
                 question__type="rating_0_to_10",
-                question__feedback_lesson__live_session__facilitator__id=int(
-                    facilitator_id
-                ),
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
                 question__feedbacklesson__live_session__session_type="in_person_session",
             )
             in_person_nps = calculate_nps_from_answers(in_person_session_answer)
@@ -4756,9 +4755,7 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
             # Overall NPS calculation
             overall_answer = Answer.objects.filter(
                 question__type="rating_0_to_10",
-                question__feedbacklesson__live_session__facilitator__id=int(
-                    facilitator_id
-                ),
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
             )
             overall_nps = calculate_nps_from_answers(overall_answer)
 
@@ -4766,20 +4763,18 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
 
             virtual_session_answer = Answer.objects.filter(
                 question__type="rating_0_to_10",
-                question__feedbacklesson__live_session__facilitator__id=int(
-                    facilitator_id
-                ),
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
                 question__feedbacklesson__live_session__session_type="virtual_session",
-                question__feedbacklesson__live_session__batch__project__id=int(project_id),
+                question__feedbacklesson__live_session__batch__project__id=int(
+                    project_id
+                ),
             )
             virtual_nps = calculate_nps_from_answers(virtual_session_answer)
 
             # In-person session NPS calculation
             in_person_session_answer = Answer.objects.filter(
                 question__type="rating_0_to_10",
-                question__feedback_lesson__live_session__facilitator__id=int(
-                    facilitator_id
-                ),
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
                 question__feedbacklesson__live_session__session_type="in_person_session",
                 question__feedbacklesson__live_session__batch__project__id=int(
                     project_id
@@ -4790,9 +4785,7 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
             # Overall NPS calculation
             overall_answer = Answer.objects.filter(
                 question__type="rating_0_to_10",
-                question__feedbacklesson__live_session__facilitator__id=int(
-                    facilitator_id
-                ),
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
                 question__feedbacklesson__live_session__batch__project__id=int(
                     project_id
                 ),
@@ -5747,7 +5740,7 @@ def create_expense(request):
         batch = request.data.get("batch")
         facilitator = request.data.get("facilitator")
         file = request.data.get("file")
-       
+
         if not file:
             return Response(
                 {"error": "Please upload file."},
