@@ -982,12 +982,10 @@ def approve_facilitator(request):
     try:
         # Get the Coach object
         unapproved_coach = request.data["coach"]
-        room_id = request.data["room_id"]
         coach = Facilitator.objects.get(id=unapproved_coach["id"])
 
         # Change the is_approved field to True
         coach.is_approved = True
-        coach.room_id = room_id
         coach.save()
 
         path = f"/profile"
@@ -2254,6 +2252,17 @@ def add_project_struture(request):
     project.project_structure = request.data.get("project_structure", [])
     project.currency = request.data.get("currency", "")
     project.save()
+    if project.steps["project_structure"]["status"] == "complete":
+        #  update project structure for  all coaches
+        for coach_status in project.coaches_status.all():
+            coach_status.project_structure = project.project_structure
+            coach_status.save()
+        if not project.coach_consent_mandatory:
+            for coach_status in project.coaches_status.filter(is_consent_asked=True):
+                if not coach_status.status["consent"]["status"] == "reject":
+                    coach_status.status["consent"]["status"] = "select"
+                    coach_status.status["project_structure"]["status"] = "select"
+                coach_status.save()
     return Response({"message": "Structure added", "details": ""}, status=200)
 
 
