@@ -74,7 +74,8 @@ from .serializers import (
     PmoSerializerAll,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
-from zohoapi.views import get_organization_data, get_vendor
+from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
+from zohoapi.tasks import organization_id
 from rest_framework import generics
 from django.utils.crypto import get_random_string
 import jwt
@@ -1253,6 +1254,7 @@ def create_project_cass(request):
             whatsapp_reminder=request.data["whatsapp_reminder"],
             junior_pmo=junior_pmo,
             calendar_invites=request.data["calendar_invites"],
+            finance=request.data["finance"],
         )
 
         project.save()
@@ -1333,9 +1335,13 @@ def create_learners(learners_data):
                         learner.phone = learner_data.get("phone")
                         try:
                             if learner_data.get("area_of_expertise", ""):
-                                learner.area_of_expertise = learner_data.get("area_of_expertise")
+                                learner.area_of_expertise = learner_data.get(
+                                    "area_of_expertise"
+                                )
                             if learner_data.get("years_of_experience", ""):
-                                learner.years_of_experience = learner_data.get("years_of_experience")
+                                learner.years_of_experience = learner_data.get(
+                                    "years_of_experience"
+                                )
                         except Exception as e:
                             print(str(e))
                         learner.save()
@@ -6657,7 +6663,7 @@ class AddRegisteredFacilitator(APIView):
                 {"error": "All required fields must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
- 
+
         try:
             # Create the Django User
             if Facilitator.objects.filter(email=email).exists():
@@ -6746,7 +6752,6 @@ class AddRegisteredFacilitator(APIView):
 
             return Response({"coach": facilitator_serializer.data})
 
-    
         except Exception as e:
             # Return error response if any other exception occurs
             print(e)
@@ -7021,6 +7026,7 @@ def edit_project_caas(request, project_id):
         project.calendar_invites = request.data.get(
             "calendar_invites", project.calendar_invites
         )
+        project.finance = request.data.get("finance", project.finance)
         project.junior_pmo = junior_pmo
 
         project.hr.clear()
@@ -8600,7 +8606,7 @@ def get_skill_training_projects(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminders_of_project(request):
-    
+
     try:
         project_id = request.data.get("id")
         reminder_type = request.data.get("reminder_type")
@@ -8624,11 +8630,10 @@ def update_reminders_of_project(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminders_of_caas_project(request):
-  
+
     try:
         project_id = request.data.get("id")
         reminder_type = request.data.get("reminder_type")
@@ -8650,7 +8655,6 @@ def update_reminders_of_caas_project(request):
         )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 @api_view(["POST"])
@@ -8834,7 +8838,7 @@ def get_all_api_logs(request):
     end_date = request.query_params.get("end_date")
 
     if start_date and end_date:
-      
+
         start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
         end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
         logs = logs.filter(created_at__date__range=(start_date, end_date))
@@ -8875,5 +8879,50 @@ def delete_pmo(request):
         print(str(e))
         return Response(
             {"error": "Failed to delete pmo."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+def get_purchase_order(purchase_orders, purchase_order_id):
+    for po in purchase_orders:
+        if po.get("purchaseorder_id") == purchase_order_id:
+            return po
+    return None
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coaches_in_project_is_vendor(request, project_id):
+    try:
+        project = Project.objects.get(id=project_id)
+        data = {}
+        purchase_orders = fetch_purchase_orders(organization_id)
+        for coach_status in project.coaches_status.all():
+            is_vendor = coach_status.coach.user.roles.filter(name="vendor").exists()
+            vendor_id = None
+            purchase_order_id = (
+                coach_status.purchase_order_id
+                if coach_status.purchase_order_id
+                else None
+            )
+            purchase_order_no = (
+                coach_status.purchase_order_id
+                if coach_status.purchase_order_no
+                else None
+            )
+            if is_vendor:
+                vendor_id = Vendor.objects.get(user=coach_status.coach.user).vendor_id
+
+            purchase_order = get_purchase_order(purchase_orders, purchase_order_id)
+
+            data[coach_status.coach.id] = {
+                "vendor_id": vendor_id,
+                "purchase_order_id": purchase_order_id,
+                "purchase_order_no": purchase_order_no,
+                "purchase_order": purchase_order,
+            }
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )

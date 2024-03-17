@@ -398,4 +398,5 @@ urlpatterns = [
         views.delete_pmo,
     ),
     path("edit-pmo/", views.edit_pmo),
+    path("get-coaches-in-project-is-vendor/<int:project_id>/", views.get_coaches_in_project_is_vendor),
 ]

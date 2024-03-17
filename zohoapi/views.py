@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from api.models import Coach, OTP, UserLoginActivity, Profile, Role
+from api.models import Coach, OTP, UserLoginActivity, Profile, Role, CoachStatus
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 import json
@@ -1610,3 +1610,37 @@ def update_purchase_order_status(request, purchase_order_id, status):
     except Exception as e:
         print(str(e))
         return Response(status=404)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def coching_purchase_order_create(request, coach_id, project_id):
+    try:
+        coach_status = CoachStatus.objects.get(
+            coach__id=coach_id, project__id=project_id
+        )
+
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header, data=request.data)
+        if response.status_code == 201:
+            purchaseorder_created = response.json().get("purchaseorder")
+
+            coach_status.purchase_order_id = purchaseorder_created["purchaseorder_id"]
+            coach_status.purchase_order_no = purchaseorder_created[
+                "purchaseorder_number"
+            ]
+            coach_status.save()
+
+            return Response({"message": "Purchase Order created successfully."})
+        else:
+            print(response.json())
+            return Response(status=500)
+    except Exception as e:
+        print(str(e))
+        return Response(status=500)

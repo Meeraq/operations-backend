@@ -122,4 +122,9 @@ urlpatterns = [
         views.update_purchase_order_status,
         name="update_purchase_order_status",
     ),
+    path(
+        "coching-purchase-order/create/<int:coach_id>/<int:project_id>/",
+        views.coching_purchase_order_create,
+
+    ),
 ]

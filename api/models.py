@@ -323,6 +323,8 @@ class CoachStatus(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     consent_expiry_date = models.DateField(blank=True, null=True)
     is_consent_asked = models.BooleanField(default=True)
+    purchase_order_id = models.CharField(max_length=200, default="", blank=True)
+    purchase_order_no = models.CharField(max_length=200, default="", blank=True)
 
     def __str__(self):
         return f"{self.id} {self.coach.first_name} {self.coach.last_name}"
@@ -383,6 +385,7 @@ class Project(models.Model):
         on_delete=models.SET_NULL,
         blank=True,
     )
+    finance = models.BooleanField(blank=True, default=False)
 
     class Meta:
         ordering = ["-created_at"]
