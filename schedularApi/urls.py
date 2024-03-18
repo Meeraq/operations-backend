@@ -234,6 +234,10 @@ urlpatterns = [
         views.get_skill_dashboard_card_data,
     ),
     path(
+        "get-skill-dashboard-card-data-for-facilitator/<str:project_id>/<int:facilitator_id>/",
+        views.get_skill_dashboard_card_data_for_facilitator,
+    ),
+    path(
         "get-past-live-session-dashboard-data/<str:project_id>/",
         views.get_past_live_session_dashboard_data,
     ),
@@ -332,5 +336,9 @@ urlpatterns = [
         "get-all-courses-for-all-batches/",
         views.get_all_courses_for_all_batches,
         name="get_all_courses_for_all_batches",
+    ),
+    path(
+        "projects/<int:project_id>/check-project-structure-edit-allowed/",
+        views.check_if_project_structure_edit_allowed,
     ),
 ]

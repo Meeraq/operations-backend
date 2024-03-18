@@ -1165,9 +1165,6 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
             slots = []
             for session in sessions:
                 if True:
-                    # start_time_for_mail = datetime.fromtimestamp(
-                    #     (int(session.availibility.start_time) / 1000) + 19800
-                    # ).strftime("%I:%M %p")
                     start_time_for_mail = get_time(int(session.availibility.start_time))
                     phone = (
                         session.availibility.coach.phone_country_code
@@ -2205,33 +2202,35 @@ def send_tomorrow_action_items_data():
         print(str(e))
 
 
-
-
-
-
 @shared_task
 def update_lesson_status_according_to_drip_dates():
     try:
         today = date.today()
-        lessons = Lesson.objects.filter(Q(live_session__date_time__date=today) | Q(drip_date=today))
+        lessons = Lesson.objects.all()
         for lesson in lessons:
-            if lesson.lesson_type == "assessment":
-                assessment = Assessment.objects.filter(lesson=lesson).first()
+            change_status = False
+            if lesson.live_session and lesson.live_session.date_time and lesson.live_session.date_time.date() == today:
+                change_status = True
+            elif lesson.drip_date == today:
+                change_status = True
 
-                assessment_modal = Assessment.objects.get(
-                    id=assessment.assessment_modal.id
-                )
-                lesson.status == "public"
-                assessment_modal.status = "ongoing"
-                lesson.save()
-                assessment_modal.save()
-            else:
+            if change_status:
+                if lesson.lesson_type == "assessment":
+                    assessment = Assessment.objects.filter(lesson=lesson).first()
 
-                lesson.status = "public"
-                lesson.save()
+                    assessment_modal = Assessment.objects.get(
+                        id=assessment.assessment_modal.id
+                    )
+                    lesson.status == "public"
+                    assessment_modal.status = "ongoing"
+                    lesson.save()
+                    assessment_modal.save()
+                else:
+
+                    lesson.status = "public"
+                    lesson.save()
     except Exception as e:
         print(str(e))
-
 
 
 @shared_task
@@ -2244,7 +2243,7 @@ def update_caas_session_status():
                 confirmed_availability__start_time__lte=end_timestamp,
                 confirmed_availability__end_time__gte=start_timestamp,
             )
-            memoized_100ms_sessions_today = {}  
+            memoized_100ms_sessions_today = {}
             for caas_session in today_sessions:
                 is_coach_joined = False
                 is_coachee_joined = False
@@ -2252,10 +2251,14 @@ def update_caas_session_status():
                 caas_session_start_timestamp = int(
                     caas_session.confirmed_availability.start_time
                 )
-                caas_session_end_timestamp = int(caas_session.confirmed_availability.end_time)
+                caas_session_end_timestamp = int(
+                    caas_session.confirmed_availability.end_time
+                )
                 coach_room_id = caas_session.coach.room_id
                 if coach_room_id in memoized_100ms_sessions_today:
-                    todays_sessions_in_100ms = memoized_100ms_sessions_today[coach_room_id]
+                    todays_sessions_in_100ms = memoized_100ms_sessions_today[
+                        coach_room_id
+                    ]
                 else:
                     todays_sessions_in_100ms = []
                     try:
@@ -2275,16 +2278,18 @@ def update_caas_session_status():
                         caas_session_start_timestamp - 5 * 60 * 1000
                     )
                     if (
-                        created_at_in_timestamp >= five_minutes_prior_schedular_start_time
+                        created_at_in_timestamp
+                        >= five_minutes_prior_schedular_start_time
                         or created_at_in_timestamp < caas_session_end_timestamp
                     ):
-                        sessions_in_100ms_at_scheduled_time_of_caas_session.append(session)
+                        sessions_in_100ms_at_scheduled_time_of_caas_session.append(
+                            session
+                        )
 
                 for session in sessions_in_100ms_at_scheduled_time_of_caas_session:
                     is_coach_joined_in_current_100ms_session = False
                     is_learner_joined_in_current_100ms_session = False
-                    
-                
+
                     for key, peer in session["peers"].items():
                         if (
                             caas_session.availibility.coach.first_name
@@ -2299,13 +2304,16 @@ def update_caas_session_status():
                         ):
                             is_coachee_joined = True
                             is_learner_joined_in_current_100ms_session = True
-                        if is_coach_joined_in_current_100ms_session and is_learner_joined_in_current_100ms_session:
+                        if (
+                            is_coach_joined_in_current_100ms_session
+                            and is_learner_joined_in_current_100ms_session
+                        ):
                             is_both_joined_at_same_time = True
                             break
 
                 if is_both_joined_at_same_time:
                     caas_session.auto_generated_status = "completed"
-            
+
                 elif is_coach_joined and is_coachee_joined:
                     caas_session.auto_generated_status = "pending"
                 elif is_coachee_joined:
@@ -2314,10 +2322,8 @@ def update_caas_session_status():
                     caas_session.auto_generated_status = "coachee_no_show"
                 caas_session.save()
 
-
     except Exception as e:
         print(str(e))
-
 
 
 @shared_task
@@ -2330,7 +2336,7 @@ def update_caas_session_status():
                 confirmed_availability__start_time__lte=end_timestamp,
                 confirmed_availability__end_time__gte=start_timestamp,
             )
-            memoized_100ms_sessions_today = {}  
+            memoized_100ms_sessions_today = {}
             for caas_session in today_sessions:
                 is_coach_joined = False
                 is_coachee_joined = False
@@ -2338,10 +2344,14 @@ def update_caas_session_status():
                 caas_session_start_timestamp = int(
                     caas_session.confirmed_availability.start_time
                 )
-                caas_session_end_timestamp = int(caas_session.confirmed_availability.end_time)
+                caas_session_end_timestamp = int(
+                    caas_session.confirmed_availability.end_time
+                )
                 coach_room_id = caas_session.coach.room_id
                 if coach_room_id in memoized_100ms_sessions_today:
-                    todays_sessions_in_100ms = memoized_100ms_sessions_today[coach_room_id]
+                    todays_sessions_in_100ms = memoized_100ms_sessions_today[
+                        coach_room_id
+                    ]
                 else:
                     todays_sessions_in_100ms = []
                     try:
@@ -2361,16 +2371,18 @@ def update_caas_session_status():
                         caas_session_start_timestamp - 5 * 60 * 1000
                     )
                     if (
-                        created_at_in_timestamp >= five_minutes_prior_schedular_start_time
+                        created_at_in_timestamp
+                        >= five_minutes_prior_schedular_start_time
                         or created_at_in_timestamp < caas_session_end_timestamp
                     ):
-                        sessions_in_100ms_at_scheduled_time_of_caas_session.append(session)
+                        sessions_in_100ms_at_scheduled_time_of_caas_session.append(
+                            session
+                        )
 
                 for session in sessions_in_100ms_at_scheduled_time_of_caas_session:
                     is_coach_joined_in_current_100ms_session = False
                     is_learner_joined_in_current_100ms_session = False
-                    
-                
+
                     for key, peer in session["peers"].items():
                         if (
                             caas_session.availibility.coach.first_name
@@ -2385,13 +2397,16 @@ def update_caas_session_status():
                         ):
                             is_coachee_joined = True
                             is_learner_joined_in_current_100ms_session = True
-                        if is_coach_joined_in_current_100ms_session and is_learner_joined_in_current_100ms_session:
+                        if (
+                            is_coach_joined_in_current_100ms_session
+                            and is_learner_joined_in_current_100ms_session
+                        ):
                             is_both_joined_at_same_time = True
                             break
 
                 if is_both_joined_at_same_time:
                     caas_session.auto_generated_status = "completed"
-            
+
                 elif is_coach_joined and is_coachee_joined:
                     caas_session.auto_generated_status = "pending"
                 elif is_coachee_joined:
