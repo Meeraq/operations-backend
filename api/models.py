@@ -647,6 +647,12 @@ class StandardizedFieldRequest(models.Model):
     facilitator = models.ForeignKey(
         Facilitator, on_delete=models.CASCADE, blank=True, null=True
     )
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.CASCADE, blank=True, null=True
+    )
+    learner = models.ForeignKey(
+        Learner, on_delete=models.CASCADE, blank=True, null=True
+    )
     standardized_field_name = models.ForeignKey(
         StandardizedField, on_delete=models.CASCADE, blank=True
     )

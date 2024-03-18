@@ -1876,7 +1876,7 @@ def get_user_data(user):
                 "user": {**serializer.data["user"], "type": user_profile_role},
             }
         else:
-           
+
             return None
     elif user_profile_role == "facilitator":
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
@@ -1999,14 +1999,14 @@ def generate_otp(request):
 
     except User.DoesNotExist:
         # Handle the case where the user with the given email does not exist
-        print("hello 2 ",str(e))
+        print("hello 2 ", str(e))
 
         return Response(
             {"error": "User with the given email does not exist."}, status=400
         )
 
     except Exception as e:
-        print("hello",str(e))
+        print("hello", str(e))
         # Handle any other exceptions
         return Response({"error": str(e)}, status=500)
 
@@ -6369,7 +6369,15 @@ def standard_field_request(request, user_id):
                     status="pending",
                 )
                 standardized_field_request.save()
-
+            elif userType == "learner":
+                user_instance = Learner.objects.get(id=user_id)
+                standardized_field_request = StandardizedFieldRequest(
+                    standardized_field_name=standardized_field,
+                    learner=user_instance,
+                    value=value,
+                    status="pending",
+                )
+                standardized_field_request.save()
             return Response({"message": "Request sent."}, status=200)
     except Exception as e:
         print(str(e))
@@ -7557,6 +7565,9 @@ models_to_update = {
         "country",
         "topic",
     ],
+    "Learner": [
+        "job_roles",
+    ],
 }
 
 
@@ -7573,8 +7584,8 @@ class StandardizedFieldRequestAcceptReject(APIView):
             value = request_instance.value
 
             standardized_field, created = StandardizedField.objects.get_or_create(
-                    field=field_name
-                )
+                field=field_name
+            )
             if status == "accepted":
                 request_instance.status = status
                 request_instance.save()
