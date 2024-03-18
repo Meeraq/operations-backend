@@ -100,6 +100,8 @@ urlpatterns = [
     path("project_structure_agree_by_hr/", views.project_structure_agree_by_hr),
     path("request_more_profiles_by_hr/", views.request_more_profiles_by_hr),
     path("edit_learner/", views.edit_learner),
+    path("edit-individual-learner/<int:user_id>/", views.edit_individual_learner),
+    
     path("mark-finalized-list-complete/", views.mark_finalized_list_complete),
     path(
         "finalized-coach-from-coach-consent/", views.finalized_coach_from_coach_consent
@@ -281,7 +283,7 @@ urlpatterns = [
         "coaches-which-are-included-in-projects/",
         views.coaches_which_are_included_in_projects,
     ),
-    path("add_registered_coach/", AddRegisteredCoach.as_view()),    
+    path("add_registered_coach/", AddRegisteredCoach.as_view()),
     path("add-registered-facilitator/", AddRegisteredFacilitator.as_view()),
     path("get-registered-coaches/", views.get_registered_coaches),
     path("get-registered-facilitators/", views.get_registered_facilitators),
@@ -398,4 +400,8 @@ urlpatterns = [
         views.delete_pmo,
     ),
     path("edit-pmo/", views.edit_pmo),
+    path("tasks/", views.get_tasks),
+    path("tasks/add-remark/", views.add_remark_to_task),
+    path("tasks/complete/", views.complete_task),
+
 ]
