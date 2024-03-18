@@ -1656,7 +1656,7 @@ def schedule_nudges(batch_id):
     batch = SchedularBatch.objects.get(id=batch_id)
     nudges = Nudge.objects.filter(batch__id=batch_id).order_by("order")
     desired_time = time(8, 30)
-    nudge_scheduled_for = datetime.combine(batch_id.nudge_start_date, desired_time)
+    nudge_scheduled_for = datetime.combine(batch.nudge_start_date, desired_time)
     for nudge in nudges:
         if nudge.batch.project.nudges and nudge.batch.project.status == "ongoing":
             clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
@@ -2209,7 +2209,11 @@ def update_lesson_status_according_to_drip_dates():
         lessons = Lesson.objects.all()
         for lesson in lessons:
             change_status = False
-            if lesson.live_session and lesson.live_session.date_time and lesson.live_session.date_time.date() == today:
+            if (
+                lesson.live_session
+                and lesson.live_session.date_time
+                and lesson.live_session.date_time.date() == today
+            ):
                 change_status = True
             elif lesson.drip_date == today:
                 change_status = True

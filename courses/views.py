@@ -83,6 +83,7 @@ from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
 )
 from schedularApi.serializers import SchedularBatchSerializer
+
 # from schedularApi.views import create_lessons_for_batch
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
@@ -336,19 +337,17 @@ def download_file_response(file_url):
 
 def create_lessons_for_batch(batch):
     try:
-        course  = Course.objects.get(batch=batch)
+        course = Course.objects.get(batch=batch)
         live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch.id)
         training_class_sessions = LiveSession.objects.filter(
             session_type__in=["in_person_session", "virtual_session"]
         )
-        max_order_of_training_class_sessions = (
-            training_class_sessions.aggregate(Max("order"))["order__max"]
-        )
+        max_order_of_training_class_sessions = training_class_sessions.aggregate(
+            Max("order")
+        )["order__max"]
         coaching_sessions = CoachingSession.objects.filter(batch__id=batch.id)
         max_order = (
-            Lesson.objects.filter(course=course).aggregate(Max("order"))[
-                "order__max"
-            ]
+            Lesson.objects.filter(course=course).aggregate(Max("order"))["order__max"]
             or 0
         )
         for live_session in live_sessions:
@@ -366,9 +365,9 @@ def create_lessons_for_batch(batch):
                 lesson=new_lesson, live_session=live_session
             )
             max_order_feedback = (
-                Lesson.objects.filter(course=course).aggregate(
-                    Max("order")
-                )["order__max"]
+                Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                    "order__max"
+                ]
                 or 0
             )
             new_feedback_lesson = Lesson.objects.create(
@@ -388,9 +387,7 @@ def create_lessons_for_batch(batch):
                 "in_person_session",
                 "virtual_session",
             ]:
-                if int(max_order_of_training_class_sessions) == int(
-                    live_session.order
-                ):
+                if int(max_order_of_training_class_sessions) == int(live_session.order):
                     add_question_to_feedback_lesson(
                         feedback_lesson, nps_default_feed_questions
                     )
@@ -2578,7 +2575,6 @@ class AssignCourseTemplateToBatch(APIView):
 
                 create_lessons_for_batch(batch)
 
-
                 if assessment_creation:
                     max_order = (
                         Lesson.objects.filter(course=new_course).aggregate(
@@ -3980,3 +3976,36 @@ def get_live_sessions_by_course(request, course_id):
     live_sessions = LiveSession.objects.filter(batch__course__id=course_id)
     live_sessions_serializer = LiveSessionSchedularSerializer(live_sessions, many=True)
     return Response(live_sessions_serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_nudge_status(request, nudge_id):
+    nudge = Nudge.objects.get(id=nudge_id)
+    is_switched_on = request.data.get("is_switched_on")
+    nudge_sent_date = request.data.get("date")  # YYYY-MM-DD format
+    if is_switched_on:
+        # schedule new periodic task
+        desired_time = time(8, 30)
+        nudge_sent_date = datetime.strptime(nudge_sent_date, "%Y-%m-%d")
+        nudge_scheduled_for = datetime.combine(nudge_sent_date, desired_time)
+        clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
+        periodic_task = PeriodicTask.objects.create(
+            name=uuid.uuid1(),
+            task="schedularApi.tasks.send_nudge",
+            args=[nudge.id],
+            clocked=clocked,
+            one_off=True,
+        )
+        nudge.is_switched_on = True
+    else:
+        # find the periodic task and switch
+        periodic_task = PeriodicTask.objects.filter(
+            task="schedularApi.tasks.send_nudge", args=f"[{nudge.id}]"
+        ).first()
+        if periodic_task:
+            periodic_task.delete()
+        nudge.is_switched_on = False
+    nudge.save()
+    nudge_serializer = NudgeSerializer(nudge)
+    return Response(nudge_serializer.data)
