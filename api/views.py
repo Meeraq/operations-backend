@@ -8911,7 +8911,15 @@ def get_coaches_in_project_is_vendor(request, project_id):
             if is_vendor:
                 vendor_id = Vendor.objects.get(user=coach_status.coach.user).vendor_id
 
-            purchase_order = get_purchase_order(purchase_orders, purchase_order_id)
+            purchase_order =  None
+            if purchase_order_id:
+                purchase_order = get_purchase_order(purchase_orders, purchase_order_id)
+                if not purchase_order:
+                    coach_status.purchase_order_id = ""
+                    coach_status.purchase_order_no = ""
+                    coach_status.save()
+                    purchase_order_id = None
+                    purchase_order_no = None
 
             data[coach_status.coach.id] = {
                 "vendor_id": vendor_id,
