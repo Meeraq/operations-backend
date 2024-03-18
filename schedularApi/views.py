@@ -494,7 +494,7 @@ def delete_sessions_and_create_new_batch_calendar_and_lessons(project):
     # deletion of related details
     lessons = Lesson.objects.filter(
         lesson_type="feedback",
-        live_session__isnull=False,
+        feedbacklesson__live_session__isnull=False,
         course__batch__project=project,
     )
     lessons.delete()
