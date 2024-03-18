@@ -375,4 +375,8 @@ urlpatterns = [
         "update_assignments_responses/",
         UpdateAssignmentLessonFile.as_view(),
     ),
+     path(
+        "delete-pdf-data/",
+        views.delete_pdf_data,
+    ),
 ]

@@ -321,6 +321,48 @@ def download_file_response(file_url):
     except Exception as e:
         return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
 
+def create_duplicate_lesson_in_all_batches(batch_id,data):
+    try:
+        with transaction.atomic():
+            batch=SchedularBatch.objects.get(id=batch_id)
+            project=batch.project
+            batches=SchedularBatch.object.filter(project__id=project.id).exclude(id=batch_id)
+            print("batches",batches)
+            lesson_data = data
+            for batch in batches:
+                lesson_serializer = LessonSerializer(data=lesson_data)
+                if lesson_serializer.is_valid():
+                    lesson = lesson_serializer.save()
+                    if lesson.lesson_type == "text":
+                        pass
+                    elif lesson.lesson_type == "video":
+                        pass
+                    elif lesson.lesson_type == "ppt":
+                        pass
+                    elif lesson.lesson_type == "downloadable_file":
+                        pass
+                    elif lesson.lesson_type == "assignment":
+                        pass
+                    elif lesson.lesson_type == "quiz":
+                        questions_data = data.get("questions")
+                        questions = []
+                        for question_data in questions_data:
+                            question_serializer = QuestionSerializer(data=question_data)
+                            if question_serializer.is_valid():
+                                question = question_serializer.save()
+                                questions.append(question)
+                            else:
+                                # If any question is invalid, delete the created lesson and return an error
+                                lesson.delete()
+                                return Response(
+                                    question_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                                )
+                            # Create QuizLesson and associate it with the Lesson
+                        quiz_lesson = QuizLesson.objects.create(lesson=lesson)
+                        quiz_lesson.questions.set(questions)
+    except Exception as e:
+        return None
+                
 
 class CourseListView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
@@ -707,10 +749,15 @@ class DeleteLessonAPIView(APIView):
 @permission_classes([IsAuthenticated])
 def create_quiz_lesson(request):
     # Deserialize the incoming data
+    print("data",request.data)
     data = request.data
     lesson_data = data.get("lesson")
     questions_data = data.get("questions")
+    duplicate=data.get("duplicate")
+    batch_id = int(data.get("batch_id"))
 
+    
+    create_duplicate_lesson_in_all_batches(batch_id,data)
     # Create the Lesson
     lesson_serializer = LessonSerializer(data=lesson_data)
     if lesson_serializer.is_valid():
@@ -3747,3 +3794,23 @@ class UpdateAssignmentLessonFile(APIView):
                 {"message": f"Failed to update file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_pdf_data(request):
+    try:
+        pdf_id = request.data.get("pdf_id")
+        resource = Resources.objects.get(pk=pdf_id)
+        if resource.pdf_file:
+            resource.pdf_file.delete(save=True)
+        resource.delete()
+        return Response({"message": "PDF deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+    except Resources.DoesNotExist:
+        return Response({"error": "PDF not found."}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to delete the PDF."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
