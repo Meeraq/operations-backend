@@ -5521,11 +5521,17 @@ def get_facilitators_and_pricing_for_project(request, project_id):
             pricing = facilitators_pricing.filter(facilitator__id=facilitator.id)
             purchase_order = None
             if pricing.exists():
-                pricing_serializer = FacilitatorPricingSerializer(pricing.first())
-                if pricing_serializer.data["purchase_order_id"]:
+                first_pricing = pricing.first()
+                if first_pricing.purchase_order_id:
                     purchase_order = get_purchase_order(
-                        purchase_orders, pricing_serializer.data["purchase_order_id"]
+                        purchase_orders, first_pricing.purchase_order_id
                     )
+                    # when no po found remove po number and id from fac. pricings
+                    if not purchase_order:
+                        first_pricing.purchase_order_id =""
+                        first_pricing.purchase_order_no = ""
+                        first_pricing.save()
+                pricing_serializer = FacilitatorPricingSerializer(first_pricing)
             else:
                 pricing_serializer = None
             facilitator_data["pricing_details"] = (
@@ -5563,11 +5569,14 @@ def get_coaches_and_pricing_for_project(request, project_id):
             all_pricings_serializer = CoachPricingSerializer(coaches_pricing, many=True)
             purchase_order = None
             if pricing.exists():
-                pricing_serializer = CoachPricingSerializer(pricing.first())
-                if pricing_serializer.data["purchase_order_id"]:
+                first_pricing = pricing.first()
+                if first_pricing.purchase_order_id:
                     purchase_order = get_purchase_order(
-                        purchase_orders, pricing_serializer.data["purchase_order_id"]
+                        purchase_orders, first_pricing.purchase_order_id
                     )
+                    if not purchase_order:
+                        CoachPricing.objects.filter(purchase_order_id = first_pricing.purchase_order_id).update(purchase_order_id="", purchase_order_no="")
+                pricing_serializer = CoachPricingSerializer(pricing.first())
             else:
                 pricing_serializer = None
             coach_data["pricing_details"] = (
