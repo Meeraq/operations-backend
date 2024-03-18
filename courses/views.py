@@ -83,6 +83,7 @@ from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
 )
 from schedularApi.serializers import SchedularBatchSerializer
+
 # from schedularApi.views import create_lessons_for_batch
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
@@ -336,19 +337,17 @@ def download_file_response(file_url):
 
 def create_lessons_for_batch(batch):
     try:
-        course  = Course.objects.get(batch=batch)
+        course = Course.objects.get(batch=batch)
         live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch.id)
         training_class_sessions = LiveSession.objects.filter(
             session_type__in=["in_person_session", "virtual_session"]
         )
-        max_order_of_training_class_sessions = (
-            training_class_sessions.aggregate(Max("order"))["order__max"]
-        )
+        max_order_of_training_class_sessions = training_class_sessions.aggregate(
+            Max("order")
+        )["order__max"]
         coaching_sessions = CoachingSession.objects.filter(batch__id=batch.id)
         max_order = (
-            Lesson.objects.filter(course=course).aggregate(Max("order"))[
-                "order__max"
-            ]
+            Lesson.objects.filter(course=course).aggregate(Max("order"))["order__max"]
             or 0
         )
         for live_session in live_sessions:
@@ -366,9 +365,9 @@ def create_lessons_for_batch(batch):
                 lesson=new_lesson, live_session=live_session
             )
             max_order_feedback = (
-                Lesson.objects.filter(course=course).aggregate(
-                    Max("order")
-                )["order__max"]
+                Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                    "order__max"
+                ]
                 or 0
             )
             new_feedback_lesson = Lesson.objects.create(
@@ -388,9 +387,7 @@ def create_lessons_for_batch(batch):
                 "in_person_session",
                 "virtual_session",
             ]:
-                if int(max_order_of_training_class_sessions) == int(
-                    live_session.order
-                ):
+                if int(max_order_of_training_class_sessions) == int(live_session.order):
                     add_question_to_feedback_lesson(
                         feedback_lesson, nps_default_feed_questions
                     )
@@ -418,6 +415,73 @@ def create_lessons_for_batch(batch):
             )
     except:
         pass
+
+
+def duplicate_lesson_to_course(lesson, course):
+    max_order = (
+        Lesson.objects.filter(course=course).aggregate(Max("order"))["order__max"] or 0
+    )
+
+    new_lesson = Lesson.objects.create(
+        course=course,
+        name=lesson.name,
+        status=lesson.status,
+        lesson_type=lesson.lesson_type,
+        order=max_order + 1,
+    )
+    if lesson.lesson_type == "text":
+        TextLesson.objects.create(
+            lesson=new_lesson,
+            content=lesson.textlesson.content,
+        )
+    elif lesson.lesson_type == "video":
+        VideoLesson.objects.create(
+            lesson=new_lesson,
+            video=lesson.videolesson.video,
+            content=lesson.videolesson.content,
+        )
+    elif lesson.lesson_type == "ppt":
+        PdfLesson.objects.create(
+            lesson=new_lesson,
+            pdf=lesson.pdflesson.pdf,
+            content=lesson.pdflesson.content,
+        )
+    elif lesson.lesson_type == "downloadable_file":
+        DownloadableLesson.objects.create(
+            lesson=new_lesson,
+            file=lesson.downloadablelesson.file,
+            description=lesson.downloadablelesson.description,
+        )
+    elif lesson.lesson_type == "assignment":
+        AssignmentLesson.objects.create(
+            lesson=new_lesson,
+            name=lesson.assignmentlesson.name,
+            description=lesson.assignmentlesson.description,
+        )
+    elif lesson.lesson_type == "assessment":
+        Assessment.objects.create(lesson=new_lesson)
+    elif lesson.lesson_type == "quiz":
+        new_quiz_lesson = QuizLesson.objects.create(lesson=new_lesson)
+        for question in lesson.quizlesson.questions.all():
+            new_question = Question.objects.create(
+                text=question.text,
+                options=question.options,
+                type=question.type,
+            )
+            new_quiz_lesson.questions.add(new_question)
+    elif lesson.lesson_type == "feedback":
+        unique_id = uuid.uuid4()
+        new_feedback_lesson = FeedbackLesson.objects.create(
+            lesson=new_lesson, unique_id=unique_id
+        )
+        for question in lesson.feedbacklesson.questions.all():
+            new_question = Question.objects.create(
+                text=question.text,
+                options=question.options,
+                type=question.type,
+            )
+            new_feedback_lesson.questions.add(new_question)
+    return new_lesson
 
 
 class CourseListView(generics.ListCreateAPIView):
@@ -2578,7 +2642,6 @@ class AssignCourseTemplateToBatch(APIView):
 
                 create_lessons_for_batch(batch)
 
-
                 if assessment_creation:
                     max_order = (
                         Lesson.objects.filter(course=new_course).aggregate(
@@ -3021,6 +3084,7 @@ class DuplicateLesson(APIView):
         try:
             with transaction.atomic():
                 is_course_tepmlate = request.data.get("is_course_tepmlate")
+                is_duplicate_to_all = request.data.get("is_duplicate_to_all")
                 duplicate_to_course_template_or_course_id = request.data.get(
                     "duplicate_to_course_template_or_course_id"
                 )
@@ -3124,6 +3188,13 @@ class DuplicateLesson(APIView):
                                 type=question.type,
                             )
                             new_feedback_lesson.questions.add(new_question)
+
+                    if is_duplicate_to_all and not is_course_tepmlate:
+                        courses_to_duplicate_the_lesson_in = Course.objects.filter(
+                            batch__project=course.batch.project
+                        ).exclude(id=course.id)
+                        for course in courses_to_duplicate_the_lesson_in:
+                            duplicate_lesson_to_course(new_lesson, course)
 
             return Response(
                 {"message": "Lesson duplicated Sucessfully."},
