@@ -2209,7 +2209,7 @@ def update_lesson_status_according_to_drip_dates():
         lessons = Lesson.objects.all()
         for lesson in lessons:
             change_status = False
-            if lesson.live_session and lesson.live_session.date_time.date() == today:
+            if lesson.live_session and lesson.live_session.date_time and lesson.live_session.date_time.date() == today:
                 change_status = True
             elif lesson.drip_date == today:
                 change_status = True
