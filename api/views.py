@@ -1333,9 +1333,13 @@ def create_learners(learners_data):
                         learner.phone = learner_data.get("phone")
                         try:
                             if learner_data.get("area_of_expertise", ""):
-                                learner.area_of_expertise = learner_data.get("area_of_expertise")
+                                learner.area_of_expertise = learner_data.get(
+                                    "area_of_expertise"
+                                )
                             if learner_data.get("years_of_experience", ""):
-                                learner.years_of_experience = learner_data.get("years_of_experience")
+                                learner.years_of_experience = learner_data.get(
+                                    "years_of_experience"
+                                )
                         except Exception as e:
                             print(str(e))
                         learner.save()
@@ -3404,6 +3408,25 @@ def edit_learner(request):
         add_contact_in_wati("learner", learner.name, learner.phone)
 
     return Response({"message": "Learner details updated.", "details": ""}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def edit_individual_learner(request, user_id):
+    try:
+        learner = Learner.objects.get(id=user_id)
+        serializer = LearnerSerializer(learner, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            if learner.phone:
+                add_contact_in_wati("learner", learner.name, learner.phone)
+
+            return Response({"message": "Learner details updated."}, status=200)
+        else:
+            print(serializer.errors)
+            return Response({"message": "Failed to edit learner"}, status=500)
+    except Exception as e:
+        return Response({"message": "Failed to edit learner"}, status=500)
 
 
 @api_view(["POST"])
@@ -6657,7 +6680,7 @@ class AddRegisteredFacilitator(APIView):
                 {"error": "All required fields must be provided."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
- 
+
         try:
             # Create the Django User
             if Facilitator.objects.filter(email=email).exists():
@@ -6746,7 +6769,6 @@ class AddRegisteredFacilitator(APIView):
 
             return Response({"coach": facilitator_serializer.data})
 
-    
         except Exception as e:
             # Return error response if any other exception occurs
             print(e)
@@ -8600,7 +8622,7 @@ def get_skill_training_projects(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminders_of_project(request):
-    
+
     try:
         project_id = request.data.get("id")
         reminder_type = request.data.get("reminder_type")
@@ -8624,11 +8646,10 @@ def update_reminders_of_project(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminders_of_caas_project(request):
-  
+
     try:
         project_id = request.data.get("id")
         reminder_type = request.data.get("reminder_type")
@@ -8650,7 +8671,6 @@ def update_reminders_of_caas_project(request):
         )
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 @api_view(["POST"])
@@ -8834,7 +8854,7 @@ def get_all_api_logs(request):
     end_date = request.query_params.get("end_date")
 
     if start_date and end_date:
-      
+
         start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
         end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
         logs = logs.filter(created_at__date__range=(start_date, end_date))
