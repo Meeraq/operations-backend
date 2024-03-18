@@ -728,6 +728,8 @@ def get_batch_calendar(request, batch_id):
                     purchase_order = get_purchase_order(purchase_orders, facilitator_item['purchase_order_id'])
                     if not purchase_order:
                         Expense.objects.filter(batch__id=batch_id , facilitator__id = facilitator_item['id']).update(purchase_order_id="", purchase_order_no="")
+                        facilitator_item['purchase_order_id'] = None
+                        facilitator_item['purchase_order_no'] = None
                     facilitator_item['purchase_order'] = purchase_order
                 else:
                     facilitator_item['purchase_order'] = None
