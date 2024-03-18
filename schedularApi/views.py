@@ -711,17 +711,7 @@ def get_batch_calendar(request, batch_id):
                     When(user__vendor__isnull=False, then=F("user__vendor__vendor_id")),
                     default=None,
                     output_field=CharField(max_length=255, null=True),
-                ),
-                purchase_order_id=Case(
-                    When(expense__isnull=False, then=F("expense__purchase_order_id")),
-                    default=None,
-                    output_field=CharField(max_length=200, null=True),
-                ),
-                purchase_order_no=Case(
-                    When(expense__isnull=False, then=F("expense__purchase_order_no")),
-                    default=None,
-                    output_field=CharField(max_length=200, null=True),
-                ),
+                ),  
             )
         )
 
@@ -732,14 +722,12 @@ def get_batch_calendar(request, batch_id):
             purchase_orders = fetch_purchase_orders(organization_id)
             for facilitator_item in facilitator_serializer.data:
                 expense = Expense.objects.filter(batch__id=batch_id , facilitator__id = facilitator_item['id']).first()
-                if expense.purchase_order_id:
-                    facilitator_item['purchase_order_id'] = expense.purchase_order_id
-                    facilitator_item['purchase_order_no'] = expense.purchase_order_no
-                else:
-                    facilitator_item['purchase_order_id'] = expense.purchase_order_id
-                    facilitator_item['purchase_order_no'] = expense.purchase_order_no
-                if facilitator_item['purchase_order_id'] is not None:
+                facilitator_item['purchase_order_id'] = expense.purchase_order_id
+                facilitator_item['purchase_order_no'] = expense.purchase_order_no
+                if facilitator_item['purchase_order_id']:
                     purchase_order = get_purchase_order(purchase_orders, facilitator_item['purchase_order_id'])
+                    if not purchase_order:
+                        Expense.objects.filter(batch__id=batch_id , facilitator__id = facilitator_item['id']).update(purchase_order_id="", purchase_order_no="")
                     facilitator_item['purchase_order'] = purchase_order
                 else:
                     facilitator_item['purchase_order'] = None
