@@ -982,12 +982,10 @@ def approve_facilitator(request):
     try:
         # Get the Coach object
         unapproved_coach = request.data["coach"]
-        room_id = request.data["room_id"]
         coach = Facilitator.objects.get(id=unapproved_coach["id"])
 
         # Change the is_approved field to True
         coach.is_approved = True
-        coach.room_id = room_id
         coach.save()
 
         path = f"/profile"
@@ -1333,6 +1331,17 @@ def create_learners(learners_data):
                     if learner:
                         learner.name = learner_data.get("name").strip()
                         learner.phone = learner_data.get("phone")
+                        try:
+                            if learner_data.get("area_of_expertise", ""):
+                                learner.area_of_expertise = learner_data.get(
+                                    "area_of_expertise"
+                                )
+                            if learner_data.get("years_of_experience", ""):
+                                learner.years_of_experience = learner_data.get(
+                                    "years_of_experience"
+                                )
+                        except Exception as e:
+                            print(str(e))
                         learner.save()
                         learners.append(learner)
                         continue
@@ -1867,6 +1876,7 @@ def get_user_data(user):
                 "user": {**serializer.data["user"], "type": user_profile_role},
             }
         else:
+           
             return None
     elif user_profile_role == "facilitator":
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
@@ -1941,13 +1951,14 @@ def generate_otp(request):
                 return Response(
                     {"error": "User with the given email does not exist."}, status=400
                 )
+        print(user)
         try:
             # Check if OTP already exists for the user
             otp_obj = OTP.objects.get(user=user)
             otp_obj.delete()
         except OTP.DoesNotExist:
             pass
-
+        print(otp_obj)
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars="0123456789")
         created_otp = OTP.objects.create(user=user, otp=otp)
@@ -1988,11 +1999,14 @@ def generate_otp(request):
 
     except User.DoesNotExist:
         # Handle the case where the user with the given email does not exist
+        print("hello 2 ",str(e))
+
         return Response(
             {"error": "User with the given email does not exist."}, status=400
         )
 
     except Exception as e:
+        print("hello",str(e))
         # Handle any other exceptions
         return Response({"error": str(e)}, status=500)
 
@@ -2247,6 +2261,17 @@ def add_project_struture(request):
     project.project_structure = request.data.get("project_structure", [])
     project.currency = request.data.get("currency", "")
     project.save()
+    if project.steps["project_structure"]["status"] == "complete":
+        #  update project structure for  all coaches
+        for coach_status in project.coaches_status.all():
+            coach_status.project_structure = project.project_structure
+            coach_status.save()
+        if not project.coach_consent_mandatory:
+            for coach_status in project.coaches_status.filter(is_consent_asked=True):
+                if not coach_status.status["consent"]["status"] == "reject":
+                    coach_status.status["consent"]["status"] = "select"
+                    coach_status.status["project_structure"]["status"] = "select"
+                coach_status.save()
     return Response({"message": "Structure added", "details": ""}, status=200)
 
 
@@ -3050,18 +3075,7 @@ def add_learner_to_project(request):
                     message = f"You have been added to Project - {project.name}"
                     create_notification(learner.user.user, path, message)
                     coacheeCounts = coacheeCounts + 1
-                    microsoft_auth_url = (
-                        f'{env("BACKEND_URL")}/api/microsoft/oauth/{learner.email}/'
-                    )
-                    user_token_present = False
-                    try:
-                        user_token = UserToken.objects.get(
-                            user_profile__user__username=learner.email
-                        )
-                        if user_token:
-                            user_token_present = True
-                    except Exception as e:
-                        pass
+
                     send_mail_templates(
                         "coachee_emails/add_coachee.html",
                         [learner.email],
@@ -3070,8 +3084,6 @@ def add_learner_to_project(request):
                             "name": learner.name,
                             "orgname": project.organisation.name,
                             "email": learner.email,
-                            "microsoft_auth_url": microsoft_auth_url,
-                            "user_token_present": user_token_present,
                         },
                         [],
                     )
@@ -3401,6 +3413,25 @@ def edit_learner(request):
         add_contact_in_wati("learner", learner.name, learner.phone)
 
     return Response({"message": "Learner details updated.", "details": ""}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def edit_individual_learner(request, user_id):
+    try:
+        learner = Learner.objects.get(id=user_id)
+        serializer = LearnerSerializer(learner, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            if learner.phone:
+                add_contact_in_wati("learner", learner.name, learner.phone)
+
+            return Response({"message": "Learner details updated."}, status=200)
+        else:
+            print(serializer.errors)
+            return Response({"message": "Failed to edit learner"}, status=500)
+    except Exception as e:
+        return Response({"message": "Failed to edit learner"}, status=500)
 
 
 @api_view(["POST"])

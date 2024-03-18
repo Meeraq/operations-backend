@@ -56,6 +56,7 @@ urlpatterns = [
     ),
     path("coaches/", views.get_coaches),
     path("batch/<int:batch_id>/", views.update_batch),
+    path("batches/get/<int:batch_id>/", views.get_batch),
     path(
         "create-coach-availibilty/",
         views.create_coach_schedular_availibilty,
@@ -233,6 +234,10 @@ urlpatterns = [
         views.get_skill_dashboard_card_data,
     ),
     path(
+        "get-skill-dashboard-card-data-for-facilitator/<str:project_id>/<int:facilitator_id>/",
+        views.get_skill_dashboard_card_data_for_facilitator,
+    ),
+    path(
         "get-past-live-session-dashboard-data/<str:project_id>/",
         views.get_past_live_session_dashboard_data,
     ),
@@ -326,5 +331,14 @@ urlpatterns = [
     path(
         "edit-status-expense/",
         views.edit_status_expense,
+    ),
+    path(
+        "get-all-courses-for-all-batches/",
+        views.get_all_courses_for_all_batches,
+        name="get_all_courses_for_all_batches",
+    ),
+    path(
+        "projects/<int:project_id>/check-project-structure-edit-allowed/",
+        views.check_if_project_structure_edit_allowed,
     ),
 ]
