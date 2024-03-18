@@ -83,6 +83,7 @@ from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
 )
 from schedularApi.serializers import SchedularBatchSerializer
+# from schedularApi.views import create_lessons_for_batch
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
 )
@@ -331,6 +332,92 @@ def download_file_response(file_url):
             )
     except Exception as e:
         return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
+
+
+def create_lessons_for_batch(batch):
+    try:
+        course  = Course.objects.get(batch=batch)
+        live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch.id)
+        training_class_sessions = LiveSession.objects.filter(
+            session_type__in=["in_person_session", "virtual_session"]
+        )
+        max_order_of_training_class_sessions = (
+            training_class_sessions.aggregate(Max("order"))["order__max"]
+        )
+        coaching_sessions = CoachingSession.objects.filter(batch__id=batch.id)
+        max_order = (
+            Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                "order__max"
+            ]
+            or 0
+        )
+        for live_session in live_sessions:
+            max_order = max_order + 1
+            session_name = get_live_session_name(live_session.session_type)
+
+            new_lesson = Lesson.objects.create(
+                course=course,
+                name=f"{session_name} {live_session.live_session_number}",
+                status="draft",
+                lesson_type="live_session",
+                order=max_order,
+            )
+            LiveSessionLesson.objects.create(
+                lesson=new_lesson, live_session=live_session
+            )
+            max_order_feedback = (
+                Lesson.objects.filter(course=course).aggregate(
+                    Max("order")
+                )["order__max"]
+                or 0
+            )
+            new_feedback_lesson = Lesson.objects.create(
+                course=course,
+                name=f"Feedback for {session_name} {live_session.live_session_number}",
+                status="draft",
+                lesson_type="feedback",
+                order=max_order_feedback,
+            )
+            unique_id = uuid.uuid4()
+            feedback_lesson = FeedbackLesson.objects.create(
+                lesson=new_feedback_lesson,
+                unique_id=unique_id,
+                live_session=live_session,
+            )
+            if live_session.session_type in [
+                "in_person_session",
+                "virtual_session",
+            ]:
+                if int(max_order_of_training_class_sessions) == int(
+                    live_session.order
+                ):
+                    add_question_to_feedback_lesson(
+                        feedback_lesson, nps_default_feed_questions
+                    )
+                else:
+                    add_question_to_feedback_lesson(
+                        feedback_lesson, default_feedback_questions
+                    )
+
+        for coaching_session in coaching_sessions:
+            max_order = max_order + 1
+            session_name = None
+            if coaching_session.session_type == "laser_coaching_session":
+                session_name = "Laser coaching"
+            elif coaching_session.session_type == "mentoring_session":
+                session_name = "Mentoring session"
+            new_lesson = Lesson.objects.create(
+                course=course,
+                name=f"{session_name} {coaching_session.coaching_session_number}",
+                status="draft",
+                lesson_type="laser_coaching",
+                order=max_order,
+            )
+            LaserCoachingSession.objects.create(
+                lesson=new_lesson, coaching_session=coaching_session
+            )
+    except:
+        pass
 
 
 class CourseListView(generics.ListCreateAPIView):
@@ -2488,85 +2575,9 @@ class AssignCourseTemplateToBatch(APIView):
                         CourseEnrollment.objects.create(
                             learner=learner, course=new_course, enrollment_date=datetime
                         )
-                live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch_id)
-                training_class_sessions = LiveSession.objects.filter(
-                    session_type__in=["in_person_session", "virtual_session"]
-                )
-                max_order_of_training_class_sessions = (
-                    training_class_sessions.aggregate(Max("order"))["order__max"]
-                )
-                coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
-                max_order = (
-                    Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
-                        "order__max"
-                    ]
-                    or 0
-                )
-                for live_session in live_sessions:
-                    max_order = max_order + 1
-                    session_name = get_live_session_name(live_session.session_type)
 
-                    new_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"{session_name} {live_session.live_session_number}",
-                        status="draft",
-                        lesson_type="live_session",
-                        order=max_order,
-                    )
-                    LiveSessionLesson.objects.create(
-                        lesson=new_lesson, live_session=live_session
-                    )
-                    max_order_feedback = (
-                        Lesson.objects.filter(course=new_course).aggregate(
-                            Max("order")
-                        )["order__max"]
-                        or 0
-                    )
-                    new_feedback_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"Feedback for {session_name} {live_session.live_session_number}",
-                        status="draft",
-                        lesson_type="feedback",
-                        order=max_order_feedback,
-                    )
-                    unique_id = uuid.uuid4()
-                    feedback_lesson = FeedbackLesson.objects.create(
-                        lesson=new_feedback_lesson,
-                        unique_id=unique_id,
-                        live_session=live_session,
-                    )
-                    if live_session.session_type in [
-                        "in_person_session",
-                        "virtual_session",
-                    ]:
-                        if int(max_order_of_training_class_sessions) == int(
-                            live_session.order
-                        ):
-                            add_question_to_feedback_lesson(
-                                feedback_lesson, nps_default_feed_questions
-                            )
-                        else:
-                            add_question_to_feedback_lesson(
-                                feedback_lesson, default_feedback_questions
-                            )
+                create_lessons_for_batch(batch)
 
-                for coaching_session in coaching_sessions:
-                    max_order = max_order + 1
-                    session_name = None
-                    if coaching_session.session_type == "laser_coaching_session":
-                        session_name = "Laser coaching"
-                    elif coaching_session.session_type == "mentoring_session":
-                        session_name = "Mentoring session"
-                    new_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"{session_name} {coaching_session.coaching_session_number}",
-                        status="draft",
-                        lesson_type="laser_coaching",
-                        order=max_order,
-                    )
-                    LaserCoachingSession.objects.create(
-                        lesson=new_lesson, coaching_session=coaching_session
-                    )
 
                 if assessment_creation:
                     max_order = (
@@ -3559,46 +3570,21 @@ def get_nps_project_wise(request):
     res = {}
     for project in projects:
         nps = 0
-        total_questions = 0  # Track the total number of questions
-        feedback_lessons = FeedbackLesson.objects.filter(
-            lesson__course__batch__project=project
+        answers = Answer.objects.filter(
+            question__type="rating_0_to_10",
+            question__feedbacklesson__lesson__course__batch__project=project,
         )
-        for feedback_lesson in feedback_lessons:
-            feedback_lesson_reponses = FeedbackLessonResponse.objects.filter(
-                feedback_lesson=feedback_lesson
+        facilitator_id = request.query_params.get("facilitator_id", None)
+        if facilitator_id:
+            answers = answers.filter(
+                question__feedbacklesson__live_session__facilitator=facilitator_id
             )
-
-            questions_serializer = QuestionSerializer(
-                feedback_lesson.questions, many=True
-            )
-            question_data = {
-                question["id"]: {**question, "descriptive_answers": [], "ratings": []}
-                for question in questions_serializer.data
-            }
-            for response in feedback_lesson_reponses:
-                for answer in response.answers.all():
-                    question_id = answer.question.id
-                    if answer.question.type.startswith("rating"):
-                        question_data[question_id]["ratings"].append(answer.rating)
-                    elif answer.question.type == "descriptive_answer":
-                        question_data[question_id]["descriptive_answers"].append(
-                            answer.text_answer
-                        )
-
-            for question_id, data in question_data.items():
-                ratings = data["ratings"]
-                if ratings:
-                    if data["type"] == "rating_0_to_10":
-
-                        nps += calculate_nps(ratings)
-                        total_questions += 1
-
-        if total_questions > 0:
-            average_nps = nps / total_questions
-        else:
-            average_nps = 0
-
-        res[project.id] = average_nps
+        ratings = []
+        for answer in answers:
+            ratings.append(answer.rating)
+        if ratings:
+            nps = calculate_nps(ratings)
+        res[project.id] = nps
     return Response(res)
 
 

@@ -333,4 +333,8 @@ urlpatterns = [
         views.get_all_courses_for_all_batches,
         name="get_all_courses_for_all_batches",
     ),
+    path(
+        "projects/<int:project_id>/check-project-structure-edit-allowed/",
+        views.check_if_project_structure_edit_allowed,
+    ),
 ]
