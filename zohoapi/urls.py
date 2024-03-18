@@ -122,4 +122,6 @@ urlpatterns = [
         views.update_purchase_order_status,
         name="update_purchase_order_status",
     ),
+    path("coach/finances/", views.get_coach_wise_finances),
+    path("project/finances/", views.get_project_wise_finances),
 ]

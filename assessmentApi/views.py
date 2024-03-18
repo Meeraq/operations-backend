@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.template.loader import render_to_string
 from operationsBackend import settings
+from openpyxl import Workbook 
 from rest_framework.decorators import api_view, permission_classes
 from .models import (
     Competency,
@@ -4219,7 +4220,42 @@ class DownloadParticipantResponseStatusData(APIView):
 
             response_data = getParticipantsResponseStatusForAssessment(assessment)
 
-            return Response(response_data)
+            # Create an Excel workbook
+            wb = Workbook()
+            ws = wb.active
+
+            # headers = ['Participant Name', 'Email', 'Response Status']
+
+            
+
+            headers = ['Participant Name', 'Email', 'Pre Response Status', 'Post Response Status']
+            ws.append(headers)
+            if assessment.assessment_timing == 'pre' or 'post':
+                data = [
+                    {'name': item.get('name', ''), 'email': item.get('email', ''), 'pre_response_status': item.get('pre_response_status', ''), 'post_response_status': item.get('post_response_status', '')}
+                    for item in response_data
+                ]
+            else:
+                return Response(
+                    {"error": "Invalid assessment timing."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # ws.append(headers)
+
+            for item in data:
+                ws.append([
+                    item.get('name', ''),
+                    item.get('email', ''),
+                    item.get('pre_response_status', ''),
+                    item.get('post_response_status', ''),
+                ])
+
+            response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            response['Content-Disposition'] = f'attachment; filename="{assessment.name}_response_status.xlsx"'
+            wb.save(response)
+
+            return response
 
         except Assessment.DoesNotExist:
             return Response(
@@ -4435,12 +4471,12 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                                 pre_assessment.save()
 
                             elif assessment_lesson.type == "post":
-                                lesson.drip_date = post_assessment.assessment_start_date
-                                lesson.save()
+                                
                                 post_assessment = Assessment.objects.get(
                                     id=post_assessment_id
                                 )
-
+                                lesson.drip_date = post_assessment.assessment_start_date
+                                lesson.save()
                                 assessment_lesson.assessment_modal = post_assessment
                                 assessment_lesson.save()
 
@@ -4809,3 +4845,36 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": "Failed to get data"}, status=500)
+
+
+
+class GetAssessmentBatchAndProject(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, assessment_id):
+        assessment = get_object_or_404(Assessment, id=assessment_id)
+        try:
+            # get batch and project of assessment
+            assessment_lessons =  AssessmentLesson.objects.filter(assessment_modal__id = assessment_id)
+            if assessment_lessons.exists():
+                assessment_lesson = assessment_lessons.first()
+                batch = assessment_lesson.lesson.course.batch
+                project = batch.project
+                return Response({
+                    "batch" : {
+                        "id" : batch.id
+                    },"project" : {
+                        "id" : project.id
+                    }
+                })
+            else:
+                return Response(
+                {"error": "Batch and project not found for the assessment"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        except Exception as e:
+            # Handle specific exceptions if needed
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+

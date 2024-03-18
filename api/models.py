@@ -256,7 +256,6 @@ class Facilitator(models.Model):
     city = models.JSONField(default=list, blank=True)
     language = models.JSONField(default=list, blank=True)
     job_roles = models.JSONField(default=list, blank=True)
-    city = models.JSONField(default=list, blank=True)
     country = models.JSONField(default=list, blank=True)
     created_at = models.DateField(auto_now_add=True)
     edited_at = models.DateField(auto_now=True)
@@ -281,13 +280,15 @@ class Facilitator(models.Model):
 
 
 class Learner(models.Model):
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=100)
     email = models.EmailField()
     phone = models.CharField(max_length=25, blank=True)
     area_of_expertise = models.CharField(max_length=100, blank=True)
     years_of_experience = models.IntegerField(default=0, blank=True)
-
+    job_roles = models.JSONField(default=list, blank=True)
+    
     def __str__(self):
         return self.name
 
@@ -481,6 +482,9 @@ class SessionRequestCaas(models.Model):
     status_updated_at = models.DateTimeField(blank=True, null=True, default=None)
     billable_session_number = models.IntegerField(blank=True, default=None, null=True)
     is_extra = models.BooleanField(blank=True, default=False)
+    auto_generated_status = models.CharField(
+        max_length=50, default="pending", blank=True
+    )
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
@@ -645,6 +649,12 @@ class StandardizedFieldRequest(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True, null=True)
     facilitator = models.ForeignKey(
         Facilitator, on_delete=models.CASCADE, blank=True, null=True
+    )
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.CASCADE, blank=True, null=True
+    )
+    learner = models.ForeignKey(
+        Learner, on_delete=models.CASCADE, blank=True, null=True
     )
     standardized_field_name = models.ForeignKey(
         StandardizedField, on_delete=models.CASCADE, blank=True
