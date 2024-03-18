@@ -56,6 +56,7 @@ urlpatterns = [
     ),
     path("coaches/", views.get_coaches),
     path("batch/<int:batch_id>/", views.update_batch),
+    path("batches/get/<int:batch_id>/", views.get_batch),
     path(
         "create-coach-availibilty/",
         views.create_coach_schedular_availibilty,
@@ -326,6 +327,11 @@ urlpatterns = [
     path(
         "edit-status-expense/",
         views.edit_status_expense,
+    ),
+    path(
+        "get-all-courses-for-all-batches/",
+        views.get_all_courses_for_all_batches,
+        name="get_all_courses_for_all_batches",
     ),
     path(
         "projects/<int:project_id>/check-project-structure-edit-allowed/",
