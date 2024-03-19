@@ -72,6 +72,8 @@ def get_live_session_name(session_type):
         session_name = "Kickoff Session"
     elif session_type == "virtual_session":
         session_name = "Virtual Session"
+    elif  session_type == "pre_study":
+        session_name = "Pre Study"
     return session_name
 
 

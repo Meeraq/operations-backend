@@ -189,7 +189,8 @@ def get_live_session_name(session_type):
         session_name = "Kickoff Session"
     elif session_type == "virtual_session":
         session_name = "Virtual Session"
-
+    elif session_type == "pre_study":
+        session_name = "Pre Study"
     return session_name
 
 
@@ -360,6 +361,7 @@ def create_facilitator_pricing(batch, facilitator):
             "kickoff_session",
             "virtual_session",
             "live_session",
+            "pre_study",
         ]:
             live_session = LiveSession.objects.filter(
                 batch=batch,
@@ -391,6 +393,7 @@ def delete_facilitator_pricing(batch, facilitator):
             "kickoff_session",
             "virtual_session",
             "live_session",
+            "pre_study",
         ]:
             live_session = LiveSession.objects.filter(
                 batch=batch,
@@ -407,7 +410,7 @@ def delete_facilitator_pricing(batch, facilitator):
                 price=session["price"],
             ).delete()
 
-            
+
 def create_coach_pricing(batch, coach):
     project_structure = batch.project.project_structure
     for session in project_structure:
@@ -444,6 +447,7 @@ def create_batch_calendar(batch):
             "in_person_session",
             "kickoff_session",
             "virtual_session",
+            "pre_study",
         ]:
             session_number = (
                 LiveSession.objects.filter(
@@ -451,13 +455,27 @@ def create_batch_calendar(batch):
                 ).count()
                 + 1
             )
-            live_session = LiveSession.objects.create(
-                batch=batch,
-                live_session_number=session_number,
-                order=order,
-                duration=duration,
-                session_type=session_type,
-            )
+            if session_type == "pre_study":
+                facilitator = Facilitator.objects.filter(
+                    email=env("PRE_STUDY_FACILITATOR")
+                ).first()
+
+                live_session = LiveSession.objects.create(
+                    batch=batch,
+                    live_session_number=session_number,
+                    order=order,
+                    duration=duration,
+                    session_type=session_type,
+                    facilitator=facilitator,
+                )
+            else:
+                live_session = LiveSession.objects.create(
+                    batch=batch,
+                    live_session_number=session_number,
+                    order=order,
+                    duration=duration,
+                    session_type=session_type,
+                )
         elif session_type == "laser_coaching_session":
             coaching_session_number = (
                 CoachingSession.objects.filter(
@@ -535,6 +553,7 @@ def delete_sessions_and_create_new_batch_calendar_and_lessons(project):
             create_coach_pricing(batch, coach)
 
     return None
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -806,148 +825,181 @@ def get_batch_calendar(request, batch_id):
 def update_live_session(request, live_session_id):
     try:
         with transaction.atomic():
-            live_session = LiveSession.objects.get(id=live_session_id)
-
-            existing_date_time = live_session.date_time
-            serializer = LiveSessionSerializer(
-                live_session, data=request.data, partial=True
-            )
-            if serializer.is_valid():
-                update_live_session = serializer.save()
-                current_time = timezone.now()
-                if update_live_session.date_time > current_time:
-                    try:
-                        scheduled_for = update_live_session.date_time - timedelta(
-                            minutes=30
-                        )
-                        clocked = ClockedSchedule.objects.create(
-                            clocked_time=scheduled_for
-                        )
-                        # time is utc one here
-                        periodic_task = PeriodicTask.objects.create(
-                            name=f"send_whatsapp_reminder_30_min_before_live_session_{uuid.uuid1()}",
-                            task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
-                            args=[update_live_session.id],
-                            clocked=clocked,
-                            one_off=True,
-                        )
-                        periodic_task.save()
-                        if update_live_session.pt_30_min_before:
-                            update_live_session.pt_30_min_before.enabled = False
-                            update_live_session.pt_30_min_before.save()
-                        live_session.pt_30_min_before = periodic_task
-                        live_session.save()
-                    except Exception as e:
-                        print(str(e))
-                        pass
-                live_session_lesson = LiveSessionLesson.objects.filter(
-                    live_session=live_session
-                ).first()
-                lesson = live_session_lesson.lesson
-
-                lesson.drip_date = live_session.date_time + timedelta(
-                    hours=5, minutes=30
+            change_in_all_batches = request.query_params.get("change_in_all_batches")
+            change_in_all_batches_bool = bool(change_in_all_batches)
+            print(change_in_all_batches_bool)
+            main_live_session = LiveSession.objects.get(id=live_session_id)
+            batches = []
+            if change_in_all_batches:
+                batches = SchedularBatch.objects.filter(
+                    project=main_live_session.batch.project
                 )
+            else:
+                batches = SchedularBatch.objects.filter(id=main_live_session.batch.id)
+            count = 0 
+            for batch in batches:
 
-                lesson.save()
+                live_session = LiveSession.objects.get(
+                    batch=batch, order=main_live_session.order
+                )
+                data = request.data
+                if change_in_all_batches and count >= 1:
+                    if "attendees" in request.data:
+                        del request.data["attendees"]
+                existing_date_time = live_session.date_time
+                serializer = LiveSessionSerializer(
+                    live_session, data=data, partial=True
+                )
+                count +=1
+                if serializer.is_valid():
+                    update_live_session = serializer.save()
+                    current_time = timezone.now()
+                    if update_live_session.date_time > current_time:
+                        try:
+                            scheduled_for = update_live_session.date_time - timedelta(
+                                minutes=30
+                            )
+                            clocked = ClockedSchedule.objects.create(
+                                clocked_time=scheduled_for
+                            )
+                            # time is utc one here
+                            periodic_task = PeriodicTask.objects.create(
+                                name=f"send_whatsapp_reminder_30_min_before_live_session_{uuid.uuid1()}",
+                                task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
+                                args=[update_live_session.id],
+                                clocked=clocked,
+                                one_off=True,
+                            )
+                            periodic_task.save()
+                            if update_live_session.pt_30_min_before:
+                                update_live_session.pt_30_min_before.enabled = False
+                                update_live_session.pt_30_min_before.save()
+                            live_session.pt_30_min_before = periodic_task
+                            live_session.save()
+                        except Exception as e:
+                            print(str(e))
+                            pass
+                    live_session_lesson = LiveSessionLesson.objects.filter(
+                        live_session=live_session
+                    ).first()
+                    if live_session_lesson:
+                        lesson = live_session_lesson.lesson
 
-                AIR_INDIA_PROJECT_ID = 3
-                if (
-                    not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
-                    and update_live_session.batch.project.status == "ongoing"
-                    and update_live_session.batch.project.calendar_invites
-                ):
-                    try:
-                        learners = live_session.batch.learners.all()
-                        facilitators = [live_session.facilitator]
-                        attendees = []
-
-                        # Adding learners to attendees list
-                        for learner in learners:
-                            attendee = {
-                                "emailAddress": {
-                                    "name": learner.name,
-                                    "address": learner.email,
-                                },
-                                "type": "required",
-                            }
-                            attendees.append(attendee)
-
-                        # Adding facilitators to attendees list
-                        for facilitator in facilitators:
-                            attendee = {
-                                "emailAddress": {
-                                    "name": facilitator.first_name
-                                    + " "
-                                    + facilitator.last_name,
-                                    "address": facilitator.email,
-                                },
-                                "type": "required",
-                            }
-                            attendees.append(attendee)
-
-                        start_time_stamp = (
-                            update_live_session.date_time.timestamp() * 1000
+                        lesson.drip_date = live_session.date_time + timedelta(
+                            hours=5, minutes=30
                         )
-                        end_time_stamp = (
-                            start_time_stamp + int(update_live_session.duration) * 60000
-                        )
-                        start_datetime_obj = datetime.fromtimestamp(
-                            int(start_time_stamp) / 1000
-                        ) + timedelta(hours=5, minutes=30)
-                        start_datetime_str = (
-                            start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
-                        )
-                        description = (
-                            f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
-                            + update_live_session.description
-                            if update_live_session.description
-                            else (
-                                "" + update_live_session.description
+
+                        lesson.save()
+
+                    AIR_INDIA_PROJECT_ID = 3
+                    if (
+                        not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
+                        and update_live_session.batch.project.status == "ongoing"
+                        and update_live_session.batch.project.calendar_invites
+                    ):
+                        try:
+                            learners = live_session.batch.learners.all()
+                            facilitators = [live_session.facilitator]
+                            attendees = []
+
+                            # Adding learners to attendees list
+                            for learner in learners:
+                                attendee = {
+                                    "emailAddress": {
+                                        "name": learner.name,
+                                        "address": learner.email,
+                                    },
+                                    "type": "required",
+                                }
+                                attendees.append(attendee)
+
+                            # Adding facilitators to attendees list
+                            for facilitator in facilitators:
+                                attendee = {
+                                    "emailAddress": {
+                                        "name": facilitator.first_name
+                                        + " "
+                                        + facilitator.last_name,
+                                        "address": facilitator.email,
+                                    },
+                                    "type": "required",
+                                }
+                                attendees.append(attendee)
+
+                            start_time_stamp = (
+                                update_live_session.date_time.timestamp() * 1000
+                            )
+                            end_time_stamp = (
+                                start_time_stamp
+                                + int(update_live_session.duration) * 60000
+                            )
+                            start_datetime_obj = datetime.fromtimestamp(
+                                int(start_time_stamp) / 1000
+                            ) + timedelta(hours=5, minutes=30)
+                            start_datetime_str = (
+                                start_datetime_obj.strftime("%d-%m-%Y %H:%M") + " IST"
+                            )
+                            description = (
+                                f"Your Meeraq Live Training Session is scheduled at {start_datetime_str}. "
+                                + update_live_session.description
                                 if update_live_session.description
-                                else ""
+                                else (
+                                    "" + update_live_session.description
+                                    if update_live_session.description
+                                    else ""
+                                )
                             )
-                        )
-                        if not existing_date_time:
-                            create_outlook_calendar_invite(
-                                "Meeraq - Live Session",
-                                description,
-                                start_time_stamp,
-                                end_time_stamp,
-                                attendees,
-                                env("CALENDAR_INVITATION_ORGANIZER"),
-                                None,
-                                None,
-                                update_live_session,
-                                update_live_session.meeting_link,
-                            )
-                        elif not existing_date_time.strftime(
-                            "%d-%m-%Y %H:%M"
-                        ) == update_live_session.date_time.strftime("%d-%m-%Y %H:%M"):
-                            existing_calendar_invite = CalendarInvites.objects.filter(
-                                live_session=live_session
-                            ).first()
-                            # delete the current one
-                            if existing_calendar_invite:
-                                delete_outlook_calendar_invite(existing_calendar_invite)
-                            # create the new one
-                            create_outlook_calendar_invite(
-                                "Meeraq - Live Session",
-                                description,
-                                start_time_stamp,
-                                end_time_stamp,
-                                attendees,
-                                env("CALENDAR_INVITATION_ORGANIZER"),
-                                None,
-                                None,
-                                update_live_session,
-                                update_live_session.meeting_link,
-                            )
-                    except Exception as e:
-                        print(str(e))
-                        pass
-                return Response(serializer.data)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                            if not existing_date_time:
+                                create_outlook_calendar_invite(
+                                    "Meeraq - Live Session",
+                                    description,
+                                    start_time_stamp,
+                                    end_time_stamp,
+                                    attendees,
+                                    env("CALENDAR_INVITATION_ORGANIZER"),
+                                    None,
+                                    None,
+                                    update_live_session,
+                                    update_live_session.meeting_link,
+                                )
+                            elif not existing_date_time.strftime(
+                                "%d-%m-%Y %H:%M"
+                            ) == update_live_session.date_time.strftime(
+                                "%d-%m-%Y %H:%M"
+                            ):
+                                existing_calendar_invite = (
+                                    CalendarInvites.objects.filter(
+                                        live_session=live_session
+                                    ).first()
+                                )
+                                # delete the current one
+                                if existing_calendar_invite:
+                                    delete_outlook_calendar_invite(
+                                        existing_calendar_invite
+                                    )
+                                # create the new one
+                                create_outlook_calendar_invite(
+                                    "Meeraq - Live Session",
+                                    description,
+                                    start_time_stamp,
+                                    end_time_stamp,
+                                    attendees,
+                                    env("CALENDAR_INVITATION_ORGANIZER"),
+                                    None,
+                                    None,
+                                    update_live_session,
+                                    update_live_session.meeting_link,
+                                )
+                        except Exception as e:
+                            print(str(e))
+                            pass
+                else:
+                    return Response(
+                        serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                    )
+            return Response(
+                {"message": "Session Updated successfully!"},
+            )
     except Exception as e:
         print(str(e))
         return Response(
@@ -976,7 +1028,7 @@ def update_coaching_session(request, coaching_session_id):
                     lesson = coaching_session_lesson.lesson
                     lesson.drip_date = coaching_session.start_date
                     lesson.save()
-  
+
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
@@ -1422,9 +1474,6 @@ def update_batch(request, batch_id):
         return Response(
             {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
         )
-    
-    
-
 
 
 @api_view(["GET"])
@@ -1436,8 +1485,6 @@ def get_batch(request, batch_id):
         return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
     serializer = SchedularBatchSerializer(batch)
     return Response({**serializer.data, "is_nudge_enabled": batch.project.nudges})
-
-
 
 
 @api_view(["GET"])
@@ -3974,6 +4021,7 @@ def add_new_session_in_project_structure(request):
                     "in_person_session",
                     "kickoff_session",
                     "virtual_session",
+                    "pre_study",
                 ]:
                     session_number = (
                         LiveSession.objects.filter(
@@ -3981,13 +4029,28 @@ def add_new_session_in_project_structure(request):
                         ).count()
                         + 1
                     )
-                    live_session = LiveSession.objects.create(
-                        batch=batch,
-                        live_session_number=session_number,
-                        order=new_session["order"],
-                        duration=new_session["duration"],
-                        session_type=session_type,
-                    )
+
+                    if session_type == "pre_study":
+                        facilitator = Facilitator.objects.filter(
+                            email=env("PRE_STUDY_FACILITATOR")
+                        ).first()
+
+                        live_session = LiveSession.objects.create(
+                            batch=batch,
+                            live_session_number=session_number,
+                            order=new_session["order"],
+                            duration=new_session["duration"],
+                            session_type=session_type,
+                            facilitator=facilitator,
+                        )
+                    else:
+                        live_session = LiveSession.objects.create(
+                            batch=batch,
+                            live_session_number=session_number,
+                            order=new_session["order"],
+                            duration=new_session["duration"],
+                            session_type=session_type,
+                        )
                     if course:
                         max_order = (
                             Lesson.objects.filter(course=course).aggregate(
@@ -4006,6 +4069,8 @@ def add_new_session_in_project_structure(request):
                             session_name = "Kickoff Session"
                         elif live_session.session_type == "virtual_session":
                             session_name = "Virtual Session"
+                        elif live_session.session_type == "pre_study":
+                            session_name = "Pre Study"
                         new_lesson = Lesson.objects.create(
                             course=course,
                             name=f"{session_name} {live_session.live_session_number}",
@@ -4185,6 +4250,7 @@ def delete_session_from_project_structure(request):
                     "in_person_session",
                     "kickoff_session",
                     "virtual_session",
+                    "pre_study",
                 ]:
                     live_session = LiveSession.objects.filter(
                         batch=batch, order=order, session_type=session_type
@@ -4256,6 +4322,7 @@ def delete_session_from_project_structure(request):
                     "in_person_session",
                     "kickoff_session",
                     "virtual_session",
+                    "pre_study",
                 ]:
                     for lesson in Lesson.objects.filter(
                         course=course, lesson_type="live_session"
@@ -5147,6 +5214,7 @@ def update_price_in_project_structure(request):
             "in_person_session",
             "kickoff_session",
             "virtual_session",
+            "pre_study",
         ]:
             facilitator_pricings = FacilitatorPricing.objects.filter(
                 project_id=project_id, session_type=session_type, order=order
@@ -5424,6 +5492,7 @@ def get_project_wise_progress_data(request, project_id):
                         "in_person_session",
                         "kickoff_session",
                         "virtual_session",
+                        "pre_study",
                     ]:
                         live_session = LiveSession.objects.filter(
                             batch=batch,
@@ -5533,6 +5602,7 @@ def get_session_progress_data_for_dashboard(request, project_id):
                     "in_person_session",
                     "kickoff_session",
                     "virtual_session",
+                    "pre_study",
                 ]:
                     total_count += 1
                     live_session = LiveSession.objects.filter(
