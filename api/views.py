@@ -171,7 +171,7 @@ from schedularApi.serializers import (
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-from zohoapi.models import Vendor
+from zohoapi.models import Vendor,InvoiceData
 from courses.models import CourseEnrollment
 
 from urllib.parse import urlencode
@@ -8898,6 +8898,7 @@ def get_coaches_in_project_is_vendor(request, project_id):
         for coach_status in project.coaches_status.all():
             is_vendor = coach_status.coach.user.roles.filter(name="vendor").exists()
             vendor_id = None
+            is_delete_purchase_order_allowed = True
             purchase_order_id = (
                 coach_status.purchase_order_id
                 if coach_status.purchase_order_id
@@ -8920,12 +8921,17 @@ def get_coaches_in_project_is_vendor(request, project_id):
                     coach_status.save()
                     purchase_order_id = None
                     purchase_order_no = None
+                else:
+                    invoices = InvoiceData.objects.filter(purchase_order_id = purchase_order_id)
+                    if invoices.exists():
+                        is_delete_purchase_order_allowed = False
 
             data[coach_status.coach.id] = {
                 "vendor_id": vendor_id,
                 "purchase_order_id": purchase_order_id,
                 "purchase_order_no": purchase_order_no,
                 "purchase_order": purchase_order,
+                "is_delete_purchase_order_allowed" : is_delete_purchase_order_allowed
             }
         return Response(data)
     except Exception as e:
