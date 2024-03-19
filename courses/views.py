@@ -635,10 +635,34 @@ def get_nudges_and_batch(request, batch_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@transaction.atomic
 def create_new_nudge(request):
     serializer = NudgeSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        nudge_instance = serializer.save()
+        nudge_instance.is_switched_on = True
+        nudge_instance.save()
+        nudges_start_date = nudge_instance.batch.nudge_start_date
+        today_date = datetime.today().date()
+        if nudges_start_date and nudges_start_date <= today_date:
+            last_nudge = (
+                Nudge.objects.filter(batch=nudge_instance.batch)
+                .exclude(id=nudge_instance.id)
+                .order_by("-order")
+                .first()
+            )
+            if last_nudge:
+                last_nudge_date = last_nudge.trigger_date
+                nudge_instance.trigger_date = last_nudge_date + timedelta(
+                    int(nudge_instance.batch.nudge_frequency)
+                )
+                nudge_instance.save()
+            else:
+                nudge_instance.trigger_date = nudges_start_date + timedelta(
+                    int(nudge_instance.batch.nudge_frequency)
+                )
+                nudge_instance.save()
+        serializer = NudgeSerializer(nudge_instance)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -672,7 +696,6 @@ def add_nudges_date_frequency_to_batch(request, batch_id):
         batch = SchedularBatch.objects.get(id=batch_id)
         nudge_start_date = request.data.get("nudge_start_date")
         nudge_frequency = request.data.get("nudge_frequency")
-        existing_nudge_start_date = batch.nudge_start_date
         batch.nudge_start_date = nudge_start_date
         batch.nudge_frequency = nudge_frequency
         batch.save()
@@ -3988,23 +4011,10 @@ def update_nudge_status(request, nudge_id):
         # schedule new periodic task
         desired_time = time(8, 30)
         nudge_sent_date = datetime.strptime(nudge_sent_date, "%Y-%m-%d")
-        nudge_scheduled_for = datetime.combine(nudge_sent_date, desired_time)
-        clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
-        periodic_task = PeriodicTask.objects.create(
-            name=uuid.uuid1(),
-            task="schedularApi.tasks.send_nudge",
-            args=[nudge.id],
-            clocked=clocked,
-            one_off=True,
-        )
+        nudge.trigger_date = nudge_sent_date.date()
         nudge.is_switched_on = True
     else:
         # find the periodic task and switch
-        periodic_task = PeriodicTask.objects.filter(
-            task="schedularApi.tasks.send_nudge", args=f"[{nudge.id}]"
-        ).first()
-        if periodic_task:
-            periodic_task.delete()
         nudge.is_switched_on = False
     nudge.save()
     nudge_serializer = NudgeSerializer(nudge)

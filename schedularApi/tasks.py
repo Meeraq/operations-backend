@@ -1655,21 +1655,13 @@ def coach_has_to_give_slots_availability_reminder():
 def schedule_nudges(batch_id):
     batch = SchedularBatch.objects.get(id=batch_id)
     nudges = Nudge.objects.filter(batch__id=batch_id).order_by("order")
-    desired_time = time(8, 30)
-    nudge_scheduled_for = datetime.combine(batch.nudge_start_date, desired_time)
+    nudge_scheduled_for = batch.nudge_start_date
     for nudge in nudges:
-        if nudge.batch.project.nudges and nudge.batch.project.status == "ongoing":
-            clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
-            periodic_task = PeriodicTask.objects.create(
-                name=uuid.uuid1(),
-                task="schedularApi.tasks.send_nudge",
-                args=[nudge.id],
-                clocked=clocked,
-                one_off=True,
-            )
-            nudge_scheduled_for = nudge_scheduled_for + timedelta(
-                int(batch.nudge_frequency)
-            )
+        nudge.trigger_date = nudge_scheduled_for
+        nudge.save()
+        nudge_scheduled_for = nudge_scheduled_for + timedelta(
+            int(batch.nudge_frequency)
+        )
 
 
 def get_file_content(file_url):
@@ -1687,13 +1679,19 @@ def get_file_extension(url):
     return file_extension
 
 
+# runs every day at 8:30 AM
 @shared_task
-def send_nudge(nudge_id):
-    nudge = Nudge.objects.get(id=nudge_id)
-    if nudge.batch.project.nudges and nudge.batch.project.status == "ongoing":
+def send_nudges():
+    today_date = date.today()
+    nudges = Nudge.objects.filter(
+        trigger_date=today_date,
+        is_sent=False,
+        is_switched_on=True,
+        batch__project__nudges=True,
+        batch__project__status="ongoing",
+    )
+    for nudge in nudges:
         subject = f"New Nudge: {nudge.name}"
-        if nudge.is_sent:
-            return
         message = nudge.content
         email_message = render_to_string(
             "nudge/nudge_wrapper.html", {"message": mark_safe(message)}

@@ -283,6 +283,7 @@ class Nudge(models.Model):
     batch = models.ForeignKey(
         SchedularBatch, on_delete=models.CASCADE, null=True, blank=True, default=None
     )
+    trigger_date = models.DateField(default=None, blank=True, null=True)
     is_sent = models.BooleanField(default=False)
     is_switched_on = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
