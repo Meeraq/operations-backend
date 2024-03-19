@@ -847,7 +847,6 @@ def check_if_the_avalibility_is_already_booked(user_id, availability):
     return False
 
 
-
 def create_task(task_details, number_of_days):
     triggered_date = datetime.now() + timedelta(days=number_of_days)
     triggered_date = triggered_date.replace(hour=8, minute=0, second=0, microsecond=0)
@@ -9192,12 +9191,15 @@ def get_all_api_logs(request):
 
     start_date = request.query_params.get("start_date")
     end_date = request.query_params.get("end_date")
+    username = request.query_params.get("username")
 
     if start_date and end_date:
-
         start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
         end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
         logs = logs.filter(created_at__date__range=(start_date, end_date))
+
+    if username:
+        logs = logs.filter(user__username__contains=username)
 
     result_page = paginator.paginate_queryset(logs, request)
     serializer = APILogSerializer(result_page, many=True)
