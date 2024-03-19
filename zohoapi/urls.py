@@ -128,4 +128,9 @@ urlpatterns = [
         "expense-purchase-order/create/<int:facilitator_id>/<int:batch_id>/",
         views.expense_purchase_order_create,
     ),
+    path(
+        "purchase-order/expense/delete/<str:purchase_order_id>/",
+        views.delete_expense_purchase_order,
+        name="delete_expense_purchase_order",
+    ),
 ]

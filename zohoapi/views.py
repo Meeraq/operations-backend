@@ -1783,3 +1783,28 @@ def get_project_wise_finances(request):
     except Exception as e:
         print(str(e))
         return Response(status=403)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_expense_purchase_order(request, purchase_order_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders/{purchase_order_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.delete(api_url, headers=auth_header)
+        print(response.json())
+        if response.status_code == 200:
+            Expense.objects.filter(purchase_order_id=purchase_order_id).update(
+                purchase_order_id="", purchase_order_no=""
+            )
+            return Response({"message": "Purchase Order deleted successfully."})
+        else:
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)

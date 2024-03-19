@@ -159,7 +159,7 @@ import environ
 import re
 from rest_framework.views import APIView
 from api.views import get_user_data
-from zohoapi.models import Vendor
+from zohoapi.models import Vendor,InvoiceData
 from zohoapi.views import fetch_purchase_orders
 from zohoapi.tasks import organization_id
 from courses.views import calculate_nps
@@ -777,12 +777,18 @@ def get_batch_calendar(request, batch_id):
                 expense = Expense.objects.filter(batch__id=batch_id , facilitator__id = facilitator_item['id']).first()
                 facilitator_item['purchase_order_id'] = expense.purchase_order_id
                 facilitator_item['purchase_order_no'] = expense.purchase_order_no
+                is_delete_purchase_order_allowed = True
                 if facilitator_item['purchase_order_id']:
                     purchase_order = get_purchase_order(purchase_orders, facilitator_item['purchase_order_id'])
                     if not purchase_order:
                         Expense.objects.filter(batch__id=batch_id , facilitator__id = facilitator_item['id']).update(purchase_order_id="", purchase_order_no="")
                         facilitator_item['purchase_order_id'] = None
                         facilitator_item['purchase_order_no'] = None
+                    else:
+                        invoices = InvoiceData.objects.filter(purchase_order_id = facilitator_item['purchase_order_id'])
+                        if invoices.exists():
+                            is_delete_purchase_order_allowed = False
+                    facilitator_item["is_delete_purchase_order_allowed"] = is_delete_purchase_order_allowed
                     facilitator_item['purchase_order'] = purchase_order
                 else:
                     facilitator_item['purchase_order'] = None
