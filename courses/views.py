@@ -5,7 +5,7 @@ from collections import defaultdict
 import boto3
 import requests
 from rest_framework import generics, serializers, status
-from datetime import timedelta, time, datetime
+from datetime import timedelta, time, datetime,date
 from .models import (
     Course,
     TextLesson,
@@ -3622,9 +3622,16 @@ class GetAllNudgesOfSchedularProjects(APIView):
             if hr_id:
                 courses = courses.filter(batch__project__hr__id=hr_id)
             for course in courses:
-                nudges = get_nudges_of_course(course)
+                today_date = date.today()
+                nudges =  Nudge.objects.filter(
+                    batch__id=course.batch.id,
+                    is_sent=False,
+                    is_switched_on=True,
+                    batch__project__nudges=True,
+                    batch__project__status="ongoing",
+                )
+                nudges = NudgeSerializer(nudges, many=True).data
                 data = list(data) + list(nudges)
-
             return Response(data)
         except Exception as e:
             print(str(e))

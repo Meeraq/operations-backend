@@ -50,7 +50,7 @@ from zohoapi.views import (
     filter_purchase_order_data,
 )
 from zohoapi.tasks import get_access_token, organization_id, base_url
-
+from courses.serializers import NudgeSerializer
 
 env = environ.Env()
 environ.Env.read_env()
@@ -2151,16 +2151,22 @@ def send_tomorrow_action_items_data():
             courses = Course.objects.filter(batch__project=project)
 
             for course in courses:
-                nudges = get_nudges_of_course(course)
+                today_date = date.today()
+                tomorrow_date = today_date + timedelta(days=1)
+                nudges = Nudge.objects.filter(
+                    batch__id=course.batch.id,
+                    trigger_date=tomorrow_date,
+                    is_sent=False,
+                    is_switched_on=True,
+                    batch__project__nudges=True,
+                    batch__project__status="ongoing",
+                )
+                nudges = NudgeSerializer(nudges, many=True).data
                 for nudge in nudges:
-                    if (
-                        nudge["nudge_scheduled_for"].date()
-                        == (current_date_time + timedelta(days=1)).date()
-                    ):
-                        nudge["nudge_scheduled_for"] = nudge[
-                            "nudge_scheduled_for"
-                        ].strftime("%d-%m-%Y %H:%M")
-                        projects_data[project.name]["nudges"].append(nudge)
+                    nudge["nudge_scheduled_for"] = nudge[
+                        "trigger_date"
+                    ].strftime("%d-%m-%Y %H:%M")
+                    projects_data[project.name]["nudges"].append(nudge)
 
         assessments = Assessment.objects.filter(
             assessment_end_date__gt=current_date,
