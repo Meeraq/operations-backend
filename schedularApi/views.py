@@ -146,7 +146,7 @@ import environ
 import re
 from rest_framework.views import APIView
 from api.views import get_user_data
-from zohoapi.models import Vendor
+from zohoapi.models import Vendor, InvoiceData
 from zohoapi.views import fetch_purchase_orders
 from zohoapi.tasks import organization_id
 
@@ -5519,6 +5519,7 @@ def get_facilitators_and_pricing_for_project(request, project_id):
                 vendor_id = Vendor.objects.get(user=facilitator.user).vendor_id
             facilitator_data = serializer.data
             pricing = facilitators_pricing.filter(facilitator__id=facilitator.id)
+            is_delete_purchase_order_allowed = True
             purchase_order = None
             if pricing.exists():
                 first_pricing = pricing.first()
@@ -5531,12 +5532,17 @@ def get_facilitators_and_pricing_for_project(request, project_id):
                         first_pricing.purchase_order_id =""
                         first_pricing.purchase_order_no = ""
                         first_pricing.save()
+                    else:
+                        invoices = InvoiceData.objects.filter(purchase_order_id = first_pricing.purchase_order_id)
+                        if invoices.exists():
+                            is_delete_purchase_order_allowed = False
                 pricing_serializer = FacilitatorPricingSerializer(first_pricing)
             else:
                 pricing_serializer = None
             facilitator_data["pricing_details"] = (
                 pricing_serializer.data if pricing_serializer else None
             )
+            facilitator_data["is_delete_purchase_order_allowed"] = is_delete_purchase_order_allowed
             facilitator_data["vendor_id"] = vendor_id
             facilitator_data["purchase_order"] = purchase_order
             facilitators_data.append(facilitator_data)
@@ -5568,6 +5574,7 @@ def get_coaches_and_pricing_for_project(request, project_id):
             pricing = coaches_pricing.filter(coach__id=coach.id)
             all_pricings_serializer = CoachPricingSerializer(coaches_pricing, many=True)
             purchase_order = None
+            is_delete_purchase_order_allowed = True
             if pricing.exists():
                 first_pricing = pricing.first()
                 if first_pricing.purchase_order_id:
@@ -5576,13 +5583,17 @@ def get_coaches_and_pricing_for_project(request, project_id):
                     )
                     if not purchase_order:
                         CoachPricing.objects.filter(purchase_order_id = first_pricing.purchase_order_id).update(purchase_order_id="", purchase_order_no="")
+                    else:
+                        invoices = InvoiceData.objects.filter(purchase_order_id = first_pricing.purchase_order_id)
+                        if invoices.exists():
+                            is_delete_purchase_order_allowed = False
                 pricing_serializer = CoachPricingSerializer(pricing.first())
             else:
                 pricing_serializer = None
             coach_data["pricing_details"] = (
                 pricing_serializer.data if pricing_serializer else None
             )
-
+            coach_data["is_delete_purchase_order_allowed"] = is_delete_purchase_order_allowed
             coach_data["vendor_id"] = vendor_id
             coach_data["purchase_order"] = purchase_order
             coach_data["all_pricings"] = all_pricings_serializer.data
