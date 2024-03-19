@@ -41,6 +41,7 @@ from .models import (
     SuperAdmin,
     Facilitator,
     Finance,
+    Task,
 )
 
 # Register your models here.
@@ -51,8 +52,6 @@ admin.site.register(Organisation)
 admin.site.register(Project)
 admin.site.register(Learner)
 admin.site.register(Availibility)
-# admin.site.register(SessionRequest)
-# admin.site.register(Session)
 admin.site.register(HR)
 admin.site.register(Profile)
 admin.site.register(Engagement)
@@ -88,3 +87,4 @@ admin.site.register(Role)
 admin.site.register(APILog)
 admin.site.register(SuperAdmin)
 admin.site.register(Finance)
+admin.site.register(Task)

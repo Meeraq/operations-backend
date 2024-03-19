@@ -71,6 +71,7 @@ from .views import (
     GetProjectWiseReport,
     GetAllAssessmentsOfSchedularProjects,
     AssessmentsResponseStatusDownload,
+    GetAssessmentBatchAndProject,
 )
 
 
@@ -311,5 +312,9 @@ urlpatterns = [
     path(
         "assessments-download-respose-status/",
         AssessmentsResponseStatusDownload.as_view(),
+    ),
+    path(
+        "assessment/<int:assessment_id>/batch-and-project/",
+        GetAssessmentBatchAndProject.as_view(),
     ),
 ]
