@@ -124,4 +124,9 @@ urlpatterns = [
     ),
     path("coach/finances/", views.get_coach_wise_finances),
     path("project/finances/", views.get_project_wise_finances),
+    path(
+        "invoices-data/",
+        views.get_all_the_invoices_counts,
+        name="get_all_the_invoices_counts",
+    ),
 ]

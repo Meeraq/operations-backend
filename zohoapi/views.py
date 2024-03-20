@@ -1754,3 +1754,33 @@ def get_project_wise_finances(request):
     except Exception as e:
         print(str(e))
         return Response(status=403)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_the_invoices_counts(request):
+    try:
+        all_invoices = fetch_invoices(organization_id)
+        res = []
+        status_counts = defaultdict(int)
+        for invoice_data in all_invoices:
+            if not invoice_data["bill"] and invoice_data["status"] == "in_review":
+                status_counts["in_review"] += 1
+            if not invoice_data["bill"] and invoice_data["status"] == "approved":
+                status_counts["approved"] += 1
+            if not invoice_data["bill"] and invoice_data["status"] == "rejected":
+                status_counts["rejected"] += 1
+            if invoice_data["bill"]:
+                if (
+                    "status" in invoice_data["bill"]
+                    and not invoice_data["bill"]["status"] == "paid"
+                ):
+                    status_counts["accepted"] += 1
+            if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid":
+                status_counts["paid"] += 1
+            res.append(invoice_data)
+        return Response({"invoice_counts": status_counts, "invoices": res}, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to load"}, status=400)
