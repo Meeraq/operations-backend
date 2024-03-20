@@ -45,6 +45,7 @@ from .tasks import (
     send_mail_templates,
     fetch_purchase_orders,
     filter_purchase_order_data,
+    get_vendor
 )
 from .models import InvoiceData, AccessToken, Vendor, InvoiceStatusUpdate
 import base64
@@ -207,23 +208,6 @@ def get_organization_data():
         return Response({}, status=400)
 
 
-def get_vendor(vendor_id):
-    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-    if access_token:
-        headers = {"Authorization": f"Bearer {access_token}"}
-        url = f"{base_url}/contacts/{vendor_id}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
-        vendor_response = requests.get(
-            url,
-            headers=headers,
-        )
-        if (
-            vendor_response.json()["message"] == "success"
-            and vendor_response.json()["contact"]
-        ):
-            return vendor_response.json()["contact"]
-        return Response({}, status=400)
-    else:
-        return Response({}, status=400)
 
 
 def add_45_days(date_str):
@@ -667,6 +651,9 @@ def add_invoice_data(request):
     serializer = InvoiceDataSerializer(data=request.data)
     if serializer.is_valid():
         invoice_instance = serializer.save()
+        vendor_details = get_vendor(request.data["vendor_id"])
+        invoice_instance.vendor_name = vendor_details["contact_name"]
+        invoice_instance.save() 
         approver_email = serializer.data["approver_email"]
         invoice_data = get_invoice_data_for_pdf(invoice_instance)
         send_mail_templates(
@@ -1328,7 +1315,7 @@ def edit_vendor(request, vendor_id):
         vendor = Vendor.objects.get(id=vendor_id)
 
         data = request.data
-        name = data.get("name", "")
+        # name = data.get("name", "")
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
@@ -1340,6 +1327,8 @@ def edit_vendor(request, vendor_id):
                 {"error": "User with this email already exists."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        vendor_details = get_vendor(vendor_id)
+        name = vendor_details["contact_name"] 
         vendor.user.user.username = email
         vendor.user.user.email = email
         vendor.user.user.save()
