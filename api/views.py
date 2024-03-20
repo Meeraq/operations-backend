@@ -1134,7 +1134,7 @@ def update_coach_profile(request, id):
 def get_coaches(request):
     try:
         # Get all the Coach objects
-        coaches = Coach.objects.filter(is_approved=True, active_inactive=True)
+        coaches = Coach.objects.filter(is_approved=True)
 
         # Serialize the Coach objects
         serializer = CoachSerializer(coaches, many=True)

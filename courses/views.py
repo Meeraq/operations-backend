@@ -83,6 +83,7 @@ from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
 )
 from schedularApi.serializers import SchedularBatchSerializer
+
 # from schedularApi.views import create_lessons_for_batch
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
@@ -336,19 +337,17 @@ def download_file_response(file_url):
 
 def create_lessons_for_batch(batch):
     try:
-        course  = Course.objects.get(batch=batch)
+        course = Course.objects.get(batch=batch)
         live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch.id)
         training_class_sessions = LiveSession.objects.filter(
             session_type__in=["in_person_session", "virtual_session"]
         )
-        max_order_of_training_class_sessions = (
-            training_class_sessions.aggregate(Max("order"))["order__max"]
-        )
+        max_order_of_training_class_sessions = training_class_sessions.aggregate(
+            Max("order")
+        )["order__max"]
         coaching_sessions = CoachingSession.objects.filter(batch__id=batch.id)
         max_order = (
-            Lesson.objects.filter(course=course).aggregate(Max("order"))[
-                "order__max"
-            ]
+            Lesson.objects.filter(course=course).aggregate(Max("order"))["order__max"]
             or 0
         )
         for live_session in live_sessions:
@@ -366,9 +365,9 @@ def create_lessons_for_batch(batch):
                 lesson=new_lesson, live_session=live_session
             )
             max_order_feedback = (
-                Lesson.objects.filter(course=course).aggregate(
-                    Max("order")
-                )["order__max"]
+                Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                    "order__max"
+                ]
                 or 0
             )
             new_feedback_lesson = Lesson.objects.create(
@@ -388,9 +387,7 @@ def create_lessons_for_batch(batch):
                 "in_person_session",
                 "virtual_session",
             ]:
-                if int(max_order_of_training_class_sessions) == int(
-                    live_session.order
-                ):
+                if int(max_order_of_training_class_sessions) == int(live_session.order):
                     add_question_to_feedback_lesson(
                         feedback_lesson, nps_default_feed_questions
                     )
@@ -2011,6 +2008,7 @@ def get_all_courses_progress(request):
         res.append(
             {
                 **course_serializer.data,
+                "project_name": course.batch.project.name,
                 "batch_name": course.batch.name,
                 "total_learners": course_enrollments.count(),
                 "completion_percentage": round(completion_percentage),
@@ -2037,57 +2035,98 @@ def get_course_progress(request, course_id):
 @permission_classes([AllowAny])
 def course_report_download(request, course_id):
     course_enrollments = CourseEnrollment.objects.filter(course__id=course_id)
-    course_enrollments_serializer = CourseEnrollmentDepthOneSerializer(
-        course_enrollments, many=True
-    )
-    lessons_count = Lesson.objects.filter(course__id=course_id, status="public").count()
+    lessons = Lesson.objects.filter(course__id=course_id, status="public")
+    lessons_count = lessons.count()
     res = []
-    for course_enrollment in course_enrollments_serializer.data:
-        res.append(
-            {
-                **course_enrollment,
-                "total_lessons": lessons_count,
-                "progress": round(
-                    (len(course_enrollment["completed_lessons"]) / lessons_count) * 100
-                ),
-            }
+    for course_enrollment in course_enrollments:
+
+        temp = {
+            "Participant Name": course_enrollment.learner.name,
+            "Participant Email": course_enrollment.learner.email,
+            "Completed Lessons": len(course_enrollment.completed_lessons),
+            "Total Lessons": lessons_count,
+            "Progress": round(
+                (len(course_enrollment.completed_lessons) / lessons_count) * 100
+            ),
+        }
+        for lesson in lessons:
+            temp[lesson.name] = (
+                "Completed"
+                if lesson.id in course_enrollment.completed_lessons
+                else "Pending"
+            )
+
+        temp["Completed Lessons"] = len(course_enrollment.completed_lessons)
+
+        temp["Total Lessons"] = lessons_count
+        temp["Progress"] = (
+            str(round((len(course_enrollment.completed_lessons) / lessons_count) * 100))
+            + "%"
         )
+        res.append(temp)
 
-    # Create a new workbook and add a worksheet
-    wb = Workbook()
-    ws = wb.active
+    df = pd.DataFrame(res)
 
-    # Write headers to the worksheet
-    headers = [
-        "Participant Name",
-        "Completed Lessons",
-        "Total Lessons",
-        "Progress",
-    ]
+    # Save the DataFrame to an Excel file in-memory
+    excel_data = BytesIO()
+    df.to_excel(excel_data, index=False)
+    excel_data.seek(0)
 
-    for col_num, header in enumerate(headers, 1):
-        ws.cell(row=1, column=col_num, value=header)
-
-    # Write data to the worksheet
-    for row_num, course_enrollment_data in enumerate(res, 2):
-        ws.append(
-            [
-                course_enrollment_data["learner"]["name"],
-                len(course_enrollment_data["completed_lessons"]),
-                course_enrollment_data["total_lessons"],
-                str(course_enrollment_data["progress"]) + "%",
-            ]
-        )
-
-    # Create a response with the Excel file
+    # Create the response with the Excel file
     response = HttpResponse(
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        excel_data.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
-    response["Content-Disposition"] = "attachment; filename=course_report.xlsx"
-    wb.save(response)
+    response["Content-Disposition"] = f"attachment; filename=Report.xlsx"
 
     return response
 
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def course_report_download_project_wise(request, project_id):
+    batches = SchedularBatch.objects.filter(project__id=project_id)
+    excel_data = BytesIO()
+    
+    # Create a Pandas Excel writer with a buffer
+    with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
+        for batch in batches:
+            course = Course.objects.get(batch=batch)
+            course_enrollments = CourseEnrollment.objects.filter(course=course)
+            lessons = Lesson.objects.filter(course=course, status="public")
+            lessons_count = lessons.count()
+            
+            data = []
+            for course_enrollment in course_enrollments:
+                temp = {
+                    "Participant Name": course_enrollment.learner.name,
+                    "Participant Email": course_enrollment.learner.email,
+                    "Completed Lessons": len(course_enrollment.completed_lessons),
+                    "Total Lessons": lessons_count,
+                    "Progress": round((len(course_enrollment.completed_lessons) / lessons_count) * 100),
+                }
+                for lesson in lessons:
+                    temp[lesson.name] = "Completed" if lesson.id in course_enrollment.completed_lessons else "Pending"
+
+                data.append(temp)
+            
+            # Create a DataFrame for the current batch
+            df = pd.DataFrame(data)
+            
+            # Write the DataFrame to a sheet with the batch name
+            df.to_excel(writer, sheet_name=batch.name, index=False)
+    
+    # Seek to the beginning of the buffer
+    excel_data.seek(0)
+
+    # Create the HttpResponse with the Excel file
+    response = HttpResponse(
+        excel_data.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f"attachment; filename=Report.xlsx"
+    
+    return response
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -2577,7 +2616,6 @@ class AssignCourseTemplateToBatch(APIView):
                         )
 
                 create_lessons_for_batch(batch)
-
 
                 if assessment_creation:
                     max_order = (

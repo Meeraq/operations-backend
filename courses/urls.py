@@ -231,6 +231,9 @@ urlpatterns = [
     path("courses/report/all/", views.get_all_courses_progress),
     path("courses/<int:course_id>/report/", views.get_course_progress),
     path("courses/<int:course_id>/report/download/", views.course_report_download),
+    path(
+        "<int:project_id>/project-wise-report/download/", views.course_report_download_project_wise
+    ),
     path("quizes/report/all/", views.get_all_quizes_report),
     path("quizes/<int:quiz_id>/report/", views.get_quiz_report),
     path("quizes/<int:quiz_id>/report/download/", views.quiz_report_download),
