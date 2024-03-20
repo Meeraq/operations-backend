@@ -3528,30 +3528,30 @@ def update_facilitator_profile(request, id):
         )
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def delete_facilitator(request):
-    data = request.data
-    facilitator_id = data.get("facilitator_id")
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# def delete_facilitator(request):
+#     data = request.data
+#     facilitator_id = data.get("facilitator_id")
 
-    if facilitator_id is None:
-        return Response(
-            {"error": "Facilitator ID is missing in the request data"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+#     if facilitator_id is None:
+#         return Response(
+#             {"error": "Facilitator ID is missing in the request data"},
+#             status=status.HTTP_400_BAD_REQUEST,
+#         )
 
-    try:
-        facilitator = Facilitator.objects.get(pk=facilitator_id)
-    except Facilitator.DoesNotExist:
-        return Response(
-            {"error": "Facilitator not found"}, status=status.HTTP_404_NOT_FOUND
-        )
+#     try:
+#         facilitator = Facilitator.objects.get(pk=facilitator_id)
+#     except Facilitator.DoesNotExist:
+#         return Response(
+#             {"error": "Facilitator not found"}, status=status.HTTP_404_NOT_FOUND
+#         )
 
-    facilitator.delete()
-    return Response(
-        {"message": "Facilitator deleted successfully"},
-        status=200,
-    )
+#     facilitator.delete()
+#     return Response(
+#         {"message": "Facilitator deleted successfully"},
+#         status=200,
+#     )
 
 
 @api_view(["GET"])
