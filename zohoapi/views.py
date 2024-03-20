@@ -44,6 +44,7 @@ from .tasks import (
     filter_invoice_data,
     send_mail_templates,
     fetch_purchase_orders,
+    fetch_sales_orders,
     filter_purchase_order_data,
 )
 from .models import InvoiceData, AccessToken, Vendor, InvoiceStatusUpdate
@@ -1742,3 +1743,40 @@ def get_project_wise_finances(request):
     except Exception as e:
         print(str(e))
         return Response(status=403)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_sales_orders(request):
+    try:
+        all_sales_orders = fetch_sales_orders(organization_id)
+        return Response(all_sales_orders, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_sales_order_data_pdf(request, salesorder_id):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if access_token:
+        api_url = f"{base_url}/salesorders/{salesorder_id}?print=true&accept=pdf&organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+
+        response = requests.get(api_url, headers=auth_header)
+        if response.status_code == 200:
+            pdf_content = response.content
+            response = HttpResponse(pdf_content, content_type="application/pdf")
+            response["Content-Disposition"] = f'attachment; filename="sales_order.pdf"'
+            return response
+        else:
+            return Response(
+                {"error": "Failed to fetch sales order data"},
+                status=response.status_code,
+            )
+    else:
+        return Response(
+            {"error": "Access token not found. Please generate an access token first."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
