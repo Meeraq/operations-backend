@@ -1048,16 +1048,19 @@ def add_vendor(request):
     # Extract data from the request
     with transaction.atomic():
         data = request.data
-        name = data.get("name", "")
+        # name = data.get("name", "")
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
 
         try:
+            vendor_details = get_vendor(vendor_id)
+            name = vendor_details["contact_name"] 
+       
             # Check if the user with the given email already exists
             user_profile = Profile.objects.get(user__email=email)
             user = user_profile.user
-
+            
             # Check if the user has the role 'vendor'
             if user_profile.roles.filter(name="vendor").exists():
                 return Response(
@@ -1152,6 +1155,7 @@ def add_vendor(request):
                 )
 
             except Exception as e:
+                print(str(e))
                 return Response(
                     {"detail": f"Error creating vendor: {str(e)}"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
