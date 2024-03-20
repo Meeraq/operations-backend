@@ -4623,3 +4623,169 @@ class AssessmentsResponseStatusDownload(APIView):
             print(str(e))
 
 
+
+
+# from assessmentApi.models import Assessment
+# from assessmentApi.views import generate_graph_for_participant,generate_graph_for_participant_for_post_assessment
+# from schedularApi.models import SchedularBatch
+# post_assessments = Assessment.objects.filter(assessment_timing="post", organisation__id=16)
+# assessments_data = []
+
+# for post_assessment in post_assessments:
+#     post_assessment_name =  post_assessment.name
+#     batch_name = post_assessment_name.split(" ")[0]
+#     batch = SchedularBatch.objects.get(name = batch_name)
+#     assessment_data = {
+#         "batch" : batch,
+#         "project" : batch.project,
+#         "assessments": [post_assessment.pre_assessment, post_assessment]
+#     }
+#     assessments_data.append(assessment_data)
+            
+# pre_compentency_percentages = []
+# post_compentency_percentages = []
+# total_participant = 0
+# total_attended_both_assessments = 0
+# for assessment_data in assessments_data:
+#     total_participant = total_participant + assessment_data['batch'].learners.count()
+#     attended_both_assessments = {}
+#     for assessment in assessment_data['assessments']:
+#         assessment_id = assessment.id
+#         for (
+#             participants_observer
+#         ) in assessment.participants_observers.all():
+#             participant = participants_observer.participant
+#             if assessment.assessment_timing == "pre":
+#                 compentency_precentage = generate_graph_for_participant(
+#                     participant, assessment_id, assessment, True
+#                 )
+#                 if compentency_precentage:
+#                     if participant.id not in attended_both_assessments:
+#                         attended_both_assessments[participant.id] = 1
+#                     else:
+#                         attended_both_assessments[participant.id] = (
+#                             attended_both_assessments[participant.id] + 1
+#                         )
+#                     pre_compentency_percentages.append(
+#                         compentency_precentage
+#                     )
+#             elif assessment.assessment_timing == "post":
+#                 (
+#                     pre_compentency_precentage,
+#                     post_compentency_precentage,
+#                 ) = generate_graph_for_participant_for_post_assessment(
+#                     participant, assessment_id, assessment, True
+#                 )
+#                 if post_compentency_precentage:
+#                     if participant.id not in attended_both_assessments:
+#                         attended_both_assessments[participant.id] = 1
+#                     else:
+#                         attended_both_assessments[participant.id] = (
+#                             attended_both_assessments[participant.id] + 1
+#                         )
+#                     post_compentency_percentages.append(
+#                         post_compentency_precentage
+#                     )
+#     participant_ids_with_value_two = [
+#         key for key, value in attended_both_assessments.items() if value > 1
+#     ]
+#     total_attended_both_assessments = total_attended_both_assessments + len(
+#         participant_ids_with_value_two
+#     )
+
+# content = {
+#     "org_name":assessments_data[0]['project'].organisation.name,
+#     "project_name": assessments_data[0]['project'].name,
+#     "total_participant": total_participant,
+#     "attended_pre_participant": len(pre_compentency_percentages),
+#     "attended_post_participant": len(post_compentency_percentages),
+#     "attended_both_assessments": total_attended_both_assessments,
+# }
+
+
+def generate_spider_web_for_pre_post_assessment(
+    pre_competency_percentage, competency_percentage, total_for_each_comp
+):
+    comp_labels = list(competency_percentage.keys())
+    pre_percentage_values = list(pre_competency_percentage.values())
+    post_percentage_values = list(competency_percentage.values())
+
+    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
+
+    # Plot pre-assessment values
+    angles = np.linspace(0, 2 * np.pi, len(comp_labels), endpoint=False).tolist()
+    angles += angles[:1]
+    pre_bars = ax.plot(angles, pre_percentage_values + pre_percentage_values[:1], label="Pre-Assessment", color="#eb0081", marker='o')
+
+    # Plot post-assessment values
+    post_bars = ax.plot(angles, post_percentage_values + post_percentage_values[:1], label="Post-Assessment", color="#374e9c", marker='o')
+
+    ax.set_thetagrids(np.degrees(angles[:-1]), labels=comp_labels, fontweight='bold', fontsize=5.5, rotation=45, ha='right')
+
+    # Add percentage values on top of the lines
+    for angle, pre_value, post_value in zip(angles, pre_percentage_values, post_percentage_values):
+        ax.text(np.degrees(angle), pre_value, f"{pre_value}%", ha='center', va='center', color='#eb0081', fontsize=8)
+        ax.text(np.degrees(angle), post_value, f"{post_value}%", ha='center', va='center', color='#374e9c', fontsize=8)
+
+    ax.legend(loc='upper right')
+
+    plt.title("Your Awareness Level", fontweight="bold", fontsize=12)
+    plt.tight_layout()
+
+    # Adjust layout for better visibility and centering
+    plt.subplots_adjust(left=0.15, right=0.85, top=0.85, bottom=0.2)
+
+    image_stream = io.BytesIO()
+    plt.savefig(image_stream, format="png")
+    plt.close()
+
+    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
+
+    return encoded_image
+
+
+
+
+# content = {
+#     "org_name":assessments_data[0]['project'].organisation.name,
+#     "project_name": assessments_data[0]['project'].name,
+#     "total_participant": total_participant,
+#     "attended_pre_participant": len(pre_compentency_percentages),
+#     "attended_post_participant": len(post_compentency_percentages),
+#     "attended_both_assessments": total_attended_both_assessments,
+# }
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_project_report_for_air_india(request):
+    content  = {'org_name': 'Air India', 'project_name': 'Coachable - Manager as a Coach', 'total_participant': 843, 'attended_pre_participant': 417, 'attended_post_participant': 304, 'attended_both_assessments': 304}
+
+    pre_average_percentage = get_average_for_all_compentency(
+                    pre_compentency_percentages
+                )
+    
+    post_average_percentage = get_average_for_all_compentency(
+        post_compentency_percentages
+    )
+    post_encoded_image = generate_spider_web_for_pre_post_assessment(
+        pre_average_percentage, post_average_percentage, None
+    )
+
+    content["image_base64"] = post_encoded_image
+    content["competency_with_description"] = (
+        get_competency_with_description(post_average_percentage)
+    )
+
+    email_message = render_to_string(
+        "assessment/project_wise_report.html",
+        content,
+    )
+
+    pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+
+    response = HttpResponse(pdf, content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'attachment; filename={f"Assessment Report.pdf"}'
+    )
+
+    return response

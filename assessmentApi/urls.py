@@ -312,4 +312,5 @@ urlpatterns = [
         "assessments-download-respose-status/",
         AssessmentsResponseStatusDownload.as_view(),
     ),
+    path("get_project_report_for_air_india/", views.get_project_report_for_air_india),
 ]
