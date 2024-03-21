@@ -3626,10 +3626,12 @@ class GetAllNudgesOfSchedularProjects(APIView):
                 nudges =  Nudge.objects.filter(
                     batch__id=course.batch.id,
                     is_sent=False,
-                    is_switched_on=True,
                     batch__project__nudges=True,
                     batch__project__status="ongoing",
+                    trigger_date__isnull=False
                 )
+                if hr_id:
+                    nudges = nudges.filter(is_switched_on=True)
                 nudges = NudgeSerializer(nudges, many=True).data
                 data = list(data) + list(nudges)
             return Response(data)
