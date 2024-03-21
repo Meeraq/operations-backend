@@ -5638,8 +5638,18 @@ def get_all_competencies(request):
             if goal.engagement and goal.engagement.learner
             else "N/A"
         )
+        coachee_email = (
+            goal.engagement.learner.email
+            if goal.engagement and goal.engagement.learner
+            else "N/A"
+        )
         coach_name = (
             goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
+            if goal.engagement and goal.engagement.coach
+            else "N/A"
+        )
+        coach_email = (
+            goal.engagement.coach.email 
             if goal.engagement and goal.engagement.coach
             else "N/A"
         )
@@ -5655,7 +5665,9 @@ def get_all_competencies(request):
                     "created_at": competency.created_at.isoformat(),
                     "project_name": project_name,
                     "learner_name": coachee_name,
+                    "learner_email":coachee_email,
                     "coach_name": coach_name,
+                    "coach_email":coach_email,
                 }
                 competency_list.append(competency_data)
         else:
@@ -5668,7 +5680,9 @@ def get_all_competencies(request):
                 "created_at": None,
                 "project_name": project_name,
                 "learner_name": coachee_name,
+                "learner_email":coachee_email,
                 "coach_name": coach_name,
+                "coach_email":coach_email,
             }
             competency_list.append(competency_data)
 
