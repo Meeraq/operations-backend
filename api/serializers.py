@@ -486,3 +486,42 @@ class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = "__all__"
+
+
+class CustomUserSerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ["id", "name", "email"]
+
+    def get_name(self, obj):
+        try:
+            profile = Profile.objects.get(user=obj)
+            if hasattr(profile, "superadmin"):
+                return profile.superadmin.name
+            elif hasattr(profile, "finance"):
+                return profile.finance.name
+            elif hasattr(profile, "pmo"):
+                return profile.pmo.name
+            elif hasattr(profile, "coach"):
+                return profile.coach.first_name + " " + profile.coach.last_name
+            elif hasattr(profile, "facilitator"):
+                return (
+                    profile.facilitator.first_name + " " + profile.facilitator.last_name
+                )
+            elif hasattr(profile, "vendor"):
+                return profile.vendor.name
+            elif hasattr(profile, "learner"):
+                return profile.learner.name
+            # Add more conditions for other profile models if needed
+            else:
+                return ""
+        except Profile.DoesNotExist:
+            return ""
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["id"] = instance.id
+        data["email"] = instance.email
+        return data

@@ -43,6 +43,10 @@ urlpatterns = [
     path("save_template/", views.addEmailTemplate),
     path("send_test_mails/", views.send_test_mails),
     path("get-learner-by-batch/<str:batch_id>/", views.participants_list),
+    path(
+        "get-learner-by-project/<str:project_type>/<int:project_id>/",
+        views.get_learner_by_project,
+    ),
     path("saved_emailsTemplates/", views.getSavedTemplates),
     path("all_batches/", views.get_batches, name="batch-list"),
     path("send_mails/", views.send_mails),

@@ -73,6 +73,7 @@ from .serializers import (
     APILogSerializer,
     PmoSerializerAll,
     TaskSerializer,
+    CustomUserSerializer
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor
@@ -9372,3 +9373,11 @@ def complete_task(request):
     return Response(
         {"message": "Task marked as completed."}, status=status.HTTP_201_CREATED
     )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_users(request):
+    users = User.objects.filter(profile__isnull=False)
+    serializer = CustomUserSerializer(users, many=True)
+    return Response(serializer.data)

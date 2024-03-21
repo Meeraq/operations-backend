@@ -407,7 +407,7 @@ def delete_facilitator_pricing(batch, facilitator):
                 price=session["price"],
             ).delete()
 
-            
+
 def create_coach_pricing(batch, coach):
     project_structure = batch.project.project_structure
     for session in project_structure:
@@ -535,6 +535,7 @@ def delete_sessions_and_create_new_batch_calendar_and_lessons(project):
             create_coach_pricing(batch, coach)
 
     return None
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -976,7 +977,7 @@ def update_coaching_session(request, coaching_session_id):
                     lesson = coaching_session_lesson.lesson
                     lesson.drip_date = coaching_session.start_date
                     lesson.save()
-  
+
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
@@ -1063,9 +1064,6 @@ def send_test_mails(request):
         subject = request.data.get("subject")
         # email_content = request.data.get('email_content', '')  # Assuming you're sending email content too
         temp1 = request.data.get("htmlContent", "")
-
-        print(emails, "emails")
-
         # if not subject:
         #     return Response({'error': "Subject is required."}, status=400)
 
@@ -1104,6 +1102,23 @@ def participants_list(request, batch_id):
     except SchedularBatch.DoesNotExist:
         return Response({"detail": "Batch not found"}, status=404)
     learners = batch.learners.all()
+    serializer = LearnerSerializer(learners, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_learner_by_project(request, project_type, project_id):
+    if project_type == "caas":
+        learners = Learner.objects.filter(engagement__project__id=project_id).distinct()
+    elif project_type == "skill_training":
+        learners = Learner.objects.filter(
+            schedularbatch__project__id=project_id
+        ).distinct()
+    else:
+        return Response(
+            {"error": "Failed to get learners"}, status=status.HTTP_400_BAD_REQUEST
+        )
     serializer = LearnerSerializer(learners, many=True)
     return Response(serializer.data)
 
@@ -1422,9 +1437,6 @@ def update_batch(request, batch_id):
         return Response(
             {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
         )
-    
-    
-
 
 
 @api_view(["GET"])
@@ -1436,8 +1448,6 @@ def get_batch(request, batch_id):
         return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
     serializer = SchedularBatchSerializer(batch)
     return Response({**serializer.data, "is_nudge_enabled": batch.project.nudges})
-
-
 
 
 @api_view(["GET"])
