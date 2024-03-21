@@ -134,6 +134,7 @@ from .models import (
     APILog,
     Facilitator,
     Task,
+    ZoomToken,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -145,6 +146,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 import json
 import string
 import random
+from django.shortcuts import redirect
 from django.db.models import Q, Min
 from collections import defaultdict
 from django.db.models import Avg
@@ -164,6 +166,7 @@ from schedularApi.models import (
     SchedularBatch,
     SchedularSessions,
     CalendarInvites,
+    LiveSession,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
@@ -649,6 +652,116 @@ def update_outlook_attendees(calendar_invite, new_attendees):
         print(str(e))
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def zoom_auth(request):
+    redirect_uri = env("ZOOM_REDIRECT_URI")
+    authorize_url = f"{env('ZOOM_OAUTH_AUTHORIZE_URL')}?response_type=code&client_id={env('ZOOM_CLIENT_ID')}&redirect_uri={redirect_uri}"
+    return redirect(authorize_url)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def zoom_auth_callback(request):
+    code = request.GET.get("code")
+    redirect_uri = env("ZOOM_REDIRECT_URI")
+    token_url = env("ZOOM_OAUTH_TOKEN_URL")
+    client_id = env("ZOOM_CLIENT_ID")
+    client_secret = env("ZOOM_CLIENT_SECRET")
+
+    response = requests.post(
+        token_url,
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "client_id": client_id,
+            "client_secret": client_secret,
+        },
+    )
+    print("hii")
+    if response.status_code == 200:
+        data = response.json()
+        access_token = data["access_token"]
+        refresh_token = data["refresh_token"]
+        expires_in = data["expires_in"]
+
+        user_info_response = requests.get(
+            "https://api.zoom.us/v2/users/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        if user_info_response.status_code == 200:
+            user_info = user_info_response.json()
+            email = user_info["email"]
+            # Now you can store the email along with tokens
+            user = User.objects.get(username=email)
+            token, created = ZoomToken.objects.get_or_create(user=user)
+            token.access_token = access_token
+            token.refresh_token = refresh_token
+            token.expires_at = expires_in
+            token.save()
+        else:
+            # Handle error when fetching user info
+            pass
+
+    return HttpResponseRedirect(env("APP_URL"))
+
+
+def create_zoom_meeting(live_session_id, topic, start_time, duration):
+    try:
+        zoom_token = ZoomToken.objects.get(user__username=env("ZOOM_MEETING_EMAIL"))
+        meeting_data = {
+            "topic": topic,
+            "type": 2,
+            "start_time": start_time,
+            "timezone": "Asia/Kolkata",
+            "duration": duration,
+            "settings": {
+                "join_before_host": False,
+                "mute_upon_entry": True,
+            },
+        }
+
+        response = requests.post(
+            "https://api.zoom.us/v2/users/me/meetings",
+            json=meeting_data,
+            headers={"Authorization": f"Bearer {zoom_token.access_token}"},
+        )
+      
+        if response.status_code == 201:
+            meeting_info = response.json()
+            meeting_link = meeting_info.get("join_url")
+            live_session = LiveSession.objects.get(id=live_session_id)
+            live_session.meeting_link = meeting_link
+            live_session.meeting_id = meeting_info.get("id")
+            live_session.save()
+            print("Meeting Link Generated")
+            return True
+        else:
+            return False
+    except Exception as e:
+        print(str(e))
+        return False
+
+def delete_zoom_meeting(meeting_id):
+    try:
+       
+        zoom_token = ZoomToken.objects.get(user__username=env("ZOOM_MEETING_EMAIL"))
+
+
+        response = requests.delete(
+            f'https://api.zoom.us/v2/meetings/{meeting_id}',
+            headers={'Authorization': f'Bearer {zoom_token.access_token}'}
+        )
+        if response.status_code == 204:
+            print("Meeting Deleted")
+            return True
+        else:
+            return False
+    except Exception as e:
+        print(str(e))
+        return False
+    
 def create_notification(user, path, message):
     notification = Notification.objects.create(user=user, path=path, message=message)
     return notification
@@ -845,7 +958,6 @@ def check_if_the_avalibility_is_already_booked(user_id, availability):
         ):
             return True
     return False
-
 
 
 def create_task(task_details, number_of_days):

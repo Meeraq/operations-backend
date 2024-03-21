@@ -131,6 +131,8 @@ from api.views import (
     send_mail_templates,
     create_outlook_calendar_invite,
     delete_outlook_calendar_invite,
+    create_zoom_meeting,
+    delete_zoom_meeting,
 )
 from django.db.models import Max
 import io
@@ -281,6 +283,7 @@ def create_project_schedular(request):
             nudges=request.data["nudges"],
             pre_post_assessment=request.data["pre_post_assessment"],
             is_finance_enabled=request.data["finance"],
+            zoom_enabled=request.data["zoom_enabled"],
             junior_pmo=junior_pmo,
         )
         schedularProject.save()
@@ -407,7 +410,7 @@ def delete_facilitator_pricing(batch, facilitator):
                 price=session["price"],
             ).delete()
 
-            
+
 def create_coach_pricing(batch, coach):
     project_structure = batch.project.project_structure
     for session in project_structure:
@@ -535,6 +538,7 @@ def delete_sessions_and_create_new_batch_calendar_and_lessons(project):
             create_coach_pricing(batch, coach)
 
     return None
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -850,6 +854,42 @@ def update_live_session(request, live_session_id):
                 )
 
                 lesson.save()
+                
+                if update_live_session.batch.project.zoom_enabled:
+                    if (
+                        existing_date_time
+                        and existing_date_time.strftime("%d-%m-%Y %H:%M")
+                        != update_live_session.date_time.strftime("%d-%m-%Y %H:%M")
+                        and update_live_session.meeting_id
+                        and update_live_session.batch.project.zoom_enabled
+                    ):
+
+                        delete_zoom_meeting(update_live_session.meeting_id)
+
+                if (
+                    update_live_session.batch.project.zoom_enabled
+                    and update_live_session.session_type != "in_person_session"
+                    and (
+                        not existing_date_time
+                        or existing_date_time.strftime("%d-%m-%Y %H:%M")
+                        != update_live_session.date_time.strftime("%d-%m-%Y %H:%M")
+                    )
+                ):
+
+                    start_time_stamp = update_live_session.date_time.timestamp() * 1000
+                    start_datetime_obj = datetime.fromtimestamp(
+                        int(start_time_stamp) / 1000
+                    ) + timedelta(hours=5, minutes=30)
+                    start_datetime_str = start_datetime_obj.strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    )
+
+                    create_zoom_meeting(
+                        update_live_session.id,
+                        f"{update_live_session.session_type} {update_live_session.live_session_number}",
+                        start_datetime_str,
+                        int(update_live_session.duration),
+                    )
 
                 AIR_INDIA_PROJECT_ID = 3
                 if (
@@ -976,7 +1016,7 @@ def update_coaching_session(request, coaching_session_id):
                     lesson = coaching_session_lesson.lesson
                     lesson.drip_date = coaching_session.start_date
                     lesson.save()
-  
+
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
@@ -1422,9 +1462,6 @@ def update_batch(request, batch_id):
         return Response(
             {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
         )
-    
-    
-
 
 
 @api_view(["GET"])
@@ -1436,8 +1473,6 @@ def get_batch(request, batch_id):
         return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
     serializer = SchedularBatchSerializer(batch)
     return Response({**serializer.data, "is_nudge_enabled": batch.project.nudges})
-
-
 
 
 @api_view(["GET"])
@@ -3719,6 +3754,7 @@ def edit_schedular_project(request, project_id):
     project.pre_post_assessment = request.data.get("pre_post_assessment")
     project.is_finance_enabled = request.data.get("finance")
     project.junior_pmo = junior_pmo
+    project.zoom_enabled = request.data.get("zoom_enabled")
     project.save()
     if not project.pre_post_assessment:
         batches = SchedularBatch.objects.filter(project=project)

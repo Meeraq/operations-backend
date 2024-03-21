@@ -906,3 +906,15 @@ class Task(models.Model):
 
     def __str__(self):
         return self.task
+
+
+class ZoomToken(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, blank=True)
+    access_token = models.TextField(blank=True)
+    refresh_token = models.TextField(blank=True)
+    expires_at = models.CharField(max_length=225, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user} Zoom Token"

@@ -402,4 +402,12 @@ urlpatterns = [
     path("tasks/", views.get_tasks),
     path("tasks/add-remark/", views.add_remark_to_task),
     path("tasks/complete/", views.complete_task),
+    path(
+        "zoom/auth/",
+        views.zoom_auth,
+    ),
+    path(
+        "zoom/auth/callback/",
+        views.zoom_auth_callback,
+    ),
 ]

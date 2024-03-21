@@ -34,6 +34,7 @@ class SchedularProject(models.Model):
     whatsapp_reminder = models.BooleanField(blank=True, default=True)
     calendar_invites = models.BooleanField(blank=True, default=True)
     is_finance_enabled = models.BooleanField(blank=True, default=False)
+    zoom_enabled = models.BooleanField(blank=True, default=False)
     junior_pmo = models.ForeignKey(
         Pmo,
         null=True,
@@ -157,6 +158,7 @@ class LiveSession(models.Model):
         max_length=50, choices=SESSION_CHOICES, default="virtual_session"
     )
     meeting_link = models.TextField(default="", blank=True)
+    meeting_id = models.TextField(default="", blank=True)
 
 
 class EmailTemplate(models.Model):

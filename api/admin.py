@@ -42,6 +42,7 @@ from .models import (
     Facilitator,
     Finance,
     Task,
+    ZoomToken,
 )
 
 # Register your models here.
@@ -88,3 +89,4 @@ admin.site.register(APILog)
 admin.site.register(SuperAdmin)
 admin.site.register(Finance)
 admin.site.register(Task)
+admin.site.register(ZoomToken)
