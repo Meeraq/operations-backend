@@ -4217,22 +4217,15 @@ class DownloadParticipantResponseStatusData(APIView):
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
-
             response_data = getParticipantsResponseStatusForAssessment(assessment)
-
             # Create an Excel workbook
             wb = Workbook()
-            ws = wb.active
-
-            # headers = ['Participant Name', 'Email', 'Response Status']
-
-            
-
-            headers = ['Participant Name', 'Email', 'Pre Response Status', 'Post Response Status']
+            ws = wb.active   
+            headers = ['Participant Name', 'Email', 'Response Status']
             ws.append(headers)
             if assessment.assessment_timing == 'pre' or 'post':
                 data = [
-                    {'name': item.get('name', ''), 'email': item.get('email', ''), 'pre_response_status': item.get('pre_response_status', ''), 'post_response_status': item.get('post_response_status', '')}
+                    {'name': item.get('name', ''), 'email': item.get('email', ''), 'response_status': item.get('response_status', '')}
                     for item in response_data
                 ]
             else:
@@ -4240,15 +4233,13 @@ class DownloadParticipantResponseStatusData(APIView):
                     {"error": "Invalid assessment timing."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-
             # ws.append(headers)
 
             for item in data:
                 ws.append([
                     item.get('name', ''),
                     item.get('email', ''),
-                    item.get('pre_response_status', ''),
-                    item.get('post_response_status', ''),
+                    item.get('response_status', ''),
                 ])
 
             response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
