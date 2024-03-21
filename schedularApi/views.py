@@ -792,6 +792,7 @@ def get_batch_calendar(request, batch_id):
                 "facilitator": facilitator_serializer.data,
                 "batch_name": batch_for_response.name,
                 "project_id": batch_for_response.project.id,
+                "project_name":batch_for_response.project.name,
                 "certificate_present": True if certificate else False,
             }
         )
