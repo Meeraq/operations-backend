@@ -10,6 +10,7 @@ from django.contrib.auth.models import User
 
 class Vendor(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
     name = models.CharField(max_length=155)
     phone = models.CharField(max_length=25)
     email = models.EmailField()
