@@ -1283,6 +1283,20 @@ def get_invoices_by_status(request, status):
         print(str(e))
         return Response({"error": "Failed to load"}, status=400)
 
+def get_purchase_order_ids_for_project(project_id):
+    coach_pricings = CoachPricing.objects.filter(project__id=project_id)
+    facilitator_pricings = FacilitatorPricing.objects.filter(project__id=project_id)
+    purchase_order_set = {}
+    for coach_pricing in coach_pricings:
+        if coach_pricing.purchase_order_id in purchase_order_set:
+            continue
+        purchase_order_set[coach_pricing.purchase_order_id]
+    for facilitator_pricing in facilitator_pricings:
+        if facilitator_pricing.purchase_order_id in purchase_order_set:
+            continue
+        purchase_order_set[facilitator_pricing.purchase_order_id]
+
+    return list(purchase_order_set)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1290,8 +1304,15 @@ def get_invoices_by_status_for_founders(request, status):
 
     try:
         all_invoices = fetch_invoices(organization_id)
+        project_id = request.query_params.get("project_id")
+        if project_id:
+            purchase_order_ids = get_purchase_order_ids_for_project(project_id)
+
         res = []
+        
         for invoice_data in all_invoices:
+            if project_id and invoice_data["purchase_order_id"] not in purchase_order_ids:
+                continue
             if status == "in_review":
                 if not invoice_data["bill"] and invoice_data["status"] == "in_review":
                     res.append(invoice_data)
@@ -1742,3 +1763,6 @@ def get_project_wise_finances(request):
     except Exception as e:
         print(str(e))
         return Response(status=403)
+
+
+

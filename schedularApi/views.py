@@ -5923,4 +5923,39 @@ def check_if_project_structure_edit_allowed(request, project_id):
             is_allowed = False
         return Response({"is_allowed_to_edit": is_allowed})
     except Exception as e:
+        print(str(e))
         return Response({"error": "Failed to get details"}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_project_purchase_orders_for_finance(request, project_id):
+    try:
+        coach_pricings = CoachPricing.objects.filter(project__id=project_id)
+        facilitator_pricings = FacilitatorPricing.objects.filter(project__id=project_id)
+        purchase_orders = fetch_purchase_orders(organization_id)
+        purchase_order_set = {}
+        all_purchase_orders = []
+        for coach_pricing in coach_pricings:
+            if coach_pricing.purchase_order_id in purchase_order_set:
+                continue
+            purchase_order = get_purchase_order(
+                purchase_orders, coach_pricing.purchase_order_id
+            )
+            all_purchase_orders.append(purchase_order)
+            purchase_order_set[coach_pricing.purchase_order_id]
+        for facilitator_pricing in facilitator_pricings:
+            if facilitator_pricing.purchase_order_id in purchase_order_set:
+                continue
+            purchase_order = get_purchase_order(
+                purchase_orders, facilitator_pricing.purchase_order_id
+            )
+            all_purchase_orders.append(purchase_order)
+            purchase_order_set[facilitator_pricing.purchase_order_id]
+
+        return Response(all_purchase_orders)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)
+
+

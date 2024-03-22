@@ -341,4 +341,8 @@ urlpatterns = [
         "projects/<int:project_id>/check-project-structure-edit-allowed/",
         views.check_if_project_structure_edit_allowed,
     ),
+    path(
+        "get-all-project-purchase-orders-for-finance/<int:project_id>/",
+        views.get_all_project_purchase_orders_for_finance,
+    ),
 ]
