@@ -262,4 +262,16 @@ urlpatterns = [
         "get-project-wise-progress-data/<int:project_id>/",
         views.get_project_wise_progress_data,
     ),
+    path(
+        "get-upcoming-coaching-and-live-session-data-for-learner/<int:user_id>/",
+        views.get_upcoming_coaching_and_live_session_data_for_learner,
+    ),
+    path(
+        "get-upcoming-assessment-data/<int:user_id>/",
+        views.get_upcoming_assessment_data,
+    ),
+    path(
+        "get-just-upcoming-session-data/<int:user_id>/",
+        views.get_just_upcoming_session_data,
+    ),
 ]

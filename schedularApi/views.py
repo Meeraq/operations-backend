@@ -41,6 +41,7 @@ from api.models import (
     Role,
     UserToken,
     Facilitator,
+    SessionRequestCaas,
 )
 from .serializers import (
     SchedularProjectSerializer,
@@ -4245,7 +4246,9 @@ class GetAllBatchesParticipantDetails(APIView):
 def coach_inside_skill_training_or_not(request, project_id, batch_id):
     try:
         if batch_id == "all":
-            sessions = SchedularSessions.objects.filter(coaching_session__batch__project__id=project_id)
+            sessions = SchedularSessions.objects.filter(
+                coaching_session__batch__project__id=project_id
+            )
         else:
             batch = get_object_or_404(SchedularBatch, pk=batch_id)
             sessions = SchedularSessions.objects.filter(coaching_session__batch=batch)
@@ -4981,3 +4984,121 @@ def get_project_wise_progress_data(request, project_id):
             {"error": "Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_coaching_and_live_session_data_for_learner(request, user_id):
+    current_time_seeq = timezone.now()
+    timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+    learner = Learner.objects.get(id=user_id)
+    schedular_sessions = SchedularSessions.objects.filter(learner=learner)
+    available_sessions = schedular_sessions.filter(
+        availibility__end_time__gt=timestamp_milliseconds
+    )
+    live_sessions = LiveSession.objects.filter(
+        batch__learners__id=user_id, date_time__gt=current_time_seeq
+    )
+    upcoming_sessions_data = []
+
+    # LIVE SESSION
+    for live_session in live_sessions:
+        project_name = live_session.batch.project.name
+        session_name = f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}"
+        facilitator_names = (
+            f"{live_session.facilitator.first_name} {live_session.facilitator.last_name}"
+            if live_session.facilitator
+            else []
+        )
+        session_timing = live_session.date_time
+        room_id = live_session.meeting_link
+        session_data = {
+            "project_name": project_name,
+            "session_name": session_name,
+            "coach_name": facilitator_names,
+            "session_timing": session_timing,
+            "type": "Live Session",
+            "room_id":room_id,
+            "start_time":"",
+            "end_time":"",
+        }
+        upcoming_sessions_data.append(session_data)
+
+    # COACHING SESSION
+    for available_session in available_sessions:
+        project_name = available_session.coaching_session.batch.project.name
+        session_name = available_session.coaching_session.session_type
+        session_type = available_session.coaching_session.session_type
+        session_timing = available_session.availibility.start_time
+        coach_name = (
+            available_session.availibility.coach.first_name
+            + " "
+            + available_session.availibility.coach.last_name
+        )
+        room_id = f"{available_session.availibility.coach.room_id}"
+        start_time=available_session.availibility.start_time
+        end_time=available_session.availibility.end_time
+        session_data = {
+            "project_name": project_name,
+            "session_name": session_name,
+            "coach_name": coach_name,
+            "session_timing": session_timing,
+            "type": "Coaching Session",
+            "room_id": room_id,
+            "start_time":start_time,
+            "end_time":end_time,
+        }
+
+        upcoming_sessions_data.append(session_data)
+
+    return JsonResponse(upcoming_sessions_data, safe=False)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_assessment_data(request, user_id):
+    try:
+        current_time = timezone.now()
+        upcoming_assessment = Assessment.objects.filter(assessment_start_date__gt=current_time, participants_observers__participant__id=user_id).first()
+        
+        if upcoming_assessment:
+            assessment_data = {
+                "assessment_name": upcoming_assessment.participant_view_name,
+                "assessment_type": upcoming_assessment.assessment_type,
+                "assessment_start_date": upcoming_assessment.assessment_start_date,
+            }
+            return Response(assessment_data)
+        else:
+            return Response({"message": "No upcoming assessment found."}, status = 400)
+    
+    except Exception as e:
+        return Response({"message": f"An error occurred: {str(e)}"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_just_upcoming_session_data(request, user_id):
+    try:
+        current_time = int(timezone.now().timestamp() * 1000)
+        learner = Learner.objects.get(id=user_id)
+        sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            learner=learner,
+        ).order_by("availibility__start_time")
+        upcoming_session = sessions.first()
+        
+        # You can customize the response based on whether an upcoming session is found or not
+        if upcoming_session:
+            # Customize the response data according to your requirement
+            response_data = {
+                "session_id": upcoming_session.id,
+                "start_time": upcoming_session.availibility.start_time,
+                # Add more fields as needed
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+        else:
+            return Response({"message": "No upcoming sessions found"}, status=status.HTTP_404_NOT_FOUND)
+    except Learner.DoesNotExist:
+        return Response({"message": "Learner not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({"message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
