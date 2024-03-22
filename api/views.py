@@ -2000,7 +2000,7 @@ def generate_otp(request):
             otp_obj.delete()
         except OTP.DoesNotExist:
             pass
-        print(otp_obj)
+    
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars="0123456789")
         created_otp = OTP.objects.create(user=user, otp=otp)
