@@ -133,6 +133,7 @@ from .models import (
     FinalizeCoachActivity,
     APILog,
     Facilitator,
+    SuperAdmin,
     Task,
 )
 from rest_framework.pagination import PageNumberPagination
@@ -847,7 +848,6 @@ def check_if_the_avalibility_is_already_booked(user_id, availability):
     return False
 
 
-
 def create_task(task_details, number_of_days):
     triggered_date = datetime.now() + timedelta(days=number_of_days)
     triggered_date = triggered_date.replace(hour=8, minute=0, second=0, microsecond=0)
@@ -1129,12 +1129,34 @@ def update_coach_profile(request, id):
     return Response(serializer.errors, status=400)
 
 
+def get_user_for_active_inactive(role, email):
+    try:
+        if role == "pmo":
+            user = Pmo.objects.get(email=email)
+        if role == "coach":
+            user = Coach.objects.get(email=email)
+        if role == "vendor":
+            user = Vendor.objects.get(email=email)
+        if role == "hr":
+            user = HR.objects.get(email=email)
+        if role == "learner":
+            user = Learner.objects.get(email=email)
+        if role == "superadmin":
+            user = SuperAdmin.objects.get(email=email)
+        if role == "facilitator":
+            user = Facilitator.objects.get(email=email)
+        return user
+    except Exception as e:
+        print(str(e))
+        return None
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_coaches(request):
     try:
         # Get all the Coach objects
-        coaches = Coach.objects.filter(is_approved=True, active_inactive=True)
+        coaches = Coach.objects.filter(is_approved=True)
 
         # Serialize the Coach objects
         serializer = CoachSerializer(coaches, many=True)
@@ -1921,19 +1943,31 @@ def get_user_data(user):
 
             return None
     elif user_profile_role == "facilitator":
+        if not user.profile.facilitator.active_inactive:
+            return None
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
         return {
             **serializer.data,
             "roles": roles,
             "user": {**serializer.data["user"], "type": user_profile_role},
         }
+
     elif user_profile_role == "pmo":
+        if not user.profile.pmo.active_inactive:
+            return None
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "superadmin":
+        if not user.profile.superadmin.active_inactive:
+            return None
+
         serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
     elif user_profile_role == "finance":
+        if not user.profile.finance.active_inactive:
+            return None
         serializer = FinanceDepthOneSerializer(user.profile.finance)
     elif user_profile_role == "learner":
+        if not user.profile.learner.active_inactive:
+            return None
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
             learner=user.profile.learner
@@ -1949,6 +1983,8 @@ def get_user_data(user):
             "user": {**serializer.data["user"], "type": user_profile_role},
         }
     elif user_profile_role == "hr":
+        if not user.profile.hr.active_inactive:
+            return None
         serializer = HrDepthOneSerializer(user.profile.hr)
         is_caas_allowed = Project.objects.filter(hr=user.profile.hr).exists()
         is_seeq_allowed = SchedularProject.objects.filter(hr=user.profile.hr).exists()
@@ -8325,14 +8361,24 @@ def change_user_role(request, user_id):
         else:
             return None
     elif user_profile_role == "pmo":
+        if not user.profile.pmo.active_inactive:
+            return None
         serializer = PmoDepthOneSerializer(user.profile.pmo)
     elif user_profile_role == "superadmin":
+        if not user.profile.superadmin.active_inactive:
+            return None
         serializer = SuperAdminDepthOneSerializer(user.profile.superadmin)
     elif user_profile_role == "finance":
+        if not user.profile.finance.active_inactive:
+            return None
         serializer = FinanceDepthOneSerializer(user.profile.finance)
     elif user_profile_role == "facilitator":
+        if not user.profile.facilitator.active_inactive:
+            return None
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
     elif user_profile_role == "vendor":
+        if not user.profile.vendor.active_inactive:
+            return None
         serializer = VendorDepthOneSerializer(user.profile.vendor)
         organization = get_organization_data()
         zoho_vendor = get_vendor(serializer.data["vendor_id"])
@@ -8357,6 +8403,8 @@ def change_user_role(request, user_id):
             }
         )
     elif user_profile_role == "learner":
+        if not user.profile.learner.active_inactive:
+            return None
         serializer = LearnerDepthOneSerializer(user.profile.learner)
         is_caas_allowed = Engagement.objects.filter(
             learner=user.profile.learner
@@ -8377,6 +8425,8 @@ def change_user_role(request, user_id):
             }
         )
     elif user_profile_role == "hr":
+        if not user.profile.hr.active_inactive:
+            return None
         serializer = HrDepthOneSerializer(user.profile.hr)
     else:
         return Response({"error": "Unknown user role."}, status=400)
@@ -8397,9 +8447,24 @@ def get_users(request):
     user_profiles = Profile.objects.all()
     res = []
     for profile in user_profiles:
-        existing_roles = [item.name for item in profile.roles.all()]
+        active_roles = []
+        inactive_roles = []
+        # existing_roles = [item.name for item in profile.roles.all()]
+        for role in profile.roles.all():
+            user = get_user_for_active_inactive(role.name, profile.user.username)
+            if user.active_inactive:
+                active_roles.append(role.name)
+            else:
+                inactive_roles.append(role.name)
         email = profile.user.email
-        res.append({"id": profile.id, "email": email, "roles": existing_roles})
+        res.append(
+            {
+                "id": profile.id,
+                "email": email,
+                "roles": active_roles,
+                "inactive_roles": inactive_roles,
+            }
+        )
     return Response(res)
 
 
@@ -9237,6 +9302,39 @@ def get_all_api_logs(request):
 #             {"error": "Failed to delete pmo."},
 #             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
 #         )
+
+
+class UpdateUserRoles(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request):
+        try:
+            with transaction.atomic():
+                user_id = request.data.get("user_id")
+                removed_roles = request.data.get("removed_roles")
+                added_roles = request.data.get("added_roles")
+
+                profile = Profile.objects.get(id=user_id)
+
+                for role in removed_roles:
+                    user = get_user_for_active_inactive(role, profile.user.username)
+
+                    user.active_inactive = False
+                    user.save()
+
+                for role in added_roles:
+                    user = get_user_for_active_inactive(role, profile.user.username)
+
+                    user.active_inactive = True
+                    user.save()
+
+                return Response({"message": "Roles updated successfully!"})
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to update."},
+                status=500,
+            )
 
 
 @api_view(["POST"])

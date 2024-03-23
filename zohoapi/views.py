@@ -70,10 +70,16 @@ from django.middleware.csrf import get_token
 from django.db import transaction
 from collections import defaultdict
 import re
-from schedularApi.models import FacilitatorPricing, CoachPricing, SchedularProject
+from schedularApi.models import (
+    FacilitatorPricing,
+    CoachPricing,
+    SchedularBatch,
+    Expense,
+    SchedularProject,
+)
+from api.models import Facilitator
 from decimal import Decimal
 from collections import defaultdict
-
 
 env = environ.Env()
 
@@ -248,6 +254,8 @@ def get_user_data(user):
     elif user.profile.roles.count() == 0:
         return None
     user_profile_role = user.profile.roles.filter(name="vendor")
+    if not user.profile.vendor.active_inactive:
+        return None
     if user_profile_role.exists() and user.profile.vendor:
         serializer = VendorDepthOneSerializer(user.profile.vendor)
     else:
@@ -1572,6 +1580,39 @@ def update_purchase_order_status(request, purchase_order_id, status):
         return Response(status=404)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def expense_purchase_order_create(request, facilitator_id, batch_id):
+    try:
+        facilitator = Facilitator.objects.get(id=facilitator_id)
+        batch = SchedularBatch.objects.get(id=batch_id)
+        expenses = Expense.objects.filter(facilitator=facilitator, batch=batch)
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header, data=request.data)
+        if response.status_code == 201:
+            purchaseorder_created = response.json().get("purchaseorder")
+            for expense in expenses:
+                expense.purchase_order_id = purchaseorder_created["purchaseorder_id"]
+                expense.purchase_order_no = purchaseorder_created[
+                    "purchaseorder_number"
+                ]
+                expense.save()
+
+            return Response({"message": "Purchase Order created successfully."})
+        else:
+            print(response.json())
+            return Response(status=500)
+    except Exception as e:
+        print(str(e))
+        return Response(status=500)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_coach_wise_finances(request):
@@ -1751,6 +1792,31 @@ def get_project_wise_finances(request):
     except Exception as e:
         print(str(e))
         return Response(status=403)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_expense_purchase_order(request, purchase_order_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders/{purchase_order_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.delete(api_url, headers=auth_header)
+        print(response.json())
+        if response.status_code == 200:
+            Expense.objects.filter(purchase_order_id=purchase_order_id).update(
+                purchase_order_id="", purchase_order_no=""
+            )
+            return Response({"message": "Purchase Order deleted successfully."})
+        else:
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
 
 
 @api_view(["GET"])
