@@ -75,7 +75,8 @@ from .serializers import (
     TaskSerializer,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
-from zohoapi.views import get_organization_data, get_vendor
+from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
+from zohoapi.tasks import organization_id
 from rest_framework import generics
 from django.utils.crypto import get_random_string
 import jwt
@@ -173,7 +174,7 @@ from schedularApi.serializers import (
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-from zohoapi.models import Vendor
+from zohoapi.models import Vendor,InvoiceData
 from courses.models import CourseEnrollment
 
 from urllib.parse import urlencode
@@ -1298,6 +1299,7 @@ def create_project_cass(request):
             whatsapp_reminder=request.data["whatsapp_reminder"],
             junior_pmo=junior_pmo,
             calendar_invites=request.data["calendar_invites"],
+            finance=request.data["finance"],
         )
 
         project.save()
@@ -1400,10 +1402,12 @@ def create_learners(learners_data):
                                 learner.area_of_expertise = learner_data.get(
                                     "area_of_expertise"
                                 )
+
                             if learner_data.get("years_of_experience", ""):
                                 learner.years_of_experience = learner_data.get(
                                     "years_of_experience"
                                 )
+
                         except Exception as e:
                             print(str(e))
                         learner.save()
@@ -7342,6 +7346,7 @@ def edit_project_caas(request, project_id):
         project.calendar_invites = request.data.get(
             "calendar_invites", project.calendar_invites
         )
+        project.finance = request.data.get("finance", project.finance)
         project.junior_pmo = junior_pmo
 
         project.hr.clear()
@@ -9470,3 +9475,62 @@ def complete_task(request):
     return Response(
         {"message": "Task marked as completed."}, status=status.HTTP_201_CREATED
     )
+
+def get_purchase_order(purchase_orders, purchase_order_id):
+    for po in purchase_orders:
+        if po.get("purchaseorder_id") == purchase_order_id:
+            return po
+    return None
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coaches_in_project_is_vendor(request, project_id):
+    try:
+        project = Project.objects.get(id=project_id)
+        data = {}
+        purchase_orders = fetch_purchase_orders(organization_id)
+        for coach_status in project.coaches_status.all():
+            is_vendor = coach_status.coach.user.roles.filter(name="vendor").exists()
+            vendor_id = None
+            is_delete_purchase_order_allowed = True
+            purchase_order_id = (
+                coach_status.purchase_order_id
+                if coach_status.purchase_order_id
+                else None
+            )
+            purchase_order_no = (
+                coach_status.purchase_order_id
+                if coach_status.purchase_order_no
+                else None
+            )
+            if is_vendor:
+                vendor_id = Vendor.objects.get(user=coach_status.coach.user).vendor_id
+
+            purchase_order =  None
+            if purchase_order_id:
+                purchase_order = get_purchase_order(purchase_orders, purchase_order_id)
+                if not purchase_order:
+                    coach_status.purchase_order_id = ""
+                    coach_status.purchase_order_no = ""
+                    coach_status.save()
+                    purchase_order_id = None
+                    purchase_order_no = None
+                else:
+                    invoices = InvoiceData.objects.filter(purchase_order_id = purchase_order_id)
+                    if invoices.exists():
+                        is_delete_purchase_order_allowed = False
+
+            data[coach_status.coach.id] = {
+                "vendor_id": vendor_id,
+                "purchase_order_id": purchase_order_id,
+                "purchase_order_no": purchase_order_no,
+                "purchase_order": purchase_order,
+                "is_delete_purchase_order_allowed" : is_delete_purchase_order_allowed
+            }
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
