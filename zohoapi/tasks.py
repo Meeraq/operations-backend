@@ -290,6 +290,34 @@ def fetch_bills(organization_id):
     return all_bills
 
 
+def fetch_customers_from_zoho(organization_id):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if not access_token:
+        raise Exception(
+            "Access token not found. Please generate an access token first."
+        )
+
+    all_customers = []
+    has_more_page = True
+    page = 1
+
+    while has_more_page:
+        api_url = f"{base_url}/customers/?organization_id={organization_id}&page={page}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.get(api_url, headers=auth_header)
+
+        if response.status_code == 200:
+            customers = response.json().get("contacts", [])
+            all_customers.extend(customers)
+            page_context = response.json().get("page_context", {})
+            has_more_page = page_context.get("has_more_page", False)
+            page += 1
+        else:
+            raise Exception("Failed to fetch customers")
+
+    return all_customers
+
+
 def filter_invoice_data(invoices):
     try:
         filtered_invoices = []

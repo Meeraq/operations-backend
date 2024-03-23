@@ -134,4 +134,29 @@ urlpatterns = [
         views.get_sales_order_data_pdf,
         name="get_sales_order_data",
     ),
+    path(
+        "get-sales-order-data/<int:salesorder_id>/",
+        views.get_sales_order_data,
+        name="get_sales_order_data",
+    ),
+    path(
+        "customers-from-zoho/",
+        views.get_customers_from_zoho,
+        name="get_customers_from_zoho",
+    ),
+    path(
+        "customer-details-from-zoho/<str:customer_id>/",
+        views.get_customer_details_from_zoho,
+        name="get_customer_details_from_zoho",
+    ),
+    path(
+        "create-invoice/",
+        views.create_invoice,
+        name="create_invoice",
+    ),
+    path(
+        "sales-order/create/",
+        views.create_sales_order,
+        name="create_sales_order",
+    ),
 ]

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from api.models import Coach, OTP, UserLoginActivity, Profile, Role
+from api.models import Coach, OTP, UserLoginActivity, Profile, Role, Project
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 import json
@@ -19,6 +19,7 @@ import json
 from rest_framework.views import APIView
 import string
 import random
+from django.db.models import Q
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -46,8 +47,15 @@ from .tasks import (
     fetch_purchase_orders,
     fetch_sales_orders,
     filter_purchase_order_data,
+    fetch_customers_from_zoho,
 )
-from .models import InvoiceData, AccessToken, Vendor, InvoiceStatusUpdate
+from .models import (
+    InvoiceData,
+    AccessToken,
+    Vendor,
+    InvoiceStatusUpdate,
+    OrdersAndProjectMapping,
+)
 import base64
 from django.core.mail import EmailMessage
 from io import BytesIO
@@ -1780,3 +1788,127 @@ def get_sales_order_data_pdf(request, salesorder_id):
             {"error": "Access token not found. Please generate an access token first."},
             status=status.HTTP_401_UNAUTHORIZED,
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sales_order_data(request, salesorder_id):
+    access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if access_token_sales_order:
+        api_url = (
+            f"{base_url}/salesorders/{salesorder_id}?organization_id={organization_id}"
+        )
+        auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
+        response = requests.get(api_url, headers=auth_header)
+        if response.status_code == 200:
+            sales_order = response.json().get("salesorder")
+            return Response(sales_order, status=status.HTTP_200_OK)
+        else:
+            return Response(
+                {"error": "Failed to fetch sales order data"},
+                status=response.status_code,
+            )
+    else:
+        return Response(
+            {"error": "Access token not found. Please generate an access token first."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_customers_from_zoho(request):
+    try:
+        customers = fetch_customers_from_zoho(organization_id)
+        return Response(customers, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_customer_details_from_zoho(request, customer_id):
+    try:
+        zoho_vendor = get_vendor(customer_id)
+        return Response(zoho_vendor)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data."}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_invoice(request):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/invoices?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header, data=request.data)
+        print(response.json())
+        if response.status_code == 201:
+            return Response({"message": "Invoice created successfully."})
+        else:
+            print(response.json())
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_sales_order(request):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/salesorders?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header, data=request.data)
+        print(response.json())
+        if response.status_code == 201:
+            salesorder_created = response.json().get("salesorder")
+            project_id = request.data.get("project_id", "")
+            project_type = request.data.get("project_type", "")
+            project = None
+            schedular_project = None
+            orders_and_project_mapping=None
+
+            if project_id:
+                if project_type=="caas":
+                    project = Project.objects.get(id=project_id)
+                    orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(Q(project=project))
+                elif project_type == "skill_training":
+                    schedular_project = SchedularProject.objects.get(id=project_id)
+                    orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(Q(schedular_project=schedular_project))
+
+            if not orders_and_project_mapping or not orders_and_project_mapping.exists():
+                OrdersAndProjectMapping.objects.create(
+                    project=project,
+                    schedular_project=schedular_project,
+                    sales_order_ids=[salesorder_created["salesorder_id"]],
+                )
+            else:
+                mapping = orders_and_project_mapping.first()
+                mapping.project = project
+                mapping.schedular_project = schedular_project
+                mapping.sales_order_ids = [
+                    *mapping.sales_order_ids,
+                    salesorder_created["salesorder_id"],
+                ]
+                mapping.save()
+            # add the mapping for sales order here
+            return Response({"message": "Sales Order created successfully."})
+        else:
+            print(response.json())
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)

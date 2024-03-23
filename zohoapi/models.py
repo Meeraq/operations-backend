@@ -1,9 +1,8 @@
 from django.db import models
 from django.utils import timezone
-from api.models import Profile, validate_pdf_extension
-from api.models import Profile
+from api.models import Profile, validate_pdf_extension, Project
 from django.contrib.auth.models import User
-
+from schedularApi.models import SchedularProject
 
 # Create your models here.
 
@@ -115,3 +114,15 @@ class InvoiceStatusUpdate(models.Model):
 
     def __str__(self):
         return f"{self.invoice.invoice_number} - {self.status} by {self.user.username}"
+
+
+class OrdersAndProjectMapping(models.Model):
+    project = models.ForeignKey(
+        Project, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
+    schedular_project = models.ForeignKey(
+        SchedularProject, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
+
+    purchase_order_ids = models.JSONField(default=list, blank=True)
+    sales_order_ids = models.JSONField(default=list, blank=True)
