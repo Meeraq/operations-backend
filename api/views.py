@@ -1767,43 +1767,43 @@ def add_coach(request):
         )
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def delete_coach(request):
-    coach_id = request.data.get("coach_id", None)
-    user_id = request.data.get("user_id")
-    if coach_id:
-        try:
-            coach = Coach.objects.get(id=coach_id)
-            coach_name = coach.first_name + " " + coach.last_name
-            coach_user_profile = coach.user
-            is_delete_user = True
-            for role in coach_user_profile.roles.all():
-                if not role.name == "coach":
-                    # don't delete user if any other role exists
-                    is_delete_user = False
-                else:
-                    coach_user_profile.roles.remove(role)
-                    coach_user_profile.save()
-            if is_delete_user:
-                user = coach.user.user
-                user.delete()
-            else:
-                coach.delete()
-            timestamp = timezone.now()
-            current_user = User.objects.get(id=user_id)
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# def delete_coach(request):
+#     coach_id = request.data.get("coach_id", None)
+#     user_id = request.data.get("user_id")
+#     if coach_id:
+#         try:
+#             coach = Coach.objects.get(id=coach_id)
+#             coach_name = coach.first_name + " " + coach.last_name
+#             coach_user_profile = coach.user
+#             is_delete_user = True
+#             for role in coach_user_profile.roles.all():
+#                 if not role.name == "coach":
+#                     # don't delete user if any other role exists
+#                     is_delete_user = False
+#                 else:
+#                     coach_user_profile.roles.remove(role)
+#                     coach_user_profile.save()
+#             if is_delete_user:
+#                 user = coach.user.user
+#                 user.delete()
+#             else:
+#                 coach.delete()
+#             timestamp = timezone.now()
+#             current_user = User.objects.get(id=user_id)
 
-            deleteCoachProfile = DeleteCoachProfileActivity.objects.create(
-                user_who_got_deleted=coach_name,
-                user_who_deleted=current_user,
-                timestamp=timestamp,
-            )
-            deleteCoachProfile.save()
-            return Response({"message": "Coach deleted."}, status=200)
-        except ObjectDoesNotExist:
-            return Response({"message": "Failed to delete coach profile"}, status=400)
-    else:
-        return Response({"message": "Failed to delete coach profile"}, status=400)
+#             deleteCoachProfile = DeleteCoachProfileActivity.objects.create(
+#                 user_who_got_deleted=coach_name,
+#                 user_who_deleted=current_user,
+#                 timestamp=timestamp,
+#             )
+#             deleteCoachProfile.save()
+#             return Response({"message": "Coach deleted."}, status=200)
+#         except ObjectDoesNotExist:
+#             return Response({"message": "Failed to delete coach profile"}, status=400)
+#     else:
+#         return Response({"message": "Failed to delete coach profile"}, status=400)
 
 
 @api_view(["GET"])
@@ -2000,7 +2000,7 @@ def generate_otp(request):
             otp_obj.delete()
         except OTP.DoesNotExist:
             pass
-        print(otp_obj)
+    
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars="0123456789")
         created_otp = OTP.objects.create(user=user, otp=otp)
@@ -2265,32 +2265,32 @@ def update_hr(request, hr_id):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-def delete_hr(request, hr_id):
-    try:
-        hr = HR.objects.get(id=hr_id)
-        user_profile = hr.user
-        is_delete_user = True
-        for role in user_profile.roles.all():
-            if not role.name == "hr":
-                is_delete_user = False
-            else:
-                user_profile.roles.remove(role)
-                user_profile.save()
-        if is_delete_user:
-            user = user_profile.user
-            user.delete()
-        else:
-            hr.delete()
-        return Response(
-            {"message": "HR deleted successfully"}, status=status.HTTP_200_OK
-        )
-    except ObjectDoesNotExist:
-        return Response(
-            {"message": "Failed to delete HR profile"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+# @api_view(["DELETE"])
+# @permission_classes([IsAuthenticated])
+# def delete_hr(request, hr_id):
+#     try:
+#         hr = HR.objects.get(id=hr_id)
+#         user_profile = hr.user
+#         is_delete_user = True
+#         for role in user_profile.roles.all():
+#             if not role.name == "hr":
+#                 is_delete_user = False
+#             else:
+#                 user_profile.roles.remove(role)
+#                 user_profile.save()
+#         if is_delete_user:
+#             user = user_profile.user
+#             user.delete()
+#         else:
+#             hr.delete()
+#         return Response(
+#             {"message": "HR deleted successfully"}, status=status.HTTP_200_OK
+#         )
+#     except ObjectDoesNotExist:
+#         return Response(
+#             {"message": "Failed to delete HR profile"},
+#             status=status.HTTP_400_BAD_REQUEST,
+#         )
 
 
 @api_view(["POST"])
@@ -9204,39 +9204,39 @@ def get_all_api_logs(request):
     return paginator.get_paginated_response(serializer.data)
 
 
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-def delete_pmo(request):
-    try:
-        with transaction.atomic():
-            pmo_email = request.data.get("email").strip().lower()
-            if pmo_email:
+# @api_view(["DELETE"])
+# @permission_classes([IsAuthenticated])
+# def delete_pmo(request):
+#     try:
+#         with transaction.atomic():
+#             pmo_email = request.data.get("email").strip().lower()
+#             if pmo_email:
 
-                pmo = Pmo.objects.get(email=pmo_email)
+#                 pmo = Pmo.objects.get(email=pmo_email)
 
-                pmo_user_profile = pmo.user
-                is_delete_user = True
-                for role in pmo_user_profile.roles.all():
-                    if not role.name == "pmo":
-                        # don't delete user if any other role exists
-                        is_delete_user = False
-                    else:
-                        pmo_user_profile.roles.remove(role)
-                        pmo_user_profile.save()
-                if is_delete_user:
-                    user = pmo.user.user
-                    user.delete()
-                else:
-                    pmo.delete()
+#                 pmo_user_profile = pmo.user
+#                 is_delete_user = True
+#                 for role in pmo_user_profile.roles.all():
+#                     if not role.name == "pmo":
+#                         # don't delete user if any other role exists
+#                         is_delete_user = False
+#                     else:
+#                         pmo_user_profile.roles.remove(role)
+#                         pmo_user_profile.save()
+#                 if is_delete_user:
+#                     user = pmo.user.user
+#                     user.delete()
+#                 else:
+#                     pmo.delete()
 
-                return Response({"message": "Pmo deleted successfully"})
+#                 return Response({"message": "Pmo deleted successfully"})
 
-    except Exception as e:
-        print(str(e))
-        return Response(
-            {"error": "Failed to delete pmo."},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
+#     except Exception as e:
+#         print(str(e))
+#         return Response(
+#             {"error": "Failed to delete pmo."},
+#             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#         )
 
 
 @api_view(["POST"])
