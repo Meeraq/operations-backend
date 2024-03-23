@@ -168,7 +168,7 @@ def fetch_purchase_orders(organization_id):
     return all_purchase_orders
 
 
-def fetch_sales_orders(organization_id):
+def fetch_sales_orders(organization_id, queryParams=""):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if not access_token:
         raise Exception(
@@ -181,7 +181,7 @@ def fetch_sales_orders(organization_id):
 
     while has_more_page:
         api_url = (
-            f"{base_url}/salesorders/?organization_id={organization_id}&page={page}"
+            f"{base_url}/salesorders/?organization_id={organization_id}&page={page}{queryParams}"
         )
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.get(api_url, headers=auth_header)
@@ -198,6 +198,36 @@ def fetch_sales_orders(organization_id):
             raise Exception("Failed to fetch sales orders")
 
     return all_sales_orders
+
+
+def fetch_client_invoices(organization_id):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if not access_token:
+        raise Exception(
+            "Access token not found. Please generate an access token first."
+        )
+
+    all_client_invoices = []
+    has_more_page = True
+    page = 1
+
+    while has_more_page:
+        api_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.get(api_url, headers=auth_header)
+
+        if response.status_code == 200:
+            client_invoices = response.json().get("invoices", [])
+            # client_invoices = filter_sales_order_data(client_invoices)
+            all_client_invoices.extend(client_invoices)
+
+            page_context = response.json().get("page_context", {})
+            has_more_page = page_context.get("has_more_page", False)
+            page += 1
+        else:
+            raise Exception("Failed to fetch client invoices.")
+
+    return all_client_invoices
 
 
 def generate_access_token_from_refresh_token(refresh_token):

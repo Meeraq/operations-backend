@@ -48,6 +48,7 @@ from .tasks import (
     fetch_sales_orders,
     filter_purchase_order_data,
     fetch_customers_from_zoho,
+    fetch_client_invoices,
 )
 from .models import (
     InvoiceData,
@@ -2002,17 +2003,24 @@ def create_sales_order(request):
             project_type = request.data.get("project_type", "")
             project = None
             schedular_project = None
-            orders_and_project_mapping=None
+            orders_and_project_mapping = None
 
             if project_id:
-                if project_type=="caas":
+                if project_type == "caas":
                     project = Project.objects.get(id=project_id)
-                    orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(Q(project=project))
+                    orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                        Q(project=project)
+                    )
                 elif project_type == "skill_training":
                     schedular_project = SchedularProject.objects.get(id=project_id)
-                    orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(Q(schedular_project=schedular_project))
+                    orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                        Q(schedular_project=schedular_project)
+                    )
 
-            if not orders_and_project_mapping or not orders_and_project_mapping.exists():
+            if (
+                not orders_and_project_mapping
+                or not orders_and_project_mapping.exists()
+            ):
                 OrdersAndProjectMapping.objects.create(
                     project=project,
                     schedular_project=schedular_project,
@@ -2035,3 +2043,130 @@ def create_sales_order(request):
     except Exception as e:
         print(str(e))
         return Response(status=404)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_client_invoices(request):
+    try:
+        all_client_invoices = fetch_client_invoices(organization_id)
+        return Response(all_client_invoices, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_client_invoice_data(request, invoice_id):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if access_token:
+        api_url = f"{base_url}/invoices/{invoice_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.get(api_url, headers=auth_header)
+        if response.status_code == 200:
+            client_invoice = response.json().get("invoice")
+            return Response(client_invoice, status=status.HTTP_200_OK)
+        else:
+            return Response(
+                {"error": "Failed to fetch invoices data"},
+                status=response.status_code,
+            )
+    else:
+        return Response(
+            {"error": "Access token not found. Please generate an access token first."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_client_invoice_data_pdf(request, invoice_id):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if access_token:
+        api_url = f"{base_url}/invoices/{invoice_id}?print=true&accept=pdf&organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.get(api_url, headers=auth_header)
+        if response.status_code == 200:
+            pdf_content = response.content
+            response = HttpResponse(pdf_content, content_type="application/pdf")
+            response["Content-Disposition"] = f'attachment; filename="invoice.pdf"'
+            return response
+        else:
+            return Response(
+                {"error": "Failed to fetch invoice data"},
+                status=response.status_code,
+            )
+    else:
+        return Response(
+            {"error": "Access token not found. Please generate an access token first."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_project_sales_orders(request, project_id):
+    try:
+        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+            project=project_id
+        )
+        res = {}
+        res["sales_orders"] = []
+        if orders_and_project_mapping.exists():
+            salesorder_ids = orders_and_project_mapping.first().sales_order_ids
+            sales_orders = []
+            if salesorder_ids:
+                ids = ",".join(salesorder_ids)
+                sales_orders = fetch_sales_orders(
+                    organization_id, f"&salesorder_ids={ids}"
+                )
+                return Response(
+                    {"sales_orders": sales_orders, "salesorder_ids": salesorder_ids}
+                )
+        return Response({"sales_orders": [], "salesorder_ids": []})
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_so_to_project(request, project_id):
+    try:
+        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+            project=project_id
+        )
+        project = Project.objects.get(id=project_id)
+        sales_order_ids = request.data.get("sales_order_ids", [])
+        if not orders_and_project_mapping.exists():
+            for id in sales_order_ids:
+                orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                    sales_order_ids__contains=id
+                )
+                if orders_and_project_mapping.exists():
+                    mapping = orders_and_project_mapping.first()
+                    if mapping.project and mapping.project.id != project.id:
+                        return Response(
+                            {"error": f"SO already exist in project: {mapping.project.name}"},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    break
+        if orders_and_project_mapping.exists():
+            mapping = orders_and_project_mapping.first()
+            existing_sales_order_ids = mapping.sales_order_ids
+            set_of_sales_order_ids = set(existing_sales_order_ids)
+            for id in sales_order_ids:
+                set_of_sales_order_ids.add(id)
+            final_list_of_sales_order_ids = list(set_of_sales_order_ids)
+            mapping.sales_order_ids = final_list_of_sales_order_ids
+            mapping.project = project
+            mapping.save()
+        else:
+            OrdersAndProjectMapping.objects.create(
+                project=project, sales_order_ids=sales_order_ids
+            )
+        return Response({"message": "Sales orders added to project"})
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

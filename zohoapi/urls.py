@@ -177,4 +177,29 @@ urlpatterns = [
         views.create_sales_order,
         name="create_sales_order",
     ),
+    path(
+        "get-all-client-invoices/",
+        views.get_all_client_invoices,
+        name="get_all_client_invoices",
+    ),
+    path(
+        "get-client-invoice-data-pdf/<int:invoice_id>/",
+        views.get_client_invoice_data_pdf,
+        name="get_client_invoice_data",
+    ),
+    path(
+        "get-client-invoice-data/<int:invoice_id>/",
+        views.get_client_invoice_data,
+        name="get_client_invoice_data",
+    ),
+    path(
+        "project/caas/sales-orders/<int:project_id>/",
+        views.get_project_sales_orders,
+        name="get_project_sales_orders",
+    ),
+    path(
+        "add-so-to-project/<int:project_id>/",
+        views.add_so_to_project,
+        name="add_so_to_project",
+    ),
 ]
