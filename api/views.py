@@ -968,6 +968,7 @@ def approve_coach(request):
 
         # Change the is_approved field to True
         coach.is_approved = True
+        coach.active_inactive = True
         coach.room_id = room_id
         coach.save()
 
@@ -1133,7 +1134,7 @@ def update_coach_profile(request, id):
 def get_coaches(request):
     try:
         # Get all the Coach objects
-        coaches = Coach.objects.filter(is_approved=True, active_inactive=True)
+        coaches = Coach.objects.filter(is_approved=True)
 
         # Serialize the Coach objects
         serializer = CoachSerializer(coaches, many=True)
@@ -6878,6 +6879,7 @@ class AddRegisteredCoach(APIView):
                     phone=phone,
                     phone_country_code=phone_country_code,
                     is_approved=is_approved,
+                    active_inactive=True,
                 )
 
                 # Approve coach
