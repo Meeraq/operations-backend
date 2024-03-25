@@ -2060,6 +2060,7 @@ def course_report_download(request, course_id):
     # Write headers to the worksheet
     headers = [
         "Participant Name",
+        "Email",
         "Completed Lessons",
         "Total Lessons",
         "Progress",
@@ -2073,6 +2074,7 @@ def course_report_download(request, course_id):
         ws.append(
             [
                 course_enrollment_data["learner"]["name"],
+                course_enrollment_data["learner"]["email"],
                 len(course_enrollment_data["completed_lessons"]),
                 course_enrollment_data["total_lessons"],
                 str(course_enrollment_data["progress"]) + "%",
