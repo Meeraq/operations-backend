@@ -847,7 +847,6 @@ def check_if_the_avalibility_is_already_booked(user_id, availability):
     return False
 
 
-
 def create_task(task_details, number_of_days):
     triggered_date = datetime.now() + timedelta(days=number_of_days)
     triggered_date = triggered_date.replace(hour=8, minute=0, second=0, microsecond=0)
@@ -969,6 +968,7 @@ def approve_coach(request):
 
         # Change the is_approved field to True
         coach.is_approved = True
+        coach.active_inactive = True
         coach.room_id = room_id
         coach.save()
 
@@ -1134,7 +1134,7 @@ def update_coach_profile(request, id):
 def get_coaches(request):
     try:
         # Get all the Coach objects
-        coaches = Coach.objects.filter(is_approved=True, active_inactive=True)
+        coaches = Coach.objects.filter(is_approved=True)
 
         # Serialize the Coach objects
         serializer = CoachSerializer(coaches, many=True)
@@ -2000,7 +2000,6 @@ def generate_otp(request):
             otp_obj.delete()
         except OTP.DoesNotExist:
             pass
-    
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars="0123456789")
         created_otp = OTP.objects.create(user=user, otp=otp)
@@ -5638,8 +5637,18 @@ def get_all_competencies(request):
             if goal.engagement and goal.engagement.learner
             else "N/A"
         )
+        coachee_email = (
+            goal.engagement.learner.email
+            if goal.engagement and goal.engagement.learner
+            else "N/A"
+        )
         coach_name = (
             goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
+            if goal.engagement and goal.engagement.coach
+            else "N/A"
+        )
+        coach_email = (
+            goal.engagement.coach.email
             if goal.engagement and goal.engagement.coach
             else "N/A"
         )
@@ -5655,7 +5664,9 @@ def get_all_competencies(request):
                     "created_at": competency.created_at.isoformat(),
                     "project_name": project_name,
                     "learner_name": coachee_name,
+                    "learner_email": coachee_email,
                     "coach_name": coach_name,
+                    "coach_email": coach_email,
                 }
                 competency_list.append(competency_data)
         else:
@@ -5668,7 +5679,9 @@ def get_all_competencies(request):
                 "created_at": None,
                 "project_name": project_name,
                 "learner_name": coachee_name,
+                "learner_email": coachee_email,
                 "coach_name": coach_name,
+                "coach_email": coach_email,
             }
             competency_list.append(competency_data)
 
@@ -6866,6 +6879,7 @@ class AddRegisteredCoach(APIView):
                     phone=phone,
                     phone_country_code=phone_country_code,
                     is_approved=is_approved,
+                    active_inactive=True,
                 )
 
                 # Approve coach

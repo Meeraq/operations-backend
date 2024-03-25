@@ -536,6 +536,7 @@ def delete_sessions_and_create_new_batch_calendar_and_lessons(project):
 
     return None
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 @transaction.atomic
@@ -976,7 +977,7 @@ def update_coaching_session(request, coaching_session_id):
                     lesson = coaching_session_lesson.lesson
                     lesson.drip_date = coaching_session.start_date
                     lesson.save()
-  
+
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
@@ -1422,9 +1423,6 @@ def update_batch(request, batch_id):
         return Response(
             {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
         )
-    
-    
-
 
 
 @api_view(["GET"])
@@ -1436,8 +1434,6 @@ def get_batch(request, batch_id):
         return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
     serializer = SchedularBatchSerializer(batch)
     return Response({**serializer.data, "is_nudge_enabled": batch.project.nudges})
-
-
 
 
 @api_view(["GET"])
@@ -3042,8 +3038,10 @@ def project_report_download_live_session_wise(request, project_id, batch_id):
             for learner in session.batch.learners.all():
 
                 participant_name = learner.name
+                participant_email = learner.email
                 data = {
                     "Participant name": participant_name,
+                    "Email": participant_email,
                     "Batch name": session.batch.name,
                     "Attended": "Yes" if learner.id in session.attendees else "No",
                 }
@@ -3093,17 +3091,20 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
                 ).first()
 
                 participant_name = learner.name
+                participant_email = learner.email
 
                 if session_exist:
                     attendance = "YES" if session_exist.status == "completed" else "NO"
                     data = {
                         "Participant name": participant_name,
+                        "Email": participant_email,
                         "Batch name": session.batch.name,
                         "Completed": attendance,
                     }
                 else:
                     data = {
                         "Participant name": participant_name,
+                        "Email": participant_email,
                         "Batch name": session.batch.name,
                         "Completed": "Not Scheduled",
                     }
@@ -5404,7 +5405,11 @@ def get_project_wise_progress_data(request, project_id):
 
             for participant in batch.learners.all():
 
-                temp = {"participant_name": participant.name, "batch_name": batch.name}
+                temp = {
+                    "participant_name": participant.name,
+                    "Email": participant.email,
+                    "batch_name": batch.name,
+                }
 
                 pre_participant_response = ParticipantResponse.objects.filter(
                     assessment=pre_assessment, participant=participant
