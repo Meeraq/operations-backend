@@ -83,6 +83,7 @@ from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
 )
 from schedularApi.serializers import SchedularBatchSerializer
+# from schedularApi.views import create_lessons_for_batch
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
 )
@@ -331,6 +332,92 @@ def download_file_response(file_url):
             )
     except Exception as e:
         return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
+
+
+def create_lessons_for_batch(batch):
+    try:
+        course  = Course.objects.get(batch=batch)
+        live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch.id)
+        training_class_sessions = LiveSession.objects.filter(
+            session_type__in=["in_person_session", "virtual_session"]
+        )
+        max_order_of_training_class_sessions = (
+            training_class_sessions.aggregate(Max("order"))["order__max"]
+        )
+        coaching_sessions = CoachingSession.objects.filter(batch__id=batch.id)
+        max_order = (
+            Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                "order__max"
+            ]
+            or 0
+        )
+        for live_session in live_sessions:
+            max_order = max_order + 1
+            session_name = get_live_session_name(live_session.session_type)
+
+            new_lesson = Lesson.objects.create(
+                course=course,
+                name=f"{session_name} {live_session.live_session_number}",
+                status="draft",
+                lesson_type="live_session",
+                order=max_order,
+            )
+            LiveSessionLesson.objects.create(
+                lesson=new_lesson, live_session=live_session
+            )
+            max_order_feedback = (
+                Lesson.objects.filter(course=course).aggregate(
+                    Max("order")
+                )["order__max"]
+                or 0
+            )
+            new_feedback_lesson = Lesson.objects.create(
+                course=course,
+                name=f"Feedback for {session_name} {live_session.live_session_number}",
+                status="draft",
+                lesson_type="feedback",
+                order=max_order_feedback,
+            )
+            unique_id = uuid.uuid4()
+            feedback_lesson = FeedbackLesson.objects.create(
+                lesson=new_feedback_lesson,
+                unique_id=unique_id,
+                live_session=live_session,
+            )
+            if live_session.session_type in [
+                "in_person_session",
+                "virtual_session",
+            ]:
+                if int(max_order_of_training_class_sessions) == int(
+                    live_session.order
+                ):
+                    add_question_to_feedback_lesson(
+                        feedback_lesson, nps_default_feed_questions
+                    )
+                else:
+                    add_question_to_feedback_lesson(
+                        feedback_lesson, default_feedback_questions
+                    )
+
+        for coaching_session in coaching_sessions:
+            max_order = max_order + 1
+            session_name = None
+            if coaching_session.session_type == "laser_coaching_session":
+                session_name = "Laser coaching"
+            elif coaching_session.session_type == "mentoring_session":
+                session_name = "Mentoring session"
+            new_lesson = Lesson.objects.create(
+                course=course,
+                name=f"{session_name} {coaching_session.coaching_session_number}",
+                status="draft",
+                lesson_type="laser_coaching",
+                order=max_order,
+            )
+            LaserCoachingSession.objects.create(
+                lesson=new_lesson, coaching_session=coaching_session
+            )
+    except:
+        pass
 
 
 class CourseListView(generics.ListCreateAPIView):
@@ -1625,18 +1712,18 @@ class LessonMarkAsCompleteAndNotComplete(APIView):
 class DownloadLessonCertificate(APIView):
     permission_classes = [AllowAny]
 
-    def get(self, request, lesson_id, learner_id):
+    def get(self, request, course_id, learner_id):
         try:
-            lesson = Lesson.objects.get(id=lesson_id)
+            course = Course.objects.get(id=course_id)
             content = {}
             course_enrollment = CourseEnrollment.objects.get(
-                course=lesson.course, learner__id=learner_id
+                course=course, learner__id=learner_id
             )
 
             content["learner_name"] = course_enrollment.learner.name
-            content["course_name"] = lesson.course.name
+            content["course_name"] = course.name
             try:
-                certificate = Certificate.objects.filter(courses=lesson.course).first()
+                certificate = Certificate.objects.filter(courses=course).first()
             except Certificate.DoesNotExist:
                 return Response(
                     {"error": "Certificate not found for the given course"},
@@ -1839,8 +1926,11 @@ def update_video_lesson(request, lesson_id):
         serializer = VideoLessonSerializer(data=video_lesson_data)
 
     if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        video_lesson_instance = serializer.save()
+        video_lesson_depth_serializer = VideoLessonSerializerDepthOne(
+            video_lesson_instance
+        )
+        return Response(video_lesson_depth_serializer.data, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -1970,6 +2060,7 @@ def course_report_download(request, course_id):
     # Write headers to the worksheet
     headers = [
         "Participant Name",
+        "Email",
         "Completed Lessons",
         "Total Lessons",
         "Progress",
@@ -1983,6 +2074,7 @@ def course_report_download(request, course_id):
         ws.append(
             [
                 course_enrollment_data["learner"]["name"],
+                course_enrollment_data["learner"]["email"],
                 len(course_enrollment_data["completed_lessons"]),
                 course_enrollment_data["total_lessons"],
                 str(course_enrollment_data["progress"]) + "%",
@@ -2485,85 +2577,9 @@ class AssignCourseTemplateToBatch(APIView):
                         CourseEnrollment.objects.create(
                             learner=learner, course=new_course, enrollment_date=datetime
                         )
-                live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch_id)
-                training_class_sessions = LiveSession.objects.filter(
-                    session_type__in=["in_person_session", "virtual_session"]
-                )
-                max_order_of_training_class_sessions = (
-                    training_class_sessions.aggregate(Max("order"))["order__max"]
-                )
-                coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
-                max_order = (
-                    Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
-                        "order__max"
-                    ]
-                    or 0
-                )
-                for live_session in live_sessions:
-                    max_order = max_order + 1
-                    session_name = get_live_session_name(live_session.session_type)
 
-                    new_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"{session_name} {live_session.live_session_number}",
-                        status="draft",
-                        lesson_type="live_session",
-                        order=max_order,
-                    )
-                    LiveSessionLesson.objects.create(
-                        lesson=new_lesson, live_session=live_session
-                    )
-                    max_order_feedback = (
-                        Lesson.objects.filter(course=new_course).aggregate(
-                            Max("order")
-                        )["order__max"]
-                        or 0
-                    )
-                    new_feedback_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"Feedback for {session_name} {live_session.live_session_number}",
-                        status="draft",
-                        lesson_type="feedback",
-                        order=max_order_feedback,
-                    )
-                    unique_id = uuid.uuid4()
-                    feedback_lesson = FeedbackLesson.objects.create(
-                        lesson=new_feedback_lesson,
-                        unique_id=unique_id,
-                        live_session=live_session,
-                    )
-                    if live_session.session_type in [
-                        "in_person_session",
-                        "virtual_session",
-                    ]:
-                        if int(max_order_of_training_class_sessions) == int(
-                            live_session.order
-                        ):
-                            add_question_to_feedback_lesson(
-                                feedback_lesson, nps_default_feed_questions
-                            )
-                        else:
-                            add_question_to_feedback_lesson(
-                                feedback_lesson, default_feedback_questions
-                            )
+                create_lessons_for_batch(batch)
 
-                for coaching_session in coaching_sessions:
-                    max_order = max_order + 1
-                    session_name = None
-                    if coaching_session.session_type == "laser_coaching_session":
-                        session_name = "Laser coaching"
-                    elif coaching_session.session_type == "mentoring_session":
-                        session_name = "Mentoring session"
-                    new_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"{session_name} {coaching_session.coaching_session_number}",
-                        status="draft",
-                        lesson_type="laser_coaching",
-                        order=max_order,
-                    )
-                    LaserCoachingSession.objects.create(
-                        lesson=new_lesson, coaching_session=coaching_session
-                    )
 
                 if assessment_creation:
                     max_order = (
@@ -3661,16 +3677,22 @@ class UpdateAssignmentLesson(APIView):
 
             assignment_lesson.save()
             lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
-            lesson.name = request.data["name"]
-            lesson.drip_date = request.data["drip_date"]
-            live_session_id = request.data["live_session"]
-            live_session = None
-            if live_session_id != "null":
-                live_session = LiveSessionSchedular.objects.get(id=live_session_id)
-            lesson.live_session = live_session
+            if lesson.course:
+                lesson.name = request.data["name"]
+                lesson.drip_date = request.data["drip_date"]
+                live_session_id = request.data["live_session"]
+                live_session = None
+                if live_session_id != "null":
+                    live_session = LiveSessionSchedular.objects.get(id=live_session_id)
+                lesson.live_session = live_session
+            else:
+                lesson.name = request.data["name"]
             lesson.save()
+            assignment_lesson_serializer = AssignmentSerializerDepthOne(
+                assignment_lesson
+            )
             return Response(
-                {"message": f"Assignment Lesson Updated."}, status=status.HTTP_200_OK
+                assignment_lesson_serializer.data, status=status.HTTP_200_OK
             )
         except Exception as e:
             print(str(e))
