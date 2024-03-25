@@ -847,7 +847,6 @@ def check_if_the_avalibility_is_already_booked(user_id, availability):
     return False
 
 
-
 def create_task(task_details, number_of_days):
     triggered_date = datetime.now() + timedelta(days=number_of_days)
     triggered_date = triggered_date.replace(hour=8, minute=0, second=0, microsecond=0)
@@ -5648,7 +5647,7 @@ def get_all_competencies(request):
             else "N/A"
         )
         coach_email = (
-            goal.engagement.coach.email 
+            goal.engagement.coach.email
             if goal.engagement and goal.engagement.coach
             else "N/A"
         )
@@ -5664,9 +5663,9 @@ def get_all_competencies(request):
                     "created_at": competency.created_at.isoformat(),
                     "project_name": project_name,
                     "learner_name": coachee_name,
-                    "learner_email":coachee_email,
+                    "learner_email": coachee_email,
                     "coach_name": coach_name,
-                    "coach_email":coach_email,
+                    "coach_email": coach_email,
                 }
                 competency_list.append(competency_data)
         else:
@@ -5679,9 +5678,9 @@ def get_all_competencies(request):
                 "created_at": None,
                 "project_name": project_name,
                 "learner_name": coachee_name,
-                "learner_email":coachee_email,
+                "learner_email": coachee_email,
                 "coach_name": coach_name,
-                "coach_email":coach_email,
+                "coach_email": coach_email,
             }
             competency_list.append(competency_data)
 
