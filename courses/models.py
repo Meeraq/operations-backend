@@ -95,6 +95,7 @@ class Question(models.Model):
     text = models.CharField(max_length=255)
     options = models.JSONField(default=list)
     type = models.CharField(max_length=255, choices=QUESTION_TYPES)
+    is_mandatory = models.BooleanField(blank=True, default=True)
 
 
 class QuizLesson(models.Model):
