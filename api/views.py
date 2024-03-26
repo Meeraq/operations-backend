@@ -73,6 +73,7 @@ from .serializers import (
     APILogSerializer,
     PmoSerializerAll,
     TaskSerializer,
+    ProjectDepthTwoSerializerArchiveCheck,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor
@@ -1448,8 +1449,15 @@ def get_ongoing_projects(request):
             if pmo.sub_role == "junior_pmo":
                 projects = projects.filter(junior_pmo=int(pmo_id))
 
-        projects = projects.filter(steps__project_live="pending")
-        serializer = ProjectDepthTwoSerializer(projects, many=True)
+        projects = projects.filter(steps__project_live="pending").annotate(
+            is_archive_enabled=Case(
+                When(coaches_status__isnull=True, then=True),
+                default=False,
+                output_field=BooleanField(),
+            )
+        )
+
+        serializer = ProjectDepthTwoSerializerArchiveCheck(projects, many=True)
         for project_data in serializer.data:
             latest_update = (
                 Update.objects.filter(project__id=project_data["id"])
@@ -9383,6 +9391,29 @@ def complete_task(request):
     task.save()
     message = f"{request.user.username} completed this task."
     task.add_remark(message)
-    return Response(
-        {"message": "Task marked as completed."}, status=status.HTTP_201_CREATED
-    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def archive_project(request):
+    try:
+        project_id = request.data.get("project_id")
+        project_type = request.data.get("project_type")
+        if project_type == "SEEQ":
+            project = SchedularProject.objects.get(id=project_id)
+        elif project_type == "CAAS":
+            project = Project.objects.get(id=project_id)
+
+        if project.is_archive:
+            project.is_archive = False
+        else:
+            project.is_archive = True
+
+        project.save()
+
+        return Response(
+            {"message": "Project Archived Sucessfully!"}, status=status.HTTP_201_CREATED
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to archive project!"}, status=500)

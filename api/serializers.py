@@ -116,6 +116,14 @@ class ProjectDepthTwoSerializer(serializers.ModelSerializer):
         fields = "__all__"
         depth = 2
 
+class ProjectDepthTwoSerializerArchiveCheck(serializers.ModelSerializer):
+    is_archive_enabled = serializers.BooleanField()
+    class Meta:
+        model = Project
+        fields = "__all__"
+        depth = 2
+
+
 
 class UpdateSerializer(serializers.ModelSerializer):
     class Meta:
