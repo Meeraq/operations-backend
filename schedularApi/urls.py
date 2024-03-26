@@ -153,7 +153,7 @@ urlpatterns = [
         views.add_multiple_facilitator,
     ),
     path("facilitator/profile/<int:id>/", views.update_facilitator_profile),
-    path("facilitator/delete/", views.delete_facilitator),
+    # path("facilitator/delete/", views.delete_facilitator),
     path("facilitator-field-values/", views.get_facilitator_field_values),
     path(
         "delete-learner_from_course/",
