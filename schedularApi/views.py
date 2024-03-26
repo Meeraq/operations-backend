@@ -407,7 +407,7 @@ def delete_facilitator_pricing(batch, facilitator):
                 price=session["price"],
             ).delete()
 
-            
+
 def create_coach_pricing(batch, coach):
     project_structure = batch.project.project_structure
     for session in project_structure:
@@ -859,13 +859,14 @@ def update_live_session(request, live_session_id):
                 live_session_lesson = LiveSessionLesson.objects.filter(
                     live_session=live_session
                 ).first()
-                lesson = live_session_lesson.lesson
+                if live_session_lesson:
+                    lesson = live_session_lesson.lesson
 
-                lesson.drip_date = live_session.date_time + timedelta(
-                    hours=5, minutes=30
-                )
+                    lesson.drip_date = live_session.date_time + timedelta(
+                        hours=5, minutes=30
+                    )
 
-                lesson.save()
+                    lesson.save()
 
                 AIR_INDIA_PROJECT_ID = 3
                 if (
@@ -2866,6 +2867,9 @@ def send_live_session_link(request):
     live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
     for learner in live_session.batch.learners.all():
         # Only send email if project status is ongoing
+        is_not_in_person_session = (
+            False if live_session.session_type == "in_person_session" else True
+        )
         if live_session.batch.project.status == "ongoing":
             send_mail_templates(
                 "send_live_session_link.html",
@@ -2879,6 +2883,7 @@ def send_live_session_link(request):
                         live_session.description if live_session.description else ""
                     ),
                     "meeting_link": live_session.meeting_link,
+                    "is_not_in_person_session": is_not_in_person_session,
                 },
                 [],
             )
@@ -5964,3 +5969,10 @@ def check_if_project_structure_edit_allowed(request, project_id):
         return Response({"is_allowed_to_edit": is_allowed})
     except Exception as e:
         return Response({"error": "Failed to get details"}, status=400)
+
+
+
+
+
+
+

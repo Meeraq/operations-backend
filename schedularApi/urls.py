@@ -341,4 +341,5 @@ urlpatterns = [
         "projects/<int:project_id>/check-project-structure-edit-allowed/",
         views.check_if_project_structure_edit_allowed,
     ),
+ 
 ]

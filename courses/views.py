@@ -84,6 +84,7 @@ from schedularApi.serializers import (
 )
 from schedularApi.serializers import SchedularBatchSerializer
 
+
 # from schedularApi.views import create_lessons_for_batch
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
@@ -2667,6 +2668,30 @@ def create_resource(request):
         )  # Return errors if validation fails
 
 
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_pdf_resource(request, resource_id):
+    try:
+        pdf_name = request.data.get("pdfName")
+        pdf_file = request.data.get("pdfFile")
+
+        resource = Resources.objects.get(id=resource_id)
+
+        resource.name = pdf_name
+        resource.pdf_file = pdf_file
+        resource.save()
+        return Response(
+            {"message": f"Pdf updated sucessfully!"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to update pdf."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_pdf_lesson(request):
@@ -4001,7 +4026,7 @@ class FacilitatorWiseFeedback(APIView):
             feedback = FeedbackLesson.objects.get(id=feedback_id)
         except Exception as e:
             return Response(
-                {"message": f"Failed to update file."},
+                {"error": f"Failed to update file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -4012,6 +4037,27 @@ def get_live_sessions_by_course(request, course_id):
     live_sessions = LiveSession.objects.filter(batch__course__id=course_id)
     live_sessions_serializer = LiveSessionSchedularSerializer(live_sessions, many=True)
     return Response(live_sessions_serializer.data)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_pdf(request):
+    try:
+        delete_pdf_id = request.data.get("pdf_id")
+        print(delete_pdf_id, Resources.objects.all())
+
+        resource = Resources.objects.get(id=delete_pdf_id)
+        resource.delete()
+        return Response(
+            {"message": f"Pdf deleted sucessfully!"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to delete pdf."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["POST"])

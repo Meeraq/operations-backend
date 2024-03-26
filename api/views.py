@@ -2199,7 +2199,8 @@ def add_hr(request):
             )
 
     except Exception as e:
-        return Response({"error": "User email already exist."}, status=400)
+        print(str(e))
+        return Response({"error": "Failed to add HR"}, status=400)
 
 
 @api_view(["PUT"])
@@ -7846,11 +7847,11 @@ class StandardizedFieldRequestAcceptReject(APIView):
                 request_instance.status = status
                 request_instance.save()
 
-                if value not in standardized_field.values:
-                    standardized_field.values.append(value)
-                    standardized_field.save()
-                else:
-                    return Response({"error": "Value already present."}, status=404)
+                # if value not in standardized_field.values:
+                #     standardized_field.values.append(value)
+                #     standardized_field.save()
+                # else:
+                #     return Response({"error": "Value already present."}, status=404)
                 return Response({"message": f"Request {status}"}, status=200)
             else:
                 request_instance.status = status
