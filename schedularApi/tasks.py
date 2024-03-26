@@ -2461,7 +2461,7 @@ def send_live_session_link_whatsapp_to_facilitators_30_min_before(id):
 def send_live_session_link_whatsapp_to_facilitators_one_day_before():
     try:
         tomorrow = timezone.now() + timedelta(days=1)
-        live_sessions = LiveSession.objects.filter(date_time__date=tomorrow)
+        live_sessions = LiveSession.objects.filter(date_time__date=tomorrow.date())
         for live_session in live_sessions:
             if (
                 live_session.batch.project.whatsapp_reminder
