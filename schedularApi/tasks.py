@@ -2427,32 +2427,32 @@ def send_live_session_link_whatsapp_to_facilitators_30_min_before(id):
             live_session.batch.project.whatsapp_reminder
             and live_session.batch.project.status == "ongoing"
         ):
-            facilitators = live_session.facilitator.all()
-            for facilitator in facilitators:
-                send_whatsapp_message_template(
-                    facilitator.phone,
-                    {
-                        "broadcast_name": "30 min before live session reminder",
-                        "parameters": [
-                            {
-                                "name": "name",
-                                "value": facilitator.first_name
-                                + " "
-                                + facilitator.last_name,
-                            },
-                            {
-                                "name": "live_session_name",
-                                "value": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
-                            },
-                            {
-                                "name": "live_session_meeting_link",
-                                "value": live_session.meeting_link,
-                            },
-                        ],
-                        "template_name": "send_whatsapp_reminder_to_facilitator_same_day_30_min_before",
-                    },
-                )
-                sleep(5)
+            facilitator = live_session.facilitator
+            if not facilitator:
+                return None
+            send_whatsapp_message_template(
+                facilitator.phone,
+                {
+                    "broadcast_name": "30 min before live session reminder",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value": facilitator.first_name
+                            + " "
+                            + facilitator.last_name,
+                        },
+                        {
+                            "name": "live_session_name",
+                            "value": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                        },
+                        {
+                            "name": "live_session_meeting_link",
+                            "value": live_session.meeting_link,
+                        },
+                    ],
+                    "template_name": "send_whatsapp_reminder_to_facilitator_same_day_30_min_before",
+                },
+            )
     except Exception as e:
         print(str(e))
 
