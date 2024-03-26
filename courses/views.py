@@ -5,7 +5,7 @@ from collections import defaultdict
 import boto3
 import requests
 from rest_framework import generics, serializers, status
-from datetime import timedelta, time, datetime
+from datetime import timedelta, time, datetime,date
 from .models import (
     Course,
     TextLesson,
@@ -83,6 +83,8 @@ from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
 )
 from schedularApi.serializers import SchedularBatchSerializer
+
+# from schedularApi.views import create_lessons_for_batch
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
 )
@@ -333,6 +335,88 @@ def download_file_response(file_url):
         return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
 
 
+def create_lessons_for_batch(batch):
+    try:
+        course = Course.objects.get(batch=batch)
+        live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch.id)
+        training_class_sessions = LiveSession.objects.filter(
+            session_type__in=["in_person_session", "virtual_session"]
+        )
+        max_order_of_training_class_sessions = training_class_sessions.aggregate(
+            Max("order")
+        )["order__max"]
+        coaching_sessions = CoachingSession.objects.filter(batch__id=batch.id)
+        max_order = (
+            Lesson.objects.filter(course=course).aggregate(Max("order"))["order__max"]
+            or 0
+        )
+        for live_session in live_sessions:
+            max_order = max_order + 1
+            session_name = get_live_session_name(live_session.session_type)
+
+            new_lesson = Lesson.objects.create(
+                course=course,
+                name=f"{session_name} {live_session.live_session_number}",
+                status="draft",
+                lesson_type="live_session",
+                order=max_order,
+            )
+            LiveSessionLesson.objects.create(
+                lesson=new_lesson, live_session=live_session
+            )
+            max_order_feedback = (
+                Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                    "order__max"
+                ]
+                or 0
+            )
+            new_feedback_lesson = Lesson.objects.create(
+                course=course,
+                name=f"Feedback for {session_name} {live_session.live_session_number}",
+                status="draft",
+                lesson_type="feedback",
+                order=max_order_feedback,
+            )
+            unique_id = uuid.uuid4()
+            feedback_lesson = FeedbackLesson.objects.create(
+                lesson=new_feedback_lesson,
+                unique_id=unique_id,
+                live_session=live_session,
+            )
+            if live_session.session_type in [
+                "in_person_session",
+                "virtual_session",
+            ]:
+                if int(max_order_of_training_class_sessions) == int(live_session.order):
+                    add_question_to_feedback_lesson(
+                        feedback_lesson, nps_default_feed_questions
+                    )
+                else:
+                    add_question_to_feedback_lesson(
+                        feedback_lesson, default_feedback_questions
+                    )
+
+        for coaching_session in coaching_sessions:
+            max_order = max_order + 1
+            session_name = None
+            if coaching_session.session_type == "laser_coaching_session":
+                session_name = "Laser coaching"
+            elif coaching_session.session_type == "mentoring_session":
+                session_name = "Mentoring session"
+            new_lesson = Lesson.objects.create(
+                course=course,
+                name=f"{session_name} {coaching_session.coaching_session_number}",
+                status="draft",
+                lesson_type="laser_coaching",
+                order=max_order,
+            )
+            LaserCoachingSession.objects.create(
+                lesson=new_lesson, coaching_session=coaching_session
+            )
+    except:
+        pass
+
+
 class CourseListView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Course.objects.all()
@@ -551,10 +635,34 @@ def get_nudges_and_batch(request, batch_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@transaction.atomic
 def create_new_nudge(request):
     serializer = NudgeSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        nudge_instance = serializer.save()
+        nudge_instance.is_switched_on = True
+        nudge_instance.save()
+        nudges_start_date = nudge_instance.batch.nudge_start_date
+        today_date = datetime.today().date()
+        if nudges_start_date and nudges_start_date <= today_date:
+            last_nudge = (
+                Nudge.objects.filter(batch=nudge_instance.batch)
+                .exclude(id=nudge_instance.id)
+                .order_by("-order")
+                .first()
+            )
+            if last_nudge:
+                last_nudge_date = last_nudge.trigger_date
+                nudge_instance.trigger_date = last_nudge_date + timedelta(
+                    int(nudge_instance.batch.nudge_frequency)
+                )
+                nudge_instance.save()
+            else:
+                nudge_instance.trigger_date = nudges_start_date + timedelta(
+                    int(nudge_instance.batch.nudge_frequency)
+                )
+                nudge_instance.save()
+        serializer = NudgeSerializer(nudge_instance)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -588,7 +696,6 @@ def add_nudges_date_frequency_to_batch(request, batch_id):
         batch = SchedularBatch.objects.get(id=batch_id)
         nudge_start_date = request.data.get("nudge_start_date")
         nudge_frequency = request.data.get("nudge_frequency")
-        existing_nudge_start_date = batch.nudge_start_date
         batch.nudge_start_date = nudge_start_date
         batch.nudge_frequency = nudge_frequency
         batch.save()
@@ -1625,18 +1732,18 @@ class LessonMarkAsCompleteAndNotComplete(APIView):
 class DownloadLessonCertificate(APIView):
     permission_classes = [AllowAny]
 
-    def get(self, request, lesson_id, learner_id):
+    def get(self, request, course_id, learner_id):
         try:
-            lesson = Lesson.objects.get(id=lesson_id)
+            course = Course.objects.get(id=course_id)
             content = {}
             course_enrollment = CourseEnrollment.objects.get(
-                course=lesson.course, learner__id=learner_id
+                course=course, learner__id=learner_id
             )
 
             content["learner_name"] = course_enrollment.learner.name
-            content["course_name"] = lesson.course.name
+            content["course_name"] = course.name
             try:
-                certificate = Certificate.objects.filter(courses=lesson.course).first()
+                certificate = Certificate.objects.filter(courses=course).first()
             except Certificate.DoesNotExist:
                 return Response(
                     {"error": "Certificate not found for the given course"},
@@ -1839,8 +1946,11 @@ def update_video_lesson(request, lesson_id):
         serializer = VideoLessonSerializer(data=video_lesson_data)
 
     if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        video_lesson_instance = serializer.save()
+        video_lesson_depth_serializer = VideoLessonSerializerDepthOne(
+            video_lesson_instance
+        )
+        return Response(video_lesson_depth_serializer.data, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -1970,6 +2080,7 @@ def course_report_download(request, course_id):
     # Write headers to the worksheet
     headers = [
         "Participant Name",
+        "Email",
         "Completed Lessons",
         "Total Lessons",
         "Progress",
@@ -1983,6 +2094,7 @@ def course_report_download(request, course_id):
         ws.append(
             [
                 course_enrollment_data["learner"]["name"],
+                course_enrollment_data["learner"]["email"],
                 len(course_enrollment_data["completed_lessons"]),
                 course_enrollment_data["total_lessons"],
                 str(course_enrollment_data["progress"]) + "%",
@@ -2485,85 +2597,8 @@ class AssignCourseTemplateToBatch(APIView):
                         CourseEnrollment.objects.create(
                             learner=learner, course=new_course, enrollment_date=datetime
                         )
-                live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch_id)
-                training_class_sessions = LiveSession.objects.filter(
-                    session_type__in=["in_person_session", "virtual_session"]
-                )
-                max_order_of_training_class_sessions = (
-                    training_class_sessions.aggregate(Max("order"))["order__max"]
-                )
-                coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
-                max_order = (
-                    Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
-                        "order__max"
-                    ]
-                    or 0
-                )
-                for live_session in live_sessions:
-                    max_order = max_order + 1
-                    session_name = get_live_session_name(live_session.session_type)
 
-                    new_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"{session_name} {live_session.live_session_number}",
-                        status="draft",
-                        lesson_type="live_session",
-                        order=max_order,
-                    )
-                    LiveSessionLesson.objects.create(
-                        lesson=new_lesson, live_session=live_session
-                    )
-                    max_order_feedback = (
-                        Lesson.objects.filter(course=new_course).aggregate(
-                            Max("order")
-                        )["order__max"]
-                        or 0
-                    )
-                    new_feedback_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"Feedback for {session_name} {live_session.live_session_number}",
-                        status="draft",
-                        lesson_type="feedback",
-                        order=max_order_feedback,
-                    )
-                    unique_id = uuid.uuid4()
-                    feedback_lesson = FeedbackLesson.objects.create(
-                        lesson=new_feedback_lesson,
-                        unique_id=unique_id,
-                        live_session=live_session,
-                    )
-                    if live_session.session_type in [
-                        "in_person_session",
-                        "virtual_session",
-                    ]:
-                        if int(max_order_of_training_class_sessions) == int(
-                            live_session.order
-                        ):
-                            add_question_to_feedback_lesson(
-                                feedback_lesson, nps_default_feed_questions
-                            )
-                        else:
-                            add_question_to_feedback_lesson(
-                                feedback_lesson, default_feedback_questions
-                            )
-
-                for coaching_session in coaching_sessions:
-                    max_order = max_order + 1
-                    session_name = None
-                    if coaching_session.session_type == "laser_coaching_session":
-                        session_name = "Laser coaching"
-                    elif coaching_session.session_type == "mentoring_session":
-                        session_name = "Mentoring session"
-                    new_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"{session_name} {coaching_session.coaching_session_number}",
-                        status="draft",
-                        lesson_type="laser_coaching",
-                        order=max_order,
-                    )
-                    LaserCoachingSession.objects.create(
-                        lesson=new_lesson, coaching_session=coaching_session
-                    )
+                create_lessons_for_batch(batch)
 
                 if assessment_creation:
                     max_order = (
@@ -2648,9 +2683,8 @@ def create_pdf_lesson(request):
             if course_id:
                 course_instance = Course.objects.get(id=course_id)
                 course_template_instance = course_instance.course_template
-                live_session_id = lesson_data["live_session"]
+                live_session_id = lesson_data.get("live_session", None)
                 live_session = None
-                print(live_session_id)
                 if live_session_id:
                     live_session = LiveSessionSchedular.objects.get(id=live_session_id)
 
@@ -2660,7 +2694,7 @@ def create_pdf_lesson(request):
                     status=lesson_data["status"],
                     lesson_type=lesson_data["lesson_type"],
                     order=lesson_data["order"],
-                    drip_date=lesson_data["drip_date"],
+                    drip_date=lesson_data.get("drip_date", None),
                     live_session=live_session,
                 )
 
@@ -2699,6 +2733,7 @@ def create_pdf_lesson(request):
     except CourseTemplate.DoesNotExist:
         return Response({"message": "Course Template does not exist."})
     except Exception as e:
+        print(str(e))
         return Response({"message": "Failed to create pdf lesson."})
 
 
@@ -3558,46 +3593,21 @@ def get_nps_project_wise(request):
     res = {}
     for project in projects:
         nps = 0
-        total_questions = 0  # Track the total number of questions
-        feedback_lessons = FeedbackLesson.objects.filter(
-            lesson__course__batch__project=project
+        answers = Answer.objects.filter(
+            question__type="rating_0_to_10",
+            question__feedbacklesson__lesson__course__batch__project=project,
         )
-        for feedback_lesson in feedback_lessons:
-            feedback_lesson_reponses = FeedbackLessonResponse.objects.filter(
-                feedback_lesson=feedback_lesson
+        facilitator_id = request.query_params.get("facilitator_id", None)
+        if facilitator_id:
+            answers = answers.filter(
+                question__feedbacklesson__live_session__facilitator=facilitator_id
             )
-
-            questions_serializer = QuestionSerializer(
-                feedback_lesson.questions, many=True
-            )
-            question_data = {
-                question["id"]: {**question, "descriptive_answers": [], "ratings": []}
-                for question in questions_serializer.data
-            }
-            for response in feedback_lesson_reponses:
-                for answer in response.answers.all():
-                    question_id = answer.question.id
-                    if answer.question.type.startswith("rating"):
-                        question_data[question_id]["ratings"].append(answer.rating)
-                    elif answer.question.type == "descriptive_answer":
-                        question_data[question_id]["descriptive_answers"].append(
-                            answer.text_answer
-                        )
-
-            for question_id, data in question_data.items():
-                ratings = data["ratings"]
-                if ratings:
-                    if data["type"] == "rating_0_to_10":
-
-                        nps += calculate_nps(ratings)
-                        total_questions += 1
-
-        if total_questions > 0:
-            average_nps = nps / total_questions
-        else:
-            average_nps = 0
-
-        res[project.id] = average_nps
+        ratings = []
+        for answer in answers:
+            ratings.append(answer.rating)
+        if ratings:
+            nps = calculate_nps(ratings)
+        res[project.id] = nps
     return Response(res)
 
 
@@ -3616,9 +3626,18 @@ class GetAllNudgesOfSchedularProjects(APIView):
             if hr_id:
                 courses = courses.filter(batch__project__hr__id=hr_id)
             for course in courses:
-                nudges = get_nudges_of_course(course)
+                today_date = date.today()
+                nudges =  Nudge.objects.filter(
+                    batch__id=course.batch.id,
+                    is_sent=False,
+                    batch__project__nudges=True,
+                    batch__project__status="ongoing",
+                    trigger_date__isnull=False
+                )
+                if hr_id:
+                    nudges = nudges.filter(is_switched_on=True)
+                nudges = NudgeSerializer(nudges, many=True).data
                 data = list(data) + list(nudges)
-
             return Response(data)
         except Exception as e:
             print(str(e))
@@ -3654,7 +3673,7 @@ class CreateAssignmentLesson(APIView):
                     name=request.data["name"],
                     status=request.data["status"],
                     lesson_type="assignment",
-                    drip_date=request.data["drip_date"],
+                    drip_date=(request.data.get("drip_date", None)),
                     order=int(request.data["order"]),
                     live_session=live_session,
                 )
@@ -3688,16 +3707,22 @@ class UpdateAssignmentLesson(APIView):
 
             assignment_lesson.save()
             lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
-            lesson.name = request.data["name"]
-            lesson.drip_date = request.data["drip_date"]
-            live_session_id = request.data["live_session"]
-            live_session = None
-            if live_session_id != "null":
-                live_session = LiveSessionSchedular.objects.get(id=live_session_id)
-            lesson.live_session = live_session
+            if lesson.course:
+                lesson.name = request.data["name"]
+                lesson.drip_date = request.data.get("drip_date", None)
+                live_session_id = request.data["live_session"]
+                live_session = None
+                if live_session_id != "null":
+                    live_session = LiveSessionSchedular.objects.get(id=live_session_id)
+                lesson.live_session = live_session
+            else:
+                lesson.name = request.data["name"]
             lesson.save()
+            assignment_lesson_serializer = AssignmentSerializerDepthOne(
+                assignment_lesson
+            )
             return Response(
-                {"message": f"Assignment Lesson Updated."}, status=status.HTTP_200_OK
+                assignment_lesson_serializer.data, status=status.HTTP_200_OK
             )
         except Exception as e:
             print(str(e))
@@ -3987,3 +4012,23 @@ def get_live_sessions_by_course(request, course_id):
     live_sessions = LiveSession.objects.filter(batch__course__id=course_id)
     live_sessions_serializer = LiveSessionSchedularSerializer(live_sessions, many=True)
     return Response(live_sessions_serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_nudge_status(request, nudge_id):
+    nudge = Nudge.objects.get(id=nudge_id)
+    is_switched_on = request.data.get("is_switched_on")
+    nudge_sent_date = request.data.get("date")  # YYYY-MM-DD format
+    if is_switched_on:
+        # schedule new periodic task
+        desired_time = time(8, 30)
+        nudge_sent_date = datetime.strptime(nudge_sent_date, "%Y-%m-%d")
+        nudge.trigger_date = nudge_sent_date.date()
+        nudge.is_switched_on = True
+    else:
+        # find the periodic task and switch
+        nudge.is_switched_on = False
+    nudge.save()
+    nudge_serializer = NudgeSerializer(nudge)
+    return Response(nudge_serializer.data)

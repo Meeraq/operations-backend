@@ -24,7 +24,7 @@ from .models import (
     AssignmentLesson,
     AssignmentLessonResponse,
     FacilitatorLesson,
-    Feedback
+    Feedback,
 )
 from schedularApi.models import LiveSession
 
@@ -72,16 +72,15 @@ class TextLessonCreateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         lesson_data = validated_data.pop("lesson")
         lesson_instance = instance.lesson
-
         lesson_instance.course = lesson_data.get("course", lesson_instance.course)
         lesson_instance.name = lesson_data.get("name", lesson_instance.name)
         lesson_instance.status = lesson_data.get("status", lesson_instance.status)
-        lesson_instance.drip_date = lesson_data.get(
-            "drip_date", lesson_instance.drip_date
-        )
+        lesson_instance.drip_date = lesson_data.get("drip_date", None)
         live_session = lesson_data.get("live_session")
         if live_session:
             lesson_instance.live_session = live_session
+        else:
+            lesson_instance.live_session = None
 
         lesson_instance.lesson_type = lesson_data.get(
             "lesson_type", lesson_instance.lesson_type
@@ -338,4 +337,3 @@ class FeedbackDepthOneSerializer(serializers.ModelSerializer):
         model = Feedback
         fields = "__all__"
         depth = 1
-

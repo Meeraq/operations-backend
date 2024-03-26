@@ -257,6 +257,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_whatsapp_reminder_1_day_before_live_session",
         "schedule": crontab(hour=12, minute=30),  # 6 PM
     },
+    "send_live_session_link_whatsapp_to_facilitators_one_day_before": {
+        "task": "schedularApi.tasks.send_live_session_link_whatsapp_to_facilitators_one_day_before",
+        "schedule": crontab(hour=12, minute=30),  # 6 PM
+    },
     "send_whatsapp_reminder_same_day_morning": {
         "task": "schedularApi.tasks.send_whatsapp_reminder_same_day_morning",
         "schedule": crontab(hour=2, minute=30),  # 8 AM
@@ -289,6 +293,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.generate_invoice_reminder_on_first_of_month",
         "schedule": crontab(hour=3, minute=30, day_of_month="25"),  # 10 AM IST
     },
+    "generate_invoice_task_for_pmo_on_25th_of_month": {
+        "task": "api.tasks.generate_invoice_task_for_pmo_on_25th_of_month",
+        "schedule": crontab(hour=3, minute=30, day_of_month="25"),  # 10 AM IST
+    },
+    "creake_book_session_remind_coach_task_for_pmo_on_7th_of_month": {
+        "task": "api.tasks.creake_book_session_remind_coach_task_for_pmo_on_7th_of_month",
+        "schedule": crontab(hour=2, minute=30, day_of_month="1"),  # 9 AM IST
+    },
     "generate_invoice_reminder_once_when_po_is_created": {
         "task": "schedularApi.tasks.generate_invoice_reminder_once_when_po_is_created",
         "schedule": crontab(hour=3, minute=30, day_of_month="2-31"),  # 10 AM IST
@@ -312,6 +324,18 @@ CELERY_BEAT_SCHEDULE = {
     "schedule_assessment_reminders": {
         "task": "schedularApi.tasks.schedule_assessment_reminders",
         "schedule": crontab(hour=0, minute=1),  # Run every day at midnight in UTC
+    },
+    "send_nudges": {
+        "task": "schedularApi.tasks.send_nudges",
+        "schedule": crontab(hour=3, minute=0, day_of_week="*"),  # 8:30 AM IST
+    },
+    "send_live_session_reminder_to_facilitator_one_day_before": {
+        "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_one_day_before",
+        "schedule": crontab(hour=10, minute=30),  # 4 PM
+    },
+    "send_live_session_reminder_to_facilitator_on_same_day_morning": {
+        "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_on_same_day_morning",
+        "schedule": crontab(hour=2, minute=30),  # 8 AM
     },
 }
 
