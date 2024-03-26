@@ -102,4 +102,31 @@ urlpatterns = [
         views.get_invoice_updates,
         name="get_invoice_updates",
     ),
+    path(
+        "vendor/<str:vendor_id>/",
+        views.get_vendor_details_from_zoho,
+        name="get_vendor_details_from_zoho",
+    ),
+    path(
+        "purchase-order/create/<str:user_type>/<int:facilitator_pricing_id>/",
+        views.create_purchase_order,
+        name="create_purchase_order",
+    ),
+    path(
+        "po-number/meeraq/",
+        views.get_po_number_to_create,
+        name="get_po_number_to_create",
+    ),
+    path(
+        "purchase-order/status/<str:purchase_order_id>/<str:status>/",
+        views.update_purchase_order_status,
+        name="update_purchase_order_status",
+    ),
+    path("coach/finances/", views.get_coach_wise_finances),
+    path("project/finances/", views.get_project_wise_finances),
+    path(
+        "purchase-order/delete/<str:user_type>/<str:purchase_order_id>/",
+        views.delete_purchase_order,
+        name="delete_purchase_order",
+    ),
 ]
