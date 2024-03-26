@@ -2468,10 +2468,11 @@ def send_live_session_link_whatsapp_to_facilitators_one_day_before():
                 and live_session.batch.project.status == "ongoing"
             ):
                 facilitator = live_session.facilitator
+                if not facilitator:
+                    continue
                 session_datetime_str = live_session.date_time.astimezone(
                     pytz.timezone("Asia/Kolkata")
                 ).strftime("%I:%M %p")
-                print("session_datetime_str", session_datetime_str)
                 send_whatsapp_message_template(
                     facilitator.phone,
                     {
@@ -2515,6 +2516,8 @@ def send_live_session_reminder_to_facilitator_one_day_before():
                 and live_session.batch.project.status == "ongoing"
             ):
                 facilitator = live_session.facilitator
+                if not facilitator:
+                    continue
                 session_datetime_str = live_session.date_time.astimezone(
                     pytz.timezone("Asia/Kolkata")
                 ).strftime("%I:%M %p")
@@ -2553,29 +2556,29 @@ def send_live_session_whatsapp_reminder_same_day_morning_for_facilitator():
                 session.batch.project.whatsapp_reminder
                 and session.batch.project.status == "ongoing"
             ):
-                facilitators = session.batch.facilitator.all()
+                facilitator = session.batch.facilitator
+                if not facilitator:
+                    return None
                 session_datetime_str = session.date_time.astimezone(
                     pytz.timezone("Asia/Kolkata")
                 ).strftime("%I:%M %p")
-                print("session_datetime_str", session_datetime_str)
-                for facilitator in facilitators:
-                    send_mail_templates(
-                        "facilitator_templates/send_live_session_reminder_to_facilitator_on_same_day_morning.html",
-                        [facilitator.email],
-                        "Meeraq - Live Session",
-                        {
-                            "participant_name": facilitator.first_name
-                            + " "
-                            + facilitator.last_name,
-                            "live_session_name": f"{get_live_session_name(session.session_type)} {session.live_session_number}",
-                            "project_name": session.batch.project.name,
-                            "description": (
-                                session.description if session.description else ""
-                            ),
-                            "meeting_link": session.meeting_link,
-                        },
-                        [],
-                    )
+                send_mail_templates(
+                    "facilitator_templates/send_live_session_reminder_to_facilitator_on_same_day_morning.html",
+                    [facilitator.email],
+                    "Meeraq - Live Session",
+                    {
+                        "participant_name": facilitator.first_name
+                        + " "
+                        + facilitator.last_name,
+                        "live_session_name": f"{get_live_session_name(session.session_type)} {session.live_session_number}",
+                        "project_name": session.batch.project.name,
+                        "description": (
+                            session.description if session.description else ""
+                        ),
+                        "meeting_link": session.meeting_link,
+                    },
+                    [],
+                )
     except Exception as e:
         print(str(e))
         pass
