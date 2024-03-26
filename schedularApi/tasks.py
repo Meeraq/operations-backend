@@ -786,7 +786,7 @@ def send_assessment_invitation_mail(assessment_id):
 def send_whatsapp_reminder_1_day_before_live_session():
     try:
         tomorrow = timezone.now() + timedelta(days=1)
-        live_sessions = LiveSession.objects.filter(date_time__date=tomorrow)
+        live_sessions = LiveSession.objects.filter(date_time__date=tomorrow.date())
 
         for session in live_sessions:
             if (
