@@ -188,38 +188,6 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
 from django.core.exceptions import ObjectDoesNotExist
 
 
-def whatsapp_message_for_participant(whatsapp):
-    ongoing_assessments = Assessment.objects.filter(
-        status="ongoing", automated_reminder=True
-    )
-
-    for assessment in ongoing_assessments:
-        start_date = datetime.strptime(
-            assessment.assessment_start_date, "%Y-%m-%d"
-        ).date()
-        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
-
-        # Check if today's date is within the assessment date range
-        today = datetime.now().date()
-        if start_date <= today <= end_date:
-            participants_observers = assessment.participants_observers.all()
-
-            for participant_observer_mapping in participants_observers:
-                participant = participant_observer_mapping.participant
-                try:
-                    participant_response = ParticipantResponse.objects.filter(
-                        participant=participant, assessment=assessment
-                    )
-                    if not participant_response:
-                        participant_unique_id = ParticipantUniqueId.objects.get(
-                            participant=participant
-                        )
-                        unique_id = participant_unique_id.unique_id
-                        send_whatsapp_message(
-                            "learner", participant, assessment, unique_id
-                        )
-                except ObjectDoesNotExist:
-                    print(f"No unique ID found for participant {participant.name}")
 
 
 def create_learner(learner_name, learner_email):
@@ -660,7 +628,9 @@ class AssessmentView(APIView):
             assessment.hr.set(hr)
             assessment.observer_types.set(observer_types)
             assessment.assessment_start_date = request.data.get("assessment_start_date")
-            assessment.automated_reminder = request.data.get("automated_reminder")
+            assessment.whatsapp_reminder = request.data.get("whatsapp_reminder")
+            assessment.email_reminder = request.data.get("email_reminder")
+            assessment.reminders = request.data.get("reminders")
             assessment.assessment_timing = request.data.get("assessment_timing")
             if request.data.get("assessment_timing") == "post":
                 assessment.pre_assessment = pre_assessment

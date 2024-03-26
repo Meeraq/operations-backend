@@ -397,4 +397,8 @@ urlpatterns = [
         "get-coach-session-feedback-response-data/<int:feedback_response_id>/",
         views.get_coach_session_feedback_response_data,
     ),
+    path(
+        "nudges/switch/<int:nudge_id>/",
+        views.update_nudge_status,
+    ),
 ]
