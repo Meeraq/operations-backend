@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.template.loader import render_to_string
 from operationsBackend import settings
-from openpyxl import Workbook 
+from openpyxl import Workbook
 from rest_framework.decorators import api_view, permission_classes
 from .models import (
     Competency,
@@ -3443,7 +3443,7 @@ def generate_graph_for_participant(
                         competency_object[question.competency.name] = competency_object[
                             question.competency.name
                         ] + (participant_response_value / label_count)
-
+      
         competency_percentage = {}
         for comp in total_for_each_comp:
             competency_percentage[comp] = round(
@@ -4196,33 +4196,47 @@ class DownloadParticipantResponseStatusData(APIView):
 
             # headers = ['Participant Name', 'Email', 'Response Status']
 
-            
-
-            headers = ['Participant Name', 'Email', 'Pre Response Status', 'Post Response Status']
+            headers = [
+                "Participant Name",
+                "Email",
+                "Pre Response Status",
+                "Post Response Status",
+            ]
             ws.append(headers)
-            if assessment.assessment_timing == 'pre' or 'post':
+            if assessment.assessment_timing == "pre" or "post":
                 data = [
-                    {'name': item.get('name', ''), 'email': item.get('email', ''), 'pre_response_status': item.get('pre_response_status', ''), 'post_response_status': item.get('post_response_status', '')}
+                    {
+                        "name": item.get("name", ""),
+                        "email": item.get("email", ""),
+                        "pre_response_status": item.get("pre_response_status", ""),
+                        "post_response_status": item.get("post_response_status", ""),
+                    }
                     for item in response_data
                 ]
             else:
                 return Response(
                     {"error": "Invalid assessment timing."},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             # ws.append(headers)
 
             for item in data:
-                ws.append([
-                    item.get('name', ''),
-                    item.get('email', ''),
-                    item.get('pre_response_status', ''),
-                    item.get('post_response_status', ''),
-                ])
+                ws.append(
+                    [
+                        item.get("name", ""),
+                        item.get("email", ""),
+                        item.get("pre_response_status", ""),
+                        item.get("post_response_status", ""),
+                    ]
+                )
 
-            response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            response['Content-Disposition'] = f'attachment; filename="{assessment.name}_response_status.xlsx"'
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            response["Content-Disposition"] = (
+                f'attachment; filename="{assessment.name}_response_status.xlsx"'
+            )
             wb.save(response)
 
             return response
@@ -4441,7 +4455,7 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                                 pre_assessment.save()
 
                             elif assessment_lesson.type == "post":
-                                
+
                                 post_assessment = Assessment.objects.get(
                                     id=post_assessment_id
                                 )
@@ -4817,7 +4831,6 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
             return Response({"error": "Failed to get data"}, status=500)
 
 
-
 class GetAssessmentBatchAndProject(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -4825,22 +4838,21 @@ class GetAssessmentBatchAndProject(APIView):
         assessment = get_object_or_404(Assessment, id=assessment_id)
         try:
             # get batch and project of assessment
-            assessment_lessons =  AssessmentLesson.objects.filter(assessment_modal__id = assessment_id)
+            assessment_lessons = AssessmentLesson.objects.filter(
+                assessment_modal__id=assessment_id
+            )
             if assessment_lessons.exists():
                 assessment_lesson = assessment_lessons.first()
                 batch = assessment_lesson.lesson.course.batch
                 project = batch.project
-                return Response({
-                    "batch" : {
-                        "id" : batch.id
-                    },"project" : {
-                        "id" : project.id
-                    }
-                })
+                return Response(
+                    {"batch": {"id": batch.id}, "project": {"id": project.id}}
+                )
             else:
                 return Response(
-                {"error": "Batch and project not found for the assessment"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+                    {"error": "Batch and project not found for the assessment"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
         except Exception as e:
             # Handle specific exceptions if needed
@@ -4848,3 +4860,133 @@ class GetAssessmentBatchAndProject(APIView):
                 {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
+class DownloadQuestionWiseExcelForProject(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, project_id):
+        try:
+            batches = SchedularBatch.objects.filter(project__id=project_id)
+            pre_assessments_data = []
+            post_assessments_data = []
+            for batch in batches:
+                assessments = Assessment.objects.filter(
+                    assessment_modal__lesson__course__batch=batch
+                )
+                for assessment in assessments:
+                    assessment_id = assessment.id
+                    for (
+                        participant_observers
+                    ) in assessment.participants_observers.all():
+                        participant = participant_observers.participant
+                        participant_response = ParticipantResponse.objects.filter(
+                            participant__id=participant.id, assessment__id=assessment_id
+                        ).first()
+                       
+                        if participant_response:
+                            questions_object = {"Participant Name": participant.name}
+                            for question in assessment.questionnaire.questions.all():
+
+                                participant_response_value = (
+                                    participant_response.participant_response.get(
+                                        str(question.id)
+                                    )
+                                )
+
+                                if question.response_type == "correct_answer":
+                                    correct_answer = (
+                                        assessment.questionnaire.questions.filter(
+                                            id=question.id
+                                        )
+                                        .first()
+                                        .correct_answer
+                                    )
+
+                                    if (
+                                        str(participant_response_value)
+                                        in correct_answer
+                                    ):
+                                        questions_object[question.self_question] = (
+                                            "100%"
+                                        )
+                                    else:
+                                        questions_object[question.self_question] = "0%"
+                                else:
+                                    if participant_response_value:
+                                        label_count = sum(
+                                            1
+                                            for key in question.label.keys()
+                                            if question.label[key]
+                                        )
+                                        if question.reverse_question:
+                                            swap_dict = swap_positions(label_count)
+                                            questions_object[question.self_question] = (
+                                                str(
+                                                    round(
+                                                        (
+                                                            swap_dict[
+                                                                participant_response_value
+                                                            ]
+                                                            / label_count
+                                                        )
+                                                        * 100
+                                                    )
+                                                )
+                                                + "%"
+                                            )
+                                        else:
+                                            questions_object[question.self_question] = (
+                                                str(
+                                                    round(
+                                                        (
+                                                            participant_response_value
+                                                            / label_count
+                                                        )
+                                                        * 100
+                                                    )
+                                                )
+                                                + "%"
+                                            )
+
+                            # print(questions_object)
+                            if assessment.assessment_timing == "pre":
+
+                                pre_assessments_data.append(questions_object)
+                            elif assessment.assessment_timing == "post":
+                                post_assessments_data.append(questions_object)
+        
+            # Create workbook
+            wb = Workbook()
+            pre_sheet = wb.active
+            pre_sheet.title = "Pre Assessment"
+            post_sheet = wb.create_sheet(title="Post Assessment")
+
+            # Write headers if data exists
+            if pre_assessments_data:
+                pre_sheet.append(list(pre_assessments_data[0].keys()))
+            if post_assessments_data:
+                post_sheet.append(list(post_assessments_data[0].keys()))
+
+            # Write data
+            for data in pre_assessments_data:
+                pre_sheet.append(list(data.values()))
+            for data in post_assessments_data:
+                post_sheet.append(list(data.values()))
+
+            # Create HTTP response with Excel file
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            response["Content-Disposition"] = 'attachment; filename="response.xlsx"'
+
+            # Save workbook to response
+            wb.save(response)
+
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
