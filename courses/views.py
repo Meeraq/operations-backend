@@ -2674,11 +2674,10 @@ def edit_pdf_resource(request, resource_id):
     try:
         pdf_name = request.data.get("pdfName")
         pdf_file = request.data.get("pdfFile")
-
         resource = Resources.objects.get(id=resource_id)
-
         resource.name = pdf_name
-        resource.pdf_file = pdf_file
+        if pdf_file:
+            resource.pdf_file = pdf_file
         resource.save()
         return Response(
             {"message": f"Pdf updated sucessfully!"},
