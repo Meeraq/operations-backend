@@ -281,9 +281,21 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.update_schedular_session_status",
         "schedule": crontab(hour=16, minute=30, day_of_week="*"),  # 10 PM Night
     },
+    "update_caas_session_status": {
+        "task": "schedularApi.tasks.update_caas_session_status",
+        "schedule": crontab(hour=16, minute=30, day_of_week="*"),  # 10 PM Night
+    },
     "generate_invoice_reminder_on_first_of_month": {
         "task": "schedularApi.tasks.generate_invoice_reminder_on_first_of_month",
         "schedule": crontab(hour=3, minute=30, day_of_month="25"),  # 10 AM IST
+    },
+    "generate_invoice_task_for_pmo_on_25th_of_month": {
+        "task": "api.tasks.generate_invoice_task_for_pmo_on_25th_of_month",
+        "schedule": crontab(hour=3, minute=30, day_of_month="25"),  # 10 AM IST
+    },
+    "creake_book_session_remind_coach_task_for_pmo_on_7th_of_month": {
+        "task": "api.tasks.creake_book_session_remind_coach_task_for_pmo_on_7th_of_month",
+        "schedule": crontab(hour=2, minute=30, day_of_month="1"),  # 9 AM IST
     },
     "generate_invoice_reminder_once_when_po_is_created": {
         "task": "schedularApi.tasks.generate_invoice_reminder_once_when_po_is_created",
@@ -296,6 +308,10 @@ CELERY_BEAT_SCHEDULE = {
     "weekly_invoice_approval_reminder": {
         "task": "schedularApi.tasks.weekly_invoice_approval_reminder",
         "schedule": crontab(hour=3, minute=30, day_of_week="mon"),  # 10 AM IST Monday
+    },
+    "update_lesson_status_according_to_drip_dates": {
+        "task": "schedularApi.tasks.update_lesson_status_according_to_drip_dates",
+        "schedule": crontab(hour=1, minute=30, day_of_week="*"),  #  7 AM
     },
     "send_tomorrow_action_items_data": {
         "task": "schedularApi.tasks.send_tomorrow_action_items_data",

@@ -92,16 +92,16 @@ urlpatterns = [
         "courses/<int:course_id>/lessons/", LessonListView.as_view(), name="lesson-list"
     ),
     path(
-        "courses/<int:course_id>/nudges/",
-        views.get_nudges_and_course,
+        "batches/<int:batch_id>/nudges/",
+        views.get_nudges_and_batch,
         name="lesson-list",
     ),
     path("nudges/create", views.create_new_nudge),
     path("nudges/<int:nudge_id>/update/", views.update_nudge),
     path("nudges/<int:nudge_id>/file/download/", views.download_nudge_file),
     path(
-        "courses/<int:course_id>/update-nudge-date-frequency/",
-        views.add_nudges_date_frequency_to_course,
+        "batches/<int:batch_id>/update-nudge-date-frequency/",
+        views.add_nudges_date_frequency_to_batch,
     ),
     path(
         "course-templates/<int:course_template_id>/lessons/",
@@ -202,7 +202,7 @@ urlpatterns = [
     path("delete-courses-to-certificate/", DeleteCourseFromCertificate.as_view()),
     path("lesson-mark-as-complete/", LessonMarkAsCompleteAndNotComplete.as_view()),
     path(
-        "download-lesson-certificate/<int:lesson_id>/<int:learner_id>/",
+        "download-lesson-certificate/<int:course_id>/<int:learner_id>/",
         DownloadLessonCertificate.as_view(),
     ),
     path(
@@ -344,7 +344,7 @@ urlpatterns = [
     ),
     path("send-test-nudge/<int:nudge_id>/", views.send_nudge_to_email),
     path(
-        "nudges/<int:nudge_id>/duplicate/<int:course_id>/",
+        "nudges/<int:nudge_id>/duplicate/<int:batch_id>/",
         views.duplicate_nudge,
         name="duplicate_nudge",
     ),
@@ -379,5 +379,22 @@ urlpatterns = [
     path(
         "facilitator-wise-feedback/",
         FacilitatorWiseFeedback.as_view(),
+    ),
+    path("course/<int:course_id>/live-sessions/", views.get_live_sessions_by_course),
+    path(
+        "get-feedback/<int:feedback_id>/",
+        views.get_feedback,
+    ),
+    path(
+        "submit-session-feedback/<int:feedback_id>/<int:learner_id>/",
+        views.submit_feedback,
+    ),
+    path(
+        "get-end-meeting-feedback-response-data/",
+        views.get_end_meeting_feedback_response_data,
+    ),
+    path(
+        "get-coach-session-feedback-response-data/<int:feedback_response_id>/",
+        views.get_coach_session_feedback_response_data,
     ),
 ]

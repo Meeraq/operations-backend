@@ -38,6 +38,8 @@ from .models import (
     FinalizeCoachActivity,
     SuperAdmin,
     Facilitator,
+    APILog,
+    Task,
 )
 from django.contrib.auth.models import User
 
@@ -444,7 +446,13 @@ class SessionDataSerializer(serializers.ModelSerializer):
 class PmoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pmo
-        fields = ["name", "email", "phone"]
+        fields = ["name", "email", "phone", "sub_role"]
+
+
+class PmoSerializerAll(serializers.ModelSerializer):
+    class Meta:
+        model = Pmo
+        fields = "__all__"
 
 
 class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
@@ -464,3 +472,17 @@ class FacilitatorBasicDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coach
         fields = ["id", "first_name", "last_name", "email", "phone"]
+
+
+class APILogSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", required=False)
+
+    class Meta:
+        model = APILog
+        fields = ["path", "username", "created_at", "method"]
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = "__all__"
