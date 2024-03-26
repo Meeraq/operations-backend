@@ -1048,6 +1048,7 @@ def update_coach_profile(request, id):
     except Coach.DoesNotExist:
         return Response(status=404)
 
+    remove_education_upload_file = request.data.get("remove_education_upload_file", False)
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
@@ -1103,7 +1104,10 @@ def update_coach_profile(request, id):
     add_contact_in_wati("coach", name, coach.phone)
 
     if serializer.is_valid():
-        serializer.save()
+        coach_instance =  serializer.save()
+        if remove_education_upload_file:
+            coach_instance.education_upload_file = None
+            coach_instance.save()
         depth_serializer = CoachDepthOneSerializer(coach)
         is_caas_allowed = Project.objects.filter(
             coaches_status__coach=user.profile.coach

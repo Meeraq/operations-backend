@@ -2664,7 +2664,7 @@ def create_pdf_lesson(request):
             if course_id:
                 course_instance = Course.objects.get(id=course_id)
                 course_template_instance = course_instance.course_template
-                live_session_id = lesson_data["live_session"]
+                live_session_id = lesson_data.get("live_session", None)
                 live_session = None
                 print(live_session_id)
                 if live_session_id:
@@ -2715,7 +2715,8 @@ def create_pdf_lesson(request):
     except CourseTemplate.DoesNotExist:
         return Response({"message": "Course Template does not exist."})
     except Exception as e:
-        return Response({"message": "Failed to create pdf lesson."})
+        print(str(e))
+        return Response({"message": "Failed to create pdf lesson."}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["PUT"])
