@@ -317,6 +317,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_tomorrow_action_items_data",
         "schedule": crontab(hour=12, minute=30, day_of_week="*"),
     },
+    "schedule_assessment_reminders": {
+        "task": "schedularApi.tasks.schedule_assessment_reminders",
+        "schedule": crontab(hour=0, minute=1),  # Run every day at midnight in UTC
+    },
+    "send_nudges": {
+        "task": "schedularApi.tasks.send_nudges",
+        "schedule": crontab(hour=3, minute=0, day_of_week="*"),  # 8:30 AM IST
+    },
 }
 
 
