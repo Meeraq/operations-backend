@@ -83,6 +83,7 @@ from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
 )
 from schedularApi.serializers import SchedularBatchSerializer
+
 # from schedularApi.views import create_lessons_for_batch
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
@@ -336,19 +337,17 @@ def download_file_response(file_url):
 
 def create_lessons_for_batch(batch):
     try:
-        course  = Course.objects.get(batch=batch)
+        course = Course.objects.get(batch=batch)
         live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch.id)
         training_class_sessions = LiveSession.objects.filter(
             session_type__in=["in_person_session", "virtual_session"]
         )
-        max_order_of_training_class_sessions = (
-            training_class_sessions.aggregate(Max("order"))["order__max"]
-        )
+        max_order_of_training_class_sessions = training_class_sessions.aggregate(
+            Max("order")
+        )["order__max"]
         coaching_sessions = CoachingSession.objects.filter(batch__id=batch.id)
         max_order = (
-            Lesson.objects.filter(course=course).aggregate(Max("order"))[
-                "order__max"
-            ]
+            Lesson.objects.filter(course=course).aggregate(Max("order"))["order__max"]
             or 0
         )
         for live_session in live_sessions:
@@ -366,9 +365,9 @@ def create_lessons_for_batch(batch):
                 lesson=new_lesson, live_session=live_session
             )
             max_order_feedback = (
-                Lesson.objects.filter(course=course).aggregate(
-                    Max("order")
-                )["order__max"]
+                Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                    "order__max"
+                ]
                 or 0
             )
             new_feedback_lesson = Lesson.objects.create(
@@ -388,9 +387,7 @@ def create_lessons_for_batch(batch):
                 "in_person_session",
                 "virtual_session",
             ]:
-                if int(max_order_of_training_class_sessions) == int(
-                    live_session.order
-                ):
+                if int(max_order_of_training_class_sessions) == int(live_session.order):
                     add_question_to_feedback_lesson(
                         feedback_lesson, nps_default_feed_questions
                     )
@@ -2060,6 +2057,7 @@ def course_report_download(request, course_id):
     # Write headers to the worksheet
     headers = [
         "Participant Name",
+        "Email",
         "Completed Lessons",
         "Total Lessons",
         "Progress",
@@ -2073,6 +2071,7 @@ def course_report_download(request, course_id):
         ws.append(
             [
                 course_enrollment_data["learner"]["name"],
+                course_enrollment_data["learner"]["email"],
                 len(course_enrollment_data["completed_lessons"]),
                 course_enrollment_data["total_lessons"],
                 str(course_enrollment_data["progress"]) + "%",
@@ -2578,7 +2577,6 @@ class AssignCourseTemplateToBatch(APIView):
 
                 create_lessons_for_batch(batch)
 
-
                 if assessment_creation:
                     max_order = (
                         Lesson.objects.filter(course=new_course).aggregate(
@@ -2662,9 +2660,8 @@ def create_pdf_lesson(request):
             if course_id:
                 course_instance = Course.objects.get(id=course_id)
                 course_template_instance = course_instance.course_template
-                live_session_id = lesson_data["live_session"]
+                live_session_id = lesson_data.get("live_session", None)
                 live_session = None
-                print(live_session_id)
                 if live_session_id:
                     live_session = LiveSessionSchedular.objects.get(id=live_session_id)
 
@@ -2674,7 +2671,7 @@ def create_pdf_lesson(request):
                     status=lesson_data["status"],
                     lesson_type=lesson_data["lesson_type"],
                     order=lesson_data["order"],
-                    drip_date=lesson_data["drip_date"],
+                    drip_date=lesson_data.get("drip_date", None),
                     live_session=live_session,
                 )
 
@@ -2713,6 +2710,7 @@ def create_pdf_lesson(request):
     except CourseTemplate.DoesNotExist:
         return Response({"message": "Course Template does not exist."})
     except Exception as e:
+        print(str(e))
         return Response({"message": "Failed to create pdf lesson."})
 
 
@@ -3239,7 +3237,9 @@ class GetAssessmentsOfBatch(APIView):
                         "total_learners_count": assessment.participants_observers.count(),
                         "total_responses_count": total_responses_count,
                         "created_at": assessment.created_at,
-                        "automated_reminder": assessment.automated_reminder,
+                        "whatsapp_reminder": assessment.whatsapp_reminder,
+                        "email_reminder": assessment.email_reminder,
+                        "reminders" : assessment.reminders,
                         "batch_name": batch.name,
                         "questionnaire": assessment.questionnaire.id,
                         "organisation": assessment.organisation.id,
@@ -3641,7 +3641,7 @@ class CreateAssignmentLesson(APIView):
                     name=request.data["name"],
                     status=request.data["status"],
                     lesson_type="assignment",
-                    drip_date=request.data["drip_date"],
+                    drip_date=(request.data.get("drip_date", None)),
                     order=int(request.data["order"]),
                     live_session=live_session,
                 )
@@ -3677,7 +3677,7 @@ class UpdateAssignmentLesson(APIView):
             lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
             if lesson.course:
                 lesson.name = request.data["name"]
-                lesson.drip_date = request.data["drip_date"]
+                lesson.drip_date = request.data.get("drip_date", None)
                 live_session_id = request.data["live_session"]
                 live_session = None
                 if live_session_id != "null":
