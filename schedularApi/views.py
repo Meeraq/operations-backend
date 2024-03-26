@@ -149,7 +149,7 @@ import environ
 import re
 from rest_framework.views import APIView
 from api.views import get_user_data
-from zohoapi.models import Vendor
+from zohoapi.models import Vendor, InvoiceData
 from zohoapi.views import fetch_purchase_orders
 from zohoapi.tasks import organization_id
 from courses.views import calculate_nps
@@ -407,7 +407,7 @@ def delete_facilitator_pricing(batch, facilitator):
                 price=session["price"],
             ).delete()
 
-            
+
 def create_coach_pricing(batch, coach):
     project_structure = batch.project.project_structure
     for session in project_structure:
@@ -793,6 +793,7 @@ def get_batch_calendar(request, batch_id):
                 "facilitator": facilitator_serializer.data,
                 "batch_name": batch_for_response.name,
                 "project_id": batch_for_response.project.id,
+                "project_name":batch_for_response.project.name,
                 "certificate_present": True if certificate else False,
             }
         )
@@ -838,19 +839,34 @@ def update_live_session(request, live_session_id):
                             update_live_session.pt_30_min_before.save()
                         live_session.pt_30_min_before = periodic_task
                         live_session.save()
+                        
+                        periodic_task = PeriodicTask.objects.create(
+                            name=f"send_live_session_link_whatsapp_to_facilitators_30_min_before{uuid.uuid1()}",
+                            task="schedularApi.tasks.send_live_session_link_whatsapp_to_facilitators_30_min_before",
+                            args=[update_live_session.id],
+                            clocked=clocked,
+                            one_off=True,
+                        )
+                        periodic_task.save()
+                        if update_live_session.pt_30_min_before:
+                            update_live_session.pt_30_min_before.enabled = False
+                            update_live_session.pt_30_min_before.save()
+                        live_session.pt_30_min_before = periodic_task
+                        live_session.save()
                     except Exception as e:
                         print(str(e))
                         pass
                 live_session_lesson = LiveSessionLesson.objects.filter(
                     live_session=live_session
                 ).first()
-                lesson = live_session_lesson.lesson
+                if live_session_lesson:
+                    lesson = live_session_lesson.lesson
 
-                lesson.drip_date = live_session.date_time + timedelta(
-                    hours=5, minutes=30
-                )
+                    lesson.drip_date = live_session.date_time + timedelta(
+                        hours=5, minutes=30
+                    )
 
-                lesson.save()
+                    lesson.save()
 
                 AIR_INDIA_PROJECT_ID = 3
                 if (
@@ -2851,6 +2867,9 @@ def send_live_session_link(request):
     live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
     for learner in live_session.batch.learners.all():
         # Only send email if project status is ongoing
+        is_not_in_person_session = (
+            False if live_session.session_type == "in_person_session" else True
+        )
         if live_session.batch.project.status == "ongoing":
             send_mail_templates(
                 "send_live_session_link.html",
@@ -2864,6 +2883,7 @@ def send_live_session_link(request):
                         live_session.description if live_session.description else ""
                     ),
                     "meeting_link": live_session.meeting_link,
+                    "is_not_in_person_session": is_not_in_person_session,
                 },
                 [],
             )
@@ -5648,18 +5668,30 @@ def get_facilitators_and_pricing_for_project(request, project_id):
                 vendor_id = Vendor.objects.get(user=facilitator.user).vendor_id
             facilitator_data = serializer.data
             pricing = facilitators_pricing.filter(facilitator__id=facilitator.id)
+            is_delete_purchase_order_allowed = True
             purchase_order = None
             if pricing.exists():
-                pricing_serializer = FacilitatorPricingSerializer(pricing.first())
-                if pricing_serializer.data["purchase_order_id"]:
+                first_pricing = pricing.first()
+                if first_pricing.purchase_order_id:
                     purchase_order = get_purchase_order(
-                        purchase_orders, pricing_serializer.data["purchase_order_id"]
+                        purchase_orders, first_pricing.purchase_order_id
                     )
+                    # when no po found remove po number and id from fac. pricings
+                    if not purchase_order:
+                        first_pricing.purchase_order_id =""
+                        first_pricing.purchase_order_no = ""
+                        first_pricing.save()
+                    else:
+                        invoices = InvoiceData.objects.filter(purchase_order_id = first_pricing.purchase_order_id)
+                        if invoices.exists():
+                            is_delete_purchase_order_allowed = False
+                pricing_serializer = FacilitatorPricingSerializer(first_pricing)
             else:
                 pricing_serializer = None
             facilitator_data["pricing_details"] = (
                 pricing_serializer.data if pricing_serializer else None
             )
+            facilitator_data["is_delete_purchase_order_allowed"] = is_delete_purchase_order_allowed
             facilitator_data["vendor_id"] = vendor_id
             facilitator_data["purchase_order"] = purchase_order
             facilitators_data.append(facilitator_data)
@@ -5691,18 +5723,26 @@ def get_coaches_and_pricing_for_project(request, project_id):
             pricing = coaches_pricing.filter(coach__id=coach.id)
             all_pricings_serializer = CoachPricingSerializer(coaches_pricing, many=True)
             purchase_order = None
+            is_delete_purchase_order_allowed = True
             if pricing.exists():
-                pricing_serializer = CoachPricingSerializer(pricing.first())
-                if pricing_serializer.data["purchase_order_id"]:
+                first_pricing = pricing.first()
+                if first_pricing.purchase_order_id:
                     purchase_order = get_purchase_order(
-                        purchase_orders, pricing_serializer.data["purchase_order_id"]
+                        purchase_orders, first_pricing.purchase_order_id
                     )
+                    if not purchase_order:
+                        CoachPricing.objects.filter(purchase_order_id = first_pricing.purchase_order_id).update(purchase_order_id="", purchase_order_no="")
+                    else:
+                        invoices = InvoiceData.objects.filter(purchase_order_id = first_pricing.purchase_order_id)
+                        if invoices.exists():
+                            is_delete_purchase_order_allowed = False
+                pricing_serializer = CoachPricingSerializer(pricing.first())
             else:
                 pricing_serializer = None
             coach_data["pricing_details"] = (
                 pricing_serializer.data if pricing_serializer else None
             )
-
+            coach_data["is_delete_purchase_order_allowed"] = is_delete_purchase_order_allowed
             coach_data["vendor_id"] = vendor_id
             coach_data["purchase_order"] = purchase_order
             coach_data["all_pricings"] = all_pricings_serializer.data
@@ -5929,3 +5969,10 @@ def check_if_project_structure_edit_allowed(request, project_id):
         return Response({"is_allowed_to_edit": is_allowed})
     except Exception as e:
         return Response({"error": "Failed to get details"}, status=400)
+
+
+
+
+
+
+

@@ -45,6 +45,7 @@ from .tasks import (
     send_mail_templates,
     fetch_purchase_orders,
     filter_purchase_order_data,
+    get_vendor
 )
 from .models import InvoiceData, AccessToken, Vendor, InvoiceStatusUpdate
 import base64
@@ -207,23 +208,6 @@ def get_organization_data():
         return Response({}, status=400)
 
 
-def get_vendor(vendor_id):
-    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-    if access_token:
-        headers = {"Authorization": f"Bearer {access_token}"}
-        url = f"{base_url}/contacts/{vendor_id}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
-        vendor_response = requests.get(
-            url,
-            headers=headers,
-        )
-        if (
-            vendor_response.json()["message"] == "success"
-            and vendor_response.json()["contact"]
-        ):
-            return vendor_response.json()["contact"]
-        return Response({}, status=400)
-    else:
-        return Response({}, status=400)
 
 
 def add_45_days(date_str):
@@ -667,6 +651,9 @@ def add_invoice_data(request):
     serializer = InvoiceDataSerializer(data=request.data)
     if serializer.is_valid():
         invoice_instance = serializer.save()
+        vendor_details = get_vendor(request.data["vendor_id"])
+        invoice_instance.vendor_name = vendor_details["contact_name"]
+        invoice_instance.save() 
         approver_email = serializer.data["approver_email"]
         invoice_data = get_invoice_data_for_pdf(invoice_instance)
         send_mail_templates(
@@ -1048,16 +1035,19 @@ def add_vendor(request):
     # Extract data from the request
     with transaction.atomic():
         data = request.data
-        name = data.get("name", "")
+        # name = data.get("name", "")
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
 
         try:
+            vendor_details = get_vendor(vendor_id)
+            name = vendor_details["contact_name"] 
+       
             # Check if the user with the given email already exists
             user_profile = Profile.objects.get(user__email=email)
             user = user_profile.user
-
+            
             # Check if the user has the role 'vendor'
             if user_profile.roles.filter(name="vendor").exists():
                 return Response(
@@ -1152,6 +1142,7 @@ def add_vendor(request):
                 )
 
             except Exception as e:
+                print(str(e))
                 return Response(
                     {"detail": f"Error creating vendor: {str(e)}"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1291,27 +1282,39 @@ def get_invoices_by_status_for_founders(request, status):
     try:
         all_invoices = fetch_invoices(organization_id)
         res = []
+        status_counts = defaultdict(int)
+
         for invoice_data in all_invoices:
-            if status == "in_review":
-                if not invoice_data["bill"] and invoice_data["status"] == "in_review":
+            # if status == "in_review":
+            if not invoice_data["bill"] and invoice_data["status"] == "in_review":
+                status_counts["in_review"] += 1
+                if status == "in_review":
                     res.append(invoice_data)
-            elif status == "approved":
-                if not invoice_data["bill"] and invoice_data["status"] == "approved":
+            # elif status == "approved":
+            if not invoice_data["bill"] and invoice_data["status"] == "approved":
+                status_counts["approved"] += 1
+                if status == "approved":
                     res.append(invoice_data)
-            elif status == "rejected":
-                if not invoice_data["bill"] and invoice_data["status"] == "rejected":
+            # elif status == "rejected":
+            if not invoice_data["bill"] and invoice_data["status"] == "rejected":
+                status_counts["rejected"] += 1
+                if status == "rejected":
                     res.append(invoice_data)
-            if status == "accepted":
-                if invoice_data["bill"]:
-                    if (
-                        "status" in invoice_data["bill"]
-                        and not invoice_data["bill"]["status"] == "paid"
-                    ):
+            # if status == "accepted":
+            if invoice_data["bill"]:
+                if (
+                    "status" in invoice_data["bill"]
+                    and not invoice_data["bill"]["status"] == "paid"
+                ):
+                    status_counts["accepted"] += 1
+                    if status == "accepted":
                         res.append(invoice_data)
-            elif status == "paid":
-                if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid":
+            # elif status == "paid":
+            if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid":
+                status_counts["paid"] += 1
+                if status == "paid":
                     res.append(invoice_data)
-        return Response(res, status=200)
+        return Response({"invoice_counts": status_counts, "invoices": res}, status=200)
 
     except Exception as e:
         print(str(e))
@@ -1324,7 +1327,7 @@ def edit_vendor(request, vendor_id):
         vendor = Vendor.objects.get(id=vendor_id)
 
         data = request.data
-        name = data.get("name", "")
+        # name = data.get("name", "")
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
@@ -1336,6 +1339,8 @@ def edit_vendor(request, vendor_id):
                 {"error": "User with this email already exists."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        vendor_details = get_vendor(vendor_id)
+        name = vendor_details["contact_name"] 
         vendor.user.user.username = email
         vendor.user.user.email = email
         vendor.user.user.save()
@@ -1493,6 +1498,33 @@ def create_purchase_order(request, user_type, facilitator_pricing_id):
     except Exception as e:
         print(str(e))
         return Response(status=404)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_purchase_order(request, user_type, purchase_order_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders/{purchase_order_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.delete(api_url, headers=auth_header)
+        print(response.json())
+        if response.status_code == 200:
+            if user_type == "coach":
+                CoachPricing.objects.filter(purchase_order_id=purchase_order_id).update(purchase_order_id="", purchase_order_no="")
+            elif user_type == "facilitator":
+                FacilitatorPricing.objects.filter(purchase_order_id=purchase_order_id).update(purchase_order_id="", purchase_order_no="")
+            return Response({"message": "Purchase Order deleted successfully."})
+        else:
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
+
 
 
 def get_current_financial_year():
