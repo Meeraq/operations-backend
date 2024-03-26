@@ -2499,6 +2499,25 @@ def send_live_session_link_whatsapp_to_facilitators_one_day_before():
                         "template_name": "send_whatsapp_reminder_to_facilitator_one_day_before",
                     },
                 )
+                sleep(5)
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_live_session_reminder_to_facilitator_one_day_before():
+    try:
+        tomorrow = timezone.now() + timedelta(days=1)
+        live_sessions = LiveSession.objects.filter(date_time__date=tomorrow.date())
+        for live_session in live_sessions:
+            if (
+                live_session.batch.project.whatsapp_reminder
+                and live_session.batch.project.status == "ongoing"
+            ):
+                facilitator = live_session.facilitator
+                session_datetime_str = live_session.date_time.astimezone(
+                    pytz.timezone("Asia/Kolkata")
+                ).strftime("%I:%M %p")
                 send_mail_templates(
                     "facilitator_templates/send_live_session_reminder_to_facilitator_one_day_before.html",
                     [facilitator.email],
