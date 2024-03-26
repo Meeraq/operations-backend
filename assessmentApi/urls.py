@@ -1,4 +1,6 @@
 from django.urls import path, include
+from . import views
+
 
 from .views import (
     CompetencyView,
@@ -20,7 +22,8 @@ from .views import (
     GetParticipantResponseFormAssessment,
     GetParticipantResponseForParticipant,
     CreateParticipantResponseView,
-    AssessmentStatusOrEndDataChange,
+    AssessmentStatusChange,
+    AssessmentEndDataChange,
     ObserverView,
     ObserverAssessment,
     AssessmentsOfParticipant,
@@ -46,6 +49,30 @@ from .views import (
     MarkAllNotificationAsRead,
     MarkNotificationAsRead,
     GetUnreadNotificationCount,
+    DownloadWordReport,
+    GetLearnersUniqueId,
+    StartAssessmentDataForParticipant,
+    StartAssessmentParticipantDisabled,
+    PrePostReportDownloadForParticipant,
+    PrePostReportDownloadForAllParticipant,
+    MoveParticipant,
+    GetAllLearnersUniqueId,
+    DownloadParticipantResponseStatusData,
+    GetParticipantReleasedResults,
+    GetAllAssessments,
+    GetOneAssessment,
+    GetAssessmentsOfHr,
+    GetAssessmentsDataForMoveParticipant,
+    CreateAssessmentAndAddMultipleParticipantsFromBatch,
+    AssessmentInAssessmentLesson,
+    AllAssessmentInAssessmentLesson,
+    PostReportDownloadForAllParticipant,
+    PostReportDownloadForParticipant,
+    GetProjectWiseReport,
+    GetAllAssessmentsOfSchedularProjects,
+    AssessmentsResponseStatusDownload,
+    GetAssessmentBatchAndProject,
+    DownloadQuestionWiseExcelForProject,
 )
 
 
@@ -66,9 +93,8 @@ urlpatterns = [
     path("get-assessments/", AssessmentView.as_view()),
     path("delete-assessment/", AssessmentView.as_view()),
     path("edit-assessment/", AssessmentView.as_view()),
-    path(
-        "assessment-status-end-data-change/", AssessmentStatusOrEndDataChange.as_view()
-    ),
+    path("assessment-status-change/", AssessmentStatusChange.as_view()),
+    path("assessment-end-data-change/", AssessmentEndDataChange.as_view()),
     path(
         "add-participant-observer-to-assessment/",
         AddParticipantObserverToAssessment.as_view(),
@@ -144,6 +170,10 @@ urlpatterns = [
         StartAssessmentDisabled.as_view(),
     ),
     path(
+        "start-participant-assessment-disabled/<str:unique_id>/",
+        StartAssessmentParticipantDisabled.as_view(),
+    ),
+    path(
         "release-assessment-result/<int:assessment_id>/",
         ReleaseResults.as_view(),
     ),
@@ -191,13 +221,106 @@ urlpatterns = [
         "download-participant-result-report/",
         DownloadParticipantResultReport.as_view(),
     ),
-     path(
+    path(
         "download-participant-result-report/<int:assessment_id>/<int:participant_id>/",
         DownloadParticipantResultReport.as_view(),
     ),
-    
-    path("notifications/all/<int:user_id>/",  GetAssessmentNotification.as_view()),
+    path("notifications/all/<int:user_id>/", GetAssessmentNotification.as_view()),
     path("notifications/mark-as-read/", MarkNotificationAsRead.as_view()),
     path("notifications/mark-all-as-read/", MarkAllNotificationAsRead.as_view()),
-    path("notifications/unread-count/<int:user_id>/", GetUnreadNotificationCount.as_view()),
+    path(
+        "notifications/unread-count/<int:user_id>/",
+        GetUnreadNotificationCount.as_view(),
+    ),
+    path(
+        "download-word-report/<int:assessment_id>/<int:participant_id>/",
+        DownloadWordReport.as_view(),
+    ),
+    path(
+        "get/uniqueId/participant/<int:assessment_id>",
+        GetLearnersUniqueId.as_view(),
+    ),
+    path(
+        "get/all/uniqueId/participant/",
+        GetAllLearnersUniqueId.as_view(),
+    ),
+    path(
+        "get-start-assessment-data-for-participant/<str:unique_id>/",
+        StartAssessmentDataForParticipant.as_view(),
+    ),
+    path(
+        "pre-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
+        PrePostReportDownloadForParticipant.as_view(),
+    ),
+    path(
+        "pre-report-download-for-all-participant/<int:assessment_id>/",
+        PrePostReportDownloadForAllParticipant.as_view(),
+    ),
+    path(
+        "move-participant/",
+        MoveParticipant.as_view(),
+    ),
+    path(
+        "get-download-respose-status/<int:assessment_id>/",
+        DownloadParticipantResponseStatusData.as_view(),
+    ),
+    path(
+        "get-participant-released-results/<int:assessment_id>/",
+        GetParticipantReleasedResults.as_view(),
+    ),
+    path(
+        "get-all-assessments/",
+        GetAllAssessments.as_view(),
+    ),
+    path("assessment/<int:assessment_id>/", GetOneAssessment.as_view()),
+    path("assessments/hr/<int:hr_id>/", GetAssessmentsOfHr.as_view()),
+    path(
+        "get-assessments-for-move-participant/",
+        GetAssessmentsDataForMoveParticipant.as_view(),
+    ),
+    path(
+        "create-assessment-and-add-multiple-participants-from-batch/",
+        CreateAssessmentAndAddMultipleParticipantsFromBatch.as_view(),
+    ),
+    path(
+        "assessment-in-assessment-lesson/<int:assessment_id>/",
+        AssessmentInAssessmentLesson.as_view(),
+    ),
+    path(
+        "all-assessment-in-assessment-lesson/",
+        AllAssessmentInAssessmentLesson.as_view(),
+    ),
+    path(
+        "send-mail-to-non-responded-participant/<str:assessment_id>/",
+        views.send_mail_to_not_responded_participant,
+    ),
+    path(
+        "post-report-download-for-all-participants/<int:assessment_id>/",
+        PostReportDownloadForAllParticipant.as_view(),
+    ),
+    path(
+        "post-report-download-for-participant/<int:assessment_id>/<int:participant_id>/",
+        PostReportDownloadForParticipant.as_view(),
+    ),
+    path(
+        "get-project-wise-report/<int:project_id>/<str:report_to_download>/",
+        GetProjectWiseReport.as_view(),
+    ),
+    path(
+        "get-all-assessments-of-schedular-project/<str:project_id>/",
+        GetAllAssessmentsOfSchedularProjects.as_view(),
+    ),
+    path(
+        "assessments-download-respose-status/",
+        AssessmentsResponseStatusDownload.as_view(),
+    ),
+    path(
+        "assessment/<int:assessment_id>/batch-and-project/",
+        GetAssessmentBatchAndProject.as_view(),
+    ),
+    path(
+        "download-question-wise-excel/<int:project_id>/",
+        DownloadQuestionWiseExcelForProject.as_view(),
+    ),
+    
 ]

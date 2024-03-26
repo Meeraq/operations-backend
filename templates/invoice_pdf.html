@@ -2,9 +2,10 @@
 <html>
 
 <head>
+	<meta charset="UTF-8">
 	<style>
 		body {
-			 font-family:"Calibri", sans-serif;
+			font-family: "Calibri", sans-serif;
 			font-size: 9pt;
 			color: #333333;
 			background: #ffffff;
@@ -22,7 +23,7 @@
 		}
 
 		#template-body {
-			padding: 0 0.400000in 0 0.550000in;
+			padding: 0 6pt 0 6pt;
 			min-width: 500px;
 			overflow-x: auto;
 		}
@@ -32,19 +33,20 @@
 			border: none;
 			padding: 0;
 		}
- 		.tableStyle {
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 20px;
-        margin: 0 auto;
-        font-size: 11pt;
-       
-     	 }
+
+		.tableStyle {
+			width: 100%;
+			border-collapse: collapse;
+			margin-bottom: 20px;
+			margin: 0 auto;
+			font-size: 11pt;
+
+		}
 
 		.tableDataCenter {
-        text-align: center;
-        padding: 8px;
-      }
+			text-align: center;
+			padding: 4px;
+		}
 
 
 		#header,
@@ -113,30 +115,35 @@
 
 <body>
 	<div style="padding: 5pt;">
-		<div style="border: 2pt solid #000; margin: 5pt;">
-			<div style="min-height: 700px; display: flex; flex-direction: column; justify-content: space-between; margin-top: 20pt;"
-				id="template-body" id='template-body'>
-				<table style="width: 100%; table-layout: fixed;  border: 0px;" >
+		<div style="border: 1px solid #adadad; margin: 0pt;">
+			<div style="min-height: 700px;margin-top: 20pt;" id="template-body" id='template-body'>
+				<table style="width: 100%; table-layout: fixed;  border: 0px; padding: 0; margin: 0;">
 					<tbody>
 						<tr>
 							<td style="vertical-align: top; width: 50%;font-size: 13pt">
-								<div class="mt-4">
+								<div class="">
 									<div style="font-size: 18px; color: #333333;"><b>{{ invoice.vendor_name }}</b></div>
 									<div style="font-size: 15px; color: #333333;">
+										<div>{{ invoice.vendor_email }}</div>
+										<div>{{ invoice.vendor_phone }}</div>
 										<div>{{ invoice.vendor_billing_address }}</div>
-										{% if invoice.is_oversea %}
+										{% if invoice.is_oversea_account %}
 										<div></div>
 										{% else %}
 										<div>GSTIN: {{ invoice.vendor_gst }}</div>
+										<div>PAN: {{ invoice.vendor_pan }}</div>
 										{% endif %}
-										<div>{{ invoice.email }}</div>
-										<div>{{ invoice.phone }}</div>
 									</div>
 								</div>
 							</td>
 							<td style="width: 50%; text-align: right; vertical-align: top; font-size: 13pt">
-								<div style="font-size: 18pt; margin: 0pt; padding:0pt;">TAX INVOICE</div><br />
-								<div style="font-size: 12pt;margin: 0pt; padding:0pt;">Invoice No.: <b>{{ invoice.invoice_number }}</b>
+								{% if invoice.is_oversea or invoice.vendor_gst == "" %}
+									<div style="font-size: 18pt; margin: 0pt; padding: 0pt;">INVOICE</div><br />
+								{% else %}
+									<div style="font-size: 18pt; margin: 0pt; padding: 0pt;">TAX INVOICE</div><br />
+								{% endif %}
+								<div style="font-size: 12pt; margin: 0pt; padding:0pt;">Original For Recipient</div>
+								<div style="font-size: 12pt; margin: 0pt; padding:0pt;">Invoice No.: <b>{{ invoice.invoice_number }}</b>
 								</div>
 							</td>
 						</tr>
@@ -193,18 +200,23 @@
 					</tbody>
 				</table>
 
-				<table style="width: 100%; margin-top: 40pt; border: 1px solid gray;" border="1" cellspacing="0"
-					cellpadding="0" class="tableStyle">
+				<table style="width: 100%; margin-top: 40pt; border: 1px solid gray;" border="1" cellspacing="0" cellpadding="0"
+					class="tableStyle">
 					<thead>
 						<tr style="height: 32px;">
-							<td class="tableDataCenter" >
+							<td class="tableDataCenter">
 								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word">
 									S. No.
 								</div>
 							</td>
 							<td class="tableDataCenter">
 								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
-									Item & Description
+									Item
+								</div>
+							</td>
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
+									Description
 								</div>
 							</td>
 							<td class="tableDataCenter">
@@ -222,11 +234,29 @@
 									Amount
 								</div>
 							</td>
+							{% if invoice.is_oversea_account %}
+							{% else %}
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
+									CGST
+								</div>
+							</td>
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
+									SGST
+								</div>
+							</td>
+							<td class="tableDataCenter">
+								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
+									IGST
+								</div>
+							</td>
 							<td class="tableDataCenter">
 								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
 									Tax
 								</div>
 							</td>
+							{% endif %}
 							<td class="tableDataCenter">
 								<div style="font-size: 13pt !important; white-space: break-spaces; word-wrap: break-word ">
 									HSN/SAC
@@ -239,20 +269,52 @@
 							</td>
 						</tr>
 					</thead>
-
 					<tbody>
 						{% for item in invoice.line_items %}
 						<tr>
 							<td class="tableDataCenter">{{ forloop.counter }}</td>
-							<td class="tableDataCenter">
-								<span style="word-wrap: break-word;">{{ item.name|default:item.description|default:"Item" }}</span>
+							<td style="word-break: break-all;" class="tableDataCenter">
+								{{ item.name|default:item.description|default:"Item" }}
+							</td>
+							<td style="word-break: break-all;" class="tableDataCenter">
+								{{ item.annexure|default:"" }}
 							</td>
 							<td class="tableDataCenter">{{ item.quantity_input }}</td>
-							<td class="tableDataCenter">{{ item.rate }}</td>
-							<td class="tableDataCenter">{{ item.quantity_mul_rate }}</td>
-							<td class="tableDataCenter">{{ item.tax_percentage }} %</td>
-							<td class="tableDataCenter">{{ item.hsn_sac|default:"-" }}</td>
-							<td class="tableDataCenter">{{ item.quantity_mul_rate_include_tax }}</td>
+							<td class="tableDataCenter">
+								{% if invoice.currency_symbol %}
+								{{ invoice.currency_symbol }}{{ item.rate }}
+								{% else %}
+								{{ item.rate }}
+								{% endif %}
+							</td>
+
+							<td class="tableDataCenter">
+								{% if invoice.currency_symbol %}
+								{{ invoice.currency_symbol }}{{ item.quantity_mul_rate }}
+								{% else %}
+								{{ item.quantity_mul_rate }}
+								{% endif %}
+							</td>
+							{% if invoice.is_oversea_account %}
+							{% else %}
+							<td class="tableDataCenter">{{ item.cgst_tax }}</td>
+							<td class="tableDataCenter">{{ item.sgst_tax }}</td>
+							<td class="tableDataCenter">{{ item.igst_tax }}</td>
+							<td class="tableDataCenter">	
+								{% if invoice.currency_symbol %}
+								{{ invoice.currency_symbol }}{{ item.tax_amount }}
+								{% else %}
+								{{ item.tax_amount }}
+								{% endif %}</td>
+							{% endif %}
+							<td class="tableDataCenter">{{ invoice.hsn_or_sac|default:"-" }}</td>
+							<td class="tableDataCenter">
+								{% if invoice.currency_symbol %}
+								{{ invoice.currency_symbol }}{{ item.quantity_mul_rate_include_tax }}
+								{% else %}
+								{{ item.quantity_mul_rate_include_tax }}
+								{% endif %}
+							</td>
 						</tr>
 						{% endfor %}
 					</tbody>
@@ -260,14 +322,32 @@
 				<table style="margin-top: 10pt; border: 0px;" cellspacing="0" border="0" width="100%">
 					<tbody>
 						<tr>
-							<td id="total" style="text-align: right;font-size: 16pt; "><span style="font-weight: bold;">Total: </span>{{ invoice.total }}</td>
+							<td id="total" style="text-align: right;font-size: 14pt; "><span style="font-weight: semibold;">SubTotal (excluding tax): </span>
+								{% if invoice.currency_symbol %}
+								{{ invoice.currency_symbol }}{{ invoice.sub_total_excluding_tax }}
+								{% else %}
+								{{ invoice.sub_total_excluding_tax }}
+								{% endif %}</td>
+						</tr>
+					</tbody>
+				</table>
+				<table style="margin-top: 10pt; border: 0px;" cellspacing="0" border="0" width="100%">
+					<tbody>
+						<tr>
+							<td id="total" style="text-align: right;font-size: 16pt; "><span style="font-weight: bold;">Total: </span>
+								{% if invoice.currency_symbol %}
+								{{ invoice.currency_symbol }}{{ invoice.total }}
+								{% else %}
+								{{ invoice.total }}
+								{% endif %}</td>
 						</tr>
 					</tbody>
 				</table>
 
 				<div style="clear: both; margin-top: 50px; width: 100%;">
 					<label style="font-size: large">Notes</label>
-					<p style="margin-top: 7px; white-space: pre-wrap; word-wrap: break-word; font-size:medium">{{ invoice.customer_notes|default:'No notes added.' }}</p>
+					<p style="margin-top: 7px; white-space: pre-wrap; word-wrap: break-word; font-size:medium">
+						{{ invoice.customer_notes|default:'No notes added.' }}</p>
 				</div>
 
 				<table style="border: 0px; width: 100%; margin-bottom: 8px;">

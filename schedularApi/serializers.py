@@ -4,13 +4,15 @@ from .models import (
     LiveSession,
     CoachingSession,
     SchedularBatch,
-    SchedularParticipants,
     EmailTemplate,
     SentEmail,
     CoachSchedularAvailibilty,
     RequestAvailibilty,
     SchedularSessions,
-    Facilitator,
+    FacilitatorPricing,
+    CoachPricing,
+    SchedularUpdate,
+    Expense,
 )
 from api.models import Coach
 
@@ -26,24 +28,23 @@ class SessionItemSerializer(serializers.Serializer):
     session_type = serializers.CharField()
     duration = serializers.IntegerField()
     order = serializers.IntegerField(required=False, allow_null=True)
-
-
-class SchedularParticipantsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SchedularParticipants
-        fields = ["name", "email", "phone"]
-
-
-class GetSchedularParticipantsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SchedularParticipants
-        fields = "__all__"
+    description = serializers.CharField(required=False)
+    price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, allow_null=True, required=False
+    )
 
 
 class SchedularBatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchedularBatch
         fields = "__all__"
+
+
+class SchedularBatchDepthSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularBatch
+        fields = "__all__"
+        depth = 1
 
 
 class LiveSessionSerializerDepthOne(serializers.ModelSerializer):
@@ -106,7 +107,14 @@ class BatchSerializer(serializers.ModelSerializer):
 class CoachBasicDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Coach
-        fields = ["id", "first_name", "last_name", "email", "phone"]
+        fields = [
+            "id",
+            "first_name",
+            "last_name",
+            "email",
+            "phone","active_inactive",
+            "phone_country_code",
+        ]
 
 
 class AvailabilitySerializer(serializers.ModelSerializer):
@@ -147,13 +155,48 @@ class RequestAvailibiltySerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class SchedularParticipantsSerializer(serializers.ModelSerializer):
+class UpdateSerializer(serializers.ModelSerializer):
     class Meta:
-        model = SchedularParticipants
+        model = SchedularUpdate
         fields = "__all__"
 
 
-class FacilitatorSerializer(serializers.ModelSerializer):
+class SchedularUpdateDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Facilitator
+        model = SchedularUpdate
         fields = "__all__"
+        depth = 1
+
+
+class SchedularBatchDepthTwoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularBatch
+        fields = "__all__"
+        depth = 2
+
+
+class FacilitatorPricingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FacilitatorPricing
+        fields = "__all__"
+
+
+class CoachPricingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachPricing
+        fields = "__all__"
+
+
+
+class ExpenseSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = Expense
+        fields = "__all__"
+        depth = 1
+
+
+class ExpenseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Expense
+        fields = "__all__"
+        

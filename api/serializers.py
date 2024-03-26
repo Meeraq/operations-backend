@@ -5,6 +5,7 @@ from .models import (
     Profile,
     Project,
     HR,
+    Finance,
     Organisation,
     Learner,
     SessionRequestCaas,
@@ -35,6 +36,10 @@ from .models import (
     ShareCoachProfileActivity,
     CreateProjectActivity,
     FinalizeCoachActivity,
+    SuperAdmin,
+    Facilitator,
+    APILog,
+    Task,
 )
 from django.contrib.auth.models import User
 
@@ -48,6 +53,20 @@ class UserSerializer(serializers.ModelSerializer):
 class PmoDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pmo
+        fields = "__all__"
+        depth = 1
+
+
+class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SuperAdmin
+        fields = "__all__"
+        depth = 1
+
+
+class FinanceDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Finance
         fields = "__all__"
         depth = 1
 
@@ -194,9 +213,12 @@ class SessionRequestWithEngagementCaasDepthOneSerializer(serializers.ModelSerial
         fields = "__all__"
         depth = 2
 
-class SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer(serializers.ModelSerializer):
+
+class SessionRequestWithEngagementCaasAndIsSeeqProjectDepthOneSerializer(
+    serializers.ModelSerializer
+):
     engagement_status = serializers.CharField()
-    is_seeq_project=serializers.BooleanField()
+    is_seeq_project = serializers.BooleanField()
 
     class Meta:
         model = SessionRequestCaas
@@ -422,4 +444,49 @@ class FinalizeCoachActivitySerializer(serializers.ModelSerializer):
 class SessionDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = SessionRequestCaas
+        fields = "__all__"
+
+
+class PmoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Pmo
+        fields = ["name", "email", "phone", "sub_role"]
+
+
+class PmoSerializerAll(serializers.ModelSerializer):
+    class Meta:
+        model = Pmo
+        fields = "__all__"
+
+
+class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Facilitator
+        fields = "__all__"
+        depth = 1
+
+
+class FacilitatorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Facilitator
+        fields = "__all__"
+
+
+class FacilitatorBasicDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Coach
+        fields = ["id", "first_name", "last_name", "email", "phone"]
+
+
+class APILogSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", required=False)
+
+    class Meta:
+        model = APILog
+        fields = ["path", "username", "created_at", "method"]
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
         fields = "__all__"

@@ -2,7 +2,6 @@ from django.contrib import admin
 
 from .models import (
     SchedularProject,
-    SchedularParticipants,
     SchedularBatch,
     CoachSchedularAvailibilty,
     CoachingSession,
@@ -11,14 +10,16 @@ from .models import (
     EmailTemplate,
     SentEmail,
     RequestAvailibilty,
-    Facilitator,
+    CoachPricing,
+    SchedularUpdate,
+    CalendarInvites,
+    FacilitatorPricing,
 )
 
 # Register your models here.
 
 
 admin.site.register(SchedularProject)
-admin.site.register(SchedularParticipants)
 admin.site.register(SchedularBatch)
 admin.site.register(CoachSchedularAvailibilty)
 admin.site.register(CoachingSession)
@@ -27,4 +28,7 @@ admin.site.register(LiveSession)
 admin.site.register(EmailTemplate)
 admin.site.register(SentEmail)
 admin.site.register(RequestAvailibilty)
-admin.site.register(Facilitator)
+admin.site.register(SchedularUpdate)
+admin.site.register(CalendarInvites)
+admin.site.register(CoachPricing)
+admin.site.register(FacilitatorPricing)

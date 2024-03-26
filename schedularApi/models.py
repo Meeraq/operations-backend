@@ -1,10 +1,25 @@
 from django.db import models
 from django_celery_beat.models import PeriodicTask
-from api.models import Organisation, HR, Coach
+from api.models import (
+    Organisation,
+    HR,
+    Coach,
+    Learner,
+    Pmo,
+    SessionRequestCaas,
+    Profile,
+    Facilitator,
+)
 
 
 # Create your models here.
 class SchedularProject(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("ongoing", "Ongoing"),
+        ("completed", "Completed"),
+    ]
+
     name = models.CharField(max_length=100, unique=True, default=None)
     project_structure = models.JSONField(default=list, blank=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
@@ -12,7 +27,20 @@ class SchedularProject(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
     is_project_structure_finalized = models.BooleanField(default=False)
-
+    nudges = models.BooleanField(blank=True, default=True)
+    pre_post_assessment = models.BooleanField(blank=True, default=True)
+    status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
+    email_reminder = models.BooleanField(blank=True, default=True)
+    whatsapp_reminder = models.BooleanField(blank=True, default=True)
+    calendar_invites = models.BooleanField(blank=True, default=True)
+    is_finance_enabled = models.BooleanField(blank=True, default=False)
+    junior_pmo = models.ForeignKey(
+        Pmo,
+        null=True,
+        on_delete=models.SET_NULL,
+        blank=True,
+    )
+    
     class Meta:
         ordering = ["-created_at"]
 
@@ -20,22 +48,18 @@ class SchedularProject(models.Model):
         return self.name
 
 
-class SchedularParticipants(models.Model):
-    name = models.CharField(max_length=100)
-    email = models.EmailField(unique=True)
-    phone = models.CharField(max_length=25)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True, blank=True)
-
-
 class SchedularBatch(models.Model):
     name = models.CharField(max_length=100, blank=True)
     project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
     coaches = models.ManyToManyField(Coach, blank=True)
-    participants = models.ManyToManyField(SchedularParticipants, blank=True)
-    facilitator = models.CharField(max_length=100, blank=True)
+    learners = models.ManyToManyField(Learner, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
+    nudge_start_date = models.DateField(default=None, blank=True, null=True)
+    nudge_frequency = models.CharField(max_length=50, default="", blank=True, null=True)
+    nudge_periodic_task = models.ForeignKey(
+        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
+    )
 
 
 class RequestAvailibilty(models.Model):
@@ -45,7 +69,7 @@ class RequestAvailibilty(models.Model):
         default=list
     )  # used to store coach ids who already provided the slots
     expiry_date = models.DateField(blank=True, null=True)
-    slot_duration= models.PositiveIntegerField(null=True, blank=True)
+    slot_duration = models.PositiveIntegerField(null=True, blank=True)
     availability = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(blank=True, null=True, default=None)
@@ -53,7 +77,11 @@ class RequestAvailibilty(models.Model):
 
 class CoachSchedularAvailibilty(models.Model):
     request = models.ForeignKey(
-        RequestAvailibilty, on_delete=models.CASCADE, default=""
+        RequestAvailibilty,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        default=None,
     )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     start_time = models.CharField(max_length=30)
@@ -81,24 +109,38 @@ class CoachingSession(models.Model):
     duration = models.CharField(max_length=50, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    session_type = models.CharField(max_length=50, choices=SESSION_CHOICES, default="laser_coaching_session")
+    session_type = models.CharField(
+        max_length=50, choices=SESSION_CHOICES, default="laser_coaching_session"
+    )
 
 
 class SchedularSessions(models.Model):
-    enrolled_participant = models.ForeignKey(
-        SchedularParticipants, on_delete=models.CASCADE
-    )
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE, null=True)
     availibility = models.ForeignKey(
         CoachSchedularAvailibilty, on_delete=models.CASCADE
     )
     coaching_session = models.ForeignKey(CoachingSession, on_delete=models.CASCADE)
     status = models.CharField(max_length=50, default="pending", blank=True)
+    auto_generated_status = models.CharField(
+        max_length=50, default="pending", blank=True
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
 
 
 class LiveSession(models.Model):
+    SESSION_CHOICES = [
+        ("live_session", "Live Session"),
+        ("check_in_session", "Check In Session"),
+        ("in_person_session", "In Person Session"),
+        ("kickoff_session", "Kickoff Session"),
+        ("virtual_session", "Virtual Session"),
+    ]
+
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
     live_session_number = models.IntegerField(blank=True, default=None, null=True)
     order = models.IntegerField(blank=True, default=None, null=True)
     date_time = models.DateTimeField(blank=True, null=True)
@@ -108,6 +150,13 @@ class LiveSession(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     duration = models.CharField(max_length=50, default=None)
+    pt_30_min_before = models.ForeignKey(
+        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
+    )
+    session_type = models.CharField(
+        max_length=50, choices=SESSION_CHOICES, default="virtual_session"
+    )
+    meeting_link = models.TextField(default="", blank=True)
 
 
 class EmailTemplate(models.Model):
@@ -136,37 +185,95 @@ class SentEmail(models.Model):
         return f"{self.id} Subject: {self.subject}"
 
 
-class Facilitator(models.Model):
-    first_name = models.CharField(max_length=50)
-    last_name = models.CharField(max_length=50)
-    email = models.EmailField()
-    age = models.CharField(max_length=10, default="", blank=True)
-    gender = models.CharField(max_length=50, blank=True)
-    domain = models.JSONField(default=list, blank=True)
-    phone_country_code = models.CharField(max_length=20, default="", blank=True)
-    phone = models.CharField(max_length=25)
-    level = models.JSONField(default=list, blank=True)
-    rating = models.CharField(max_length=20, blank=True)
-    area_of_expertise = models.JSONField(default=list, blank=True)
-    profile_pic = models.ImageField(upload_to="post_images", blank=True)
-    education = models.JSONField(default=list, blank=True)
-    years_of_corporate_experience = models.CharField(max_length=20, blank=True)
-    city = models.JSONField(default=list, blank=True)
-    language = models.JSONField(default=list, blank=True)
-    job_roles = models.JSONField(default=list, blank=True)
-    city = models.JSONField(default=list, blank=True)
-    country = models.JSONField(default=list, blank=True)
-    created_at = models.DateField(auto_now_add=True)
-    edited_at = models.DateField(auto_now=True)
-    linkedin_profile_link = models.CharField(max_length=500, blank=True)
-    companies_worked_in = models.JSONField(default=list, blank=True)
-    other_certification = models.JSONField(default=list, blank=True)
-    currency = models.CharField(max_length=100, blank=True, default="")
-    client_companies = models.JSONField(default=list, blank=True)
-    educational_qualification = models.JSONField(default=list, blank=True)
-    fees_per_hour = models.CharField(max_length=20, blank=True)
-    fees_per_day = models.CharField(max_length=20, blank=True)
-    topic = models.JSONField(default=list, blank=True)
+class CalendarInvites(models.Model):
+    event_id = models.TextField(blank=True, null=True)
+    title = models.CharField(max_length=255, blank=True, null=True)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    start_datetime = models.CharField(max_length=255, blank=True, null=True)
+    end_datetime = models.CharField(max_length=255, blank=True, null=True)
+    attendees = models.JSONField(blank=True, null=True)
+    creator = models.CharField(max_length=255, blank=True, null=True)
+    caas_session = models.ForeignKey(
+        SessionRequestCaas, on_delete=models.CASCADE, blank=True, null=True
+    )
+    schedular_session = models.ForeignKey(
+        SchedularSessions, on_delete=models.CASCADE, blank=True, null=True
+    )
+    live_session = models.ForeignKey(
+        LiveSession, on_delete=models.CASCADE, blank=True, null=True
+    )
+
+
+class SchedularUpdate(models.Model):
+    pmo = models.ForeignKey(Pmo, on_delete=models.SET_NULL, null=True, blank=True)
+    project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
+    message = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return self.first_name + " " + self.last_name
+        return f"{self.project.name} update by {self.pmo.name}"
+
+
+class CoachPricing(models.Model):
+    SESSION_CHOICES = [
+        ("laser_coaching_session", "Laser Coaching Session"),
+        ("mentoring_session", "Mentoring Session"),
+    ]
+
+    project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    session_type = models.CharField(
+        max_length=50, choices=SESSION_CHOICES, default="laser_coaching_session"
+    )
+    coaching_session_number = models.IntegerField(blank=True, default=None, null=True)
+    order = models.IntegerField(blank=True, default=None, null=True)
+    purchase_order_id = models.CharField(max_length=200, default="", blank=True)
+    purchase_order_no = models.CharField(max_length=200, default="", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.session_type} {self.coaching_session_number}  in {self.project.name} for {self.coach.first_name} {self.coach.last_name}"
+
+
+class FacilitatorPricing(models.Model):
+    project = models.ForeignKey(SchedularProject, on_delete=models.CASCADE)
+    facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE)
+    price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    purchase_order_id = models.CharField(max_length=200, default="", blank=True)
+    purchase_order_no = models.CharField(max_length=200, default="", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.facilitator.first_name} {self.facilitator.last_name} pricing for {self.project.name} "
+
+
+class Expense(models.Model):
+
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("accepted", "Accepted"),
+        ("rejected", "Rejected"),
+    ]
+
+    name = models.CharField(max_length=255)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    facilitator = models.ForeignKey(
+        Facilitator,
+        on_delete=models.CASCADE,
+    )
+    date_of_expense = models.DateField(blank=True, null=True)
+    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    live_session = models.ForeignKey(
+        LiveSession, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    file = models.FileField(upload_to="expenses/", blank=True, null=True)
+    status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="pending")
+    update_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name}"

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<style>
+		body {
+			font-family: "Calibri", sans-serif;
+		}
+
+		ul {
+			list-style-type: none;
+			padding: 0;
+		}
+
+		li {
+			margin-bottom: 10px;
+			padding: 8px;
+			background-color: #f0f0f0;
+			border-radius: 5px;
+		}
+	</style>
+</head>
+
+<body>
+	<div>
+		<img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png"
+			style="width: 150px; float: left;" alt="Meeraq Logo" class="fr-fic fr-dii" width="187" height="34" />
+		<h2 style="float: right; margin-bottom: 20pt;margin-top: 0; padding-top: 0; font-size: 8pt;">
+			&#169; 2024 InMuto Consulting Pvt Ltd
+		</h2>
+	</div>
+	<div style="clear:both;"></div> <!-- Clear floats -->
+	<h3 style="margin-top: 20pt; font-size: 20pt;">{{ org_name }} - {{ project_name }}</h3>
+
+	{% if batch_name %}
+    
+	<h3 style="margin-top: 20pt; font-size: 15pt;">Batch - {{ batch_name }}</h3>
+       
+    {% endif %} 
+
+	<p>Total Participant - {{total_participant}}</p>
+	<p>Attended Pre Assessment - {{attended_pre_participant}}</p>
+	<p>Attended Post Assesment - {{attended_post_participant}}</p>
+	<p>Attended Both - {{attended_both_assessments}}</p>
+	<img src="data:image/png;base64, {{ image_base64 }}" alt="graph"
+		style="width: 100%; height: auto; margin-top: 40pt;" />
+	<p>
+		Here is what these parameters mean:
+	</p>
+	<ul>
+		{% for competency in competency_with_description %}
+		<li>
+			{{ competency.competency_name }}: {{ competency.competency_description }}.
+		</li>
+		{% endfor %}
+	</ul>
+	
+</body>
+
+</html>

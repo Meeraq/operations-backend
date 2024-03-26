@@ -10,13 +10,15 @@ from rest_framework.exceptions import AuthenticationFailed
 from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
-from rest_framework.permissions import AllowAny
-from api.models import Coach, OTP, UserLoginActivity
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from api.models import Coach, OTP, UserLoginActivity, Profile, Role
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
+import json
 
 from rest_framework.views import APIView
-
+import string
+import random
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -27,19 +29,43 @@ from .serializers import (
     InvoiceDataEditSerializer,
     InvoiceDataSerializer,
     VendorDepthOneSerializer,
+    VendorSerializer,
+    InvoiceStatusUpdateGetSerializer,
+    VendorEditSerializer,
 )
-from .models import InvoiceData, AccessToken, Vendor
+from .tasks import (
+    import_invoice_for_new_vendor,
+    get_access_token,
+    base_url,
+    organization_id,
+    import_invoices_for_vendor_from_zoho,
+    fetch_bills,
+    purchase_orders_allowed,
+    filter_invoice_data,
+    send_mail_templates,
+    fetch_purchase_orders,
+    filter_purchase_order_data,
+    get_vendor
+)
+from .models import InvoiceData, AccessToken, Vendor, InvoiceStatusUpdate
 import base64
 from django.core.mail import EmailMessage
 from io import BytesIO
 from xhtml2pdf import pisa
-
 import environ
 import os
 import os
 from django.http import HttpResponse
 import io
 import pdfkit
+from django.middleware.csrf import get_token
+from django.db import transaction
+from collections import defaultdict
+import re
+from schedularApi.models import FacilitatorPricing, CoachPricing, SchedularProject
+from decimal import Decimal
+from collections import defaultdict
+
 
 env = environ.Env()
 
@@ -48,10 +74,6 @@ wkhtmltopdf_path = os.environ.get(
 )
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
-
-
-base_url = os.environ.get("ZOHO_API_BASE_URL")
-organization_id = os.environ.get("ZOHO_ORGANIZATION_ID")
 
 
 def get_line_items_details(invoices):
@@ -63,6 +85,33 @@ def get_line_items_details(invoices):
             else:
                 res[line_item["line_item_id"]] = line_item["quantity_input"]
     return res
+
+
+def get_invoice_data_for_pdf(invoice):
+    serializer = InvoiceDataSerializer(invoice)
+    line_items = get_line_items_for_template(serializer.data["line_items"])
+    invoice_date = datetime.strptime(
+        serializer.data["invoice_date"], "%Y-%m-%d"
+    ).strftime("%d-%m-%Y")
+    due_date = datetime.strptime(
+        add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
+    ).strftime("%d-%m-%Y")
+    hsn_or_sac = None
+    try:
+        hsn_or_sac = Vendor.objects.get(vendor_id=invoice.vendor_id).hsn_or_sac
+    except Exception as e:
+        pass
+    invoice_data = {
+        **serializer.data,
+        "invoice_date": invoice_date,
+        "due_date": due_date,
+        "line_items": line_items,
+        "sub_total_excluding_tax": get_subtotal_excluding_tax(
+            serializer.data["line_items"]
+        ),
+        "hsn_or_sac": hsn_or_sac if hsn_or_sac else "-",
+    }
+    return invoice_data
 
 
 def generate_access_token_from_refresh_token(refresh_token):
@@ -78,6 +127,7 @@ def generate_access_token_from_refresh_token(refresh_token):
         "grant_type": "refresh_token",
     }
     token_response = requests.post(token_url, params=token_payload)
+
     token_data = token_response.json()
     if "access_token" in token_data:
         return token_data["access_token"]
@@ -85,76 +135,54 @@ def generate_access_token_from_refresh_token(refresh_token):
         return None
 
 
-def get_access_token(refresh_token):
-    try:
-        access_token_object = AccessToken.objects.get(refresh_token=refresh_token)
-        if not access_token_object.is_expired():
-            return access_token_object.access_token
-        else:
-            new_access_token = generate_access_token_from_refresh_token(refresh_token)
-            if new_access_token:
-                access_token_object.access_token = new_access_token
-                access_token_object.created_at = timezone.now()
-                access_token_object.save()
-            return new_access_token
-    except:
-        new_access_token = generate_access_token_from_refresh_token(refresh_token)
-        if new_access_token:
-            access_token_instance = AccessToken(
-                access_token=new_access_token,
-                refresh_token=refresh_token,
-                expires_in=3600,
-            )
-            access_token_instance.save()
-        return new_access_token
-
-
-def send_mail_templates(file_name, user_email, email_subject, content):
-    try:
-        email_message = render_to_string(file_name, content)
-
-        # Attempt to send the email
-        send_mail_result = send_mail(
-            f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
-            email_message,
-            settings.DEFAULT_FROM_EMAIL,
-            user_email,
-            fail_silently=False,
-            html_message=email_message,
-        )
-
-        if not send_mail_result:
-            print(
-                "send_mail function returned False. There may be an issue with sending the email."
-            )
-    except Exception as e:
-        print(f"Error occurred while sending emails: {str(e)}")
-
-
 def send_mail_templates_with_attachment(
-    file_name, user_email, email_subject, content, body_message
+    file_name,
+    user_email,
+    email_subject,
+    content,
+    body_message,
+    bcc_emails,
+    is_send_attatched_invoice,
 ):
     try:
-        image_url = f"{content['invoice']['signature']}"
-
-        # Attempt to send the email
-        image_response = requests.get(image_url)
-        image_response.raise_for_status()
-
-        # Convert the downloaded image to base64
-        image_base64 = base64.b64encode(image_response.content).decode("utf-8")
-        content["image_base64"] = image_base64
-        email_message = render_to_string(file_name, content)
-        pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
-        result = BytesIO(pdf)
+        datetime_obj = datetime.strptime(
+            content["invoice"]["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
+        formatted_date = datetime_obj.strftime("%d-%m-%Y")
+        pdf_name = f"{content['invoice']['vendor_name']}_{formatted_date}.pdf"
         email = EmailMessage(
             subject=f"{env('EMAIL_SUBJECT_INITIAL', default='')} {email_subject}",
             body=body_message,
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=user_email,
+            bcc=bcc_emails,
         )
+        if is_send_attatched_invoice:
+            attachment_url = content["invoice"]["attatched_invoice"]
+            # attachment_file_name = attachment_url.split('/')[-1].split('?')[0]
+            attachment_response = requests.get(attachment_url)
+            if attachment_response.status_code == 200:
+                email.attach(pdf_name, attachment_response.content, "application/pdf")
+            else:
+                pass
+        else:
+            image_url = f"{content['invoice']['signature']}"
+            image_response = requests.get(image_url)
+            image_response.raise_for_status()
+            image_base64 = base64.b64encode(image_response.content).decode("utf-8")
+            content["image_base64"] = image_base64
+            email_message = render_to_string(file_name, content)
+            pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
+            result = BytesIO(pdf)
+            email.attach(
+                pdf_name,
+                result.getvalue(),
+                "application/pdf",
+            )
+
+        # Convert the downloaded image to base64
         # Attach the PDF to the email
-        email.attach("invoice.pdf", result.getvalue(), "application/pdf")
+        email.content_subtype = "html"
         email.send()
 
     except Exception as e:
@@ -180,23 +208,6 @@ def get_organization_data():
         return Response({}, status=400)
 
 
-def get_vendor(vendor_id):
-    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-    if access_token:
-        headers = {"Authorization": f"Bearer {access_token}"}
-        url = f"{base_url}/contacts/{vendor_id}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
-        vendor_response = requests.get(
-            url,
-            headers=headers,
-        )
-        if (
-            vendor_response.json()["message"] == "success"
-            and vendor_response.json()["contact"]
-        ):
-            return vendor_response.json()["contact"]
-        return Response({}, status=400)
-    else:
-        return Response({}, status=400)
 
 
 def add_45_days(date_str):
@@ -246,6 +257,7 @@ def generate_otp(request):
                 [user],
                 subject,
                 {"name": name, "otp": created_otp.otp},
+                [],
             )
             return Response({"message": f"OTP has been sent to {user.username}!"})
         else:
@@ -258,6 +270,7 @@ def generate_otp(request):
         )
 
     except Exception as e:
+        print(str(e))
         # Handle any other exceptions
         return Response({"error": str(e)}, status=500)
 
@@ -287,6 +300,7 @@ def generate_otp_send_mail_fixed(request, email):
                 ["pankaj@meeraq.com"],
                 subject,
                 {"name": name, "otp": created_otp.otp},
+                [],
             )
             return Response({"message": f"OTP has been sent to {user.username}!"})
         else:
@@ -299,6 +313,7 @@ def generate_otp_send_mail_fixed(request, email):
         )
 
     except Exception as e:
+        print(str(e))
         # Handle any other exceptions
         return Response({"error": str(e)}, status=500)
 
@@ -333,7 +348,7 @@ def validate_otp(request):
         UserLoginActivity.objects.create(
             user=user, timestamp=login_timestamp, platform=platform
         )
-        return Response(
+        response = Response(
             {
                 "detail": "Successfully logged in.",
                 "user": {**user_data, "last_login": last_login},
@@ -341,6 +356,8 @@ def validate_otp(request):
                 "zoho_vendor": zoho_vendor,
             }
         )
+        response["X-CSRFToken"] = get_token(request)
+        return response
     else:
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
@@ -356,7 +373,7 @@ def session_view(request):
     if user_data:
         organization = get_organization_data()
         zoho_vendor = get_vendor(user_data["vendor_id"])
-        return Response(
+        response = Response(
             {
                 "isAuthenticated": True,
                 "user": {**user_data, "last_login": last_login},
@@ -364,6 +381,8 @@ def session_view(request):
                 "zoho_vendor": zoho_vendor,
             }
         )
+        response["X-CSRFToken"] = get_token(request)
+        return response
     else:
         logout(request)
         return Response({"error": "Invalid user type."}, status=400)
@@ -392,7 +411,7 @@ def login_view(request):
         UserLoginActivity.objects.create(
             user=user, timestamp=login_timestamp, platform=platform
         )
-        return Response(
+        response = Response(
             {
                 "detail": "Successfully logged in.",
                 "user": {**user_data, "last_login": last_login},
@@ -400,12 +419,15 @@ def login_view(request):
                 "zoho_vendor": zoho_vendor,
             }
         )
+        response["X-CSRFToken"] = get_token(request)
+        return response
     else:
         logout(request)
         return Response({"error": "Invalid user type"}, status=400)
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_purchase_orders(request, vendor_id):
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_data:
@@ -414,6 +436,7 @@ def get_purchase_orders(request, vendor_id):
         response = requests.get(api_url, headers=auth_header)
         if response.status_code == 200:
             purchase_orders = response.json().get("purchaseorders", [])
+            purchase_orders = filter_purchase_order_data(purchase_orders)
 
             return Response(purchase_orders, status=status.HTTP_200_OK)
         else:
@@ -429,16 +452,21 @@ def get_purchase_orders(request, vendor_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_invoices_with_status(request, vendor_id, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
         headers = {"Authorization": f"Bearer {access_token}"}
         if purchase_order_id == "all":
             invoices = InvoiceData.objects.filter(vendor_id=vendor_id)
+
+            invoices = filter_invoice_data(invoices)
+
             url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&vendor_id={vendor_id}"
             bills_response = requests.get(url, headers=headers)
         else:
             invoices = InvoiceData.objects.filter(purchase_order_id=purchase_order_id)
+            invoices = filter_invoice_data(invoices)
             url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&purchaseorder_id={purchase_order_id}"
             bills_response = requests.get(
                 url,
@@ -449,16 +477,28 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
             bills = bills_response.json()["bills"]
             invoice_res = []
             for invoice in invoice_serializer.data:
+                hsn_or_sac = Vendor.objects.get(
+                    vendor_id=invoice["vendor_id"]
+                ).hsn_or_sac
                 matching_bill = next(
                     (
                         bill
                         for bill in bills
-                        if bill.get(env("INVOICE_FIELD_NAME"))
-                        == invoice["invoice_number"]
+                        if (
+                            bill.get(env("INVOICE_FIELD_NAME"))
+                            == invoice["invoice_number"]
+                            and bill.get("vendor_id") == invoice["vendor_id"]
+                        )
                     ),
                     None,
                 )
-                invoice_res.append({**invoice, "bill": matching_bill})
+                invoice_res.append(
+                    {
+                        **invoice,
+                        "bill": matching_bill,
+                        "hsn_or_sac": hsn_or_sac if hsn_or_sac else "",
+                    }
+                )
             return Response(invoice_res)
         else:
             return Response({}, status=400)
@@ -467,6 +507,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_purchase_order_data(request, purchaseorder_id):
     access_token_purchase_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_order:
@@ -476,6 +517,7 @@ def get_purchase_order_data(request, purchaseorder_id):
         response = requests.get(api_url, headers=auth_header)
         if response.status_code == 200:
             purchase_order = response.json().get("purchaseorder")
+
             invoices = InvoiceData.objects.filter(
                 purchase_order_no=purchase_order.get("purchaseorder_number")
             )
@@ -485,6 +527,13 @@ def get_purchase_order_data(request, purchaseorder_id):
                     line_item["total_invoiced_quantity"] = line_item_details[
                         line_item["line_item_id"]
                     ]
+                    vendor_id = purchase_order.get("vendor_id")
+                    if vendor_id:
+                        vendor = Vendor.objects.filter(vendor_id=vendor_id).first()
+                        hsn_or_sac = vendor.hsn_or_sac if vendor else None
+                        line_item["hsn_sac_vendor_modal"] = hsn_or_sac
+                    else:
+                        line_item["hsn_sac_vendor_modal"] = None
             return Response(purchase_order, status=status.HTTP_200_OK)
         else:
             return Response(
@@ -499,6 +548,7 @@ def get_purchase_order_data(request, purchaseorder_id):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def get_purchase_order_data_pdf(request, purchaseorder_id):
     access_token_purchase_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_order:
@@ -509,9 +559,9 @@ def get_purchase_order_data_pdf(request, purchaseorder_id):
         if response.status_code == 200:
             pdf_content = response.content
             response = HttpResponse(pdf_content, content_type="application/pdf")
-            response[
-                "Content-Disposition"
-            ] = f'attachment; filename="purchase_order.pdf"'
+            response["Content-Disposition"] = (
+                f'attachment; filename="purchase_order.pdf"'
+            )
             return response
         else:
             return Response(
@@ -525,69 +575,108 @@ def get_purchase_order_data_pdf(request, purchaseorder_id):
         )
 
 
+def get_tax(line_item, taxt_type):
+    tax_based_on_type = next(
+        (
+            item
+            for item in line_item.get("line_item_taxes", [])
+            if taxt_type in item.get("tax_name", "")
+        ),
+        None,
+    )
+    percentage = (
+        float(tax_based_on_type["tax_name"].split("(")[-1].split("%")[0])
+        if tax_based_on_type
+        else 0
+    )
+    return f"{percentage}%" if percentage else ""
+
+
+def get_subtotal_excluding_tax(line_items):
+    res = 0
+    for line_item in line_items:
+        res += round(line_item["quantity_input"] * line_item["rate"])
+    return res
+
+
 def get_line_items_for_template(line_items):
     res = [*line_items]
     for line_item in res:
-        line_item["quantity_mul_rate"] = line_item["quantity_input"] * line_item["rate"]
-        line_item["quantity_mul_rate_include_tax"] = (
+        line_item["quantity_mul_rate"] = round(
+            line_item["quantity_input"] * line_item["rate"], 2
+        )
+        line_item["quantity_mul_rate_include_tax"] = round(
             line_item["quantity_input"]
             * line_item["rate"]
-            * (1 + line_item["tax_percentage"] / 100)
+            * (1 + line_item["tax_percentage"] / 100),
+            2,
         )
+        line_item["tax_amount"] = round(
+            (
+                line_item["quantity_input"]
+                * line_item["rate"]
+                * line_item["tax_percentage"]
+            )
+            / 100,
+            2,
+        )
+        line_item["cgst_tax"] = get_tax(line_item, "CGST")
+        line_item["sgst_tax"] = get_tax(line_item, "SGST")
+        line_item["igst_tax"] = get_tax(line_item, "IGST")
     return res
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def add_invoice_data(request):
     invoices = InvoiceData.objects.filter(
         vendor_id=request.data["vendor_id"],
         invoice_number=request.data["invoice_number"],
     )
+    hsn_or_sac = request.data.get("hsn_or_sac", None)
+    if hsn_or_sac:
+        try:
+            vendor = Vendor.objects.get(vendor_id=request.data["vendor_id"])
+            vendor.hsn_or_sac = hsn_or_sac
+            vendor.save()
+        except Exception as e:
+            print(str(e))
+            return Response({"error": "Vendor not found."}, status=400)
 
     if invoices.count() > 0:
         return Response({"error": "Invoice number should be unique."}, status=400)
 
+    vendor = Vendor.objects.get(vendor_id=request.data["vendor_id"])
+
     serializer = InvoiceDataSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
-        line_items = serializer.data["line_items"]
-        # for line_item in line_items:
-        #     line_item["quantity_mul_rate"] = (
-        #         line_item["quantity_input"] * line_item["rate"]
-        #     )
-        #     line_item["quantity_mul_rate_include_tax"] = (
-        #         line_item["quantity_input"]
-        #         * line_item["rate"]
-        #         * (1 + line_item["tax_percentage"] / 100)
-        #     )
-        line_items = get_line_items_for_template(serializer.data["line_items"])
-        invoice_date = datetime.strptime(
-            serializer.data["invoice_date"], "%Y-%m-%d"
-        ).strftime("%d-%m-%Y")
-        due_date = datetime.strptime(
-            add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
-        ).strftime("%d-%m-%Y")
-
-        invoice_data = {
-            **serializer.data,
-            "invoice_date": invoice_date,
-            "due_date": due_date,
-            "line_items": line_items,
-        }
-        
-        send_mail_templates_with_attachment(
-            "invoice_pdf.html",
-            [env("FINANCE_EMAIL")],
-            f"Invoice raised by a Vendor - {invoice_data['vendor_name']} ",
-            {"invoice": invoice_data},
-            f"A new invoice: {invoice_data['invoice_number']} is raised by the vendor: {invoice_data['vendor_name']}",
+        invoice_instance = serializer.save()
+        vendor_details = get_vendor(request.data["vendor_id"])
+        invoice_instance.vendor_name = vendor_details["contact_name"]
+        invoice_instance.save() 
+        approver_email = serializer.data["approver_email"]
+        invoice_data = get_invoice_data_for_pdf(invoice_instance)
+        send_mail_templates(
+            "vendors/add_invoice.html",
+            [
+                (
+                    approver_email
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else "tech@meeraq.com"
+                )
+            ],
+            f"Action Needed: Approval Required for Invoice - {invoice_data['vendor_name']}  + {invoice_data['invoice_number']}",
+            {**invoice_data, "link": env("CAAS_APP_URL")},
+            [],
         )
         return Response({"message": "Invoice generated successfully"}, status=201)
     else:
+        print(serializer.errors)
         return Response(serializer.errors, status=400)
 
 
 @api_view(["PUT"])
+@permission_classes([IsAuthenticated])
 def edit_invoice(request, invoice_id):
     invoice = get_object_or_404(InvoiceData, id=invoice_id)
     if (
@@ -599,38 +688,26 @@ def edit_invoice(request, invoice_id):
     ):
         return Response({"error": "Invoice already exists with the invoice number"})
     serializer = InvoiceDataEditSerializer(data=request.data, instance=invoice)
-   
+    vendor = Vendor.objects.get(vendor_id=request.data["vendor_id"])
+
     if serializer.is_valid():
         serializer.save()
-        line_items = serializer.data["line_items"]
-        for line_item in line_items:
-            line_item["quantity_mul_rate"] = (
-                line_item["quantity_input"] * line_item["rate"]
-            )
-            line_item["quantity_mul_rate_include_tax"] = (
-                line_item["quantity_input"]
-                * line_item["rate"]
-                * (1 + line_item["tax_percentage"] / 100)
-            )
-        invoice_serializer = InvoiceDataSerializer(invoice)
-        invoice_date = datetime.strptime(
-            serializer.data["invoice_date"], "%Y-%m-%d"
-        ).strftime("%d-%m-%Y")
-        due_date = datetime.strptime(
-            add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
-        ).strftime("%d-%m-%Y")
-        invoice_data = {
-            **invoice_serializer.data,
-            "invoice_date": invoice_date,
-            "due_date": due_date,
-            "line_items": line_items,
-        }
-        send_mail_templates_with_attachment(
-            "invoice_pdf.html",
-            [env("FINANCE_EMAIL")],
-            f"Invoice edited by a Vendor - {invoice_data['vendor_name']}",
-            {"invoice": invoice_data},
-            f"Invoice: {invoice_data['invoice_number']} has been edited by the vendor: {invoice_data['vendor_name']}",
+        invoice.status = "in_review"
+        invoice.save()
+        approver_email = invoice.approver_email
+        invoice_data = get_invoice_data_for_pdf(invoice)
+        send_mail_templates(
+            "vendors/edit_invoice.html",
+            [
+                (
+                    approver_email
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else "tech@meeraq.com"
+                )
+            ],
+            f"Action Needed: Re-Approval Required for Invoice - {invoice_data['vendor_name']}  + {invoice_data['invoice_number']}",
+            {**invoice_data, "link": env("CAAS_APP_URL")},
+            [],
         )
         return Response({"message": "Invoice edited successfully."}, status=201)
     else:
@@ -638,6 +715,7 @@ def edit_invoice(request, invoice_id):
 
 
 @api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
 def delete_invoice(request, invoice_id):
     try:
         invoice = get_object_or_404(InvoiceData, id=invoice_id)
@@ -646,10 +724,12 @@ def delete_invoice(request, invoice_id):
     except InvoiceData.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
+        print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_purchase_order_and_invoices(request, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -658,7 +738,9 @@ def get_purchase_order_and_invoices(request, purchase_order_id):
         response = requests.get(api_url, headers=auth_header)
         if response.status_code == 200:
             purchase_order = response.json()["purchaseorder"]
+
             invoices = InvoiceData.objects.filter(purchase_order_id=purchase_order_id)
+
             invoice_serializer = InvoiceDataSerializer(invoices, many=True)
             return Response(
                 {"purchase_order": purchase_order, "invoices": invoice_serializer.data},
@@ -677,6 +759,7 @@ def get_purchase_order_and_invoices(request, purchase_order_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_bank_account_data(
     request,
     vendor_id,
@@ -723,6 +806,7 @@ def get_bank_account_data(
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def get_vendor_exists_and_not_existing_emails(request):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -755,6 +839,7 @@ def get_vendor_exists_and_not_existing_emails(request):
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def import_invoices_from_zoho(request):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -763,86 +848,14 @@ def import_invoices_from_zoho(request):
         res = []
         bill_details_res = []
         for vendor in vendors:
-            purchase_orders_url = f"{base_url}/purchaseorders/?organization_id={organization_id}&vendor_id={vendor.vendor_id}"
-            response = requests.get(purchase_orders_url, headers=headers)
-            if response.status_code == 200:
-                purchase_orders = response.json().get("purchaseorders", [])
-                for purchase_order in purchase_orders:
-                    bills_url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&purchaseorder_id={purchase_order['purchaseorder_id']}"
-                    bills_response = requests.get(bills_url, headers=headers)
-                    if bills_response.status_code == 200:
-                        bills = bills_response.json().get("bills", [])
-                        res.append(bills_response.json().get("bills", []))
-                        for bill in bills:
-                            bill_url = f"{base_url}/bills/{bill['bill_id']}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
-                            bill_response = requests.get(bill_url, headers=headers)
-                            if (
-                                env("INVOICE_FIELD_NAME") in bill
-                                and bill_response.status_code == 200
-                            ):
-                                bill_details = bill_response.json().get("bill")
-                                bill_details_res.append(bill_details)
-                                line_items_res = []
-
-                                for line_item in bill_details["line_items"]:
-                                    if line_item["quantity"] > 0:
-                                        line_items_res.append(
-                                            {
-                                                **line_item,
-                                                "line_item_id": line_item[
-                                                    "purchaseorder_item_id"
-                                                ],
-                                                "quantity_input": line_item["quantity"],
-                                            }
-                                        )
-                                if InvoiceData.objects.filter(
-                                    vendor_id=vendor.vendor_id,
-                                    invoice_number=bill[env("INVOICE_FIELD_NAME")],
-                                ).exists():
-                                    print(
-                                        "invoice already exists",
-                                        bill[env("INVOICE_FIELD_NAME")],
-                                    )
-                                else:
-                                    invoice = InvoiceData.objects.create(
-                                        invoice_number=bill[env("INVOICE_FIELD_NAME")],
-                                        vendor_id=vendor.vendor_id,
-                                        vendor_name=vendor.name,
-                                        vendor_email=vendor.email,
-                                        vendor_billing_address="",
-                                        vendor_gst="",
-                                        vendor_phone=vendor.phone,
-                                        customer_name="",
-                                        customer_gst="",
-                                        customer_notes="",
-                                        customer_address="",
-                                        is_oversea_account=False,
-                                        tin_number="",
-                                        invoice_date=bill["date"],
-                                        purchase_order_id=purchase_order[
-                                            "purchaseorder_id"
-                                        ],
-                                        purchase_order_no=purchase_order[
-                                            "purchaseorder_number"
-                                        ],
-                                        line_items=line_items_res,
-                                        total=bill["total"],
-                                    )
-                            else:
-                                print("bill details couldn't get")
-                    else:
-                        print("bills didn't fetched")
-                print(vendor.email, purchase_orders)
-            else:
-                print(
-                    {"error": "Failed to fetch purchase orders", "email": vendor.email}
-                )
+            import_invoices_for_vendor_from_zoho(vendor, headers, res, bill_details_res)
         return Response({"res": res, "bill_details_res": bill_details_res}, status=200)
     else:
         return Response({"error": "Invalid invoices"}, status=400)
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def export_invoice_data(request):
     # Retrieve all InvoiceData objects
     queryset = InvoiceData.objects.all()
@@ -922,44 +935,62 @@ def export_invoice_data(request):
 
 
 class DownloadInvoice(APIView):
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, record_id):
         try:
             invoice = get_object_or_404(InvoiceData, id=record_id)
+            invoice_data = get_invoice_data_for_pdf(invoice)
             serializer = InvoiceDataSerializer(invoice)
-            line_items = get_line_items_for_template(serializer.data["line_items"])
-            invoice_date = datetime.strptime(
-                serializer.data["invoice_date"], "%Y-%m-%d"
-            ).strftime("%d-%m-%Y")
-            due_date = datetime.strptime(
-                add_45_days(serializer.data["invoice_date"]), "%Y-%m-%d"
-            ).strftime("%d-%m-%Y")
-            invoice_data = {
-                **serializer.data,
-                "invoice_date": invoice_date,
-                "due_date": due_date,
-                "line_items": line_items,
-            }
-            image_base64=None
+
+            image_base64 = None
             try:
                 image_url = f"{invoice_data['signature']}"
-            
                 # Attempt to send the email
                 image_response = requests.get(image_url)
-            
                 image_response.raise_for_status()
-                
                 # Convert the downloaded image to base64
                 image_base64 = base64.b64encode(image_response.content).decode("utf-8")
             except Exception as e:
                 pass
-            
-            email_message = render_to_string("invoice_pdf.html", {"invoice":invoice_data,"image_base64":image_base64})
+            email_message = render_to_string(
+                "invoice_pdf.html",
+                {"invoice": invoice_data, "image_base64": image_base64},
+            )
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
             response = HttpResponse(pdf, content_type="application/pdf")
-            response[
-                "Content-Disposition"
-            ] = f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+            response["Content-Disposition"] = (
+                f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+            )
             return response
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download invoice."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class DownloadAttatchedInvoice(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, record_id):
+        try:
+            invoice = get_object_or_404(InvoiceData, id=record_id)
+            serializer = InvoiceDataSerializer(invoice)
+            response = requests.get(serializer.data["attatched_invoice"])
+            if response.status_code == 200:
+                file_content = response.content
+                content_type = response.headers.get("Content-Type", f"application/pdf")
+                file_response = HttpResponse(file_content, content_type=content_type)
+                file_response["Content-Disposition"] = (
+                    f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+                )
+                return file_response
+            else:
+                return HttpResponse(
+                    "Failed to download the file", status=response.status_code
+                )
 
         except Exception as e:
             print(str(e))
@@ -967,3 +998,779 @@ class DownloadInvoice(APIView):
                 {"error": "Failed to download invoice."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class DownloadAttatchedInvoice(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, record_id):
+        try:
+            invoice = get_object_or_404(InvoiceData, id=record_id)
+            serializer = InvoiceDataSerializer(invoice)
+            response = requests.get(serializer.data["attatched_invoice"])
+            if response.status_code == 200:
+                file_content = response.content
+                content_type = response.headers.get("Content-Type", f"application/pdf")
+                file_response = HttpResponse(file_content, content_type=content_type)
+                file_response["Content-Disposition"] = (
+                    f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
+                )
+                return file_response
+            else:
+                return HttpResponse(
+                    "Failed to download the file", status=response.status_code
+                )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to download invoice."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_vendor(request):
+    # Extract data from the request
+    with transaction.atomic():
+        data = request.data
+        # name = data.get("name", "")
+        email = data.get("email", "").strip().lower()
+        vendor_id = data.get("vendor", "")
+        phone = data.get("phone", "")
+
+        try:
+            vendor_details = get_vendor(vendor_id)
+            name = vendor_details["contact_name"] 
+       
+            # Check if the user with the given email already exists
+            user_profile = Profile.objects.get(user__email=email)
+            user = user_profile.user
+            
+            # Check if the user has the role 'vendor'
+            if user_profile.roles.filter(name="vendor").exists():
+                return Response(
+                    {"detail": "User already exists as a vendor."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # If the user was not a vendor, update the Vendor model
+            try:
+                vendor = Vendor.objects.get(user=user_profile)
+                # Check if the provided vendor_id already exists for another vendor
+                if (
+                    Vendor.objects.exclude(id=vendor.id)
+                    .filter(vendor_id=vendor_id)
+                    .exists()
+                ):
+                    return Response(
+                        {"detail": "Vendor with the same vendor_id already exists."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                vendor.name = name
+                vendor.phone = phone
+                vendor.vendor_id = vendor_id
+                vendor.save()
+
+            except Vendor.DoesNotExist:
+                # Check if the provided vendor_id already exists for another vendor
+                if Vendor.objects.filter(vendor_id=vendor_id).exists():
+                    return Response(
+                        {"detail": "Vendor with the same vendor_id already exists."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                vendor_role, created = Role.objects.get_or_create(name="vendor")
+                user_profile.roles.add(vendor_role)
+                user_profile.save()
+                vendor = Vendor.objects.create(
+                    user=user_profile,
+                    name=name,
+                    email=email,
+                    vendor_id=vendor_id,
+                    phone=phone,
+                )
+                vendor.save()
+                import_invoice_for_new_vendor.delay(vendor.id)
+            return Response(
+                {"detail": 'Role "vendor" assigned to the existing user successfully.'},
+                status=status.HTTP_200_OK,
+            )
+
+        except Profile.DoesNotExist:
+            # User with the given email doesn't exist, create a new Vendor
+            try:
+                # Check if the provided vendor_id already exists for another vendor
+                if Vendor.objects.filter(vendor_id=vendor_id).exists():
+                    return Response(
+                        {"detail": "Vendor with the same vendor_id already exists."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                temp_password = "".join(
+                    random.choices(
+                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
+                        k=8,
+                    )
+                )
+                user = User.objects.create_user(
+                    username=email,
+                    password=temp_password,
+                    email=email,
+                )
+                # user.set_unusable_password()
+                user.save()
+                vendor_role, created = Role.objects.get_or_create(name="vendor")
+                profile = Profile.objects.create(user=user)
+                profile.roles.add(vendor_role)
+                profile.save()
+
+                vendor = Vendor.objects.create(
+                    user=profile,
+                    name=name,
+                    email=email,
+                    vendor_id=vendor_id,
+                    phone=phone,
+                )
+                vendor.save()
+
+                return Response(
+                    {"detail": "New vendor created successfully."},
+                    status=status.HTTP_201_CREATED,
+                )
+
+            except Exception as e:
+                print(str(e))
+                return Response(
+                    {"detail": f"Error creating vendor: {str(e)}"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_vendors(request):
+    try:
+        vendors = Vendor.objects.all()
+        serializer = VendorSerializer(vendors, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Error fetching vendors: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_purchase_orders(request):
+    try:
+        all_purchase_orders = fetch_purchase_orders(organization_id)
+        return Response(all_purchase_orders, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_purchase_orders_for_pmo(request):
+    try:
+        all_purchase_orders = fetch_purchase_orders(organization_id)
+        pmos_allowed = json.loads(env("PMOS_ALLOWED_TO_VIEW_ALL_INVOICES_AND_POS"))
+        if not request.user.username in pmos_allowed:
+            all_purchase_orders = [
+                purchase_order
+                for purchase_order in all_purchase_orders
+                if "cf_invoice_approver_s_email" in purchase_order
+                and purchase_order["cf_invoice_approver_s_email"].strip().lower()
+                == request.user.username.strip().lower()
+            ]
+        # filter based on the conditions
+        return Response(all_purchase_orders, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def fetch_invoices(organization_id):
+    all_bills = fetch_bills(organization_id)
+    invoices = InvoiceData.objects.all()
+    invoices = filter_invoice_data(invoices)
+    invoice_serializer = InvoiceDataSerializer(invoices, many=True)
+    all_invoices = []
+    for invoice in invoice_serializer.data:
+        matching_bill = next(
+            (
+                bill
+                for bill in all_bills
+                if (
+                    bill.get(env("INVOICE_FIELD_NAME")) == invoice["invoice_number"]
+                    and bill.get("vendor_id") == invoice["vendor_id"]
+                )
+            ),
+            None,
+        )
+        all_invoices.append({**invoice, "bill": matching_bill})
+    return all_invoices
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_invoices(request):
+    try:
+        all_invoices = fetch_invoices(organization_id)
+        return Response(all_invoices, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_invoices_for_pmo(request):
+    try:
+        all_invoices = fetch_invoices(organization_id)
+        pmos_allowed = json.loads(env("PMOS_ALLOWED_TO_VIEW_ALL_INVOICES_AND_POS"))
+        if not request.user.username in pmos_allowed:
+            all_invoices = [
+                invoice
+                for invoice in all_invoices
+                if invoice["approver_email"].strip().lower() == request.user.username
+            ]
+        return Response(all_invoices, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_invoices_by_status(request, status):
+    try:
+        all_invoices = fetch_invoices(organization_id)
+        res = []
+        for invoice_data in all_invoices:
+            if status == "approved":
+                if invoice_data["bill"]:
+                    if (
+                        "status" in invoice_data["bill"]
+                        and not invoice_data["bill"]["status"] == "paid"
+                    ):
+                        res.append(invoice_data)
+                elif invoice_data["status"] == "approved":
+                    res.append(invoice_data)
+            elif status == "paid":
+                if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid":
+                    res.append(invoice_data)
+
+        return Response(res, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to load"}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_invoices_by_status_for_founders(request, status):
+
+    try:
+        all_invoices = fetch_invoices(organization_id)
+        res = []
+        status_counts = defaultdict(int)
+
+        for invoice_data in all_invoices:
+            # if status == "in_review":
+            if not invoice_data["bill"] and invoice_data["status"] == "in_review":
+                status_counts["in_review"] += 1
+                if status == "in_review":
+                    res.append(invoice_data)
+            # elif status == "approved":
+            if not invoice_data["bill"] and invoice_data["status"] == "approved":
+                status_counts["approved"] += 1
+                if status == "approved":
+                    res.append(invoice_data)
+            # elif status == "rejected":
+            if not invoice_data["bill"] and invoice_data["status"] == "rejected":
+                status_counts["rejected"] += 1
+                if status == "rejected":
+                    res.append(invoice_data)
+            # if status == "accepted":
+            if invoice_data["bill"]:
+                if (
+                    "status" in invoice_data["bill"]
+                    and not invoice_data["bill"]["status"] == "paid"
+                ):
+                    status_counts["accepted"] += 1
+                    if status == "accepted":
+                        res.append(invoice_data)
+            # elif status == "paid":
+            if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid":
+                status_counts["paid"] += 1
+                if status == "paid":
+                    res.append(invoice_data)
+        return Response({"invoice_counts": status_counts, "invoices": res}, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to load"}, status=400)
+
+
+@api_view(["PUT"])
+def edit_vendor(request, vendor_id):
+    try:
+        vendor = Vendor.objects.get(id=vendor_id)
+
+        data = request.data
+        # name = data.get("name", "")
+        email = data.get("email", "").strip().lower()
+        vendor_id = data.get("vendor", "")
+        phone = data.get("phone", "")
+        existing_user = (
+            User.objects.filter(username=email).exclude(username=vendor.email).first()
+        )
+        if existing_user:
+            return Response(
+                {"error": "User with this email already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        vendor_details = get_vendor(vendor_id)
+        name = vendor_details["contact_name"] 
+        vendor.user.user.username = email
+        vendor.user.user.email = email
+        vendor.user.user.save()
+        vendor.email = email
+        vendor.name = name
+        vendor.phone = phone
+        vendor.vendor_id = vendor_id
+
+        vendor.save()
+
+        return Response(
+            {"message": "Vendor updated successfully!"}, status=status.HTTP_200_OK
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to update vendor"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_invoice_status(request, invoice_id):
+    try:
+        invoice = InvoiceData.objects.get(pk=invoice_id)
+    except InvoiceData.DoesNotExist:
+        return Response({"error": "Invoice does not exist"}, status=404)
+    new_status = request.data.get("status")
+    if new_status not in ["rejected", "approved"]:
+        return Response({"error": "Invalid status"}, status=400)
+    vendor = Vendor.objects.get(vendor_id=invoice.vendor_id)
+    invoice.status = new_status
+    invoice.save()
+    comment = request.data.get("comment", "")
+    approval = InvoiceStatusUpdate.objects.create(
+        invoice=invoice,
+        status=new_status,
+        comment=comment,
+        user=request.user,
+    )
+    approval.save()
+    invoice_data = get_invoice_data_for_pdf(invoice)
+    if new_status == "approved":
+        email_body_message = render_to_string(
+            "vendors/approve_invoice.html",
+            {**invoice_data, "comment": comment, "approved_by": request.user.username},
+        )
+        send_mail_templates_with_attachment(
+            "invoice_pdf.html",
+            [env("FINANCE_EMAIL")],
+            f"Meeraq | Invoice Approved - {invoice_data['purchase_order_no']} + {invoice_data['vendor_name']} ",
+            {"invoice": invoice_data},
+            email_body_message,
+            [env("BCC_EMAIL")],
+            vendor.is_upload_invoice_allowed,
+        )
+    else:
+        send_mail_to = (
+            invoice.vendor_email
+            if env("ENVIRONMENT") == "PRODUCTION"
+            else "tech@meeraq.com"
+        )
+        send_mail_templates(
+            "vendors/reject_invoice.html",
+            [send_mail_to],
+            "Meeraq - Invoice Rejected",
+            {"vendor_name": invoice.vendor_name, "comment": comment},
+            [],
+        )
+    return Response({"message": f"Invoice {invoice.invoice_number} {new_status}."})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_invoice_updates(request, invoice_id):
+    try:
+        updates = InvoiceStatusUpdate.objects.filter(invoice_id=invoice_id).order_by(
+            "-created_at"
+        )
+        serializer = InvoiceStatusUpdateGetSerializer(updates, many=True)
+        return Response(serializer.data)
+    except InvoiceStatusUpdate.DoesNotExist:
+        return Response(status=404)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_vendor_details_from_zoho(request, vendor_id):
+    try:
+
+        vendor = Vendor.objects.get(vendor_id=vendor_id)
+
+        user = vendor.user.user
+        user_data = get_user_data(user)
+        if user_data:
+            organization = get_organization_data()
+            zoho_vendor = get_vendor(user_data["vendor_id"])
+            res = {
+                "vendor": user_data,
+                "organization": organization,
+                "zoho_vendor": zoho_vendor,
+            }
+            return Response(res)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data."}, status=500)
+
+
+# creating a PO in zoho and adding the create po id and number in either coach pricing or facilitator pricing
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_purchase_order(request, user_type, facilitator_pricing_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if user_type == "facilitator":
+            facilitator_pricing = FacilitatorPricing.objects.get(
+                id=facilitator_pricing_id
+            )
+        elif user_type == "coach":
+            coach_pricing = CoachPricing.objects.get(id=facilitator_pricing_id)
+            coach_pricings = CoachPricing.objects.filter(
+                project=coach_pricing.project, coach=coach_pricing.coach
+            )
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header, data=request.data)
+        if response.status_code == 201:
+            purchaseorder_created = response.json().get("purchaseorder")
+            if user_type == "facilitator":
+                facilitator_pricing.purchase_order_id = purchaseorder_created[
+                    "purchaseorder_id"
+                ]
+                facilitator_pricing.purchase_order_no = purchaseorder_created[
+                    "purchaseorder_number"
+                ]
+                facilitator_pricing.save()
+            elif user_type == "coach":
+                for coach_pricing in coach_pricings:
+                    coach_pricing.purchase_order_id = purchaseorder_created[
+                        "purchaseorder_id"
+                    ]
+                    coach_pricing.purchase_order_no = purchaseorder_created[
+                        "purchaseorder_number"
+                    ]
+                    coach_pricing.save()
+            return Response({"message": "Purchase Order created successfully."})
+        else:
+            print(response.json())
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_purchase_order(request, user_type, purchase_order_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders/{purchase_order_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.delete(api_url, headers=auth_header)
+        print(response.json())
+        if response.status_code == 200:
+            if user_type == "coach":
+                CoachPricing.objects.filter(purchase_order_id=purchase_order_id).update(purchase_order_id="", purchase_order_no="")
+            elif user_type == "facilitator":
+                FacilitatorPricing.objects.filter(purchase_order_id=purchase_order_id).update(purchase_order_id="", purchase_order_no="")
+            return Response({"message": "Purchase Order deleted successfully."})
+        else:
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
+
+
+
+def get_current_financial_year():
+    today = date.today()
+    current_year = today.year
+    financial_year_start = date(
+        current_year, 4, 1
+    )  # Financial year starts from April 1st
+    if today < financial_year_start:
+        financial_year = str(current_year - 1)[2:] + "-" + str(current_year)[2:]
+    else:
+        financial_year = str(current_year)[2:] + "-" + str(current_year + 1)[2:]
+    return financial_year
+
+
+def generate_new_po_number(po_list, regex_to_match):
+    # pattern to match the purchase order number
+    pattern = rf"^{regex_to_match}\d+$"
+    # Filter out purchase orders with the desired format
+    filtered_pos = [
+        po for po in po_list if re.match(pattern, po["purchaseorder_number"])
+    ]
+    latest_number = 0
+    # Finding the latest number for each year
+    for po in filtered_pos:
+        print(po["purchaseorder_number"].split("/"))
+        _, _, _, _, po_number = po["purchaseorder_number"].split("/")
+        latest_number = max(latest_number, int(po_number))
+    # Generating the new purchase order number
+    new_number = latest_number + 1
+    new_po_number = f"{regex_to_match}{str(new_number).zfill(4)}"
+    return new_po_number
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_po_number_to_create(request):
+    try:
+        purchase_orders = fetch_purchase_orders(organization_id)
+        current_financial_year = get_current_financial_year()
+        regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
+        new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
+        return Response({"new_po_number": new_po_number})
+    except Exception as e:
+        print(str(e))
+        return Response(status=403)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_purchase_order_status(request, purchase_order_id, status):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders/{purchase_order_id}/status/{status}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header)
+        print(response.json())
+        if response.status_code == 200:
+            return Response({"message": f"Purchase Order changed to {status}."})
+        else:
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_wise_finances(request):
+    try:
+        # Fetch all invoices and purchase orders
+        all_invoices = fetch_invoices(organization_id)
+        all_purchase_orders = fetch_purchase_orders(organization_id)
+        # Filter vendors who are coaches
+        vendors = Vendor.objects.filter(user__roles__name="coach")
+        # Calculate purchase order amounts
+        vendor_po_amounts = {}
+        for po in all_purchase_orders:
+            if po["status"] not in ["draft", "cancelled"]:
+                vendor_id = po["vendor_id"]
+                total_amount = Decimal(po["total"])
+                if vendor_id in vendor_po_amounts:
+                    vendor_po_amounts[vendor_id] += total_amount
+                else:
+                    vendor_po_amounts[vendor_id] = total_amount
+
+        # Calculate invoice amounts and paid amounts
+        vendor_invoice_amounts = {}
+        for invoice in all_invoices:
+            vendor_id = invoice["vendor_id"]
+            invoiced_amount = Decimal(invoice["total"])
+            paid_amount = (
+                Decimal(invoice["total"])
+                if invoice["bill"] and invoice["bill"]["status"] == "paid"
+                else Decimal(0)
+            )
+            if vendor_id in vendor_invoice_amounts:
+                vendor_invoice_amounts[vendor_id]["invoiced_amount"] += invoiced_amount
+                vendor_invoice_amounts[vendor_id]["paid_amount"] += paid_amount
+                vendor_invoice_amounts[vendor_id]["currency_symbol"] = (
+                    invoice["currency_symbol"]
+                    if not vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                    else vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                )
+            else:
+                vendor_invoice_amounts[vendor_id] = {
+                    "invoiced_amount": invoiced_amount,
+                    "paid_amount": paid_amount,
+                    "currency_symbol": invoice["currency_symbol"],
+                }
+
+        # Prepare response
+        res = []
+        for vendor in vendors:
+            vendor_id = vendor.vendor_id
+            res.append(
+                {
+                    "id": vendor.id,
+                    "vendor_id": vendor_id,
+                    "vendor_name": vendor.name,
+                    "po_amount": vendor_po_amounts.get(vendor_id, Decimal(0)),
+                    "invoiced_amount": vendor_invoice_amounts.get(
+                        vendor_id, {"invoiced_amount": Decimal(0)}
+                    )["invoiced_amount"],
+                    "paid_amount": vendor_invoice_amounts.get(
+                        vendor_id, {"paid_amount": Decimal(0)}
+                    )["paid_amount"],
+                    "currency_symbol": vendor_invoice_amounts[vendor_id][
+                        "currency_symbol"
+                    ],
+                }
+            )
+        return Response(res)
+    except Exception as e:
+        print(str(e))
+        return Response(status=403)
+
+
+def create_purchase_order_project_mapping():
+    coach_pricings = CoachPricing.objects.all()
+    facilitator_pricings = FacilitatorPricing.objects.all()
+
+    # Create a dictionary to store the mapping of purchase_order_id to project_id
+    purchase_order_project_mapping = {}
+
+    # Iterate over CoachPricing instances and add purchase_order_id to project_id mapping
+    for coach_pricing in coach_pricings:
+        purchase_order_id = coach_pricing.purchase_order_id
+        project_id = coach_pricing.project.id
+        purchase_order_project_mapping[purchase_order_id] = project_id
+
+    # Iterate over FacilitatorPricing instances and add purchase_order_id to project_id mapping
+    for facilitator_pricing in facilitator_pricings:
+        purchase_order_id = facilitator_pricing.purchase_order_id
+        project_id = facilitator_pricing.project.id
+        purchase_order_project_mapping[purchase_order_id] = project_id
+
+    return purchase_order_project_mapping
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_project_wise_finances(request):
+    try:
+        purchase_order_project_mapping = create_purchase_order_project_mapping()
+        all_invoices = fetch_invoices(organization_id)
+        all_purchase_orders = fetch_purchase_orders(organization_id)
+
+        # Filter vendors who are coaches
+        schedular_projects = SchedularProject.objects.all()
+
+        # Calculate purchase order amounts
+        project_po_amounts = {}
+        for po in all_purchase_orders:
+
+            if (
+                po["status"] not in ["draft", "cancelled"]
+                and po["purchaseorder_id"] in purchase_order_project_mapping
+            ):
+                project_id = purchase_order_project_mapping[po["purchaseorder_id"]]
+                total_amount = Decimal(po["total"])
+                if project_id in project_po_amounts:
+                    project_po_amounts[project_id] += total_amount
+                else:
+                    project_po_amounts[project_id] = total_amount
+
+        # Calculate invoice amounts and paid amounts
+        project_invoice_amounts = {}
+        for invoice in all_invoices:
+            if invoice["purchase_order_id"] in purchase_order_project_mapping:
+                project_id = purchase_order_project_mapping[
+                    invoice["purchase_order_id"]
+                ]
+                invoiced_amount = Decimal(invoice["total"])
+                paid_amount = (
+                    Decimal(invoice["total"])
+                    if invoice["bill"] and invoice["bill"]["status"] == "paid"
+                    else Decimal(0)
+                )
+                if project_id in project_invoice_amounts:
+                    project_invoice_amounts[project_id][
+                        "invoiced_amount"
+                    ] += invoiced_amount
+                    project_invoice_amounts[project_id]["paid_amount"] += paid_amount
+                    project_invoice_amounts[project_id]["currency_symbol"] = (
+                        invoice["currency_symbol"]
+                        if not project_invoice_amounts[project_id]["currency_symbol"]
+                        else project_invoice_amounts[project_id]["currency_symbol"]
+                    )
+                else:
+                    project_invoice_amounts[project_id] = {
+                        "invoiced_amount": invoiced_amount,
+                        "paid_amount": paid_amount,
+                        "currency_symbol": invoice.get("currency_symbol", ""),
+                    }
+
+        # Prepare response
+        res = []
+        for project in schedular_projects:
+            project_id = project.id
+            if (
+                project_id in project_po_amounts
+                or project_id in project_invoice_amounts
+            ):
+                res.append(
+                    {
+                        "id": project_id,
+                        "project_name": project.name,
+                        "po_amount": project_po_amounts.get(project_id, Decimal(0)),
+                        "invoiced_amount": project_invoice_amounts.get(
+                            project_id, {"invoiced_amount": Decimal(0)}
+                        )["invoiced_amount"],
+                        "paid_amount": project_invoice_amounts.get(
+                            project_id, {"paid_amount": Decimal(0)}
+                        )["paid_amount"],
+                        "currency_symbol": project_invoice_amounts.get(
+                            project_id, {}
+                        ).get("currency_symbol", ""),
+                    }
+                )
+
+        return Response(res)
+    except Exception as e:
+        print(str(e))
+        return Response(status=403)
