@@ -19,6 +19,7 @@ from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
 from django_celery_beat.models import PeriodicTask
+from django.utils import timezone
 
 
 import environ
@@ -163,7 +164,9 @@ class Pmo(models.Model):
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
-    sub_role = models.CharField(max_length=50, choices=SUB_ROLE_CHOICES, blank=True,default="manager")
+    sub_role = models.CharField(
+        max_length=50, choices=SUB_ROLE_CHOICES, blank=True, default="manager"
+    )
     room_id = models.CharField(max_length=50, blank=True)
 
     def __str__(self):
@@ -253,7 +256,6 @@ class Facilitator(models.Model):
     city = models.JSONField(default=list, blank=True)
     language = models.JSONField(default=list, blank=True)
     job_roles = models.JSONField(default=list, blank=True)
-    city = models.JSONField(default=list, blank=True)
     country = models.JSONField(default=list, blank=True)
     created_at = models.DateField(auto_now_add=True)
     edited_at = models.DateField(auto_now=True)
@@ -278,13 +280,15 @@ class Facilitator(models.Model):
 
 
 class Learner(models.Model):
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=100)
     email = models.EmailField()
     phone = models.CharField(max_length=25, blank=True)
     area_of_expertise = models.CharField(max_length=100, blank=True)
     years_of_experience = models.IntegerField(default=0, blank=True)
-
+    job_roles = models.JSONField(default=list, blank=True)
+    
     def __str__(self):
         return self.name
 
@@ -646,6 +650,12 @@ class StandardizedFieldRequest(models.Model):
     facilitator = models.ForeignKey(
         Facilitator, on_delete=models.CASCADE, blank=True, null=True
     )
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.CASCADE, blank=True, null=True
+    )
+    learner = models.ForeignKey(
+        Learner, on_delete=models.CASCADE, blank=True, null=True
+    )
     standardized_field_name = models.ForeignKey(
         StandardizedField, on_delete=models.CASCADE, blank=True
     )
@@ -831,3 +841,68 @@ class APILog(models.Model):
 
     def __str__(self):
         return f"{self.path}"
+
+
+class Task(models.Model):
+    PRIORITY_CHOICES = (
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+    )
+    TASK_STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+    )
+    task = models.CharField(max_length=100)
+    caas_project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
+    session_caas = models.ForeignKey(
+        SessionRequestCaas,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
+    coach = models.ForeignKey(
+        Coach, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    engagement = models.ForeignKey(
+        Engagement, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    goal = models.ForeignKey(
+        Goal, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    vendor_user = models.ForeignKey(
+        User, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES)
+    status = models.CharField(
+        max_length=20, choices=TASK_STATUS_CHOICES, default="pending"
+    )
+
+    remarks = models.JSONField(default=list, blank=True)
+    trigger_date = models.DateTimeField(default=timezone.now, blank=True)
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def add_remark(self, remark_message):
+        current_datetime = timezone.now()
+        formatted_datetime = current_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        new_remark = {
+            "message": remark_message,
+            "datetime": formatted_datetime,
+        }
+        self.remarks.append(new_remark)
+        self.save()
+
+    def is_visible(self):
+        return timezone.now() >= self.trigger_date
+
+    def __str__(self):
+        return self.task
