@@ -11,7 +11,15 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from api.models import Coach, OTP, UserLoginActivity, Profile, Role, CoachStatus, Project
+from api.models import (
+    Coach,
+    OTP,
+    UserLoginActivity,
+    Profile,
+    Role,
+    CoachStatus,
+    Project,
+)
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 import json
@@ -89,6 +97,20 @@ wkhtmltopdf_path = os.environ.get(
 )
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
+
+SESSION_TYPE_VALUE = {
+    "chemistry": "Chemistry",
+    "tripartite": "Tripartite",
+    "goal_setting": "Goal Setting",
+    "coaching_session": "Coaching Session",
+    "mid_review": "Mid Review",
+    "end_review": "End Review",
+    "closure_session": "Closure Session",
+    "stakeholder_without_coach": "Tripartite Without Coach",
+    "interview": "Interview",
+    "stakeholder_interview": "Stakeholder Interview",
+}
 
 
 def get_line_items_details(invoices):
@@ -1617,7 +1639,7 @@ def coching_purchase_order_create(request, coach_id, project_id):
 
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
-def delete_coaching_purchase_order(request,  purchase_order_id):
+def delete_coaching_purchase_order(request, purchase_order_id):
     try:
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
         if not access_token:
@@ -1629,7 +1651,9 @@ def delete_coaching_purchase_order(request,  purchase_order_id):
         response = requests.delete(api_url, headers=auth_header)
         print(response.json())
         if response.status_code == 200:
-            CoachStatus.objects.filter(purchase_order_id=purchase_order_id).update(purchase_order_id="", purchase_order_no="")
+            CoachStatus.objects.filter(purchase_order_id=purchase_order_id).update(
+                purchase_order_id="", purchase_order_no=""
+            )
             return Response({"message": "Purchase Order deleted successfully."})
         else:
             return Response(status=401)
@@ -1882,6 +1906,50 @@ def delete_expense_purchase_order(request, purchase_order_id):
 def get_all_sales_orders(request):
     try:
         all_sales_orders = fetch_sales_orders(organization_id)
+
+        for sales_order in all_sales_orders:
+            project = None
+            sales_order["matching_project_structure"] = "Project Not Assigned"
+            for order_project_mapping in OrdersAndProjectMapping.objects.all():
+                if (
+                    str(sales_order["salesorder_id"])
+                    in order_project_mapping.sales_order_ids
+                ):
+                    if order_project_mapping.project:
+                        project = Project.objects.get(
+                            id=order_project_mapping.project.id
+                        )
+                    elif order_project_mapping.schedular_project:
+                        project = SchedularProject.objects.get(
+                            id=order_project_mapping.schedular_project.id
+                        )
+                    if project:
+                        data = project.project_structure
+                        for item in data:
+
+                            if (
+                                "session_type" in item
+                                and item["session_type"] in SESSION_TYPE_VALUE
+                            ):
+
+                                result = (
+                                    float(item["price"])
+                                    * float(item["session_duration"])
+                                    * float(item["no_of_sessions"])
+                                ) / 60
+
+                                item["price"] = float(result)
+
+                                item["session_type"] = SESSION_TYPE_VALUE[
+                                    item["session_type"]
+                                ]
+                        total_price = sum(float(session["price"]) for session in data)
+
+                        if total_price == sales_order["total"]:
+                            sales_order["matching_project_structure"] = "Matching"
+                        else:
+                            sales_order["matching_project_structure"] = "Not Matching"
+
         return Response(all_sales_orders, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -2148,7 +2216,9 @@ def add_so_to_project(request, project_id):
                     mapping = orders_and_project_mapping.first()
                     if mapping.project and mapping.project.id != project.id:
                         return Response(
-                            {"error": f"SO already exist in project: {mapping.project.name}"},
+                            {
+                                "error": f"SO already exist in project: {mapping.project.name}"
+                            },
                             status=status.HTTP_400_BAD_REQUEST,
                         )
                     break
@@ -2167,6 +2237,56 @@ def add_so_to_project(request, project_id):
                 project=project, sales_order_ids=sales_order_ids
             )
         return Response({"message": "Sales orders added to project"})
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def assign_so_to_po(request):
+    try:
+        purchase_order_id = request.data.get("purchase_order_id")
+        sales_order_ids = request.data.get("sales_order_ids")
+
+        mapping_instance = None
+        for order_project_mapping in OrdersAndProjectMapping.objects.all():
+            if str(purchase_order_id) in order_project_mapping.purchase_order_ids:
+                mapping_instance = order_project_mapping
+
+        if not mapping_instance:
+            mapping_instance = OrdersAndProjectMapping.objects.create(
+                purchase_order_ids=[str(purchase_order_id)]
+            )
+        unique_sales_order_ids = set(mapping_instance.sales_order_ids)
+        unique_sales_order_ids.update(sales_order_ids)
+        mapping_instance.sales_order_ids = list(unique_sales_order_ids)
+        mapping_instance.save()
+
+        return Response({"message": "Sales orders added to purchase order"})
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_sales_order_for_po(request, purchase_order_id):
+    try:
+
+        mapping_instance = None
+        for order_project_mapping in OrdersAndProjectMapping.objects.all():
+            if str(purchase_order_id) in order_project_mapping.purchase_order_ids:
+
+                mapping_instance = order_project_mapping
+                break
+        if mapping_instance:
+            return Response(mapping_instance.sales_order_ids)
+        else:
+            return Response(
+                {"message": "No sales orders found for the given purchase order ID"},
+                status=500,
+            )
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

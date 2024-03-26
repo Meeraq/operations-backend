@@ -202,4 +202,14 @@ urlpatterns = [
         views.add_so_to_project,
         name="add_so_to_project",
     ),
+    path(
+        "assign_so_to_po/",
+        views.assign_so_to_po,
+        name="assign_so_to_po",
+    ),
+    path(
+        "get-all-sales-orders-for-purchase-order/<int:purchase_order_id>/",
+        views.get_all_sales_order_for_po,
+        name="get_all_sales_order_for_po",
+    ),
 ]

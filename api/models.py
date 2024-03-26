@@ -149,6 +149,7 @@ class Finance(models.Model):
     email = models.EmailField()
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
@@ -395,7 +396,8 @@ class Project(models.Model):
         blank=True,
     )
     finance = models.BooleanField(blank=True, default=False)
-
+    is_archive = models.BooleanField(default=False)
+    
     class Meta:
         ordering = ["-created_at"]
 

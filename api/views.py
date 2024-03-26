@@ -1319,6 +1319,7 @@ def create_project_cass(request):
             pass
 
     except IntegrityError as e:
+        print(str(e))
         return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
         print(str(e))
