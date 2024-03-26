@@ -100,6 +100,7 @@ urlpatterns = [
     path("project_structure_agree_by_hr/", views.project_structure_agree_by_hr),
     path("request_more_profiles_by_hr/", views.request_more_profiles_by_hr),
     path("edit_learner/", views.edit_learner),
+    path("edit-individual-learner/<int:user_id>/", views.edit_individual_learner),
     path("mark-finalized-list-complete/", views.mark_finalized_list_complete),
     path(
         "finalized-coach-from-coach-consent/", views.finalized_coach_from_coach_consent
@@ -110,7 +111,7 @@ urlpatterns = [
     ),
     path("coach-field-values/", views.get_coach_field_values),
     path("add-multiple-coaches/", views.add_mulitple_coaches),
-    path("coach/delete/", views.delete_coach),
+    # path("coach/delete/", views.delete_coach),
     path("notifications/all/<int:user_id>/", views.get_notifications),
     path("notifications/mark-as-read/", views.mark_notifications_as_read),
     path("notifications/mark-all-as-read/", views.mark_all_notifications_as_read),
@@ -250,7 +251,7 @@ urlpatterns = [
     path("reset_consent/", views.reset_consent),
     path("update_organisation/<int:org_id>/", views.update_organisation),
     path("update_hr/<int:hr_id>/", views.update_hr),
-    path("delete_hr/<int:hr_id>/", views.delete_hr),
+    # path("delete_hr/<int:hr_id>/", views.delete_hr),
     path(
         "learner_completed_sessions/count/<int:learner_id>/",
         views.get_completed_learner_sessions_count,
@@ -281,7 +282,7 @@ urlpatterns = [
         "coaches-which-are-included-in-projects/",
         views.coaches_which_are_included_in_projects,
     ),
-    path("add_registered_coach/", AddRegisteredCoach.as_view()),    
+    path("add_registered_coach/", AddRegisteredCoach.as_view()),
     path("add-registered-facilitator/", AddRegisteredFacilitator.as_view()),
     path("get-registered-coaches/", views.get_registered_coaches),
     path("get-registered-facilitators/", views.get_registered_facilitators),
@@ -370,6 +371,11 @@ urlpatterns = [
         name="update_reminders_of_project",
     ),
     path(
+        "update-reminders-of-caas-project/",
+        views.update_reminders_of_caas_project,
+        name="update_reminders_of_project",
+    ),
+    path(
         "add-session/<int:project_id>/<int:learner_id>/",
         views.add_extra_session_in_caas,
     ),
@@ -388,9 +394,12 @@ urlpatterns = [
         views.blacklist_coach,
     ),
     path("api-logs/", views.get_all_api_logs, name="api-logs"),
-    path(
-        "delete-pmo/",
-        views.delete_pmo,
-    ),
+    # path(
+    #     "delete-pmo/",
+    #     views.delete_pmo,
+    # ),
     path("edit-pmo/", views.edit_pmo),
+    path("tasks/", views.get_tasks),
+    path("tasks/add-remark/", views.add_remark_to_task),
+    path("tasks/complete/", views.complete_task),
 ]

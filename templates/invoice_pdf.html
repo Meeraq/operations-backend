@@ -303,7 +303,7 @@
 								{{ item.tax_amount }}
 								{% endif %}</td>
 							{% endif %}
-							<td class="tableDataCenter">{{ item.hsn_sac|default:"-" }}</td>
+							<td class="tableDataCenter">{{ invoice.hsn_or_sac|default:"-" }}</td>
 							<td class="tableDataCenter">
 								{% if invoice.currency_symbol %}
 								{{ invoice.currency_symbol }}{{ item.quantity_mul_rate_include_tax }}
@@ -313,6 +313,18 @@
 							</td>
 						</tr>
 						{% endfor %}
+					</tbody>
+				</table>
+				<table style="margin-top: 10pt; border: 0px;" cellspacing="0" border="0" width="100%">
+					<tbody>
+						<tr>
+							<td id="total" style="text-align: right;font-size: 14pt; "><span style="font-weight: semibold;">SubTotal (excluding tax): </span>
+								{% if invoice.currency_symbol %}
+								{{ invoice.currency_symbol }}{{ invoice.sub_total_excluding_tax }}
+								{% else %}
+								{{ invoice.sub_total_excluding_tax }}
+								{% endif %}</td>
+						</tr>
 					</tbody>
 				</table>
 				<table style="margin-top: 10pt; border: 0px;" cellspacing="0" border="0" width="100%">
