@@ -5,7 +5,7 @@ from collections import defaultdict
 import boto3
 import requests
 from rest_framework import generics, serializers, status
-from datetime import timedelta, time, datetime
+from datetime import timedelta, time, datetime,date
 from .models import (
     Course,
     TextLesson,
@@ -83,6 +83,7 @@ from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
 )
 from schedularApi.serializers import SchedularBatchSerializer
+
 # from schedularApi.views import create_lessons_for_batch
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
@@ -336,19 +337,17 @@ def download_file_response(file_url):
 
 def create_lessons_for_batch(batch):
     try:
-        course  = Course.objects.get(batch=batch)
+        course = Course.objects.get(batch=batch)
         live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch.id)
         training_class_sessions = LiveSession.objects.filter(
             session_type__in=["in_person_session", "virtual_session"]
         )
-        max_order_of_training_class_sessions = (
-            training_class_sessions.aggregate(Max("order"))["order__max"]
-        )
+        max_order_of_training_class_sessions = training_class_sessions.aggregate(
+            Max("order")
+        )["order__max"]
         coaching_sessions = CoachingSession.objects.filter(batch__id=batch.id)
         max_order = (
-            Lesson.objects.filter(course=course).aggregate(Max("order"))[
-                "order__max"
-            ]
+            Lesson.objects.filter(course=course).aggregate(Max("order"))["order__max"]
             or 0
         )
         for live_session in live_sessions:
@@ -366,9 +365,9 @@ def create_lessons_for_batch(batch):
                 lesson=new_lesson, live_session=live_session
             )
             max_order_feedback = (
-                Lesson.objects.filter(course=course).aggregate(
-                    Max("order")
-                )["order__max"]
+                Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                    "order__max"
+                ]
                 or 0
             )
             new_feedback_lesson = Lesson.objects.create(
@@ -388,9 +387,7 @@ def create_lessons_for_batch(batch):
                 "in_person_session",
                 "virtual_session",
             ]:
-                if int(max_order_of_training_class_sessions) == int(
-                    live_session.order
-                ):
+                if int(max_order_of_training_class_sessions) == int(live_session.order):
                     add_question_to_feedback_lesson(
                         feedback_lesson, nps_default_feed_questions
                     )
@@ -638,10 +635,34 @@ def get_nudges_and_batch(request, batch_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@transaction.atomic
 def create_new_nudge(request):
     serializer = NudgeSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        nudge_instance = serializer.save()
+        nudge_instance.is_switched_on = True
+        nudge_instance.save()
+        nudges_start_date = nudge_instance.batch.nudge_start_date
+        today_date = datetime.today().date()
+        if nudges_start_date and nudges_start_date <= today_date:
+            last_nudge = (
+                Nudge.objects.filter(batch=nudge_instance.batch)
+                .exclude(id=nudge_instance.id)
+                .order_by("-order")
+                .first()
+            )
+            if last_nudge:
+                last_nudge_date = last_nudge.trigger_date
+                nudge_instance.trigger_date = last_nudge_date + timedelta(
+                    int(nudge_instance.batch.nudge_frequency)
+                )
+                nudge_instance.save()
+            else:
+                nudge_instance.trigger_date = nudges_start_date + timedelta(
+                    int(nudge_instance.batch.nudge_frequency)
+                )
+                nudge_instance.save()
+        serializer = NudgeSerializer(nudge_instance)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -675,7 +696,6 @@ def add_nudges_date_frequency_to_batch(request, batch_id):
         batch = SchedularBatch.objects.get(id=batch_id)
         nudge_start_date = request.data.get("nudge_start_date")
         nudge_frequency = request.data.get("nudge_frequency")
-        existing_nudge_start_date = batch.nudge_start_date
         batch.nudge_start_date = nudge_start_date
         batch.nudge_frequency = nudge_frequency
         batch.save()
@@ -2060,6 +2080,7 @@ def course_report_download(request, course_id):
     # Write headers to the worksheet
     headers = [
         "Participant Name",
+        "Email",
         "Completed Lessons",
         "Total Lessons",
         "Progress",
@@ -2073,6 +2094,7 @@ def course_report_download(request, course_id):
         ws.append(
             [
                 course_enrollment_data["learner"]["name"],
+                course_enrollment_data["learner"]["email"],
                 len(course_enrollment_data["completed_lessons"]),
                 course_enrollment_data["total_lessons"],
                 str(course_enrollment_data["progress"]) + "%",
@@ -2578,7 +2600,6 @@ class AssignCourseTemplateToBatch(APIView):
 
                 create_lessons_for_batch(batch)
 
-
                 if assessment_creation:
                     max_order = (
                         Lesson.objects.filter(course=new_course).aggregate(
@@ -2662,9 +2683,8 @@ def create_pdf_lesson(request):
             if course_id:
                 course_instance = Course.objects.get(id=course_id)
                 course_template_instance = course_instance.course_template
-                live_session_id = lesson_data["live_session"]
+                live_session_id = lesson_data.get("live_session", None)
                 live_session = None
-                print(live_session_id)
                 if live_session_id:
                     live_session = LiveSessionSchedular.objects.get(id=live_session_id)
 
@@ -2674,7 +2694,7 @@ def create_pdf_lesson(request):
                     status=lesson_data["status"],
                     lesson_type=lesson_data["lesson_type"],
                     order=lesson_data["order"],
-                    drip_date=lesson_data["drip_date"],
+                    drip_date=lesson_data.get("drip_date", None),
                     live_session=live_session,
                 )
 
@@ -2713,6 +2733,7 @@ def create_pdf_lesson(request):
     except CourseTemplate.DoesNotExist:
         return Response({"message": "Course Template does not exist."})
     except Exception as e:
+        print(str(e))
         return Response({"message": "Failed to create pdf lesson."})
 
 
@@ -3239,7 +3260,9 @@ class GetAssessmentsOfBatch(APIView):
                         "total_learners_count": assessment.participants_observers.count(),
                         "total_responses_count": total_responses_count,
                         "created_at": assessment.created_at,
-                        "automated_reminder": assessment.automated_reminder,
+                        "whatsapp_reminder": assessment.whatsapp_reminder,
+                        "email_reminder": assessment.email_reminder,
+                        "reminders" : assessment.reminders,
                         "batch_name": batch.name,
                         "questionnaire": assessment.questionnaire.id,
                         "organisation": assessment.organisation.id,
@@ -3603,9 +3626,18 @@ class GetAllNudgesOfSchedularProjects(APIView):
             if hr_id:
                 courses = courses.filter(batch__project__hr__id=hr_id)
             for course in courses:
-                nudges = get_nudges_of_course(course)
+                today_date = date.today()
+                nudges =  Nudge.objects.filter(
+                    batch__id=course.batch.id,
+                    is_sent=False,
+                    batch__project__nudges=True,
+                    batch__project__status="ongoing",
+                    trigger_date__isnull=False
+                )
+                if hr_id:
+                    nudges = nudges.filter(is_switched_on=True)
+                nudges = NudgeSerializer(nudges, many=True).data
                 data = list(data) + list(nudges)
-
             return Response(data)
         except Exception as e:
             print(str(e))
@@ -3641,7 +3673,7 @@ class CreateAssignmentLesson(APIView):
                     name=request.data["name"],
                     status=request.data["status"],
                     lesson_type="assignment",
-                    drip_date=request.data["drip_date"],
+                    drip_date=(request.data.get("drip_date", None)),
                     order=int(request.data["order"]),
                     live_session=live_session,
                 )
@@ -3677,7 +3709,7 @@ class UpdateAssignmentLesson(APIView):
             lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
             if lesson.course:
                 lesson.name = request.data["name"]
-                lesson.drip_date = request.data["drip_date"]
+                lesson.drip_date = request.data.get("drip_date", None)
                 live_session_id = request.data["live_session"]
                 live_session = None
                 if live_session_id != "null":
@@ -3980,3 +4012,23 @@ def get_live_sessions_by_course(request, course_id):
     live_sessions = LiveSession.objects.filter(batch__course__id=course_id)
     live_sessions_serializer = LiveSessionSchedularSerializer(live_sessions, many=True)
     return Response(live_sessions_serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_nudge_status(request, nudge_id):
+    nudge = Nudge.objects.get(id=nudge_id)
+    is_switched_on = request.data.get("is_switched_on")
+    nudge_sent_date = request.data.get("date")  # YYYY-MM-DD format
+    if is_switched_on:
+        # schedule new periodic task
+        desired_time = time(8, 30)
+        nudge_sent_date = datetime.strptime(nudge_sent_date, "%Y-%m-%d")
+        nudge.trigger_date = nudge_sent_date.date()
+        nudge.is_switched_on = True
+    else:
+        # find the periodic task and switch
+        nudge.is_switched_on = False
+    nudge.save()
+    nudge_serializer = NudgeSerializer(nudge)
+    return Response(nudge_serializer.data)
