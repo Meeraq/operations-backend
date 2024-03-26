@@ -2216,7 +2216,9 @@ def send_tomorrow_action_items_data():
 def update_lesson_status_according_to_drip_dates():
     try:
         today = date.today()
-        lessons = Lesson.objects.filter(Q(drip_date=today) | Q(live_session__date_time__date=today))
+        lessons = Lesson.objects.filter(
+            Q(drip_date=today) | Q(live_session__date_time__date=today)
+        )
         for lesson in lessons:
             if lesson.lesson_type == "assessment":
                 assessment = Assessment.objects.filter(lesson=lesson).first()
@@ -2234,3 +2236,148 @@ def update_lesson_status_according_to_drip_dates():
                 lesson.save()
     except Exception as e:
         print(str(e))
+
+
+@shared_task
+def send_live_session_link_whatsapp_to_facilitators_30_min_before(id):
+    try:
+        live_session = LiveSession.objects.get(id=id)
+        if (
+            live_session.batch.project.whatsapp_reminder
+            and live_session.batch.project.status == "ongoing"
+        ):
+            facilitators = live_session.facilitator.all()
+            for facilitator in facilitators:
+                send_whatsapp_message_template(
+                    facilitator.phone,
+                    {
+                        "broadcast_name": "30 min before live session reminder",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": facilitator.first_name
+                                + " "
+                                + facilitator.last_name,
+                            },
+                            {
+                                "name": "live_session_name",
+                                "value": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                            },
+                            {
+                                "name": "live_session_meeting_link",
+                                "value": live_session.meeting_link,
+                            },
+                        ],
+                        "template_name": "send_whatsapp_reminder_to_facilitator_same_day_30_min_before",
+                    },
+                )
+                sleep(5)
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_live_session_link_whatsapp_to_facilitators_one_day_before():
+    try:
+        tomorrow = timezone.now() + timedelta(days=1)
+        live_sessions = LiveSession.objects.filter(date_time__date=tomorrow)
+        for live_session in live_sessions:
+            if (
+                live_session.batch.project.whatsapp_reminder
+                and live_session.batch.project.status == "ongoing"
+            ):
+                facilitator = live_session.facilitator
+                session_datetime_str = live_session.date_time.astimezone(
+                    pytz.timezone("Asia/Kolkata")
+                ).strftime("%I:%M %p")
+                print("session_datetime_str",session_datetime_str)
+                send_whatsapp_message_template(
+                    facilitator.phone,
+                    {
+                        "broadcast_name": "one day before live session reminder",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": facilitator.first_name
+                                + " "
+                                + facilitator.last_name,
+                            },
+                            {
+                                "name": "live_session_name",
+                                "value": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                            },
+                            {
+                                "name": "time",
+                                "value": f"{session_datetime_str} IST",
+                            },
+                            {
+                                "name": "live_session_meeting_link",
+                                "value": live_session.meeting_link,
+                            },
+                        ],
+                        "template_name": "send_whatsapp_reminder_to_facilitator_one_day_before",
+                    },
+                )
+                send_mail_templates(
+                    "facilitator_templates/send_live_session_reminder_to_facilitator_one_day_before.html",
+                    [facilitator.email],
+                    "Meeraq - Live Session",
+                    {
+                        "participant_name": facilitator.first_name
+                        + " "
+                        + facilitator.last_name,
+                        "live_session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                        "project_name": live_session.batch.project.name,
+                        "description": (
+                            live_session.description
+                            if live_session.description
+                            else ""
+                        ),
+                        "meeting_link": live_session.meeting_link,
+                    },
+                    [],
+                )
+                sleep(5)
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_live_session_whatsapp_reminder_same_day_morning_for_facilitator():
+    try:
+        today_morning = timezone.now().replace(
+            hour=8, minute=0, second=0, microsecond=0
+        )
+        live_sessions = LiveSession.objects.filter(date_time__date=today_morning.date())
+
+        for session in live_sessions:
+            if (
+                session.batch.project.whatsapp_reminder
+                and session.batch.project.status == "ongoing"
+            ):
+                facilitators = session.batch.facilitator.all()
+                session_datetime_str = session.date_time.astimezone(
+                    pytz.timezone("Asia/Kolkata")
+                ).strftime("%I:%M %p")
+                print("session_datetime_str",session_datetime_str)
+                for facilitator in facilitators:
+                    send_mail_templates(
+                        "facilitator_templates/send_live_session_reminder_to_facilitator_on_same_day_morning.html",
+                        [facilitator.email],
+                        "Meeraq - Live Session",
+                        {
+                            "participant_name": facilitator.first_name
+                            + " "
+                            + facilitator.last_name,
+                            "live_session_name": f"{get_live_session_name(session.session_type)} {session.live_session_number}",
+                            "project_name": session.batch.project.name,
+                            "description": (
+                                session.description if session.description else ""
+                            ),
+                            "meeting_link": session.meeting_link,
+                        },
+                        [],
+                    )
+    except Exception as e:
+        print(str(e))
+        pass

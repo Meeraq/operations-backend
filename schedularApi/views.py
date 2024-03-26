@@ -324,14 +324,14 @@ def create_project_schedular(request):
 @permission_classes([IsAuthenticated])
 def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
-    pmo_id  = request.query_params.get("pmo")
+    pmo_id = request.query_params.get("pmo")
     projects = None
     if pmo_id:
-        pmo = Pmo.objects.get(id = int(pmo_id) )
+        pmo = Pmo.objects.get(id=int(pmo_id))
         if pmo.sub_role == "junior_pmo":
             projects = SchedularProject.objects.filter(junior_pmo=pmo)
         else:
-            projects = SchedularProject.objects.all() 
+            projects = SchedularProject.objects.all()
 
     if status:
 
@@ -777,6 +777,20 @@ def update_live_session(request, live_session_id):
                         periodic_task = PeriodicTask.objects.create(
                             name=f"send_whatsapp_reminder_30_min_before_live_session_{uuid.uuid1()}",
                             task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
+                            args=[update_live_session.id],
+                            clocked=clocked,
+                            one_off=True,
+                        )
+                        periodic_task.save()
+                        if update_live_session.pt_30_min_before:
+                            update_live_session.pt_30_min_before.enabled = False
+                            update_live_session.pt_30_min_before.save()
+                        live_session.pt_30_min_before = periodic_task
+                        live_session.save()
+                        
+                        periodic_task = PeriodicTask.objects.create(
+                            name=f"send_live_session_link_whatsapp_to_facilitators_30_min_before{uuid.uuid1()}",
+                            task="schedularApi.tasks.send_live_session_link_whatsapp_to_facilitators_30_min_before",
                             args=[update_live_session.id],
                             clocked=clocked,
                             one_off=True,
@@ -3799,7 +3813,7 @@ def get_live_sessions_by_status(request):
     pmo_id = request.query_params.get("pmo", None)
 
     if pmo_id:
-        pmo = Pmo.objects.get(id = int(pmo_id))
+        pmo = Pmo.objects.get(id=int(pmo_id))
         if pmo.sub_role == "junior_pmo":
             queryset = queryset.filter(batch__project__junior_pmo=pmo)
         else:
