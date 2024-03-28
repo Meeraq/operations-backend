@@ -2129,21 +2129,20 @@ class AddMultipleParticipants(APIView):
     @transaction.atomic
     def post(self, request):
         try:
-            with transaction.atomic():
-                participants = request.data.get("participants")
-                assessment_id = request.data.get("assessment_id")
-                assessment = Assessment.objects.get(id=assessment_id)
-                for participant in participants:
-                    serializer = add_multiple_participants(
-                        participant, assessment_id, assessment, True
-                    )
-                return Response(
-                    {
-                        "message": "Participants added successfully.",
-                        "assessment_data": serializer.data,
-                    },
-                    status=status.HTTP_200_OK,
+            participants = request.data.get("participants")
+            assessment_id = request.data.get("assessment_id")
+            assessment = Assessment.objects.get(id=assessment_id)
+            for participant in participants:
+                serializer = add_multiple_participants(
+                    participant, assessment_id, assessment, True
                 )
+            return Response(
+                {
+                    "message": "Participants added successfully.",
+                    "assessment_data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             print(str(e))
@@ -2151,7 +2150,6 @@ class AddMultipleParticipants(APIView):
                 {"error": "Failed to add participants."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
 
 class CreateObserverType(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo")]
