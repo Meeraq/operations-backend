@@ -5,7 +5,7 @@ from collections import defaultdict
 import boto3
 import requests
 from rest_framework import generics, serializers, status
-from datetime import timedelta, time, datetime,date
+from datetime import timedelta, time, datetime, date
 from .models import (
     Course,
     TextLesson,
@@ -634,7 +634,7 @@ class LessonListView(generics.ListAPIView):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated,IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_nudges_and_batch(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
@@ -703,7 +703,7 @@ def download_nudge_file(request, nudge_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated,IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_nudges_date_frequency_to_batch(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
@@ -2705,30 +2705,6 @@ def edit_pdf_resource(request, resource_id):
         )
 
 
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
-def edit_pdf_resource(request, resource_id):
-    try:
-        pdf_name = request.data.get("pdfName")
-        pdf_file = request.data.get("pdfFile")
-        resource = Resources.objects.get(id=resource_id)
-        resource.name = pdf_name
-        if pdf_file:
-            resource.pdf_file = pdf_file
-        resource.save()
-        return Response(
-            {"message": f"Pdf updated sucessfully!"},
-            status=status.HTTP_200_OK,
-        )
-    except Exception as e:
-        print(str(e))
-        return Response(
-            {"error": f"Failed to update pdf."},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
-
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_pdf_lesson(request):
@@ -3324,7 +3300,7 @@ class GetAssessmentsOfBatch(APIView):
                         "created_at": assessment.created_at,
                         "whatsapp_reminder": assessment.whatsapp_reminder,
                         "email_reminder": assessment.email_reminder,
-                        "reminders" : assessment.reminders,
+                        "reminders": assessment.reminders,
                         "batch_name": batch.name,
                         "questionnaire": assessment.questionnaire.id,
                         "organisation": assessment.organisation.id,
@@ -3692,12 +3668,12 @@ class GetAllNudgesOfSchedularProjects(APIView):
                 courses = courses.filter(batch__project__hr__id=hr_id)
             for course in courses:
                 today_date = date.today()
-                nudges =  Nudge.objects.filter(
+                nudges = Nudge.objects.filter(
                     batch__id=course.batch.id,
                     is_sent=False,
                     batch__project__nudges=True,
                     batch__project__status="ongoing",
-                    trigger_date__isnull=False
+                    trigger_date__isnull=False,
                 )
                 if hr_id:
                     nudges = nudges.filter(is_switched_on=True)
@@ -3954,7 +3930,7 @@ def submit_feedback(request, feedback_id, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated,IsInRoles("pmo", "learner", "coach")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach")])
 def get_feedback(request, feedback_id):
     feedback = Feedback.objects.get(id=feedback_id)
     serializer = FeedbackDepthOneSerializer(feedback)
@@ -4057,7 +4033,7 @@ def get_coach_session_feedback_response_data(request, feedback_response_id):
 
 
 class FacilitatorWiseFeedback(APIView):
-    permission_classes = [IsAuthenticated,IsInRoles("pmo", "facilitator")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "facilitator")]
 
     def get(self, request, feedback_id):
         try:
@@ -4070,7 +4046,7 @@ class FacilitatorWiseFeedback(APIView):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated,IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_live_sessions_by_course(request, course_id):
     live_sessions = LiveSession.objects.filter(batch__course__id=course_id)
     live_sessions_serializer = LiveSessionSchedularSerializer(live_sessions, many=True)
