@@ -2398,7 +2398,7 @@ def send_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("leanrer", "pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("leanrer", "pmo", "hr", "coach")])
 def get_project_details(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
