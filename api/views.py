@@ -6464,7 +6464,7 @@ class UpdateInviteesView(APIView):
                 print(str(e))
 
             return Response(
-                {"message": " Invitees Updated Sucessfully"}, status=status.HTTP_200_OK
+                {"message": "Invitees Updated Sucessfully"}, status=status.HTTP_200_OK
             )
         except Exception as e:
             return Response(
@@ -9390,3 +9390,24 @@ def complete_task(request):
     return Response(
         {"message": "Task marked as completed."}, status=status.HTTP_201_CREATED
     )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def change_user_password(request):
+    try:
+        
+        with transaction.atomic():
+            email = request.data.get("email", None)
+            password = request.data.get("password", None)
+    
+            if email and password:
+                user = User.objects.get(username=email)
+                user.set_password(password)
+                user.save()
+                return Response({"message": "Password reset successful!"}, status=200)
+            else:
+                return Response({"error": "Failed to reset password!"}, status=500)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to reset password!"}, status=500)
