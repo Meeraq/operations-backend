@@ -31,6 +31,12 @@ class Question(models.Model):
         ("1-5", "1-5"),
         ("1-10", "1-10"),
     ]
+
+    RESPONSE_CHOICES = [
+        ("correct_answer", "Correct Answer"),
+        ("rating_type", "Rating Type"),
+    ]
+
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
     type = models.CharField(max_length=10, choices=QUESTION_TYPES, blank=True)
     self_question = models.TextField()
@@ -41,7 +47,10 @@ class Question(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     label = models.JSONField(blank=True, null=True)
-    correct_answer = models.CharField(max_length=255, blank=True, null=True)
+    correct_answer = models.JSONField(default=list, blank=True)
+    response_type = models.CharField(
+        max_length=50, choices=RESPONSE_CHOICES, blank=True
+    )
 
     def __str__(self):
         return self.self_question
@@ -53,15 +62,12 @@ class Questionnaire(models.Model):
         ("360", "360"),
     ]
     QUESTIONS_TYPE = [
-        ("single_correct", " Single Correct"),
+        ("correct_answer_type", " Correct Answer Type"),
         ("rating_type", "Rating Type"),
     ]
     name = models.CharField(max_length=255, blank=True, null=True)
     type = models.CharField(max_length=10, choices=QUESTIONNAIRE_TYPES, blank=True)
     questions = models.ManyToManyField(Question, blank=True)
-    questions_type = models.CharField(
-        max_length=255, choices=QUESTIONS_TYPE, default="single_correct"
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -150,7 +156,8 @@ class Assessment(models.Model):
     )
     observer_types = models.ManyToManyField(ObserverTypes, blank=True)
     # rating_type = models.CharField(max_length=5, choices=RATING_CHOICES, blank=True)
-    automated_reminder = models.BooleanField(blank=True, default=False)
+    email_reminder = models.BooleanField(blank=True, default=False)
+    whatsapp_reminder = models.BooleanField(blank=True, default=False)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
     result_released = models.BooleanField(blank=True, default=False)
     assessment_timing = models.CharField(
@@ -160,7 +167,7 @@ class Assessment(models.Model):
         "self", on_delete=models.CASCADE, blank=True, null=True
     )
     initial_reminder = models.BooleanField(blank=True, default=False)
-
+    reminders = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

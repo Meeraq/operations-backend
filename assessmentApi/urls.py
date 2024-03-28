@@ -69,7 +69,10 @@ from .views import (
     PostReportDownloadForAllParticipant,
     PostReportDownloadForParticipant,
     GetProjectWiseReport,
-    GetAllAssessmentsOfSchedularProjects
+    GetAllAssessmentsOfSchedularProjects,
+    AssessmentsResponseStatusDownload,
+    GetAssessmentBatchAndProject,
+    DownloadQuestionWiseExcelForProject,
 )
 
 
@@ -307,4 +310,17 @@ urlpatterns = [
         "get-all-assessments-of-schedular-project/<str:project_id>/",
         GetAllAssessmentsOfSchedularProjects.as_view(),
     ),
+    path(
+        "assessments-download-respose-status/",
+        AssessmentsResponseStatusDownload.as_view(),
+    ),
+    path(
+        "assessment/<int:assessment_id>/batch-and-project/",
+        GetAssessmentBatchAndProject.as_view(),
+    ),
+    path(
+        "download-question-wise-excel/<int:project_id>/",
+        DownloadQuestionWiseExcelForProject.as_view(),
+    ),
+    
 ]

@@ -14,7 +14,10 @@ from schedularApi.models import (
     SchedularSessions,
     RequestAvailibilty,
     CoachSchedularAvailibilty,
+    SchedularProject,
+    SchedularBatch,
 )
+from django.db import transaction
 from django.utils import timezone
 from api.views import (
     send_mail_templates,
@@ -22,8 +25,9 @@ from api.views import (
     generateManagementToken,
 )
 from schedularApi.serializers import AvailabilitySerializer
-from datetime import timedelta, time, datetime
+from datetime import timedelta, time, datetime, date
 import pytz
+import json
 
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
@@ -46,6 +50,7 @@ from zohoapi.views import (
     filter_purchase_order_data,
 )
 from zohoapi.tasks import get_access_token, organization_id, base_url
+from courses.serializers import NudgeSerializer
 
 env = environ.Env()
 environ.Env.read_env()
@@ -68,6 +73,33 @@ def get_live_session_name(session_type):
     elif session_type == "virtual_session":
         session_name = "Virtual Session"
     return session_name
+
+
+def get_nudges_of_course(course):
+    try:
+        data = []
+        nudges = Nudge.objects.filter(batch__id=course.batch.id).order_by("order")
+        desired_time = time(8, 30)
+        if course.batch.nudge_start_date:
+            nudge_scheduled_for = datetime.combine(
+                course.batch.nudge_start_date, desired_time
+            )
+            for nudge in nudges:
+                temp = {
+                    "is_sent": nudge.is_sent,
+                    "name": nudge.name,
+                    "learner_count": nudge.batch.learners.count(),
+                    "batch_name": nudge.batch.name,
+                    "nudge_scheduled_for": nudge_scheduled_for,
+                }
+
+                data.append(temp)
+                nudge_scheduled_for = nudge_scheduled_for + timedelta(
+                    int(course.batch.nudge_frequency)
+                )
+        return data
+    except Exception as e:
+        print(str(e))
 
 
 def generate_slots(start, end, duration):
@@ -171,11 +203,139 @@ def available_slots_count_for_participant(id):
         return 0
 
 
+def get_coaching_session_according_to_time(
+    schedular_session, time_period, start_time=None, end_time=None
+):
+    current_time = timezone.now()
+
+    if time_period == "upcoming":
+        filter_criteria = {
+            "availibility__end_time__gt": current_time.timestamp() * 1000
+        }
+    elif time_period == "past":
+        filter_criteria = {
+            "availibility__end_time__lt": current_time.timestamp() * 1000
+        }
+    elif time_period == "today":
+        start_of_day = (
+            current_time.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            * 1000
+        )
+
+        end_of_day = (
+            current_time.replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            ).timestamp()
+            * 1000
+        )
+        filter_criteria = {"availibility__end_time__range": (start_of_day, end_of_day)}
+    elif time_period == "tomorrow":
+        tomorrow = current_time + timedelta(days=1)
+        start_of_tomorrow = (
+            tomorrow.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            * 1000
+        )
+        end_of_tomorrow = (
+            tomorrow.replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            ).timestamp()
+            * 1000
+        )
+        filter_criteria = {
+            "availibility__end_time__range": (start_of_tomorrow, end_of_tomorrow)
+        }
+    elif time_period == "yesterday":
+        yesterday = current_time - timedelta(days=1)
+        start_of_yesterday = (
+            yesterday.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            * 1000
+        )
+        end_of_yesterday = (
+            yesterday.replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            ).timestamp()
+            * 1000
+        )
+        filter_criteria = {
+            "availibility__end_time__range": (start_of_yesterday, end_of_yesterday)
+        }
+    elif time_period == "duration":
+        if start_time is None or end_time is None:
+            raise ValueError(
+                "Start time and end time must be provided for duration filter."
+            )
+        filter_criteria = {"availibility__end_time__range": (start_time, end_time)}
+    else:
+        raise ValueError("Invalid time period.")
+
+    # Apply additional filter criteria if necessary
+    if time_period != "duration":
+        upcoming_schedular_sessions = schedular_session.filter(**filter_criteria)
+    else:
+        upcoming_schedular_sessions = schedular_session.filter(
+            availibility__end_time__range=(start_time, end_time), **filter_criteria
+        )
+
+    return upcoming_schedular_sessions
+
+
+def get_live_session_according_to_time(
+    session, time_period, start_time=None, end_time=None
+):
+    current_time = timezone.now()
+
+    if time_period == "upcoming":
+        filter_criteria = {"date_time__gt": current_time}
+    elif time_period == "past":
+        filter_criteria = {"date_time__lt": current_time}
+    elif time_period == "today":
+        start_of_day = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = current_time.replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        )
+        filter_criteria = {"date_time__range": (start_of_day, end_of_day)}
+    elif time_period == "tomorrow":
+        tomorrow = current_time + timedelta(days=1)
+        start_of_tomorrow = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_tomorrow = tomorrow.replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        )
+        filter_criteria = {"date_time__range": (start_of_tomorrow, end_of_tomorrow)}
+    elif time_period == "yesterday":
+        yesterday = current_time - timedelta(days=1)
+        start_of_yesterday = yesterday.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        end_of_yesterday = yesterday.replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        )
+        filter_criteria = {"date_time__range": (start_of_yesterday, end_of_yesterday)}
+    elif time_period == "duration":
+        if start_time is None or end_time is None:
+            raise ValueError(
+                "Start time and end time must be provided for duration filter."
+            )
+        filter_criteria = {"date_time__range": (start_time, end_time)}
+    else:
+        raise ValueError("Invalid time period.")
+
+    live_sessions = session.filter(**filter_criteria)
+
+    return live_sessions
+
+
 def get_time(timestamp):
     dt = datetime.fromtimestamp(timestamp / 1000) + timedelta(
         hours=5, minutes=30
     )  # Convert milliseconds to seconds
     return dt.strftime("%I:%M %p")
+
+
+def get_date_time(timestamp):
+    dt = datetime.fromtimestamp(timestamp / 1000) + timedelta(
+        hours=5, minutes=30
+    )  # Convert milliseconds to seconds
+    return dt.strftime("%d-%m-%Y %H:%M")
 
 
 def send_whatsapp_message(user_type, participant, assessment, unique_id):
@@ -562,132 +722,6 @@ def send_participant_morning_reminder_one_day_before_email():
 
 
 @shared_task
-def send_reminder_email_to_participants_for_assessment_at_2PM():
-    ongoing_assessments = Assessment.objects.filter(
-        status="ongoing", automated_reminder=True
-    )
-
-    for assessment in ongoing_assessments:
-        # Convert assessment_start_date and assessment_end_date to datetime objects
-        start_date = datetime.strptime(
-            assessment.assessment_start_date, "%Y-%m-%d"
-        ).date()
-        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
-        # Check if today's date is within the assessment date range
-        today = datetime.now().date()
-        day_of_week = today.strftime("%A")
-
-        if start_date <= today <= end_date and not day_of_week == "Sunday":
-            participants_observers = assessment.participants_observers.all()
-
-            for participant_observer_mapping in participants_observers:
-                participant = participant_observer_mapping.participant
-
-                try:
-                    participant_response = ParticipantResponse.objects.filter(
-                        participant=participant, assessment=assessment
-                    )
-
-                    if not participant_response:
-                        participant_unique_id = ParticipantUniqueId.objects.get(
-                            participant=participant, assessment=assessment
-                        )
-                        unique_id = participant_unique_id.unique_id
-
-                        assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
-
-                        # Send email only if today's date is within the assessment date range
-                        send_mail_templates(
-                            "assessment/assessment_reminder_mail_to_participant.html",
-                            [participant.email],
-                            "Meeraq - Assessment Reminder !",
-                            {
-                                "assessment_name": assessment.participant_view_name,
-                                "participant_name": participant.name.capitalize(),
-                                "link": assessment_link,
-                            },
-                            [],
-                        )
-
-                except ObjectDoesNotExist:
-                    print(f"No unique ID found for participant {participant.name}")
-                sleep(5)
-
-
-@shared_task
-def send_whatsapp_message_to_participants_for_assessment_at_9AM():
-    ongoing_assessments = Assessment.objects.filter(
-        status="ongoing", automated_reminder=True
-    )
-    for assessment in ongoing_assessments:
-        start_date = datetime.strptime(
-            assessment.assessment_start_date, "%Y-%m-%d"
-        ).date()
-        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
-
-        # Check if today's date is within the assessment date range
-        today = datetime.now().date()
-        day_of_week = today.strftime("%A")
-        if start_date <= today <= end_date and not day_of_week == "Sunday":
-            participants_observers = assessment.participants_observers.all()
-
-            for participant_observer_mapping in participants_observers:
-                participant = participant_observer_mapping.participant
-                try:
-                    participant_response = ParticipantResponse.objects.filter(
-                        participant=participant, assessment=assessment
-                    )
-                    if not participant_response:
-                        participant_unique_id = ParticipantUniqueId.objects.get(
-                            participant=participant, assessment=assessment
-                        )
-                        unique_id = participant_unique_id.unique_id
-                        print("Participant Unique ID:", unique_id)
-                        send_whatsapp_message(
-                            "learner", participant, assessment, unique_id
-                        )
-                except ObjectDoesNotExist:
-                    print(f"No unique ID found for participant {participant.name}")
-                sleep(2)
-
-
-@shared_task
-def send_whatsapp_message_to_participants_for_assessment_at_7PM():
-    ongoing_assessments = Assessment.objects.filter(
-        status="ongoing", automated_reminder=True
-    )
-    for assessment in ongoing_assessments:
-        start_date = datetime.strptime(
-            assessment.assessment_start_date, "%Y-%m-%d"
-        ).date()
-        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
-
-        # Check if today's date is within the assessment date range
-        today = datetime.now().date()
-        day_of_week = today.strftime("%A")
-        if start_date <= today <= end_date and not day_of_week == "Sunday":
-            participants_observers = assessment.participants_observers.all()
-            for participant_observer_mapping in participants_observers:
-                participant = participant_observer_mapping.participant
-                try:
-                    participant_response = ParticipantResponse.objects.filter(
-                        participant=participant, assessment=assessment
-                    )
-                    if not participant_response:
-                        participant_unique_id = ParticipantUniqueId.objects.get(
-                            participant=participant, assessment=assessment
-                        )
-                        unique_id = participant_unique_id.unique_id
-                        print("Participant Unique ID:", unique_id)
-                        send_whatsapp_message(
-                            "learner", participant, assessment, unique_id
-                        )
-                except ObjectDoesNotExist:
-                    print(f"No unique ID found for participant {participant.name}")
-                sleep(2)
-
-
-@shared_task
 def update_assessment_status():
     assessments = Assessment.objects.filter(~Q(assessment_timing="none"))
     for assessment in assessments:
@@ -752,7 +786,7 @@ def send_assessment_invitation_mail(assessment_id):
 def send_whatsapp_reminder_1_day_before_live_session():
     try:
         tomorrow = timezone.now() + timedelta(days=1)
-        live_sessions = LiveSession.objects.filter(date_time__date=tomorrow)
+        live_sessions = LiveSession.objects.filter(date_time__date=tomorrow.date())
 
         for session in live_sessions:
             if (
@@ -1005,9 +1039,6 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_seeq():
             slots = []
             for session in sessions:
                 if True:
-                    # start_time_for_mail = datetime.fromtimestamp(
-                    #     (int(session.availibility.start_time) / 1000) + 19800
-                    # ).strftime("%I:%M %p")
                     start_time_for_mail = get_time(int(session.availibility.start_time))
                     phone = (
                         session.availibility.coach.phone_country_code
@@ -1062,9 +1093,6 @@ def send_coach_morning_reminder_whatsapp_message_at_8AM_caas():
                     coach_name = coach.first_name + " " + coach.last_name
                     phone = coach.phone_country_code + coach.phone
                     time = caas_session.confirmed_availability.start_time
-                    # final_time = datetime.fromtimestamp(
-                    #     (int(time) / 1000) + 19800
-                    # ).strftime("%I:%M %p")
                     final_time = get_time(int(time))
                     booking_id = caas_session.coach.room_id
                     print(booking_id)
@@ -1151,14 +1179,11 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_caas():
             ~Q(status="completed"),
         )
         for caas_session in session_requests:
-            if caas_session.project.automated_reminder:
+            if caas_session.project.whatsapp_reminder:
                 learner = caas_session.learner
                 learner_name = learner.name
                 phone = learner.phone
                 time = caas_session.confirmed_availability.start_time
-                # final_time = datetime.fromtimestamp(
-                #     (int(time) / 1000) + 19800
-                # ).strftime("%I:%M %p")
                 final_time = get_time(int(time))
                 booking_id = caas_session.coach.room_id
                 send_whatsapp_message_template(
@@ -1223,35 +1248,33 @@ def send_whatsapp_reminder_to_users_before_5mins_in_caas(session_id):
                         "template_name": "session_reminder_5_mins_before_final",
                     },
                 )
-            learner = caas_session.learner
-            caas_learner_name = learner.name
-            caas_learner_phone = learner.phone
-            time = caas_session.confirmed_availability.start_time
-            # caas_learner_final_time = datetime.fromtimestamp(
-            #     (int(time) / 1000) + 19800
-            # ).strftime("%I:%M %p")
-            caas_learner_final_time = get_time(int(time))
-            send_whatsapp_message_template(
-                caas_learner_phone,
-                {
-                    "broadcast_name": "send_whatsapp_reminder_to_users_before_5mins_in_caas_to_learner",
-                    "parameters": [
-                        {
-                            "name": "name",
-                            "value": caas_learner_name,
-                        },
-                        {
-                            "name": "time",
-                            "value": f"{caas_learner_final_time} IST",
-                        },
-                        {
-                            "name": "booking_id",
-                            "value": booking_id,
-                        },
-                    ],
-                    "template_name": "session_reminder_5_mins_before_final",
-                },
-            )
+            if caas_session.project.whatsapp_reminder:
+                learner = caas_session.learner
+                caas_learner_name = learner.name
+                caas_learner_phone = learner.phone
+                time = caas_session.confirmed_availability.start_time
+                caas_learner_final_time = get_time(int(time))
+                send_whatsapp_message_template(
+                    caas_learner_phone,
+                    {
+                        "broadcast_name": "send_whatsapp_reminder_to_users_before_5mins_in_caas_to_learner",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": caas_learner_name,
+                            },
+                            {
+                                "name": "time",
+                                "value": f"{caas_learner_final_time} IST",
+                            },
+                            {
+                                "name": "booking_id",
+                                "value": booking_id,
+                            },
+                        ],
+                        "template_name": "session_reminder_5_mins_before_final",
+                    },
+                )
     except Exception as e:
         print(str(e))
 
@@ -1262,9 +1285,6 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
         # for seeq sessions
         session = SchedularSessions.objects.get(id=session_id)
         if True:
-            # seeq_coach_start_time_for_mail = datetime.fromtimestamp(
-            #     (int(session.availibility.start_time) / 1000) + 19800
-            # ).strftime("%I:%M %p")
             seeq_coach_start_time_for_mail = get_time(
                 int(session.availibility.start_time)
             )
@@ -1301,9 +1321,6 @@ def send_whatsapp_reminder_to_users_before_5mins_in_seeq(session_id):
             )
             seeq_participant_name = session.learner.name
             seeq_participant_phone = session.learner.phone
-            # seeq_participant_time = datetime.fromtimestamp(
-            #     (int(session.availibility.start_time) / 1000) + 19800
-            # ).strftime("%I:%M %p")
             seeq_participant_time = get_time(int(session.availibility.start_time))
             send_whatsapp_message_template(
                 seeq_participant_phone,
@@ -1375,7 +1392,6 @@ def send_whatsapp_reminder_to_users_after_3mins_in_seeq(session_id):
 @shared_task
 def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
     try:
-        # for caas sessions
         caas_session = SessionRequestCaas.objects.get(id=session_id)
         if True:
             if caas_session.coach:
@@ -1383,9 +1399,6 @@ def send_whatsapp_reminder_to_users_after_3mins_in_caas(session_id):
                 caas_coach_name = coach.first_name + " " + coach.last_name
                 caas_coach_phone = coach.phone_country_code + coach.phone
                 time = caas_session.confirmed_availability.start_time
-                # caas_coach_final_time = datetime.fromtimestamp(
-                #     (int(time) / 1000) + 19800
-                # ).strftime("%I:%M %p")
                 caas_coach_final_time = get_time(int(time))
                 send_whatsapp_message_template(
                     caas_coach_phone,
@@ -1513,28 +1526,16 @@ def coach_has_to_give_slots_availability_reminder():
 
 
 @shared_task
-def schedule_nudges(course_id):
-    course = Course.objects.get(id=course_id)
-    nudges = Nudge.objects.filter(course__id=course_id).order_by("order")
-
-    desired_time = time(8, 30)
-    nudge_scheduled_for = datetime.combine(course.nudge_start_date, desired_time)
+def schedule_nudges(batch_id):
+    batch = SchedularBatch.objects.get(id=batch_id)
+    nudges = Nudge.objects.filter(batch__id=batch_id).order_by("order")
+    nudge_scheduled_for = batch.nudge_start_date
     for nudge in nudges:
-        if (
-            nudge.course.batch.project.nudges
-            and nudge.course.batch.project.status == "ongoing"
-        ):
-            clocked = ClockedSchedule.objects.create(clocked_time=nudge_scheduled_for)
-            periodic_task = PeriodicTask.objects.create(
-                name=uuid.uuid1(),
-                task="schedularApi.tasks.send_nudge",
-                args=[nudge.id],
-                clocked=clocked,
-                one_off=True,
-            )
-            nudge_scheduled_for = nudge_scheduled_for + timedelta(
-                int(course.nudge_frequency)
-            )
+        nudge.trigger_date = nudge_scheduled_for
+        nudge.save()
+        nudge_scheduled_for = nudge_scheduled_for + timedelta(
+            int(batch.nudge_frequency)
+        )
 
 
 def get_file_content(file_url):
@@ -1552,16 +1553,19 @@ def get_file_extension(url):
     return file_extension
 
 
+# runs every day at 8:30 AM
 @shared_task
-def send_nudge(nudge_id):
-    nudge = Nudge.objects.get(id=nudge_id)
-    if (
-        nudge.course.batch.project.nudges
-        and nudge.course.batch.project.status == "ongoing"
-    ):
+def send_nudges():
+    today_date = date.today()
+    nudges = Nudge.objects.filter(
+        trigger_date=today_date,
+        is_sent=False,
+        is_switched_on=True,
+        batch__project__nudges=True,
+        batch__project__status="ongoing",
+    )
+    for nudge in nudges:
         subject = f"New Nudge: {nudge.name}"
-        if nudge.is_sent:
-            return
         message = nudge.content
         email_message = render_to_string(
             "nudge/nudge_wrapper.html", {"message": mark_safe(message)}
@@ -1570,7 +1574,7 @@ def send_nudge(nudge_id):
             attachment_path = nudge.file.url
             file_content = get_file_content(nudge.file.url)
 
-        for learner in nudge.course.batch.learners.all():
+        for learner in nudge.batch.learners.all():
             email = EmailMessage(
                 subject,
                 email_message,
@@ -1786,6 +1790,7 @@ def update_schedular_session_status():
 # Notify vendor by email when the po is in open status, 1st of every month (pending PO)
 @shared_task
 def generate_invoice_reminder_on_first_of_month():
+    return None
     vendors = Vendor.objects.all()
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     for vendor in vendors:
@@ -1837,6 +1842,7 @@ def generate_invoice_reminder_on_first_of_month():
 # Reminder to vendor for new PO, Checks every day if any po without reminder exist and then send the reminder
 @shared_task
 def generate_invoice_reminder_once_when_po_is_created():
+    return None
     vendors = Vendor.objects.all()
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     for vendor in vendors:
@@ -1922,3 +1928,660 @@ def reminder_to_pmo_bank_details_unavailable():
             },
             [env("BCC_EMAIL")],  # no bcc
         )
+
+
+@shared_task
+def send_tomorrow_action_items_data():
+    try:
+        current_date_time = timezone.now()
+        current_date = date.today()
+        schedular_projects = SchedularProject.objects.all()
+
+        projects_data = {}
+        for project in schedular_projects:
+            projects_data[project.name] = {
+                "laser_coaching_sessions": [],
+                "mentoring_sessions": [],
+                "live_sessions": [],
+                "assessments": [],
+                "nudges": [],
+                "email_reminder": "ON" if project.email_reminder else "OFF",
+                "whatsapp_reminder": "ON" if project.whatsapp_reminder else "OFF",
+                "calendar_invites": "ON" if project.calendar_invites else "OFF",
+            }
+
+            schedular_sessions = get_coaching_session_according_to_time(
+                SchedularSessions.objects.filter(
+                    coaching_session__batch__project=project
+                ),
+                "tomorrow",
+            )
+
+            for schedular_session in schedular_sessions:
+                temp = {
+                    "date_time": get_date_time(
+                        int(schedular_session.availibility.start_time)
+                    ),
+                    "coach": schedular_session.availibility.coach.first_name
+                    + " "
+                    + schedular_session.availibility.coach.last_name,
+                    "coach_phone_number": schedular_session.availibility.coach.phone,
+                    "batch_name": schedular_session.coaching_session.batch.name,
+                    "learner": schedular_session.learner.name,
+                    "learner_phone_number": schedular_session.learner.phone,
+                }
+                if (
+                    schedular_session.coaching_session.session_type
+                    == "laser_coaching_session"
+                ):
+                    projects_data[project.name]["laser_coaching_sessions"].append(temp)
+                else:
+                    projects_data[project.name]["mentoring_sessions"].append(temp)
+
+            live_sessions = get_live_session_according_to_time(
+                LiveSession.objects.filter(batch__project=project), "tomorrow"
+            )
+
+            for live_session in live_sessions:
+                temp = {
+                    "date_time": (
+                        live_session.date_time.strftime("%d-%m-%Y %H:%M")
+                        if live_session.date_time
+                        else None
+                    ),
+                    "session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                    "batch_name": live_session.batch.name,
+                    "duration": live_session.duration,
+                    "description": live_session.description,
+                }
+                projects_data[project.name]["live_sessions"].append(temp)
+
+            # Filter ongoing assessments
+            assessments = Assessment.objects.filter(
+                assessment_end_date__gt=current_date,
+                status="ongoing",
+                assessment_modal__lesson__course__batch__project=project,
+            )
+
+            for assessment in assessments:
+                total_responses_count = ParticipantResponse.objects.filter(
+                    assessment=assessment
+                ).count()
+
+                assessment_lesson = AssessmentLesson.objects.filter(
+                    assessment_modal=assessment
+                ).first()
+                temp = {
+                    "name": assessment.name,
+                    "batch_name": (
+                        assessment_lesson.lesson.course.batch.name
+                        if assessment_lesson
+                        else None
+                    ),
+                    "response_status": f"{total_responses_count} / {assessment.participants_observers.count()}",
+                    "reminder": "On" if assessment.automated_reminder else "Off",
+                }
+                projects_data[project.name]["assessments"].append(temp)
+            courses = Course.objects.filter(batch__project=project)
+
+            for course in courses:
+                today_date = date.today()
+                tomorrow_date = today_date + timedelta(days=1)
+                nudges = Nudge.objects.filter(
+                    batch__id=course.batch.id,
+                    trigger_date=tomorrow_date,
+                    is_sent=False,
+                    is_switched_on=True,
+                    batch__project__nudges=True,
+                    batch__project__status="ongoing",
+                )
+                nudges = NudgeSerializer(nudges, many=True).data
+                for nudge in nudges:
+                    nudge["nudge_scheduled_for"] = nudge["trigger_date"].strftime(
+                        "%d-%m-%Y %H:%M"
+                    )
+                    projects_data[project.name]["nudges"].append(nudge)
+
+        assessments = Assessment.objects.filter(
+            assessment_end_date__gt=current_date,
+            status="ongoing",
+            assessment_timing="none",
+        )
+        assessment_data = []
+        for assessment in assessments:
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+            if not assessment_lesson:
+                total_responses_count = ParticipantResponse.objects.filter(
+                    assessment=assessment
+                ).count()
+
+                assessment_lesson = AssessmentLesson.objects.filter(
+                    assessment_modal=assessment
+                ).first()
+                temp = {
+                    "name": assessment.name,
+                    "response_status": f"{total_responses_count} / {assessment.participants_observers.count()}",
+                    "reminder": "On" if assessment.automated_reminder else "Off",
+                    "type": assessment.assessment_type,
+                }
+                assessment_data.append(temp)
+
+        send_mail_templates(
+            "pmo_emails/tomorrow_action_items_mail.html",
+            json.loads(env("ACTION_ITEMS_MAIL")),
+            "Tomorrow's Project Updates for PMO Review",
+            {"projects_data": projects_data, "Assessments": assessment_data},
+            json.loads(env("ACTION_ITEMS_MAIL_CC_EMAILS")),
+        )
+
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_whatsapp_reminder_assessment(assessment_id):
+    assessment = Assessment.objects.get(id=assessment_id)
+    participants_observers = assessment.participants_observers.all()
+    for participant_observer_mapping in participants_observers:
+        participant = participant_observer_mapping.participant
+        try:
+            participant_response = ParticipantResponse.objects.filter(
+                participant=participant, assessment=assessment
+            )
+            if not participant_response:
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    participant=participant, assessment=assessment
+                )
+                unique_id = participant_unique_id.unique_id
+                print("Participant Unique ID:", unique_id)
+                send_whatsapp_message("learner", participant, assessment, unique_id)
+        except ObjectDoesNotExist:
+            print(f"No unique ID found for participant {participant.name}")
+        sleep(2)
+
+
+@shared_task
+def send_email_reminder_assessment(assessment_id):
+    assessment = Assessment.objects.get(id=assessment_id)
+    participants_observers = assessment.participants_observers.all()
+    for participant_observer_mapping in participants_observers:
+        participant = participant_observer_mapping.participant
+        try:
+            participant_response = ParticipantResponse.objects.filter(
+                participant=participant, assessment=assessment
+            )
+            if not participant_response:
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    participant=participant, assessment=assessment
+                )
+                unique_id = participant_unique_id.unique_id
+                assessment_link = (
+                    f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
+                )
+                # Send email only if today's date is within the assessment date range
+                send_mail_templates(
+                    "assessment/assessment_reminder_mail_to_participant.html",
+                    [participant.email],
+                    "Meeraq - Assessment Reminder !",
+                    {
+                        "assessment_name": assessment.participant_view_name,
+                        "participant_name": participant.name.capitalize(),
+                        "link": assessment_link,
+                    },
+                    [],
+                )
+        except ObjectDoesNotExist:
+            print(f"No unique ID found for participant {participant.name}")
+        sleep(5)
+
+
+@shared_task
+def update_lesson_status_according_to_drip_dates():
+    try:
+        today = date.today()
+        lessons = Lesson.objects.all()
+        for lesson in lessons:
+            change_status = False
+            if (
+                lesson.live_session
+                and lesson.live_session.date_time
+                and lesson.live_session.date_time.date() == today
+            ):
+                change_status = True
+            elif lesson.drip_date == today:
+                change_status = True
+
+            if change_status:
+                if lesson.lesson_type == "assessment":
+                    assessment = Assessment.objects.filter(lesson=lesson).first()
+
+                    assessment_modal = Assessment.objects.get(
+                        id=assessment.assessment_modal.id
+                    )
+                    lesson.status == "public"
+                    assessment_modal.status = "ongoing"
+                    lesson.save()
+                    assessment_modal.save()
+                else:
+
+                    lesson.status = "public"
+                    lesson.save()
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def update_caas_session_status():
+    try:
+        with transaction.atomic():
+            start_timestamp, end_timestamp = get_current_date_timestamps()
+            start_time, end_time = get_current_date_start_and_end_time_in_string()
+            today_sessions = SessionRequestCaas.objects.filter(
+                confirmed_availability__start_time__lte=end_timestamp,
+                confirmed_availability__end_time__gte=start_timestamp,
+            )
+            memoized_100ms_sessions_today = {}
+            for caas_session in today_sessions:
+                is_coach_joined = False
+                is_coachee_joined = False
+                is_both_joined_at_same_time = False
+                caas_session_start_timestamp = int(
+                    caas_session.confirmed_availability.start_time
+                )
+                caas_session_end_timestamp = int(
+                    caas_session.confirmed_availability.end_time
+                )
+                coach_room_id = caas_session.coach.room_id
+                if coach_room_id in memoized_100ms_sessions_today:
+                    todays_sessions_in_100ms = memoized_100ms_sessions_today[
+                        coach_room_id
+                    ]
+                else:
+                    todays_sessions_in_100ms = []
+                    try:
+                        management_token = generateManagementToken()
+                        todays_sessions_in_100ms = get_todays_100ms_sessions_of_room_id(
+                            management_token, coach_room_id, start_time, end_time
+                        )
+                    except Exception as e:
+                        print("failed to get coach room 100ms sessions")
+                sessions_in_100ms_at_scheduled_time_of_caas_session = []
+
+                for session in todays_sessions_in_100ms:
+                    created_at_in_timestamp = convert_timestr_to_timestamp(
+                        session["created_at"]
+                    )
+                    five_minutes_prior_schedular_start_time = (
+                        caas_session_start_timestamp - 5 * 60 * 1000
+                    )
+                    if (
+                        created_at_in_timestamp
+                        >= five_minutes_prior_schedular_start_time
+                        or created_at_in_timestamp < caas_session_end_timestamp
+                    ):
+                        sessions_in_100ms_at_scheduled_time_of_caas_session.append(
+                            session
+                        )
+
+                for session in sessions_in_100ms_at_scheduled_time_of_caas_session:
+                    is_coach_joined_in_current_100ms_session = False
+                    is_learner_joined_in_current_100ms_session = False
+
+                    for key, peer in session["peers"].items():
+                        if (
+                            caas_session.availibility.coach.first_name
+                            + " "
+                            + caas_session.availibility.coach.last_name
+                        ).lower().strip() == peer["name"].lower().strip():
+                            is_coach_joined = True
+                            is_coach_joined_in_current_100ms_session = True
+                        if (
+                            caas_session.learner.name.lower().strip()
+                            == peer["name"].lower().strip()
+                        ):
+                            is_coachee_joined = True
+                            is_learner_joined_in_current_100ms_session = True
+                        if (
+                            is_coach_joined_in_current_100ms_session
+                            and is_learner_joined_in_current_100ms_session
+                        ):
+                            is_both_joined_at_same_time = True
+                            break
+
+                if is_both_joined_at_same_time:
+                    caas_session.auto_generated_status = "completed"
+
+                elif is_coach_joined and is_coachee_joined:
+                    caas_session.auto_generated_status = "pending"
+                elif is_coachee_joined:
+                    caas_session.auto_generated_status = "coach_no_show"
+                elif is_coach_joined:
+                    caas_session.auto_generated_status = "coachee_no_show"
+                caas_session.save()
+
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def update_caas_session_status():
+    try:
+        with transaction.atomic():
+            start_timestamp, end_timestamp = get_current_date_timestamps()
+            start_time, end_time = get_current_date_start_and_end_time_in_string()
+            today_sessions = SessionRequestCaas.objects.filter(
+                confirmed_availability__start_time__lte=end_timestamp,
+                confirmed_availability__end_time__gte=start_timestamp,
+            )
+            memoized_100ms_sessions_today = {}
+            for caas_session in today_sessions:
+                is_coach_joined = False
+                is_coachee_joined = False
+                is_both_joined_at_same_time = False
+                caas_session_start_timestamp = int(
+                    caas_session.confirmed_availability.start_time
+                )
+                caas_session_end_timestamp = int(
+                    caas_session.confirmed_availability.end_time
+                )
+                coach_room_id = caas_session.coach.room_id
+                if coach_room_id in memoized_100ms_sessions_today:
+                    todays_sessions_in_100ms = memoized_100ms_sessions_today[
+                        coach_room_id
+                    ]
+                else:
+                    todays_sessions_in_100ms = []
+                    try:
+                        management_token = generateManagementToken()
+                        todays_sessions_in_100ms = get_todays_100ms_sessions_of_room_id(
+                            management_token, coach_room_id, start_time, end_time
+                        )
+                    except Exception as e:
+                        print("failed to get coach room 100ms sessions")
+                sessions_in_100ms_at_scheduled_time_of_caas_session = []
+
+                for session in todays_sessions_in_100ms:
+                    created_at_in_timestamp = convert_timestr_to_timestamp(
+                        session["created_at"]
+                    )
+                    five_minutes_prior_schedular_start_time = (
+                        caas_session_start_timestamp - 5 * 60 * 1000
+                    )
+                    if (
+                        created_at_in_timestamp
+                        >= five_minutes_prior_schedular_start_time
+                        or created_at_in_timestamp < caas_session_end_timestamp
+                    ):
+                        sessions_in_100ms_at_scheduled_time_of_caas_session.append(
+                            session
+                        )
+
+                for session in sessions_in_100ms_at_scheduled_time_of_caas_session:
+                    is_coach_joined_in_current_100ms_session = False
+                    is_learner_joined_in_current_100ms_session = False
+
+                    for key, peer in session["peers"].items():
+                        if (
+                            caas_session.availibility.coach.first_name
+                            + " "
+                            + caas_session.availibility.coach.last_name
+                        ).lower().strip() == peer["name"].lower().strip():
+                            is_coach_joined = True
+                            is_coach_joined_in_current_100ms_session = True
+                        if (
+                            caas_session.learner.name.lower().strip()
+                            == peer["name"].lower().strip()
+                        ):
+                            is_coachee_joined = True
+                            is_learner_joined_in_current_100ms_session = True
+                        if (
+                            is_coach_joined_in_current_100ms_session
+                            and is_learner_joined_in_current_100ms_session
+                        ):
+                            is_both_joined_at_same_time = True
+                            break
+
+                if is_both_joined_at_same_time:
+                    caas_session.auto_generated_status = "completed"
+
+                elif is_coach_joined and is_coachee_joined:
+                    caas_session.auto_generated_status = "pending"
+                elif is_coachee_joined:
+                    caas_session.auto_generated_status = "coach_no_show"
+                elif is_coach_joined:
+                    caas_session.auto_generated_status = "coachee_no_show"
+                caas_session.save()
+
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def schedule_assessment_reminders():
+    # Get the timezone for IST
+    ist = pytz.timezone("Asia/Kolkata")
+    # Get ongoing assessments with email or WhatsApp reminders enabled
+    ongoing_assessments = Assessment.objects.filter(
+        Q(status="ongoing"), Q(email_reminder=True) | Q(whatsapp_reminder=True)
+    )
+    # Loop through each ongoing assessment
+    for assessment in ongoing_assessments:
+        start_date = datetime.strptime(
+            assessment.assessment_start_date, "%Y-%m-%d"
+        ).date()
+        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
+        # Check if today's date is within the assessment date range
+        today = datetime.now().date()
+        day_of_week = today.strftime("%A")
+        if start_date <= today <= end_date and not day_of_week == "Sunday":
+            if assessment.whatsapp_reminder:
+                for time in assessment.reminders["whatsapp"]["timings"]:
+                    # Parse time in hh:mm A format to a datetime object
+                    reminder_time = datetime.strptime(time, "%I:%M %p")
+                    # Set the reminder time to today with the specified time in IST
+                    reminder_datetime_ist = ist.localize(
+                        datetime.combine(timezone.now().date(), reminder_time.time())
+                    )
+                    # Convert reminder time from IST to UTC
+                    reminder_datetime_utc = reminder_datetime_ist.astimezone(pytz.utc)
+                    # Create a clocked schedule for the reminder time
+                    clocked_schedule = ClockedSchedule.objects.create(
+                        clocked_time=reminder_datetime_utc
+                    )
+                    # Create a periodic task for sending the reminder
+                    periodic_task = PeriodicTask.objects.create(
+                        name=uuid.uuid1(),
+                        task="schedularApi.tasks.send_whatsapp_reminder_assessment",
+                        args=[assessment.id],
+                        clocked=clocked_schedule,
+                        one_off=True,
+                    )
+
+            # Check and schedule email reminders
+            if assessment.email_reminder:
+                for time in assessment.reminders["email"]["timings"]:
+                    reminder_time = datetime.strptime(time, "%I:%M %p")
+                    reminder_datetime_ist = ist.localize(
+                        datetime.combine(timezone.now().date(), reminder_time.time())
+                    )
+                    reminder_datetime_utc = reminder_datetime_ist.astimezone(pytz.utc)
+                    clocked_schedule = ClockedSchedule.objects.create(
+                        clocked_time=reminder_datetime_utc
+                    )
+                    periodic_task = PeriodicTask.objects.create(
+                        name=uuid.uuid1(),
+                        task="schedularApi.tasks.send_email_reminder_assessment",
+                        args=[assessment.id],
+                        clocked=clocked_schedule,
+                        one_off=True,
+                    )
+
+
+@shared_task
+def send_live_session_link_whatsapp_to_facilitators_30_min_before(id):
+    try:
+        live_session = LiveSession.objects.get(id=id)
+        if (
+            live_session.batch.project.whatsapp_reminder
+            and live_session.batch.project.status == "ongoing"
+        ):
+            facilitator = live_session.facilitator
+            if not facilitator:
+                return None
+            send_whatsapp_message_template(
+                facilitator.phone,
+                {
+                    "broadcast_name": "30 min before live session reminder",
+                    "parameters": [
+                        {
+                            "name": "name",
+                            "value": facilitator.first_name
+                            + " "
+                            + facilitator.last_name,
+                        },
+                        {
+                            "name": "live_session_name",
+                            "value": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                        },
+                        {
+                            "name": "live_session_meeting_link",
+                            "value": live_session.meeting_link,
+                        },
+                    ],
+                    "template_name": "send_whatsapp_reminder_to_facilitator_same_day_30_min_before",
+                },
+            )
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_live_session_link_whatsapp_to_facilitators_one_day_before():
+    try:
+        tomorrow = timezone.now() + timedelta(days=1)
+        live_sessions = LiveSession.objects.filter(date_time__date=tomorrow.date())
+        for live_session in live_sessions:
+            if (
+                live_session.batch.project.whatsapp_reminder
+                and live_session.batch.project.status == "ongoing"
+            ):
+                facilitator = live_session.facilitator
+                if not facilitator:
+                    continue
+                session_datetime_str = live_session.date_time.astimezone(
+                    pytz.timezone("Asia/Kolkata")
+                ).strftime("%I:%M %p")
+                send_whatsapp_message_template(
+                    facilitator.phone,
+                    {
+                        "broadcast_name": "one day before live session reminder",
+                        "parameters": [
+                            {
+                                "name": "name",
+                                "value": facilitator.first_name
+                                + " "
+                                + facilitator.last_name,
+                            },
+                            {
+                                "name": "live_session_name",
+                                "value": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                            },
+                            {
+                                "name": "time",
+                                "value": f"{session_datetime_str} IST",
+                            },
+                            {
+                                "name": "live_session_meeting_link",
+                                "value": live_session.meeting_link,
+                            },
+                        ],
+                        "template_name": "send_whatsapp_reminder_to_facilitator_one_day_before",
+                    },
+                )
+                sleep(5)
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_live_session_reminder_to_facilitator_one_day_before():
+    try:
+        tomorrow = timezone.now() + timedelta(days=1)
+        live_sessions = LiveSession.objects.filter(date_time__date=tomorrow.date())
+        for live_session in live_sessions:
+            if (
+                live_session.batch.project.whatsapp_reminder
+                and live_session.batch.project.status == "ongoing"
+            ):
+                facilitator = live_session.facilitator
+                if not facilitator:
+                    continue
+                session_datetime_str = live_session.date_time.astimezone(
+                    pytz.timezone("Asia/Kolkata")
+                ).strftime("%I:%M %p")
+                send_mail_templates(
+                    "facilitator_templates/send_live_session_reminder_to_facilitator_one_day_before.html",
+                    [facilitator.email],
+                    "Meeraq - Live Session",
+                    {
+                        "participant_name": facilitator.first_name
+                        + " "
+                        + facilitator.last_name,
+                        "live_session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                        "project_name": live_session.batch.project.name,
+                        "description": (
+                            live_session.description if live_session.description else ""
+                        ),
+                        "meeting_link": live_session.meeting_link,
+                    },
+                    [],
+                )
+                sleep(5)
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def send_live_session_whatsapp_reminder_same_day_morning_for_facilitator():
+    try:
+        today_morning = timezone.now().replace(
+            hour=8, minute=0, second=0, microsecond=0
+        )
+        live_sessions = LiveSession.objects.filter(date_time__date=today_morning.date())
+
+        for session in live_sessions:
+            if (
+                session.batch.project.whatsapp_reminder
+                and session.batch.project.status == "ongoing"
+            ):
+                facilitator = session.batch.facilitator
+                if not facilitator:
+                    return None
+                session_datetime_str = session.date_time.astimezone(
+                    pytz.timezone("Asia/Kolkata")
+                ).strftime("%I:%M %p")
+                send_mail_templates(
+                    "facilitator_templates/send_live_session_reminder_to_facilitator_on_same_day_morning.html",
+                    [facilitator.email],
+                    "Meeraq - Live Session",
+                    {
+                        "participant_name": facilitator.first_name
+                        + " "
+                        + facilitator.last_name,
+                        "live_session_name": f"{get_live_session_name(session.session_type)} {session.live_session_number}",
+                        "project_name": session.batch.project.name,
+                        "description": (
+                            session.description if session.description else ""
+                        ),
+                        "meeting_link": session.meeting_link,
+                    },
+                    [],
+                )
+    except Exception as e:
+        print(str(e))
+        pass

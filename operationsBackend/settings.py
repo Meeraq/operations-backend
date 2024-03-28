@@ -31,7 +31,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-@4lj39m8fw$6-h66bk=!!8qws9jo!7vg-i@m+r&3c+z&iiabk@"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env("DEBUG", default=False)
 
 ALLOWED_HOSTS = [env("ALLOWED_HOSTS")]
 
@@ -257,6 +257,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_whatsapp_reminder_1_day_before_live_session",
         "schedule": crontab(hour=12, minute=30),  # 6 PM
     },
+    "send_live_session_link_whatsapp_to_facilitators_one_day_before": {
+        "task": "schedularApi.tasks.send_live_session_link_whatsapp_to_facilitators_one_day_before",
+        "schedule": crontab(hour=12, minute=30),  # 6 PM
+    },
     "send_whatsapp_reminder_same_day_morning": {
         "task": "schedularApi.tasks.send_whatsapp_reminder_same_day_morning",
         "schedule": crontab(hour=2, minute=30),  # 8 AM
@@ -279,19 +283,59 @@ CELERY_BEAT_SCHEDULE = {
     },
     "update_schedular_session_status": {
         "task": "schedularApi.tasks.update_schedular_session_status",
-        "schedule": crontab(hour=16, minute=30, day_of_week="*"), # 10 PM Night
+        "schedule": crontab(hour=16, minute=30, day_of_week="*"),  # 10 PM Night
+    },
+    "update_caas_session_status": {
+        "task": "schedularApi.tasks.update_caas_session_status",
+        "schedule": crontab(hour=16, minute=30, day_of_week="*"),  # 10 PM Night
     },
     "generate_invoice_reminder_on_first_of_month": {
         "task": "schedularApi.tasks.generate_invoice_reminder_on_first_of_month",
-        "schedule": crontab(hour=3, minute=30, day_of_month='25'), # 10 AM IST
+        "schedule": crontab(hour=3, minute=30, day_of_month="25"),  # 10 AM IST
+    },
+    "generate_invoice_task_for_pmo_on_25th_of_month": {
+        "task": "api.tasks.generate_invoice_task_for_pmo_on_25th_of_month",
+        "schedule": crontab(hour=3, minute=30, day_of_month="25"),  # 10 AM IST
+    },
+    "creake_book_session_remind_coach_task_for_pmo_on_7th_of_month": {
+        "task": "api.tasks.creake_book_session_remind_coach_task_for_pmo_on_7th_of_month",
+        "schedule": crontab(hour=2, minute=30, day_of_month="1"),  # 9 AM IST
     },
     "generate_invoice_reminder_once_when_po_is_created": {
         "task": "schedularApi.tasks.generate_invoice_reminder_once_when_po_is_created",
-        "schedule": crontab(hour=3, minute=30, day_of_month='2-31'), # 10 AM IST
+        "schedule": crontab(hour=3, minute=30, day_of_month="2-31"),  # 10 AM IST
     },
     "reminder_to_pmo_bank_details_unavailable": {
         "task": "schedularApi.tasks.reminder_to_pmo_bank_details_unavailable",
-        "schedule": crontab(hour=3, minute=30, day_of_week='mon'), # 10 AM IST Monday
+        "schedule": crontab(hour=3, minute=30, day_of_week="mon"),  # 10 AM IST Monday
+    },
+    "weekly_invoice_approval_reminder": {
+        "task": "schedularApi.tasks.weekly_invoice_approval_reminder",
+        "schedule": crontab(hour=3, minute=30, day_of_week="mon"),  # 10 AM IST Monday
+    },
+    "update_lesson_status_according_to_drip_dates": {
+        "task": "schedularApi.tasks.update_lesson_status_according_to_drip_dates",
+        "schedule": crontab(hour=1, minute=30, day_of_week="*"),  #  7 AM
+    },
+    "send_tomorrow_action_items_data": {
+        "task": "schedularApi.tasks.send_tomorrow_action_items_data",
+        "schedule": crontab(hour=12, minute=30, day_of_week="*"),
+    },
+    "schedule_assessment_reminders": {
+        "task": "schedularApi.tasks.schedule_assessment_reminders",
+        "schedule": crontab(hour=0, minute=1),  # Run every day at midnight in UTC
+    },
+    "send_nudges": {
+        "task": "schedularApi.tasks.send_nudges",
+        "schedule": crontab(hour=3, minute=0, day_of_week="*"),  # 8:30 AM IST
+    },
+    "send_live_session_reminder_to_facilitator_one_day_before": {
+        "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_one_day_before",
+        "schedule": crontab(hour=10, minute=30),  # 4 PM
+    },
+    "send_live_session_reminder_to_facilitator_on_same_day_morning": {
+        "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_on_same_day_morning",
+        "schedule": crontab(hour=2, minute=30),  # 8 AM
     },
 }
 

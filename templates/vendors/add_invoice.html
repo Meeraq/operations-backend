@@ -1,5 +1,5 @@
-{% extends "table_parent_template.html" %} {% block title %}Meeraq Platform |
-OTP to login {% endblock %} {% block content %}
+{% extends "table_parent_template.html" %} {% block title %}Meeraq | Invoice
+Raised {% endblock %} {% block content %}
 <tr style="border: 0">
   <td style="padding: 20px; background: #f8f7f8; border: 0">
     <div align="center">
@@ -27,16 +27,24 @@ OTP to login {% endblock %} {% block content %}
             <td style="padding: 15pt 15pt 15pt 15pt">
               <p>
                 <strong><span style="font-size: 16px">Dear&nbsp;</span></strong
-                ><b>Finance</b><strong>,</strong>
+                ><b>Team,</b><strong>,</strong>
               </p>
               <p
                 class="child-para"
                 style="color: #333; font-size: 14px; font-weight: bold"
               >
-                Greetings from Meeraq!!
+                Greetings from Meeraq!
               </p>
               <br />
-              <p class="child-para">{{message}}</p>
+              <p class="child-para">
+                Quick heads up! We need your approval on the invoice
+                {{invoice_number}} raised by {{vendor_name}}.
+              </p>
+              <p class="child-para">
+                Click here to log in to the system and give it the green light.
+              </p>
+              <p class="child-para"><a href="{{link}}">{{link}}</a></p>
+              <p class="child-para">Thanks for your speedy action!</p>
               <p><br /></p>
               <p>Best regards,</p>
               <p>Team Meeraq.</p>

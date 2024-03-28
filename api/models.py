@@ -19,6 +19,7 @@ from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
 from django_celery_beat.models import PeriodicTask
+from django.utils import timezone
 
 
 import environ
@@ -123,7 +124,7 @@ class Profile(models.Model):
         ("hr", "hr"),
         ("superadmin", "superadmin"),
         ("facilitator", "facilitator"),
-        ("finance", "finance")
+        ("finance", "finance"),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)
@@ -140,6 +141,7 @@ class SuperAdmin(models.Model):
     def __str__(self):
         return self.name
 
+
 class Finance(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -150,11 +152,21 @@ class Finance(models.Model):
     def __str__(self):
         return self.name
 
+
 class Pmo(models.Model):
+
+    SUB_ROLE_CHOICES = [
+        ("manager", "Manager"),
+        ("junior_pmo", "Junior PMO"),
+    ]
+
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
+    sub_role = models.CharField(
+        max_length=50, choices=SUB_ROLE_CHOICES, blank=True, default="manager"
+    )
     room_id = models.CharField(max_length=50, blank=True)
 
     def __str__(self):
@@ -220,6 +232,7 @@ class Coach(models.Model):
     def __str__(self):
         return self.first_name + " " + self.last_name
 
+
 class Facilitator(models.Model):
     user = models.OneToOneField(
         Profile, on_delete=models.CASCADE, blank=True, default=""
@@ -237,11 +250,12 @@ class Facilitator(models.Model):
     area_of_expertise = models.JSONField(default=list, blank=True)
     profile_pic = models.ImageField(upload_to="post_images", blank=True)
     education = models.JSONField(default=list, blank=True)
+    corporate_experience = models.TextField(blank=True)
+    coaching_experience = models.TextField(blank=True)
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
     city = models.JSONField(default=list, blank=True)
     language = models.JSONField(default=list, blank=True)
     job_roles = models.JSONField(default=list, blank=True)
-    city = models.JSONField(default=list, blank=True)
     country = models.JSONField(default=list, blank=True)
     created_at = models.DateField(auto_now_add=True)
     edited_at = models.DateField(auto_now=True)
@@ -250,23 +264,31 @@ class Facilitator(models.Model):
     other_certification = models.JSONField(default=list, blank=True)
     currency = models.CharField(max_length=100, blank=True, default="")
     client_companies = models.JSONField(default=list, blank=True)
+    education_pic = models.ImageField(upload_to="post_images", blank=True)
+    # education_upload_file = models.ImageField(upload_to="post_images", blank=True)
+    education_upload_file = models.FileField(
+        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+    )
     educational_qualification = models.JSONField(default=list, blank=True)
     fees_per_hour = models.CharField(max_length=20, blank=True)
     fees_per_day = models.CharField(max_length=20, blank=True)
     topic = models.JSONField(default=list, blank=True)
+    is_approved = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
-    
+
 
 class Learner(models.Model):
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=100)
     email = models.EmailField()
     phone = models.CharField(max_length=25, blank=True)
     area_of_expertise = models.CharField(max_length=100, blank=True)
     years_of_experience = models.IntegerField(default=0, blank=True)
-
+    job_roles = models.JSONField(default=list, blank=True)
+    
     def __str__(self):
         return self.name
 
@@ -300,9 +322,11 @@ class HR(models.Model):
 class CoachStatus(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     status = models.JSONField(default=dict, blank=True)
+    project_structure = models.JSONField(default=list, blank=True)
     learner_id = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     consent_expiry_date = models.DateField(blank=True, null=True)
+    is_consent_asked = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.id} {self.coach.first_name} {self.coach.last_name}"
@@ -354,7 +378,15 @@ class Project(models.Model):
     coach_consent_mandatory = models.BooleanField(default=True)
     enable_emails_to_hr_and_coachee = models.BooleanField(default=True)
     masked_coach_profile = models.BooleanField(default=False)
-    automated_reminder = models.BooleanField(blank=True, default=True)
+    email_reminder = models.BooleanField(blank=True, default=False)
+    whatsapp_reminder = models.BooleanField(blank=True, default=False)
+    calendar_invites = models.BooleanField(blank=True, default=False)
+    junior_pmo = models.ForeignKey(
+        Pmo,
+        null=True,
+        on_delete=models.SET_NULL,
+        blank=True,
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -364,7 +396,7 @@ class Project(models.Model):
 
 
 class Update(models.Model):
-    pmo = models.ForeignKey(Pmo, on_delete=models.CASCADE)
+    pmo = models.ForeignKey(Pmo, on_delete=models.SET_NULL, null=True, blank=True)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     message = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -449,6 +481,10 @@ class SessionRequestCaas(models.Model):
     session_duration = models.IntegerField(blank=True, default=None, null=True)
     status_updated_at = models.DateTimeField(blank=True, null=True, default=None)
     billable_session_number = models.IntegerField(blank=True, default=None, null=True)
+    is_extra = models.BooleanField(blank=True, default=False)
+    auto_generated_status = models.CharField(
+        max_length=50, default="pending", blank=True
+    )
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
@@ -460,17 +496,6 @@ class SessionRequestCaas(models.Model):
             )
         else:
             return f"{self.session_type} = Learner: {self.learner.name}"
-
-
-# class SessionCaas(models.Model):
-#     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-#     confirmed_availability = models.ForeignKey(Availibility, on_delete=models.CASCADE)
-#     session_request = models.ForeignKey(SessionRequestCaas, on_delete=models.CASCADE)
-#     status = models.CharField(max_length=20,default='pending')
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     coach_joined = models.BooleanField(blank=True,default=False)
-#     learner_joined = models.BooleanField(blank=True,default=False)
-#     hr_joined = models.BooleanField(blank=True,default=False)
 
 
 class Notification(models.Model):
@@ -621,8 +646,16 @@ class StandardizedFieldRequest(models.Model):
         ("accepted", "Accepted"),
         ("rejected", "Rejected"),
     )
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True , null=True)
-    facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE, blank=True , null=True)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True, null=True)
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.CASCADE, blank=True, null=True
+    )
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.CASCADE, blank=True, null=True
+    )
+    learner = models.ForeignKey(
+        Learner, on_delete=models.CASCADE, blank=True, null=True
+    )
     standardized_field_name = models.ForeignKey(
         StandardizedField, on_delete=models.CASCADE, blank=True
     )
@@ -808,3 +841,68 @@ class APILog(models.Model):
 
     def __str__(self):
         return f"{self.path}"
+
+
+class Task(models.Model):
+    PRIORITY_CHOICES = (
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+    )
+    TASK_STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+    )
+    task = models.CharField(max_length=100)
+    caas_project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
+    session_caas = models.ForeignKey(
+        SessionRequestCaas,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
+    coach = models.ForeignKey(
+        Coach, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    engagement = models.ForeignKey(
+        Engagement, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    goal = models.ForeignKey(
+        Goal, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    vendor_user = models.ForeignKey(
+        User, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES)
+    status = models.CharField(
+        max_length=20, choices=TASK_STATUS_CHOICES, default="pending"
+    )
+
+    remarks = models.JSONField(default=list, blank=True)
+    trigger_date = models.DateTimeField(default=timezone.now, blank=True)
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def add_remark(self, remark_message):
+        current_datetime = timezone.now()
+        formatted_datetime = current_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        new_remark = {
+            "message": remark_message,
+            "datetime": formatted_datetime,
+        }
+        self.remarks.append(new_remark)
+        self.save()
+
+    def is_visible(self):
+        return timezone.now() >= self.trigger_date
+
+    def __str__(self):
+        return self.task

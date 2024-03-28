@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.template.loader import render_to_string
 from operationsBackend import settings
+from openpyxl import Workbook
 from rest_framework.decorators import api_view, permission_classes
 from .models import (
     Competency,
@@ -45,7 +46,7 @@ import json
 import string
 import random
 from django.contrib.auth.models import User
-from api.models import Profile, Learner, Organisation, HR, SentEmailActivity, Role
+from api.models import Profile, Learner, Organisation, HR, SentEmailActivity, Role, Pmo
 from api.serializers import OrganisationSerializer
 from django.core.mail import EmailMessage, BadHeaderError
 from api.serializers import LearnerSerializer
@@ -185,40 +186,6 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
 
 
 from django.core.exceptions import ObjectDoesNotExist
-
-
-def whatsapp_message_for_participant(whatsapp):
-    ongoing_assessments = Assessment.objects.filter(
-        status="ongoing", automated_reminder=True
-    )
-
-    for assessment in ongoing_assessments:
-        start_date = datetime.strptime(
-            assessment.assessment_start_date, "%Y-%m-%d"
-        ).date()
-        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
-
-        # Check if today's date is within the assessment date range
-        today = datetime.now().date()
-        if start_date <= today <= end_date:
-            participants_observers = assessment.participants_observers.all()
-
-            for participant_observer_mapping in participants_observers:
-                participant = participant_observer_mapping.participant
-                try:
-                    participant_response = ParticipantResponse.objects.filter(
-                        participant=participant, assessment=assessment
-                    )
-                    if not participant_response:
-                        participant_unique_id = ParticipantUniqueId.objects.get(
-                            participant=participant
-                        )
-                        unique_id = participant_unique_id.unique_id
-                        send_whatsapp_message(
-                            "learner", participant, assessment, unique_id
-                        )
-                except ObjectDoesNotExist:
-                    print(f"No unique ID found for participant {participant.name}")
 
 
 def create_learner(learner_name, learner_email):
@@ -659,7 +626,9 @@ class AssessmentView(APIView):
             assessment.hr.set(hr)
             assessment.observer_types.set(observer_types)
             assessment.assessment_start_date = request.data.get("assessment_start_date")
-            assessment.automated_reminder = request.data.get("automated_reminder")
+            assessment.whatsapp_reminder = request.data.get("whatsapp_reminder")
+            assessment.email_reminder = request.data.get("email_reminder")
+            assessment.reminders = request.data.get("reminders")
             assessment.assessment_timing = request.data.get("assessment_timing")
             if request.data.get("assessment_timing") == "post":
                 assessment.pre_assessment = pre_assessment
@@ -2019,54 +1988,59 @@ class AddMultipleQuestions(APIView):
     def post(self, request):
         try:
             with transaction.atomic():
+
                 questions = request.data.get("questions")
 
                 for question in questions:
                     behavior, created = Behavior.objects.get_or_create(
-                        name=question["behaviour"],
+                        name=question["behaviour"].strip(),
                         description="This is a demo description",
                     )
                     behavior.save()
                     competency, created = Competency.objects.get_or_create(
-                        name=question["compentency_name"]
+                        name=question["compentency_name"].strip()
                     )
 
                     competency.behaviors.add(behavior)
                     competency.save()
 
-                    if question["rating_type"] == "1-5":
+                    if question["rating_type"].strip() == "1-5":
                         labels = {
-                            "1": question["label1"],
-                            "2": question["label2"],
-                            "3": question["label3"],
-                            "4": question["label4"],
-                            "5": question["label5"],
+                            "1": question["label1"].strip(),
+                            "2": question["label2"].strip(),
+                            "3": question["label3"].strip(),
+                            "4": question["label4"].strip(),
+                            "5": question["label5"].strip(),
                         }
                     elif question["rating_type"] == "1-10":
                         labels = {
-                            "1": question["label1"],
-                            "2": question["label2"],
-                            "3": question["label3"],
-                            "4": question["label4"],
-                            "5": question["label5"],
-                            "6": question["label6"],
-                            "7": question["label7"],
-                            "8": question["label8"],
-                            "9": question["label9"],
-                            "10": question["label10"],
+                            "1": question["label1"].strip(),
+                            "2": question["label2"].strip(),
+                            "3": question["label3"].strip(),
+                            "4": question["label4"].strip(),
+                            "5": question["label5"].strip(),
+                            "6": question["label6"].strip(),
+                            "7": question["label7"].strip(),
+                            "8": question["label8"].strip(),
+                            "9": question["label9"].strip(),
+                            "10": question["label10"].strip(),
                         }
 
                     new_question, created = Question.objects.get_or_create(
-                        type=question["type"],
+                        type=question["type"].strip(),
                         reverse_question=(
-                            True if question["reverse_question"] == "Yes" else False
+                            True
+                            if question["reverse_question"].strip() == "Yes"
+                            else False
                         ),
                         behavior=behavior,
                         competency=competency,
-                        self_question=question["self_question"],
-                        observer_question=question["observer_question"],
-                        rating_type=question["rating_type"],
+                        self_question=question["self_question"].strip(),
+                        observer_question=question["observer_question"].strip(),
+                        rating_type=question["rating_type"].strip(),
                         label=labels,
+                        correct_answer=question["correct_answer"],
+                        response_type=question["response_type"].strip(),
                     )
                     new_question.save()
 
@@ -3189,6 +3163,70 @@ def generate_graph_for_pre_assessment(competency_percentage, total_for_each_comp
     return encoded_image
 
 
+def generate_spider_web_for_pre_assessment(competency_percentage, total_for_each_comp):
+    comp_labels = list(competency_percentage.keys())
+    percentage_values = list(competency_percentage.values())
+
+    categories = comp_labels
+    values = percentage_values
+
+    angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
+    values += values[:1]
+    angles += angles[:1]
+
+    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
+
+    # Plot the background polygons
+    ax.fill(angles, [100] * len(angles), color="lightgray", alpha=0.7)
+
+    # Plot the data
+    ax.plot(
+        angles,
+        values,
+        linewidth=2,
+        linestyle="solid",
+        color="#eb0081",
+        label="Your Competency",
+    )
+
+    # Add labels with padding
+    ax.set_thetagrids(
+        np.degrees(angles[:-1]),
+        labels=comp_labels,
+        fontweight="bold",
+        fontsize=6,
+        rotation=45,
+        ha="right",
+    )
+
+    # Add percentage values with padding
+    for angle, value, label in zip(angles, values[:-1], comp_labels):
+        ax.text(
+            np.degrees(angle),
+            value + 3,
+            f"{value}%",
+            ha="center",
+            va="center",
+            fontsize=6,
+        )
+
+    # Add a title with adjusted position
+    plt.title(
+        "Your Competency Chart", size=10, color="#eb0081", y=1.1, fontweight="bold"
+    )
+
+    # Adjust layout for better visibility and centering
+    plt.subplots_adjust(left=0.15, right=0.85, top=0.9, bottom=0.1)
+
+    image_stream = io.BytesIO()
+    plt.savefig(image_stream, format="png")
+    plt.close()
+
+    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
+
+    return encoded_image
+
+
 def generate_graph_for_pre_post_assessment(
     pre_competency_percentage, competency_percentage, total_for_each_comp
 ):
@@ -3265,169 +3303,85 @@ def generate_graph_for_pre_post_assessment(
     return encoded_image
 
 
-def generate_graph_for_participant_single_correct(
-    participant, assessment_id, assessment, project_wise=False
+def generate_spider_web_for_pre_post_assessment(
+    pre_competency_percentage, competency_percentage, total_for_each_comp
 ):
+    comp_labels = list(competency_percentage.keys())
+    pre_percentage_values = list(pre_competency_percentage.values())
+    post_percentage_values = list(competency_percentage.values())
 
-    participant_response = ParticipantResponse.objects.filter(
-        participant__id=participant.id, assessment__id=assessment_id
-    ).first()
+    fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
 
-    if participant_response:
-        total_for_each_comp = {}
-        compentency_with_description = []
+    # Plot pre-assessment values
+    angles = np.linspace(0, 2 * np.pi, len(comp_labels), endpoint=False).tolist()
+    angles += angles[:1]
+    pre_bars = ax.plot(
+        angles,
+        pre_percentage_values + pre_percentage_values[:1],
+        label="Pre-Assessment",
+        color="#eb0081",
+        marker="o",
+    )
 
-        for competency in assessment.questionnaire.questions.values(
-            "competency"
-        ).distinct():
-            competency_id = competency["competency"]
+    # Plot post-assessment values
+    post_bars = ax.plot(
+        angles,
+        post_percentage_values + post_percentage_values[:1],
+        label="Post-Assessment",
+        color="#374e9c",
+        marker="o",
+    )
 
-            competency_name_for_object = Competency.objects.get(id=competency_id).name
-            competency_description_for_object = Competency.objects.get(
-                id=competency_id
-            ).description
-            competency_object = {
-                "competency_name": competency_name_for_object,
-                "competency_description": competency_description_for_object,
-            }
-            compentency_with_description.append(competency_object)
+    ax.set_thetagrids(
+        np.degrees(angles[:-1]),
+        labels=comp_labels,
+        fontweight="bold",
+        fontsize=5.5,
+        rotation=45,
+        ha="right",
+    )
 
-        for question in assessment.questionnaire.questions.all():
-            if question.competency.name not in total_for_each_comp:
-                total_for_each_comp[question.competency.name] = 1
-            else:
-                total_for_each_comp[question.competency.name] += 1
-
-        competency_object = {}
-        for question in assessment.questionnaire.questions.all():
-            if question.competency.name not in competency_object:
-                competency_object[question.competency.name] = 0
-
-            participant_response_value = participant_response.participant_response.get(
-                str(question.id)
-            )
-            correct_answer = (
-                assessment.questionnaire.questions.filter(id=question.id)
-                .first()
-                .correct_answer
-            )
-
-            if participant_response_value == int(correct_answer):
-                competency_object[question.competency.name] = (
-                    competency_object[question.competency.name] + 1
-                )
-
-        competency_percentage = {}
-        for comp in total_for_each_comp:
-            competency_percentage[comp] = round(
-                (competency_object[comp] / total_for_each_comp[comp]) * 100
-            )
-        if project_wise:
-            return competency_percentage
-
-        encoded_image = generate_graph_for_pre_assessment(
-            competency_percentage, total_for_each_comp
+    # Add percentage values on top of the lines
+    for angle, pre_value, post_value in zip(
+        angles, pre_percentage_values, post_percentage_values
+    ):
+        ax.text(
+            np.degrees(angle),
+            pre_value,
+            f"{pre_value}%",
+            ha="center",
+            va="center",
+            color="#eb0081",
+            fontsize=8,
+        )
+        ax.text(
+            np.degrees(angle),
+            post_value,
+            f"{post_value}%",
+            ha="center",
+            va="center",
+            color="#374e9c",
+            fontsize=8,
         )
 
-        return encoded_image, compentency_with_description
+    ax.legend(loc="upper right")
 
-    if project_wise:
-        return None
+    plt.title("Your Awareness Level", fontweight="bold", fontsize=12)
+    plt.tight_layout()
 
-    return None, None
+    # Adjust layout for better visibility and centering
+    plt.subplots_adjust(left=0.15, right=0.85, top=0.85, bottom=0.2)
 
+    image_stream = io.BytesIO()
+    plt.savefig(image_stream, format="png")
+    plt.close()
 
-def generate_graph_for_participant_single_correct_for_post_assessent(
-    participant, assessment_id, assessment, project_wise=False
-):
-    participant_response = ParticipantResponse.objects.filter(
-        participant__id=participant.id, assessment__id=assessment_id
-    ).first()
+    encoded_image = base64.b64encode(image_stream.getvalue()).decode("utf-8")
 
-    pre_assessment_participant_response = ParticipantResponse.objects.filter(
-        participant__id=participant.id, assessment__id=assessment.pre_assessment.id
-    ).first()
-
-    if participant_response and pre_assessment_participant_response:
-        total_for_each_comp = {}
-        compentency_with_description = []
-
-        for competency in assessment.questionnaire.questions.values(
-            "competency"
-        ).distinct():
-            competency_id = competency["competency"]
-
-            competency_name_for_object = Competency.objects.get(id=competency_id).name
-            competency_description_for_object = Competency.objects.get(
-                id=competency_id
-            ).description
-            competency_object = {
-                "competency_name": competency_name_for_object,
-                "competency_description": competency_description_for_object,
-            }
-            compentency_with_description.append(competency_object)
-
-        for question in assessment.questionnaire.questions.all():
-            if question.competency.name not in total_for_each_comp:
-                total_for_each_comp[question.competency.name] = 1
-            else:
-                total_for_each_comp[question.competency.name] += 1
-
-        competency_object = {}
-        pre_competency_object = {}
-        for question in assessment.questionnaire.questions.all():
-            if question.competency.name not in competency_object:
-                competency_object[question.competency.name] = 0
-            if question.competency.name not in pre_competency_object:
-                pre_competency_object[question.competency.name] = 0
-
-            participant_response_value = participant_response.participant_response.get(
-                str(question.id)
-            )
-            pre_assessment_participant_response_value = (
-                pre_assessment_participant_response.participant_response.get(
-                    str(question.id)
-                )
-            )
-            correct_answer = (
-                assessment.questionnaire.questions.filter(id=question.id)
-                .first()
-                .correct_answer
-            )
-
-            if pre_assessment_participant_response_value == int(correct_answer):
-                pre_competency_object[question.competency.name] = (
-                    pre_competency_object[question.competency.name] + 1
-                )
-
-            if participant_response_value == int(correct_answer):
-                competency_object[question.competency.name] = (
-                    competency_object[question.competency.name] + 1
-                )
-
-        competency_percentage = {}
-        pre_competency_percentage = {}
-        for comp in total_for_each_comp:
-            competency_percentage[comp] = round(
-                (competency_object[comp] / total_for_each_comp[comp]) * 100
-            )
-            pre_competency_percentage[comp] = round(
-                (pre_competency_object[comp] / total_for_each_comp[comp]) * 100
-            )
-
-        if project_wise:
-            return pre_competency_percentage, competency_percentage
-
-        encoded_image = generate_graph_for_pre_post_assessment(
-            pre_competency_percentage, competency_percentage, total_for_each_comp
-        )
-
-        return encoded_image, compentency_with_description
-
-    return None, None
+    return encoded_image
 
 
-def generate_graph_for_participant_rating_type(
+def generate_graph_for_participant(
     participant, assessment_id, assessment, project_wise=False
 ):
     participant_response = ParticipantResponse.objects.filter(
@@ -3468,24 +3422,35 @@ def generate_graph_for_participant_rating_type(
                 str(question.id)
             )
 
-            if participant_response_value:
-                if question.reverse_question:
-                    # label_count = sum(1 for value in question.label.values() if value)
+            if question.response_type == "correct_answer":
+                correct_answer = (
+                    assessment.questionnaire.questions.filter(id=question.id)
+                    .first()
+                    .correct_answer
+                )
 
-                    swap_dict = swap_positions(4)
-
+                if str(participant_response_value) in correct_answer:
                     competency_object[question.competency.name] = (
-                        competency_object[question.competency.name]
-                        + swap_dict[participant_response_value]
-                    )
-                else:
-                    competency_object[question.competency.name] = (
-                        competency_object[question.competency.name]
-                        + participant_response_value
+                        competency_object[question.competency.name] + 1
                     )
 
-        for comp, value in competency_object.items():
-            competency_object[comp] = competency_object[comp] / 4
+            else:
+                if participant_response_value:
+                    label_count = sum(
+                        1 for key in question.label.keys() if question.label[key]
+                    )
+                    if question.reverse_question:
+
+                        swap_dict = swap_positions(label_count)
+
+                        competency_object[question.competency.name] = competency_object[
+                            question.competency.name
+                        ] + (swap_dict[participant_response_value] / label_count)
+                    else:
+
+                        competency_object[question.competency.name] = competency_object[
+                            question.competency.name
+                        ] + (participant_response_value / label_count)
 
         competency_percentage = {}
         for comp in total_for_each_comp:
@@ -3494,7 +3459,6 @@ def generate_graph_for_participant_rating_type(
             )
 
         if project_wise:
-
             return competency_percentage
 
         encoded_image = generate_graph_for_pre_assessment(
@@ -3509,7 +3473,7 @@ def generate_graph_for_participant_rating_type(
     return None, None
 
 
-def generate_graph_for_participant_rating_type_for_post_assessent(
+def generate_graph_for_participant_for_post_assessment(
     participant, assessment_id, assessment, project_wise=False
 ):
     participant_response = ParticipantResponse.objects.filter(
@@ -3562,39 +3526,58 @@ def generate_graph_for_participant_rating_type_for_post_assessent(
                 )
             )
 
-            if pre_assessment_participant_response_value:
-                if question.reverse_question:
-                    # label_count = sum(1 for value in question.label.values() if value)
-                    swap_dict = swap_positions(4)
+            if question.response_type == "correct_answer":
+
+                correct_answer = (
+                    assessment.questionnaire.questions.filter(id=question.id)
+                    .first()
+                    .correct_answer
+                )
+
+                if str(pre_assessment_participant_response_value) in correct_answer:
+
                     pre_competency_object[question.competency.name] = (
-                        pre_competency_object[question.competency.name]
-                        + swap_dict[pre_assessment_participant_response_value]
-                    )
-                else:
-                    pre_competency_object[question.competency.name] = (
-                        pre_competency_object[question.competency.name]
-                        + pre_assessment_participant_response_value
+                        pre_competency_object[question.competency.name] + 1
                     )
 
-            if participant_response_value:
-                if question.reverse_question:
-                    label_count = sum(1 for value in question.label.values() if value)
-                    swap_dict = swap_positions(4)
+                if str(participant_response_value) in correct_answer:
                     competency_object[question.competency.name] = (
-                        competency_object[question.competency.name]
-                        + swap_dict[participant_response_value]
-                    )
-                else:
-                    competency_object[question.competency.name] = (
-                        competency_object[question.competency.name]
-                        + participant_response_value
+                        competency_object[question.competency.name] + 1
                     )
 
-        for comp, value in pre_competency_object.items():
-            pre_competency_object[comp] = pre_competency_object[comp] / 4
+            else:
+                if participant_response_value:
+                    label_count = sum(
+                        1 for key in question.label.keys() if question.label[key]
+                    )
+                    swap_dict = swap_positions(label_count)
+                    if pre_assessment_participant_response_value:
+                        if question.reverse_question:
 
-        for comp, value in competency_object.items():
-            competency_object[comp] = competency_object[comp] / 4
+                            pre_competency_object[
+                                question.competency.name
+                            ] = pre_competency_object[question.competency.name] + (
+                                swap_dict[pre_assessment_participant_response_value]
+                                / label_count
+                            )
+                        else:
+                            pre_competency_object[
+                                question.competency.name
+                            ] = pre_competency_object[question.competency.name] + (
+                                pre_assessment_participant_response_value / label_count
+                            )
+
+                    if participant_response_value:
+                        if question.reverse_question:
+                            competency_object[question.competency.name] = (
+                                competency_object[question.competency.name]
+                                + (swap_dict[participant_response_value] / label_count)
+                            )
+                        else:
+                            competency_object[question.competency.name] = (
+                                competency_object[question.competency.name]
+                                + (participant_response_value / label_count)
+                            )
 
         competency_percentage = {}
         pre_competency_percentage = {}
@@ -3608,7 +3591,6 @@ def generate_graph_for_participant_rating_type_for_post_assessent(
 
         if project_wise:
             return pre_competency_percentage, competency_percentage
-
         encoded_image = generate_graph_for_pre_post_assessment(
             pre_competency_percentage, competency_percentage, total_for_each_comp
         )
@@ -3635,38 +3617,21 @@ class PrePostReportDownloadForParticipant(APIView):
             participant = Learner.objects.get(id=participant_id)
             encoded_image = None
             compentency_with_description = None
-            if assessment.questionnaire.questions_type == "single_correct":
-                if assessment.assessment_timing == "pre":
-                    (
-                        encoded_image,
-                        compentency_with_description,
-                    ) = generate_graph_for_participant_single_correct(
-                        participant, assessment_id, assessment
-                    )
-                elif assessment.assessment_timing == "post":
-                    (
-                        encoded_image,
-                        compentency_with_description,
-                    ) = generate_graph_for_participant_single_correct_for_post_assessent(
-                        participant, assessment_id, assessment
-                    )
-            elif assessment.questionnaire.questions_type == "rating_type":
-                if assessment.assessment_timing == "pre":
-                    (
-                        encoded_image,
-                        compentency_with_description,
-                    ) = generate_graph_for_participant_rating_type(
-                        participant,
-                        assessment_id,
-                        assessment,
-                    )
-                elif assessment.assessment_timing == "post":
-                    (
-                        encoded_image,
-                        compentency_with_description,
-                    ) = generate_graph_for_participant_rating_type_for_post_assessent(
-                        participant, assessment_id, assessment
-                    )
+
+            if assessment.assessment_timing == "pre":
+                (
+                    encoded_image,
+                    compentency_with_description,
+                ) = generate_graph_for_participant(
+                    participant, assessment_id, assessment
+                )
+            elif assessment.assessment_timing == "post":
+                (
+                    encoded_image,
+                    compentency_with_description,
+                ) = generate_graph_for_participant_for_post_assessment(
+                    participant, assessment_id, assessment
+                )
 
             email_message = render_to_string(
                 "assessment/air_india_assessement_report.html",
@@ -3715,36 +3680,22 @@ class PrePostReportDownloadForAllParticipant(APIView):
                 participant = participant_observer.participant
                 encoded_image = None
                 compentency_with_description = None
-                if assessment.questionnaire.questions_type == "single_correct":
-                    if assessment.assessment_timing == "pre":
-                        (
-                            encoded_image,
-                            compentency_with_description,
-                        ) = generate_graph_for_participant_single_correct(
-                            participant, assessment_id, assessment
-                        )
-                    elif assessment.assessment_timing == "post":
-                        (
-                            encoded_image,
-                            compentency_with_description,
-                        ) = generate_graph_for_participant_single_correct_for_post_assessent(
-                            participant, assessment_id, assessment
-                        )
-                elif assessment.questionnaire.questions_type == "rating_type":
-                    if assessment.assessment_timing == "pre":
-                        (
-                            encoded_image,
-                            compentency_with_description,
-                        ) = generate_graph_for_participant_rating_type(
-                            participant, assessment_id, assessment
-                        )
-                    elif assessment.assessment_timing == "post":
-                        (
-                            encoded_image,
-                            compentency_with_description,
-                        ) = generate_graph_for_participant_rating_type_for_post_assessent(
-                            participant, assessment_id, assessment
-                        )
+
+                if assessment.assessment_timing == "pre":
+                    (
+                        encoded_image,
+                        compentency_with_description,
+                    ) = generate_graph_for_participant(
+                        participant, assessment_id, assessment
+                    )
+                elif assessment.assessment_timing == "post":
+                    (
+                        encoded_image,
+                        compentency_with_description,
+                    ) = generate_graph_for_participant_for_post_assessment(
+                        participant, assessment_id, assessment
+                    )
+
                 participant_context.append(
                     {
                         "name": participant.name.title(),
@@ -3796,20 +3747,11 @@ class PostReportDownloadForParticipant(APIView):
             participant = Learner.objects.get(id=participant_id)
             encoded_image = None
             compentency_with_description = None
-            if assessment.questionnaire.questions_type == "single_correct":
-                (
-                    encoded_image,
-                    compentency_with_description,
-                ) = generate_graph_for_participant_single_correct(
-                    participant, assessment_id, assessment
-                )
-            elif assessment.questionnaire.questions_type == "rating_type":
-                (
-                    encoded_image,
-                    compentency_with_description,
-                ) = generate_graph_for_participant_rating_type(
-                    participant, assessment_id, assessment
-                )
+
+            (
+                encoded_image,
+                compentency_with_description,
+            ) = generate_graph_for_participant(participant, assessment_id, assessment)
 
             email_message = render_to_string(
                 "assessment/air_india_assessement_report.html",
@@ -3858,21 +3800,13 @@ class PostReportDownloadForAllParticipant(APIView):
                 participant = participant_observer.participant
                 encoded_image = None
                 compentency_with_description = None
-                if assessment.questionnaire.questions_type == "single_correct":
-                    (
-                        encoded_image,
-                        compentency_with_description,
-                    ) = generate_graph_for_participant_single_correct(
-                        participant, assessment_id, assessment
-                    )
 
-                elif assessment.questionnaire.questions_type == "rating_type":
-                    (
-                        encoded_image,
-                        compentency_with_description,
-                    ) = generate_graph_for_participant_rating_type(
-                        participant, assessment_id, assessment
-                    )
+                (
+                    encoded_image,
+                    compentency_with_description,
+                ) = generate_graph_for_participant(
+                    participant, assessment_id, assessment
+                )
 
                 participant_context.append(
                     {
@@ -3961,36 +3895,20 @@ class ReleaseResults(APIView):
                     for participant in participant_with_not_released_results:
                         encoded_image = None
                         compentency_with_description = None
-                        if assessment.questionnaire.questions_type == "single_correct":
-                            if assessment.assessment_timing == "pre":
-                                (
-                                    encoded_image,
-                                    compentency_with_description,
-                                ) = generate_graph_for_participant_single_correct(
-                                    participant, assessment_id, assessment
-                                )
-                            elif assessment.assessment_timing == "post":
-                                (
-                                    encoded_image,
-                                    compentency_with_description,
-                                ) = generate_graph_for_participant_single_correct_for_post_assessent(
-                                    participant, assessment_id, assessment
-                                )
-                        elif assessment.questionnaire.questions_type == "rating_type":
-                            if assessment.assessment_timing == "pre":
-                                (
-                                    encoded_image,
-                                    compentency_with_description,
-                                ) = generate_graph_for_participant_rating_type(
-                                    participant, assessment_id, assessment
-                                )
-                            elif assessment.assessment_timing == "post":
-                                (
-                                    encoded_image,
-                                    compentency_with_description,
-                                ) = generate_graph_for_participant_rating_type_for_post_assessent(
-                                    participant, assessment_id, assessment
-                                )
+                        if assessment.assessment_timing == "pre":
+                            (
+                                encoded_image,
+                                compentency_with_description,
+                            ) = generate_graph_for_participant(
+                                participant, assessment_id, assessment
+                            )
+                        elif assessment.assessment_timing == "post":
+                            (
+                                encoded_image,
+                                compentency_with_description,
+                            ) = generate_graph_for_participant_for_post_assessment(
+                                participant, assessment_id, assessment
+                            )
                         send_mail_templates(
                             "assessment/air_india_report_mail.html",
                             [participant.email],
@@ -4219,6 +4137,58 @@ class GetAllLearnersUniqueId(APIView):
             )
 
 
+def getParticipantsResponseStatusForAssessment(assessment):
+    try:
+        response_data = []
+
+        if assessment.assessment_timing == "pre":
+            for participant_observers in assessment.participants_observers.all():
+                participant_responses = ParticipantResponse.objects.filter(
+                    assessment=assessment,
+                    participant__id=participant_observers.participant.id,
+                ).first()
+
+                data = {
+                    "name": participant_observers.participant.name.title(),
+                    "email": participant_observers.participant.email,
+                    "response_status": (
+                        "Responded" if participant_responses else "Not Responded"
+                    ),
+                }
+
+                response_data.append(data)
+
+        elif assessment.assessment_timing == "post":
+            for participant_observers in assessment.participants_observers.all():
+                post_participant_responses = ParticipantResponse.objects.filter(
+                    assessment=assessment,
+                    participant__id=participant_observers.participant.id,
+                ).first()
+
+                pre_assessment = assessment.pre_assessment
+
+                pre_participant_responses = ParticipantResponse.objects.filter(
+                    assessment=pre_assessment,
+                    participant__id=participant_observers.participant.id,
+                ).first()
+
+                data = {
+                    "name": participant_observers.participant.name.title(),
+                    "email": participant_observers.participant.email,
+                    "pre_response_status": (
+                        "Responded" if pre_participant_responses else "Not Responded"
+                    ),
+                    "post_response_status": (
+                        "Responded" if post_participant_responses else "Not Responded"
+                    ),
+                }
+
+                response_data.append(data)
+        return response_data
+    except Exception as e:
+        print(str(e))
+
+
 class DownloadParticipantResponseStatusData(APIView):
     permission_classes = [AllowAny]
 
@@ -4226,59 +4196,58 @@ class DownloadParticipantResponseStatusData(APIView):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
 
-            response_data = []
+            response_data = getParticipantsResponseStatusForAssessment(assessment)
 
-            if assessment.assessment_timing == "pre":
-                for participant_observers in assessment.participants_observers.all():
-                    participant_responses = ParticipantResponse.objects.filter(
-                        assessment=assessment,
-                        participant__id=participant_observers.participant.id,
-                    ).first()
+            # Create an Excel workbook
+            wb = Workbook()
+            ws = wb.active
 
-                    data = {
-                        "name": participant_observers.participant.name.title(),
-                        "email": participant_observers.participant.email,
-                        "response_status": (
-                            "Responded" if participant_responses else "Not Responded"
-                        ),
+            # headers = ['Participant Name', 'Email', 'Response Status']
+
+            headers = [
+                "Participant Name",
+                "Email",
+                "Pre Response Status",
+                "Post Response Status",
+            ]
+            ws.append(headers)
+            if assessment.assessment_timing == "pre" or "post":
+                data = [
+                    {
+                        "name": item.get("name", ""),
+                        "email": item.get("email", ""),
+                        "pre_response_status": item.get("pre_response_status", ""),
+                        "post_response_status": item.get("post_response_status", ""),
                     }
+                    for item in response_data
+                ]
+            else:
+                return Response(
+                    {"error": "Invalid assessment timing."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-                    response_data.append(data)
+            # ws.append(headers)
 
-                return Response(response_data)
+            for item in data:
+                ws.append(
+                    [
+                        item.get("name", ""),
+                        item.get("email", ""),
+                        item.get("pre_response_status", ""),
+                        item.get("post_response_status", ""),
+                    ]
+                )
 
-            elif assessment.assessment_timing == "post":
-                for participant_observers in assessment.participants_observers.all():
-                    post_participant_responses = ParticipantResponse.objects.filter(
-                        assessment=assessment,
-                        participant__id=participant_observers.participant.id,
-                    ).first()
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            response["Content-Disposition"] = (
+                f'attachment; filename="{assessment.name}_response_status.xlsx"'
+            )
+            wb.save(response)
 
-                    pre_assessment = assessment.pre_assessment
-
-                    pre_participant_responses = ParticipantResponse.objects.filter(
-                        assessment=pre_assessment,
-                        participant__id=participant_observers.participant.id,
-                    ).first()
-
-                    data = {
-                        "name": participant_observers.participant.name.title(),
-                        "email": participant_observers.participant.email,
-                        "pre_response_status": (
-                            "Responded"
-                            if pre_participant_responses
-                            else "Not Responded"
-                        ),
-                        "post_response_status": (
-                            "Responded"
-                            if post_participant_responses
-                            else "Not Responded"
-                        ),
-                    }
-
-                    response_data.append(data)
-
-                return Response(response_data)
+            return response
 
         except Assessment.DoesNotExist:
             return Response(
@@ -4321,12 +4290,22 @@ class GetAllAssessments(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
-        assessments = Assessment.objects.all()
+        pmo = Pmo.objects.filter(email=request.user.username).first()
+        if pmo.sub_role == "junior_pmo":
+            assessments = Assessment.objects.filter(
+                assessment_modal__lesson__course__batch__project__pmo=pmo
+            )
+        else:
+            assessments = Assessment.objects.all()
         assessment_list = []
         for assessment in assessments:
             total_responses_count = ParticipantResponse.objects.filter(
                 assessment=assessment
             ).count()
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+
             assessment_data = {
                 "id": assessment.id,
                 "name": assessment.name,
@@ -4340,6 +4319,21 @@ class GetAllAssessments(APIView):
                 "status": assessment.status,
                 "total_learners_count": assessment.participants_observers.count(),
                 "total_responses_count": total_responses_count,
+                "batch_name": (
+                    assessment_lesson.lesson.course.batch.name
+                    if assessment_lesson
+                    else None
+                ),
+                "project_name": (
+                    assessment_lesson.lesson.course.batch.project.name
+                    if assessment_lesson
+                    else None
+                ),
+                "project_id": (
+                    assessment_lesson.lesson.course.batch.project.id
+                    if assessment_lesson
+                    else None
+                ),
                 "created_at": assessment.created_at,
             }
 
@@ -4364,7 +4358,7 @@ class GetOneAssessment(APIView):
 
 
 class GetAssessmentsOfHr(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request, hr_id):
         assessments = Assessment.objects.filter(
@@ -4449,11 +4443,14 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                         )
 
                         for lesson in lessons:
+
                             assessment_lesson = AssessmentLesson.objects.filter(
                                 lesson=lesson
                             ).first()
 
                             if assessment_lesson.type == "pre":
+                                lesson.drip_date = pre_assessment.assessment_start_date
+                                lesson.save()
                                 assessment_lesson.assessment_modal = pre_assessment
 
                                 assessment_lesson.save()
@@ -4466,10 +4463,12 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                                 pre_assessment.save()
 
                             elif assessment_lesson.type == "post":
+
                                 post_assessment = Assessment.objects.get(
                                     id=post_assessment_id
                                 )
-
+                                lesson.drip_date = post_assessment.assessment_start_date
+                                lesson.save()
                                 assessment_lesson.assessment_modal = post_assessment
                                 assessment_lesson.save()
 
@@ -4584,6 +4583,7 @@ def get_average_for_all_compentency(compentency_precentages):
             if count_occurrences[competency_name] != 0
             else 0
         )
+
     return average_percentage
 
 
@@ -4605,9 +4605,17 @@ class GetProjectWiseReport(APIView):
 
     def get(self, request, project_id, report_to_download):
         try:
+            spider = self.request.query_params.get("spider", None)
 
             project = SchedularProject.objects.get(id=project_id)
-            batches = SchedularBatch.objects.filter(project__id=project.id)
+            batch_id = request.query_params.get("batch_id", None)
+
+            if batch_id:
+                batches = SchedularBatch.objects.filter(id=int(batch_id))
+                batch_name = None
+            else:
+
+                batches = SchedularBatch.objects.filter(project__id=project.id)
 
             pre_compentency_percentages = []
             post_compentency_percentages = []
@@ -4615,6 +4623,8 @@ class GetProjectWiseReport(APIView):
             total_participant = 0
             total_attended_both_assessments = 0
             for batch in batches:
+                if batch_id:
+                    batch_name = batch.name
                 total_participant = total_participant + len(batch.learners.all())
                 assessments = Assessment.objects.filter(
                     assessment_modal__lesson__course__batch=batch
@@ -4628,84 +4638,39 @@ class GetProjectWiseReport(APIView):
                     ) in assessment.participants_observers.all():
                         participant = participants_observer.participant
 
-                        if assessment.questionnaire.questions_type == "single_correct":
-                            if assessment.assessment_timing == "pre":
-                                compentency_precentage = (
-                                    generate_graph_for_participant_single_correct(
-                                        participant, assessment_id, assessment, True
+                        if assessment.assessment_timing == "pre":
+                            compentency_precentage = generate_graph_for_participant(
+                                participant, assessment_id, assessment, True
+                            )
+
+                            if compentency_precentage:
+                                if participant.id not in attended_both_assessments:
+                                    attended_both_assessments[participant.id] = 1
+                                else:
+                                    attended_both_assessments[participant.id] = (
+                                        attended_both_assessments[participant.id] + 1
                                     )
+                                pre_compentency_percentages.append(
+                                    compentency_precentage
                                 )
+                        elif assessment.assessment_timing == "post":
+                            (
+                                pre_compentency_precentage,
+                                post_compentency_precentage,
+                            ) = generate_graph_for_participant_for_post_assessment(
+                                participant, assessment_id, assessment, True
+                            )
 
-                                if compentency_precentage:
-                                    if participant.id not in attended_both_assessments:
-                                        attended_both_assessments[participant.id] = 1
-                                    else:
-                                        attended_both_assessments[participant.id] = (
-                                            attended_both_assessments[participant.id]
-                                            + 1
-                                        )
-                                    pre_compentency_percentages.append(
-                                        compentency_precentage
+                            if post_compentency_precentage:
+                                if participant.id not in attended_both_assessments:
+                                    attended_both_assessments[participant.id] = 1
+                                else:
+                                    attended_both_assessments[participant.id] = (
+                                        attended_both_assessments[participant.id] + 1
                                     )
-                            elif assessment.assessment_timing == "post":
-                                (
-                                    pre_compentency_precentage,
-                                    post_compentency_precentage,
-                                ) = generate_graph_for_participant_single_correct_for_post_assessent(
-                                    participant, assessment_id, assessment, True
+                                post_compentency_percentages.append(
+                                    post_compentency_precentage
                                 )
-
-                                if post_compentency_precentage:
-                                    if participant.id not in attended_both_assessments:
-                                        attended_both_assessments[participant.id] = 1
-                                    else:
-                                        attended_both_assessments[participant.id] = (
-                                            attended_both_assessments[participant.id]
-                                            + 1
-                                        )
-                                    post_compentency_percentages.append(
-                                        post_compentency_precentage
-                                    )
-
-                        elif assessment.questionnaire.questions_type == "rating_type":
-                            if assessment.assessment_timing == "pre":
-
-                                compentency_precentage = (
-                                    generate_graph_for_participant_rating_type(
-                                        participant, assessment_id, assessment, True
-                                    )
-                                )
-
-                                if compentency_precentage:
-                                    if participant.id not in attended_both_assessments:
-                                        attended_both_assessments[participant.id] = 1
-                                    else:
-                                        attended_both_assessments[participant.id] = (
-                                            attended_both_assessments[participant.id]
-                                            + 1
-                                        )
-                                    pre_compentency_percentages.append(
-                                        compentency_precentage
-                                    )
-                            elif assessment.assessment_timing == "post":
-                                (
-                                    pre_compentency_precentage,
-                                    post_compentency_precentage,
-                                ) = generate_graph_for_participant_rating_type_for_post_assessent(
-                                    participant, assessment_id, assessment, True
-                                )
-
-                                if post_compentency_precentage:
-                                    if participant.id not in attended_both_assessments:
-                                        attended_both_assessments[participant.id] = 1
-                                    else:
-                                        attended_both_assessments[participant.id] = (
-                                            attended_both_assessments[participant.id]
-                                            + 1
-                                        )
-                                    post_compentency_percentages.append(
-                                        post_compentency_precentage
-                                    )
 
                 participant_ids_with_value_two = [
                     key for key, value in attended_both_assessments.items() if value > 1
@@ -4721,6 +4686,7 @@ class GetProjectWiseReport(APIView):
                 "attended_pre_participant": len(pre_compentency_percentages),
                 "attended_post_participant": len(post_compentency_percentages),
                 "attended_both_assessments": total_attended_both_assessments,
+                "batch_name": batch_name if batch_id else None,
             }
 
             if report_to_download == "pre":
@@ -4728,10 +4694,15 @@ class GetProjectWiseReport(APIView):
                 pre_average_percentage = get_average_for_all_compentency(
                     pre_compentency_percentages
                 )
-
-                pre_encoded_image = generate_graph_for_pre_assessment(
-                    pre_average_percentage, None
-                )
+                pre_encoded_image = None
+                if spider:
+                    pre_encoded_image = generate_spider_web_for_pre_assessment(
+                        pre_average_percentage, None
+                    )
+                else:
+                    pre_encoded_image = generate_graph_for_pre_assessment(
+                        pre_average_percentage, None
+                    )
                 content["image_base64"] = pre_encoded_image
                 content["competency_with_description"] = (
                     get_competency_with_description(pre_average_percentage)
@@ -4742,9 +4713,15 @@ class GetProjectWiseReport(APIView):
                 post_average_percentage = get_average_for_all_compentency(
                     post_compentency_percentages
                 )
-                post_encoded_image = generate_graph_for_pre_assessment(
-                    post_average_percentage, None
-                )
+                post_encoded_image = None
+                if spider:
+                    post_encoded_image = generate_spider_web_for_pre_assessment(
+                        post_average_percentage, None
+                    )
+                else:
+                    post_encoded_image = generate_graph_for_pre_assessment(
+                        post_average_percentage, None
+                    )
 
                 content["image_base64"] = post_encoded_image
                 content["competency_with_description"] = (
@@ -4759,9 +4736,15 @@ class GetProjectWiseReport(APIView):
                 post_average_percentage = get_average_for_all_compentency(
                     post_compentency_percentages
                 )
-                post_encoded_image = generate_graph_for_pre_post_assessment(
-                    pre_average_percentage, post_average_percentage, None
-                )
+                post_encoded_image = None
+                if spider:
+                    post_encoded_image = generate_spider_web_for_pre_post_assessment(
+                        pre_average_percentage, post_average_percentage, None
+                    )
+                else:
+                    post_encoded_image = generate_graph_for_pre_post_assessment(
+                        pre_average_percentage, post_average_percentage, None
+                    )
 
                 content["image_base64"] = post_encoded_image
                 content["competency_with_description"] = (
@@ -4784,19 +4767,40 @@ class GetProjectWiseReport(APIView):
 
         except Exception as e:
             print(str(e))
+            return Response({"error": "Failed to download report"}, status=500)
+
+
+class AssessmentsResponseStatusDownload(APIView):
+    permission_classes = [IsAuthenticated,IsInRoles("hr", "pmo") ]
+
+    def post(self, request):
+        try:
+            assessment_ids = request.data.get("assessment_ids")
+
+            response_data_for_assessments = {}
+            for assessment_id in assessment_ids:
+                assessment = Assessment.objects.get(id=assessment_id)
+                response_data = getParticipantsResponseStatusForAssessment(assessment)
+                response_data_for_assessments[assessment.name] = response_data
+            return Response(response_data_for_assessments)
+        except Exception as e:
+            print(str(e))
 
 
 class GetAllAssessmentsOfSchedularProjects(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("hr", "pmo")]
 
     def get(self, request, project_id):
         try:
+            hr_id = request.query_params.get("hr", None)
             schedular_projects = []
             assessment_list = []
             if project_id == "all":
                 schedular_projects = SchedularProject.objects.all()
             else:
                 schedular_projects = SchedularProject.objects.filter(id=int(project_id))
+            if hr_id:
+                schedular_projects = schedular_projects.filter(hr__id=hr_id)
             for schedular_project in schedular_projects:
                 batches = SchedularBatch.objects.filter(project=schedular_project)
 
@@ -4833,3 +4837,164 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
         except Exception as e:
             print(str(e))
             return Response({"error": "Failed to get data"}, status=500)
+
+
+class GetAssessmentBatchAndProject(APIView):
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
+
+    def get(self, request, assessment_id):
+        assessment = get_object_or_404(Assessment, id=assessment_id)
+        try:
+            # get batch and project of assessment
+            assessment_lessons = AssessmentLesson.objects.filter(
+                assessment_modal__id=assessment_id
+            )
+            if assessment_lessons.exists():
+                assessment_lesson = assessment_lessons.first()
+                batch = assessment_lesson.lesson.course.batch
+                project = batch.project
+                return Response(
+                    {"batch": {"id": batch.id}, "project": {"id": project.id}}
+                )
+            else:
+                return Response(
+                    {"error": "Batch and project not found for the assessment"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        except Exception as e:
+            # Handle specific exceptions if needed
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class DownloadQuestionWiseExcelForProject(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, project_id):
+        try:
+            batches = SchedularBatch.objects.filter(project__id=project_id)
+            pre_assessments_data = []
+            post_assessments_data = []
+            for batch in batches:
+                assessments = Assessment.objects.filter(
+                    assessment_modal__lesson__course__batch=batch
+                )
+                for assessment in assessments:
+                    assessment_id = assessment.id
+                    for (
+                        participant_observers
+                    ) in assessment.participants_observers.all():
+                        participant = participant_observers.participant
+                        participant_response = ParticipantResponse.objects.filter(
+                            participant__id=participant.id, assessment__id=assessment_id
+                        ).first()
+
+                        if participant_response:
+                            questions_object = {"Participant Name": participant.name}
+                            for question in assessment.questionnaire.questions.all():
+
+                                participant_response_value = (
+                                    participant_response.participant_response.get(
+                                        str(question.id)
+                                    )
+                                )
+
+                                if question.response_type == "correct_answer":
+                                    correct_answer = (
+                                        assessment.questionnaire.questions.filter(
+                                            id=question.id
+                                        )
+                                        .first()
+                                        .correct_answer
+                                    )
+
+                                    if (
+                                        str(participant_response_value)
+                                        in correct_answer
+                                    ):
+                                        questions_object[question.self_question] = (
+                                            "100%"
+                                        )
+                                    else:
+                                        questions_object[question.self_question] = "0%"
+                                else:
+                                    if participant_response_value:
+                                        label_count = sum(
+                                            1
+                                            for key in question.label.keys()
+                                            if question.label[key]
+                                        )
+                                        if question.reverse_question:
+                                            swap_dict = swap_positions(label_count)
+                                            questions_object[question.self_question] = (
+                                                str(
+                                                    round(
+                                                        (
+                                                            swap_dict[
+                                                                participant_response_value
+                                                            ]
+                                                            / label_count
+                                                        )
+                                                        * 100
+                                                    )
+                                                )
+                                                + "%"
+                                            )
+                                        else:
+                                            questions_object[question.self_question] = (
+                                                str(
+                                                    round(
+                                                        (
+                                                            participant_response_value
+                                                            / label_count
+                                                        )
+                                                        * 100
+                                                    )
+                                                )
+                                                + "%"
+                                            )
+
+                            # print(questions_object)
+                            if assessment.assessment_timing == "pre":
+
+                                pre_assessments_data.append(questions_object)
+                            elif assessment.assessment_timing == "post":
+                                post_assessments_data.append(questions_object)
+
+            # Create workbook
+            wb = Workbook()
+            pre_sheet = wb.active
+            pre_sheet.title = "Pre Assessment"
+            post_sheet = wb.create_sheet(title="Post Assessment")
+
+            # Write headers if data exists
+            if pre_assessments_data:
+                pre_sheet.append(list(pre_assessments_data[0].keys()))
+            if post_assessments_data:
+                post_sheet.append(list(post_assessments_data[0].keys()))
+
+            # Write data
+            for data in pre_assessments_data:
+                pre_sheet.append(list(data.values()))
+            for data in post_assessments_data:
+                post_sheet.append(list(data.values()))
+
+            # Create HTTP response with Excel file
+            response = HttpResponse(
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            response["Content-Disposition"] = 'attachment; filename="response.xlsx"'
+
+            # Save workbook to response
+            wb.save(response)
+
+            return response
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
