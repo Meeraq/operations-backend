@@ -808,128 +808,126 @@ class AssessmentEndDataChange(APIView):
 class AddParticipantObserverToAssessment(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
+    @transaction.atomic
     def put(self, request):
+        assessment_id = request.data.get("assessment_id")
+        phone = request.data.get("phone")
+
         try:
-            with transaction.atomic():
-                assessment_id = request.data.get("assessment_id")
-                phone = request.data.get("phone")
+            assessment = Assessment.objects.get(id=assessment_id)
+        except Assessment.DoesNotExist:
+            return Response(
+                {"error": "Assessment not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        assessment.result_released = False
+        assessment.save()
+        try:
+            participants = request.data.get("participants", [])
 
-                assessment = Assessment.objects.get(id=assessment_id)
+            if assessment.participants_observers.filter(
+                participant__email=participants[0]["participantEmail"]
+            ).exists():
+                return Response(
+                    {"error": "Participant already exists in the assessment."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-                assessment.result_released = False
-                assessment.save()
+            participant = create_learner(
+                participants[0]["participantName"].title(),
+                participants[0]["participantEmail"],
+            )
+            if phone:
+                participant.phone = phone
+                participant.save()
+            unique_id = uuid.uuid4()  # Generate a UUID4
+            if phone:
+                add_contact_in_wati(
+                    "learner", participant.name.title(), participant.phone
+                )
+            # Creating a ParticipantUniqueId instance with a UUID as unique_id
+            unique_id_instance = ParticipantUniqueId.objects.create(
+                participant=participant,
+                assessment=assessment,
+                unique_id=unique_id,
+            )
 
-                participants = request.data.get("participants", [])
+            mapping = ParticipantObserverMapping.objects.create(participant=participant)
 
-                if assessment.participants_observers.filter(
+            # if assessment.assessment_type == "360":
+            if False:
+                observers = request.data.get("observers", [])
+                for observer_data in observers:
+                    observer, created = Observer.objects.get_or_create(
+                        email=observer_data["observerEmail"],
+                    )
+                    observer.name = observer_data["observerName"]
+                    observer.save()
+
+                    (
+                        participant_observer_type,
+                        created1,
+                    ) = ParticipantObserverType.objects.get_or_create(
+                        participant=participant,
+                        observers=observer,
+                    )
+                    participant_observer_type.type = observer_data["observerType"]
+                    participant_observer_type.save()
+                    mapping.observers.add(observer)
+
+            mapping.save()
+            assessment.participants_observers.add(mapping)
+            assessment.save()
+
+            particpant_data = [{"name": participant.name, "email": participant.email}]
+            # send_reset_password_link(particpant_data)
+
+            if assessment.assessment_timing == "pre":
+                post_assessment = Assessment.objects.filter(
+                    pre_assessment=assessment
+                ).first()
+
+                if not post_assessment.participants_observers.filter(
                     participant__email=participants[0]["participantEmail"]
                 ).exists():
-                    return Response(
-                        {"error": "Participant already exists in the assessment."},
-                        status=status.HTTP_400_BAD_REQUEST,
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
                     )
-
-                participant = create_learner(
-                    participants[0]["participantName"].title(),
-                    participants[0]["participantEmail"],
-                )
-                if phone:
-                    participant.phone = phone
-                    participant.save()
-                unique_id = uuid.uuid4()  # Generate a UUID4
-                if phone:
-                    add_contact_in_wati(
-                        "learner", participant.name.title(), participant.phone
+                    mapping.save()
+                    post_assessment.participants_observers.add(mapping)
+                    post_assessment.save()
+                    post_unique_id = uuid.uuid4()
+                    post_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=post_assessment,
+                        unique_id=post_unique_id,
                     )
-                # Creating a ParticipantUniqueId instance with a UUID as unique_id
-                unique_id_instance = ParticipantUniqueId.objects.create(
-                    participant=participant,
-                    assessment=assessment,
-                    unique_id=unique_id,
-                )
+            elif assessment.assessment_timing == "post":
+                pre_assessment = Assessment.objects.get(id=assessment.pre_assessment.id)
 
-                mapping = ParticipantObserverMapping.objects.create(
-                    participant=participant
-                )
-
-                # if assessment.assessment_type == "360":
-                if False:
-                    observers = request.data.get("observers", [])
-                    for observer_data in observers:
-                        observer, created = Observer.objects.get_or_create(
-                            email=observer_data["observerEmail"],
-                        )
-                        observer.name = observer_data["observerName"]
-                        observer.save()
-
-                        (
-                            participant_observer_type,
-                            created1,
-                        ) = ParticipantObserverType.objects.get_or_create(
-                            participant=participant,
-                            observers=observer,
-                        )
-                        participant_observer_type.type = observer_data["observerType"]
-                        participant_observer_type.save()
-                        mapping.observers.add(observer)
-
-                mapping.save()
-                assessment.participants_observers.add(mapping)
-                assessment.save()
-
-                particpant_data = [
-                    {"name": participant.name, "email": participant.email}
-                ]
-                # send_reset_password_link(particpant_data)
-
-                if assessment.assessment_timing == "pre":
-                    post_assessment = Assessment.objects.filter(
-                        pre_assessment=assessment
-                    ).first()
-
-                    if not post_assessment.participants_observers.filter(
-                        participant__email=participants[0]["participantEmail"]
-                    ).exists():
-                        mapping = ParticipantObserverMapping.objects.create(
-                            participant=participant
-                        )
-                        mapping.save()
-                        post_assessment.participants_observers.add(mapping)
-                        post_assessment.save()
-                        post_unique_id = uuid.uuid4()
-                        post_unique_id_instance = ParticipantUniqueId.objects.create(
-                            participant=participant,
-                            assessment=post_assessment,
-                            unique_id=post_unique_id,
-                        )
-                elif assessment.assessment_timing == "post":
-                    pre_assessment = Assessment.objects.get(
-                        id=assessment.pre_assessment.id
+                if not pre_assessment.participants_observers.filter(
+                    participant__email=participants[0]["participantEmail"]
+                ).exists():
+                    mapping = ParticipantObserverMapping.objects.create(
+                        participant=participant
                     )
-
-                    if not pre_assessment.participants_observers.filter(
-                        participant__email=participants[0]["participantEmail"]
-                    ).exists():
-                        mapping = ParticipantObserverMapping.objects.create(
-                            participant=participant
-                        )
-                        mapping.save()
-                        pre_assessment.participants_observers.add(mapping)
-                        pre_assessment.save()
-                        pre_unique_id = uuid.uuid4()
-                        pre_unique_id_instance = ParticipantUniqueId.objects.create(
-                            participant=participant,
-                            assessment=pre_assessment,
-                            unique_id=pre_unique_id,
-                        )
-                serializer = AssessmentSerializerDepthFour(assessment)
-                return Response(
-                    {
-                        "message": "Participant added successfully.",
-                        "assessment_data": serializer.data,
-                    },
-                    status=status.HTTP_200_OK,
-                )
+                    mapping.save()
+                    pre_assessment.participants_observers.add(mapping)
+                    pre_assessment.save()
+                    pre_unique_id = uuid.uuid4()
+                    pre_unique_id_instance = ParticipantUniqueId.objects.create(
+                        participant=participant,
+                        assessment=pre_assessment,
+                        unique_id=pre_unique_id,
+                    )
+            serializer = AssessmentSerializerDepthFour(assessment)
+            return Response(
+                {
+                    "message": "Participant added successfully.",
+                    "assessment_data": serializer.data,
+                },
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             print(str(e))
@@ -4771,7 +4769,7 @@ class GetProjectWiseReport(APIView):
 
 
 class AssessmentsResponseStatusDownload(APIView):
-    permission_classes = [IsAuthenticated,IsInRoles("hr", "pmo") ]
+    permission_classes = [IsAuthenticated, IsInRoles("hr", "pmo")]
 
     def post(self, request):
         try:
