@@ -1043,7 +1043,6 @@ def approve_facilitator(request):
 def update_coach_profile(request, id):
     try:
         coach = Coach.objects.get(id=id)
-        mutable_data = request.data.copy()
     except Coach.DoesNotExist:
         return Response(status=404)
 
