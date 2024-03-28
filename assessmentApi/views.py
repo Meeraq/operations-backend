@@ -93,7 +93,7 @@ from courses.models import (
     CourseEnrollment,
 )
 from schedularApi.models import SchedularBatch, SchedularSessions, SchedularProject
-
+from api.permissions import IsInRoles
 
 matplotlib.use("Agg")
 env = environ.Env()
@@ -188,8 +188,6 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
 from django.core.exceptions import ObjectDoesNotExist
 
 
-
-
 def create_learner(learner_name, learner_email):
     try:
         with transaction.atomic():
@@ -241,7 +239,7 @@ def create_learner(learner_name, learner_email):
 
 
 class CompetencyView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         competencies = Competency.objects.all()
@@ -337,7 +335,7 @@ class CompetencyView(APIView):
 
 
 class OneCompetencyDetail(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         competency_id = request.data.get("id")
@@ -353,7 +351,7 @@ class OneCompetencyDetail(APIView):
 
 
 class QuestionView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         questions = Question.objects.all()
@@ -422,7 +420,7 @@ class QuestionView(APIView):
 
 
 class OneQuestionDetail(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         question_id = request.data.get("id")
@@ -438,7 +436,7 @@ class OneQuestionDetail(APIView):
 
 
 class QuestionnaireView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         questionnaires = Questionnaire.objects.all()
@@ -504,7 +502,7 @@ class QuestionnaireView(APIView):
 
 
 class OneQuestionnaireDetail(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         questionnaire_id = request.data.get("id")
@@ -535,7 +533,7 @@ def create_pre_post_assessments(request):
             post_assessment = post_assessment_serializer.save()
             post_assessment.pre_assessment = pre_assessment
             post_assessment.save()
-            print("done")
+
             return True, pre_assessment.id, post_assessment.id
         return False, None, None
     except Exception as e:
@@ -543,7 +541,7 @@ def create_pre_post_assessments(request):
 
 
 class AssessmentView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         assessments = Assessment.objects.all()
@@ -672,96 +670,103 @@ class AssessmentView(APIView):
 
 
 class AssessmentStatusChange(APIView):
-    @transaction.atomic()
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+
     def put(self, request):
         assessment_id = request.data.get("id")
 
         try:
-            assessment = Assessment.objects.get(id=assessment_id)
-            prev_status = assessment.status
-            assessment.status = request.data.get("status")
-            # assessment.assessment_end_date = request.data.get("assessment_end_date")
-            assessment.save()
-            assessment_lesson = AssessmentLesson.objects.filter(
-                assessment_modal=assessment
-            ).first()
-
-            if assessment_lesson:
-                lesson = Lesson.objects.filter(id=assessment_lesson.lesson.id).first()
-
-                if assessment.status == "ongoing":
-                    lesson.status = "public"
-                    lesson.save()
-                if assessment.status == "draft":
-                    lesson.status = "draft"
-                    lesson.save()
-
-            if (
-                prev_status == "draft"
-                and assessment.status == "ongoing"
-                and not assessment.initial_reminder
-            ):
-                send_assessment_invitation_mail.delay(assessment.id)
-                assessment.initial_reminder = True
+            with transaction.atomic():
+                assessment = Assessment.objects.get(id=assessment_id)
+                prev_status = assessment.status
+                assessment.status = request.data.get("status")
+                # assessment.assessment_end_date = request.data.get("assessment_end_date")
                 assessment.save()
-                # for hr in assessment.hr.all():
-                #     user = User.objects.get(email=hr.email)
+                assessment_lesson = AssessmentLesson.objects.filter(
+                    assessment_modal=assessment
+                ).first()
 
-                #     token = get_token_generator().generate_token()
+                if assessment_lesson:
+                    lesson = Lesson.objects.filter(
+                        id=assessment_lesson.lesson.id
+                    ).first()
 
-                #     ResetPasswordToken.objects.create(user=user, key=token)
+                    if assessment.status == "ongoing":
+                        lesson.status = "public"
+                        lesson.save()
+                    if assessment.status == "draft":
+                        lesson.status = "draft"
+                        lesson.save()
 
-                #     create_password_link = (
-                #         f"https://assessment.meeraq.com/create-password/{token}"
-                #     )
+                if (
+                    prev_status == "draft"
+                    and assessment.status == "ongoing"
+                    and not assessment.initial_reminder
+                ):
+                    send_assessment_invitation_mail.delay(assessment.id)
+                    assessment.initial_reminder = True
+                    assessment.save()
+                    # for hr in assessment.hr.all():
+                    #     user = User.objects.get(email=hr.email)
 
-                # send_mail_templates(
-                #     "assessment/create_password_to_hr.html",
-                #     [hr.email],
-                #     "Meeraq - Welcome to Assessment Platform !",
-                #     {
-                #         "hr_name": hr.first_name,
-                #         "link": create_password_link,
-                #         "assessment_name": assessment.participant_view_name,
-                #     },
-                #     [],
-                # )
-                # if not assessment.initial_reminder:
-                #     for (
-                #         participant_observers
-                #     ) in assessment.participants_observers.all():
-                #         participant = participant_observers.participant
-                #         participant_response = ParticipantResponse.objects.filter(
-                #             participant=participant, assessment=assessment
-                #         ).first()
+                    #     token = get_token_generator().generate_token()
 
-                #         if not participant_response:
-                #             participant_unique_id = ParticipantUniqueId.objects.filter(
-                #                 participant=participant, assessment=assessment
-                #             ).first()
+                    #     ResetPasswordToken.objects.create(user=user, key=token)
 
-                #             if participant_unique_id:
-                #                 assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{participant_unique_id.unique_id}"
-                #                 send_mail_templates(
-                #                     "assessment/assessment_initial_reminder.html",
-                #                     [participant.email],
-                #                     "Meeraq - Welcome to Assessment Platform !",
-                #                     {
-                #                         "assessment_name": assessment.participant_view_name,
-                #                         "participant_name": participant.name.title(),
-                #                         "link": assessment_link,
-                #                     },
-                #                     [],
-                #                 )
-                # send_assessment_invitation_mail.delay(assessment.id)
-                # assessment.initial_reminder = True
-                # assessment.save()
+                    #     create_password_link = (
+                    #         f"https://assessment.meeraq.com/create-password/{token}"
+                    #     )
 
-            serializer = AssessmentSerializerDepthFour(assessment)
-            return Response(
-                {"message": "Update successfully.", "assessment_data": serializer.data},
-                status=status.HTTP_200_OK,
-            )
+                    # send_mail_templates(
+                    #     "assessment/create_password_to_hr.html",
+                    #     [hr.email],
+                    #     "Meeraq - Welcome to Assessment Platform !",
+                    #     {
+                    #         "hr_name": hr.first_name,
+                    #         "link": create_password_link,
+                    #         "assessment_name": assessment.participant_view_name,
+                    #     },
+                    #     [],
+                    # )
+                    # if not assessment.initial_reminder:
+                    #     for (
+                    #         participant_observers
+                    #     ) in assessment.participants_observers.all():
+                    #         participant = participant_observers.participant
+                    #         participant_response = ParticipantResponse.objects.filter(
+                    #             participant=participant, assessment=assessment
+                    #         ).first()
+
+                    #         if not participant_response:
+                    #             participant_unique_id = ParticipantUniqueId.objects.filter(
+                    #                 participant=participant, assessment=assessment
+                    #             ).first()
+
+                    #             if participant_unique_id:
+                    #                 assessment_link = f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{participant_unique_id.unique_id}"
+                    #                 send_mail_templates(
+                    #                     "assessment/assessment_initial_reminder.html",
+                    #                     [participant.email],
+                    #                     "Meeraq - Welcome to Assessment Platform !",
+                    #                     {
+                    #                         "assessment_name": assessment.participant_view_name,
+                    #                         "participant_name": participant.name.title(),
+                    #                         "link": assessment_link,
+                    #                     },
+                    #                     [],
+                    #                 )
+                    # send_assessment_invitation_mail.delay(assessment.id)
+                    # assessment.initial_reminder = True
+                    # assessment.save()
+
+                serializer = AssessmentSerializerDepthFour(assessment)
+                return Response(
+                    {
+                        "message": "Update successfully.",
+                        "assessment_data": serializer.data,
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
         except Exception as e:
             print(str(e))
@@ -774,7 +779,7 @@ class AssessmentStatusChange(APIView):
 
 
 class AssessmentEndDataChange(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def put(self, request):
         assessment_id = request.data.get("id")
@@ -801,7 +806,7 @@ class AssessmentEndDataChange(APIView):
 
 
 class AddParticipantObserverToAssessment(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     @transaction.atomic
     def put(self, request):
@@ -935,7 +940,7 @@ class AddParticipantObserverToAssessment(APIView):
 
 
 class AssessmentsOfParticipant(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("learner")]
 
     def get(self, request, participant_email):
         try:
@@ -1199,7 +1204,7 @@ class GetParticipantResponseForParticipant(APIView):
 
 
 class GetParticipantResponseFormAssessment(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request, assessment_id):
         try:
@@ -1243,7 +1248,7 @@ class GetObserverResponseForObserver(APIView):
 
 
 class GetObserverResponseFormAssessment(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr", "learner")]
 
     def get(self, request, assessment_id):
         try:
@@ -1265,7 +1270,7 @@ class GetObserverResponseFormAssessment(APIView):
 
 
 class ParticipantObserverTypeList(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr", "learner")]
 
     def get(self, request):
         participant_observer_types = ParticipantObserverType.objects.all()
@@ -1343,7 +1348,7 @@ def delete_participant_from_assessments(assessment, participant_id, assessment_i
 
 
 class DeleteParticipantFromAssessment(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     @transaction.atomic
     def delete(self, request):
@@ -1424,7 +1429,7 @@ class DeleteParticipantFromAssessment(APIView):
 
 
 class DeleteObserverFromAssessment(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "learner")]
 
     @transaction.atomic
     def delete(self, request):
@@ -1459,7 +1464,7 @@ class DeleteObserverFromAssessment(APIView):
 
 
 class AddObserverToParticipant(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     @transaction.atomic
     def put(self, request):
@@ -1547,7 +1552,7 @@ class AddObserverToParticipant(APIView):
 
 
 class CompetencyIdsInOngoingAndCompletedAssessments(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         try:
@@ -1570,7 +1575,7 @@ class CompetencyIdsInOngoingAndCompletedAssessments(APIView):
 
 
 class QuestionIdsInOngoingAndCompletedAssessments(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         try:
@@ -1593,7 +1598,7 @@ class QuestionIdsInOngoingAndCompletedAssessments(APIView):
 
 
 class QuestionnaireIdsInOngoingAndCompletedAssessments(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         try:
@@ -1614,7 +1619,7 @@ class QuestionnaireIdsInOngoingAndCompletedAssessments(APIView):
 
 
 class ParticipantAddsObserverToAssessment(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("learner")]
 
     @transaction.atomic
     def post(self, request):
@@ -1730,7 +1735,7 @@ class StartAssessmentDataForObserver(APIView):
 
 
 class GetObserversUniqueIds(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request, assessment_id):
         try:
@@ -1753,7 +1758,7 @@ class GetObserversUniqueIds(APIView):
 
 
 class GetParticipantObserversUniqueIds(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("learner")]
 
     def get(self, request, participant_email):
         try:
@@ -1827,7 +1832,7 @@ class StartAssessmentParticipantDisabled(APIView):
 
 
 class AssessmentsOfHr(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("hr")]
 
     def get(self, request, hr_email):
         try:
@@ -1848,7 +1853,7 @@ class AssessmentsOfHr(APIView):
 
 
 class GetParticipantResponseForAllAssessment(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("hr")]
 
     def get(self, request, hr_email):
         try:
@@ -1868,7 +1873,7 @@ class GetParticipantResponseForAllAssessment(APIView):
 
 
 class GetObserverResponseForAllAssessment(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("hr")]
 
     def get(self, request, hr_email):
         try:
@@ -1888,7 +1893,7 @@ class GetObserverResponseForAllAssessment(APIView):
 
 
 class ReminderMailForObserverByPmoAndParticipant(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "learner")]
 
     def put(self, request):
         try:
@@ -1924,7 +1929,7 @@ class ReminderMailForObserverByPmoAndParticipant(APIView):
                         },
                         [],
                     )
-
+                    sleep(3)
             return Response(
                 {
                     "message": "Reminders are Send Successfully",
@@ -1975,7 +1980,7 @@ class GetObserverResponseForAllAssessments(APIView):
 
 
 class AddMultipleQuestions(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     @transaction.atomic
     def post(self, request):
@@ -2119,7 +2124,7 @@ def add_multiple_participants(participant, assessment_id, assessment, name_seper
 
 
 class AddMultipleParticipants(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     @transaction.atomic
     def post(self, request):
@@ -2146,9 +2151,8 @@ class AddMultipleParticipants(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-
 class CreateObserverType(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     @transaction.atomic
     def post(
@@ -2175,7 +2179,7 @@ class CreateObserverType(APIView):
 
 
 class GetObserverTypes(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         try:
@@ -2541,7 +2545,7 @@ def get_frequency_analysis_data(
 
 
 class DownloadParticipantResultReport(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "learner")]
 
     def post(self, request):
         try:
@@ -3031,7 +3035,7 @@ class DownloadWordReport(APIView):
 
 
 class GetLearnersUniqueId(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request, assessment_id):
         try:
@@ -3443,7 +3447,7 @@ def generate_graph_for_participant(
                         competency_object[question.competency.name] = competency_object[
                             question.competency.name
                         ] + (participant_response_value / label_count)
-      
+
         competency_percentage = {}
         for comp in total_for_each_comp:
             competency_percentage[comp] = round(
@@ -3835,7 +3839,7 @@ class PostReportDownloadForAllParticipant(APIView):
 
 
 class ReleaseResults(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def put(self, request, assessment_id):
         try:
@@ -3934,7 +3938,7 @@ class ReleaseResults(APIView):
 
 
 class MoveParticipant(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def post(self, request):
         try:
@@ -4100,7 +4104,7 @@ class MoveParticipant(APIView):
 
 
 class GetAllLearnersUniqueId(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("learner")]
 
     def get(self, request):
         try:
@@ -4256,7 +4260,7 @@ class DownloadParticipantResponseStatusData(APIView):
 
 
 class GetParticipantReleasedResults(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request, assessment_id):
         try:
@@ -4279,7 +4283,7 @@ class GetParticipantReleasedResults(APIView):
 
 
 class GetAllAssessments(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         pmo = Pmo.objects.filter(email=request.user.username).first()
@@ -4335,7 +4339,7 @@ class GetAllAssessments(APIView):
 
 
 class GetOneAssessment(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request, assessment_id):
         assessment = get_object_or_404(Assessment, id=assessment_id)
@@ -4350,7 +4354,7 @@ class GetOneAssessment(APIView):
 
 
 class GetAssessmentsOfHr(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request, hr_id):
         assessments = Assessment.objects.filter(
@@ -4380,7 +4384,7 @@ class GetAssessmentsOfHr(APIView):
 
 
 class GetAssessmentsDataForMoveParticipant(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         assessments = Assessment.objects.all()
@@ -4399,7 +4403,7 @@ class GetAssessmentsDataForMoveParticipant(APIView):
 
 
 class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def post(self, request):
         try:
@@ -4488,7 +4492,7 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
 
 
 class AssessmentInAssessmentLesson(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request, assessment_id):
         try:
@@ -4514,7 +4518,7 @@ class AssessmentInAssessmentLesson(APIView):
 
 
 class AllAssessmentInAssessmentLesson(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         try:
@@ -4545,7 +4549,7 @@ class AllAssessmentInAssessmentLesson(APIView):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def send_mail_to_not_responded_participant(request, assessment_id):
     try:
         data = {"req": request.data, "assessment_id": assessment_id}
@@ -4763,7 +4767,7 @@ class GetProjectWiseReport(APIView):
 
 
 class AssessmentsResponseStatusDownload(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("hr", "pmo")]
 
     def post(self, request):
         try:
@@ -4780,7 +4784,7 @@ class AssessmentsResponseStatusDownload(APIView):
 
 
 class GetAllAssessmentsOfSchedularProjects(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("hr", "pmo")]
 
     def get(self, request, project_id):
         try:
@@ -4832,7 +4836,7 @@ class GetAllAssessmentsOfSchedularProjects(APIView):
 
 
 class GetAssessmentBatchAndProject(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request, assessment_id):
         assessment = get_object_or_404(Assessment, id=assessment_id)
@@ -4882,7 +4886,7 @@ class DownloadQuestionWiseExcelForProject(APIView):
                         participant_response = ParticipantResponse.objects.filter(
                             participant__id=participant.id, assessment__id=assessment_id
                         ).first()
-                       
+
                         if participant_response:
                             questions_object = {"Participant Name": participant.name}
                             for question in assessment.questionnaire.questions.all():
@@ -4954,7 +4958,7 @@ class DownloadQuestionWiseExcelForProject(APIView):
                                 pre_assessments_data.append(questions_object)
                             elif assessment.assessment_timing == "post":
                                 post_assessments_data.append(questions_object)
-        
+
             # Create workbook
             wb = Workbook()
             pre_sheet = wb.active
