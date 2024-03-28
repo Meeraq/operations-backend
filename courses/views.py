@@ -5,7 +5,7 @@ from collections import defaultdict
 import boto3
 import requests
 from rest_framework import generics, serializers, status
-from datetime import timedelta, time, datetime
+from datetime import timedelta, time, datetime, date
 from .models import (
     Course,
     TextLesson,
@@ -82,6 +82,10 @@ from schedularApi.models import (
 from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
 )
+from schedularApi.serializers import SchedularBatchSerializer
+
+
+# from schedularApi.views import create_lessons_for_batch
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
 )
@@ -120,7 +124,7 @@ from schedularApi.tasks import (
 
 from django.core.mail import EmailMessage
 from django.conf import settings
-
+from api.permissions import IsInRoles
 
 env = environ.Env()
 
@@ -332,8 +336,93 @@ def download_file_response(file_url):
         return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
 
 
+def create_lessons_for_batch(batch):
+    try:
+        course = Course.objects.get(batch=batch)
+        live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch.id)
+        training_class_sessions = LiveSession.objects.filter(
+            session_type__in=["in_person_session", "virtual_session"]
+        )
+        max_order_of_training_class_sessions = training_class_sessions.aggregate(
+            Max("order")
+        )["order__max"]
+        coaching_sessions = CoachingSession.objects.filter(batch__id=batch.id)
+        max_order = (
+            Lesson.objects.filter(course=course).aggregate(Max("order"))["order__max"]
+            or 0
+        )
+        for live_session in live_sessions:
+            max_order = max_order + 1
+            session_name = get_live_session_name(live_session.session_type)
+
+            new_lesson = Lesson.objects.create(
+                course=course,
+                name=f"{session_name} {live_session.live_session_number}",
+                status="draft",
+                lesson_type="live_session",
+                order=max_order,
+            )
+            LiveSessionLesson.objects.create(
+                lesson=new_lesson, live_session=live_session
+            )
+            max_order_feedback = (
+                Lesson.objects.filter(course=course).aggregate(Max("order"))[
+                    "order__max"
+                ]
+                or 0
+            )
+            new_feedback_lesson = Lesson.objects.create(
+                course=course,
+                name=f"Feedback for {session_name} {live_session.live_session_number}",
+                status="draft",
+                lesson_type="feedback",
+                order=max_order_feedback,
+            )
+            unique_id = uuid.uuid4()
+            feedback_lesson = FeedbackLesson.objects.create(
+                lesson=new_feedback_lesson,
+                unique_id=unique_id,
+                live_session=live_session,
+            )
+            if live_session.session_type in [
+                "in_person_session",
+                "virtual_session",
+            ]:
+                if int(max_order_of_training_class_sessions) == int(live_session.order):
+                    add_question_to_feedback_lesson(
+                        feedback_lesson, nps_default_feed_questions
+                    )
+                else:
+                    add_question_to_feedback_lesson(
+                        feedback_lesson, default_feedback_questions
+                    )
+
+        for coaching_session in coaching_sessions:
+            max_order = max_order + 1
+            session_name = None
+            if coaching_session.session_type == "laser_coaching_session":
+                session_name = "Laser coaching"
+            elif coaching_session.session_type == "mentoring_session":
+                session_name = "Mentoring session"
+            new_lesson = Lesson.objects.create(
+                course=course,
+                name=f"{session_name} {coaching_session.coaching_session_number}",
+                status="draft",
+                lesson_type="laser_coaching",
+                order=max_order,
+            )
+            LaserCoachingSession.objects.create(
+                lesson=new_lesson, coaching_session=coaching_session
+            )
+    except:
+        pass
+
+
 class CourseListView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [
+        IsAuthenticated,
+        IsInRoles("pmo", "coach", "learner", "hr", "facilitator"),
+    ]
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
 
@@ -343,7 +432,10 @@ class CourseListView(generics.ListCreateAPIView):
 
 
 class CourseTemplateListView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [
+        IsAuthenticated,
+        IsInRoles("pmo", "coach", "learner", "hr", "facilitator"),
+    ]
     queryset = CourseTemplate.objects.all()
     serializer_class = CourseTemplateSerializer
 
@@ -365,7 +457,10 @@ class CourseTemplateListView(generics.ListCreateAPIView):
 
 
 class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [
+        IsAuthenticated,
+        IsInRoles("pmo", "coach", "learner", "hr", "facilitator"),
+    ]
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
 
@@ -376,7 +471,10 @@ class CourseDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class CourseTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [
+        IsAuthenticated,
+        IsInRoles("pmo", "coach", "learner", "hr", "facilitator"),
+    ]
     queryset = CourseTemplate.objects.all()
     serializer_class = CourseTemplateSerializer
 
@@ -396,7 +494,7 @@ class CourseTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class DuplicateCourseAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def post(self, request, course_id, *args, **kwargs):
         try:
@@ -466,7 +564,7 @@ class DuplicateCourseAPIView(APIView):
 
 
 class UpdateLessonOrder(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def post(self, request, *args, **kwargs):
         payload = request.data
@@ -488,7 +586,7 @@ class UpdateLessonOrder(APIView):
 
 
 class UpdateNudgesOrder(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles(("pmo"))]
 
     def post(self, request, *args, **kwargs):
         payload = request.data
@@ -508,13 +606,13 @@ class UpdateNudgesOrder(APIView):
 
 
 class TextLessonCreateView(generics.CreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
     queryset = TextLesson.objects.all()
     serializer_class = TextLessonCreateSerializer
 
 
 class TextLessonEditView(generics.RetrieveUpdateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
     queryset = TextLesson.objects.all()
     serializer_class = TextLessonCreateSerializer
 
@@ -536,30 +634,54 @@ class LessonListView(generics.ListAPIView):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def get_nudges_and_course(request, course_id):
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def get_nudges_and_batch(request, batch_id):
     try:
-        course = Course.objects.get(id=course_id)
-        course_serializer = CourseSerializer(course)
-        nudges = Nudge.objects.filter(course=course)
+        batch = SchedularBatch.objects.get(id=batch_id)
+        batch_serializer = SchedularBatchSerializer(batch)
+        nudges = Nudge.objects.filter(batch=batch)
         serializer = NudgeSerializer(nudges, many=True)
-        return Response({"nudges": serializer.data, "course": course_serializer.data})
+        return Response({"nudges": serializer.data, "batch": batch_serializer.data})
     except Course.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@transaction.atomic
 def create_new_nudge(request):
     serializer = NudgeSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        nudge_instance = serializer.save()
+        nudge_instance.is_switched_on = True
+        nudge_instance.save()
+        nudges_start_date = nudge_instance.batch.nudge_start_date
+        today_date = datetime.today().date()
+        if nudges_start_date and nudges_start_date <= today_date:
+            last_nudge = (
+                Nudge.objects.filter(batch=nudge_instance.batch)
+                .exclude(id=nudge_instance.id)
+                .order_by("-order")
+                .first()
+            )
+            if last_nudge:
+                last_nudge_date = last_nudge.trigger_date
+                nudge_instance.trigger_date = last_nudge_date + timedelta(
+                    int(nudge_instance.batch.nudge_frequency)
+                )
+                nudge_instance.save()
+            else:
+                nudge_instance.trigger_date = nudges_start_date + timedelta(
+                    int(nudge_instance.batch.nudge_frequency)
+                )
+                nudge_instance.save()
+        serializer = NudgeSerializer(nudge_instance)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_nudge(request, nudge_id):
     try:
         nudge = Nudge.objects.get(id=nudge_id)
@@ -581,41 +703,40 @@ def download_nudge_file(request, nudge_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
-def add_nudges_date_frequency_to_course(request, course_id):
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def add_nudges_date_frequency_to_batch(request, batch_id):
     try:
-        course = Course.objects.get(id=course_id)
+        batch = SchedularBatch.objects.get(id=batch_id)
         nudge_start_date = request.data.get("nudge_start_date")
         nudge_frequency = request.data.get("nudge_frequency")
-        existing_nudge_start_date = course.nudge_start_date
-        course.nudge_start_date = nudge_start_date
-        course.nudge_frequency = nudge_frequency
-        course.save()
-        if course.nudge_periodic_task:
-            course.nudge_periodic_task.enabled = False
-            course.nudge_periodic_task.save()
+        batch.nudge_start_date = nudge_start_date
+        batch.nudge_frequency = nudge_frequency
+        batch.save()
+        if batch.nudge_periodic_task:
+            batch.nudge_periodic_task.enabled = False
+            batch.nudge_periodic_task.save()
         desired_time = time(18, 31)
         datetime_comined = datetime.combine(
-            datetime.strptime(course.nudge_start_date, "%Y-%m-%d"), desired_time
+            datetime.strptime(batch.nudge_start_date, "%Y-%m-%d"), desired_time
         )
         scheduled_for = datetime_comined - timedelta(days=1)
         clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
         periodic_task = PeriodicTask.objects.create(
             name=uuid.uuid1(),
             task="schedularApi.tasks.schedule_nudges",
-            args=[course.id],
+            args=[batch.id],
             clocked=clocked,
             one_off=True,
         )
-        course.nudge_periodic_task = periodic_task
-        course.save()
+        batch.nudge_periodic_task = periodic_task
+        batch.save()
         return Response({"message": "Updated successfully"}, status=201)
     except Course.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
 
 class CourseTemplateLessonListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "learner", "hr")]
     queryset = Lesson.objects.all()
     serializer_class = LessonSerializer
 
@@ -690,7 +811,7 @@ class LessonDetailView(generics.RetrieveAPIView):
 
 
 class DeleteLessonAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def delete(self, request, lesson_id):
         try:
@@ -717,7 +838,7 @@ class DeleteLessonAPIView(APIView):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_quiz_lesson(request):
     # Deserialize the incoming data
     data = request.data
@@ -761,7 +882,7 @@ def create_quiz_lesson(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def edit_quiz_lesson(request, quiz_lesson_id):
     try:
         quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
@@ -832,7 +953,7 @@ def edit_quiz_lesson(request, quiz_lesson_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_feedback_lesson(request):
     # Deserialize the incoming data
     data = request.data
@@ -879,7 +1000,7 @@ def create_feedback_lesson(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def edit_feedback_lesson(request, feedback_lesson_id):
     try:
         feedback_lesson = FeedbackLesson.objects.get(id=feedback_lesson_id)
@@ -959,7 +1080,7 @@ def edit_feedback_lesson(request, feedback_lesson_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_lesson_with_live_session(request):
     lesson_data = request.data.get("lesson")
     live_session_data = request.data.get("live_session")
@@ -988,7 +1109,7 @@ def create_lesson_with_live_session(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator", "hr", "learner")])
 def get_live_sessions_for_lesson(request, lesson_id, course_id):
     try:
         live_sessions = LiveSessionLesson.objects.filter(
@@ -1001,7 +1122,7 @@ def get_live_sessions_for_lesson(request, lesson_id, course_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_live_session(request, course_id, lesson_id):
     try:
         lesson = Lesson.objects.get(pk=lesson_id, course__id=course_id)
@@ -1037,7 +1158,7 @@ def update_live_session(request, course_id, lesson_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_laser_booking_lesson(request):
     lesson_data = request.data.get("lesson")
     coaching_session_data = request.data.get("laser_coaching_session")
@@ -1065,7 +1186,7 @@ def create_laser_booking_lesson(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator", "hr", "learner")])
 def get_laser_coaching_sessions(request, lesson_id, course_id):
     try:
         laser_sessions = LaserCoachingSession.objects.filter(
@@ -1078,7 +1199,7 @@ def get_laser_coaching_sessions(request, lesson_id, course_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_laser_coaching_session(request, course_id, lesson_id, session_id):
     try:
         lesson = Lesson.objects.get(course_id=course_id, id=lesson_id)
@@ -1118,7 +1239,7 @@ def update_laser_coaching_session(request, course_id, lesson_id, session_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_assessment_and_lesson(request):
     with transaction.atomic():
         lesson_data = request.data.get("lesson")
@@ -1148,7 +1269,7 @@ def create_assessment_and_lesson(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr", "facilitator", "learner")])
 def get_assessment_lesson(request, lesson_id):
     try:
         assessment = Assessment.objects.filter(lesson__id=lesson_id)
@@ -1159,7 +1280,7 @@ def get_assessment_lesson(request, lesson_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_assessment_lesson(request, lesson_id, session_id):
     try:
         lesson = Lesson.objects.get(id=lesson_id)
@@ -1213,7 +1334,7 @@ def update_assessment_lesson(request, lesson_id, session_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
 def get_course_enrollment(request, course_id, learner_id):
     try:
         course_enrollment = CourseEnrollment.objects.get(
@@ -1241,7 +1362,7 @@ def get_course_enrollment(request, course_id, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_course_enrollment_for_pmo_preview(request, course_id):
     try:
         course = Course.objects.get(id=course_id)
@@ -1267,7 +1388,7 @@ def get_course_enrollment_for_pmo_preview(request, course_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_course_enrollment_for_pmo_preview_for_course_template(
     request, course_template_id
 ):
@@ -1295,7 +1416,7 @@ def get_course_enrollment_for_pmo_preview_for_course_template(
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "pmo")])
 def get_course_enrollments_of_learner(request, learner_id):
     try:
         course_enrollments = CourseEnrollment.objects.filter(
@@ -1324,7 +1445,7 @@ def get_course_enrollments_of_learner(request, learner_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
 def submit_quiz_answers(request, quiz_lesson_id, learner_id):
     try:
         quiz_lesson = get_object_or_404(QuizLesson, id=quiz_lesson_id)
@@ -1395,7 +1516,7 @@ def calculate_quiz_result(quiz_lesson, quiz_lesson_response):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
 def get_quiz_result(request, quiz_lesson_id, learner_id):
     quiz_lesson = QuizLesson.objects.get(id=quiz_lesson_id)
     quiz_lesson_response = QuizLessonResponse.objects.get(
@@ -1442,7 +1563,7 @@ def submit_feedback_answers(request, feedback_lesson_id, learner_id):
 
 
 class CertificateListAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request, format=None):
         certificates = Certificate.objects.all()
@@ -1507,7 +1628,7 @@ class CertificateListAPIView(APIView):
 
 
 class GetFilteredCoursesForCertificate(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         certificates = Certificate.objects.all()
@@ -1526,7 +1647,7 @@ class GetFilteredCoursesForCertificate(APIView):
 
 
 class AssignCoursesToCertificate(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def post(self, request):
         try:
@@ -1557,7 +1678,7 @@ class AssignCoursesToCertificate(APIView):
 
 
 class DeleteCourseFromCertificate(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def delete(self, request):
         try:
@@ -1589,7 +1710,7 @@ class DeleteCourseFromCertificate(APIView):
 
 
 class LessonMarkAsCompleteAndNotComplete(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "learner")]
 
     def post(self, request):
         try:
@@ -1624,18 +1745,18 @@ class LessonMarkAsCompleteAndNotComplete(APIView):
 class DownloadLessonCertificate(APIView):
     permission_classes = [AllowAny]
 
-    def get(self, request, lesson_id, learner_id):
+    def get(self, request, course_id, learner_id):
         try:
-            lesson = Lesson.objects.get(id=lesson_id)
+            course = Course.objects.get(id=course_id)
             content = {}
             course_enrollment = CourseEnrollment.objects.get(
-                course=lesson.course, learner__id=learner_id
+                course=course, learner__id=learner_id
             )
 
             content["learner_name"] = course_enrollment.learner.name
-            content["course_name"] = lesson.course.name
+            content["course_name"] = course.name
             try:
-                certificate = Certificate.objects.filter(courses=lesson.course).first()
+                certificate = Certificate.objects.filter(courses=course).first()
             except Certificate.DoesNotExist:
                 return Response(
                     {"error": "Certificate not found for the given course"},
@@ -1665,7 +1786,7 @@ class DownloadLessonCertificate(APIView):
 
 
 class GetCertificateForCourse(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "learner")]
 
     def get(self, request, course_id):
         try:
@@ -1691,7 +1812,7 @@ from .serializers import VideoSerializer  # Import your Video model serializer
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_videos(request):
     name = request.data.get("name")  # Extract 'name' from request data
     video_file = request.data.get("video")  # Extract 'video' file from request data
@@ -1718,7 +1839,7 @@ from .serializers import VideoSerializer
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "facilitator", "hr")])
 def get_all_videos(request):
     videos = Video.objects.all()  # Retrieve all videos from the database
 
@@ -1737,7 +1858,7 @@ from .serializers import LessonSerializer, VideoLessonSerializer
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_video_lesson(request):
     if request.method == "POST":
         lesson_data = request.data.get("lesson")
@@ -1788,7 +1909,7 @@ from .serializers import VideoSerializer
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "facilitator", "hr")])
 def get_all_videos(request):
     if request.method == "GET":
         videos = Video.objects.all()
@@ -1804,7 +1925,7 @@ from .serializers import VideoLessonSerializer, LessonSerializer
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr", "learner", "facilitator")])
 def update_video_lesson(request, lesson_id):
     try:
         lesson = Lesson.objects.get(pk=lesson_id)
@@ -1838,8 +1959,11 @@ def update_video_lesson(request, lesson_id):
         serializer = VideoLessonSerializer(data=video_lesson_data)
 
     if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        video_lesson_instance = serializer.save()
+        video_lesson_depth_serializer = VideoLessonSerializerDepthOne(
+            video_lesson_instance
+        )
+        return Response(video_lesson_depth_serializer.data, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -1851,7 +1975,7 @@ from .serializers import VideoSerializer
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_video(request, pk):
     try:
         video = Video.objects.get(pk=pk)
@@ -1866,7 +1990,7 @@ def update_video(request, pk):
 
 
 class GetLaserCoachingTime(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "learner")]
 
     def get(self, request, laser_coaching_id, participant_email):
         try:
@@ -1891,7 +2015,7 @@ class GetLaserCoachingTime(APIView):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr", "facilitator")])
 def get_all_courses_progress(request):
     res = []
     courses = Course.objects.filter(status="public")
@@ -1969,6 +2093,7 @@ def course_report_download(request, course_id):
     # Write headers to the worksheet
     headers = [
         "Participant Name",
+        "Email",
         "Completed Lessons",
         "Total Lessons",
         "Progress",
@@ -1982,6 +2107,7 @@ def course_report_download(request, course_id):
         ws.append(
             [
                 course_enrollment_data["learner"]["name"],
+                course_enrollment_data["learner"]["email"],
                 len(course_enrollment_data["completed_lessons"]),
                 course_enrollment_data["total_lessons"],
                 str(course_enrollment_data["progress"]) + "%",
@@ -1999,7 +2125,7 @@ def course_report_download(request, course_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr", "facilitator")])
 def get_all_quizes_report(request):
     res = []
     quizes = QuizLesson.objects.filter(
@@ -2045,7 +2171,7 @@ def get_quiz_report_data(quiz_lesson):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr", "facilitator")])
 def get_quiz_report(request, quiz_id):
     quiz_lesson = QuizLesson.objects.get(id=quiz_id)
     data = get_quiz_report_data(quiz_lesson)
@@ -2101,7 +2227,7 @@ def calculate_nps(ratings):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_all_feedbacks_report(request):
     res = []
     feedbacks = FeedbackLesson.objects.filter(
@@ -2161,6 +2287,7 @@ def get_all_feedbacks_report(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_consolidated_feedback_report(request):
     try:
         data = {}
@@ -2284,6 +2411,7 @@ def get_feedback_report(request, feedback_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_consolidated_feedback_report_response(request, lesson_id):
     try:
         live_session = LiveSession.objects.get(id=lesson_id)
@@ -2348,7 +2476,7 @@ def get_consolidated_feedback_report_response(request, lesson_id):
 
 
 class AssignCourseTemplateToBatch(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def post(self, request, course_template_id, batch_id):
         try:
@@ -2484,85 +2612,8 @@ class AssignCourseTemplateToBatch(APIView):
                         CourseEnrollment.objects.create(
                             learner=learner, course=new_course, enrollment_date=datetime
                         )
-                live_sessions = LiveSessionSchedular.objects.filter(batch__id=batch_id)
-                training_class_sessions = LiveSession.objects.filter(
-                    session_type__in=["in_person_session", "virtual_session"]
-                )
-                max_order_of_training_class_sessions = (
-                    training_class_sessions.aggregate(Max("order"))["order__max"]
-                )
-                coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
-                max_order = (
-                    Lesson.objects.filter(course=new_course).aggregate(Max("order"))[
-                        "order__max"
-                    ]
-                    or 0
-                )
-                for live_session in live_sessions:
-                    max_order = max_order + 1
-                    session_name = get_live_session_name(live_session.session_type)
 
-                    new_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"{session_name} {live_session.live_session_number}",
-                        status="draft",
-                        lesson_type="live_session",
-                        order=max_order,
-                    )
-                    LiveSessionLesson.objects.create(
-                        lesson=new_lesson, live_session=live_session
-                    )
-                    max_order_feedback = (
-                        Lesson.objects.filter(course=new_course).aggregate(
-                            Max("order")
-                        )["order__max"]
-                        or 0
-                    )
-                    new_feedback_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"Feedback for {session_name} {live_session.live_session_number}",
-                        status="draft",
-                        lesson_type="feedback",
-                        order=max_order_feedback,
-                    )
-                    unique_id = uuid.uuid4()
-                    feedback_lesson = FeedbackLesson.objects.create(
-                        lesson=new_feedback_lesson,
-                        unique_id=unique_id,
-                        live_session=live_session,
-                    )
-                    if live_session.session_type in [
-                        "in_person_session",
-                        "virtual_session",
-                    ]:
-                        if int(max_order_of_training_class_sessions) == int(
-                            live_session.order
-                        ):
-                            add_question_to_feedback_lesson(
-                                feedback_lesson, nps_default_feed_questions
-                            )
-                        else:
-                            add_question_to_feedback_lesson(
-                                feedback_lesson, default_feedback_questions
-                            )
-
-                for coaching_session in coaching_sessions:
-                    max_order = max_order + 1
-                    session_name = None
-                    if coaching_session.session_type == "laser_coaching_session":
-                        session_name = "Laser coaching"
-                    elif coaching_session.session_type == "mentoring_session":
-                        session_name = "Mentoring session"
-                    new_lesson = Lesson.objects.create(
-                        course=new_course,
-                        name=f"{session_name} {coaching_session.coaching_session_number}",
-                        status="draft",
-                        lesson_type="laser_coaching",
-                        order=max_order,
-                    )
-                    LaserCoachingSession.objects.create(
-                        lesson=new_lesson, coaching_session=coaching_session
-                    )
+                create_lessons_for_batch(batch)
 
                 if assessment_creation:
                     max_order = (
@@ -2607,7 +2658,7 @@ def get_resources(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_resource(request):
     pdf_name = request.data.get("pdfName")  # Extracting pdfName from request data
     pdf_file = request.data.get("pdfFile")  # Extracting pdfFile from request data
@@ -2631,8 +2682,31 @@ def create_resource(request):
         )  # Return errors if validation fails
 
 
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def edit_pdf_resource(request, resource_id):
+    try:
+        pdf_name = request.data.get("pdfName")
+        pdf_file = request.data.get("pdfFile")
+        resource = Resources.objects.get(id=resource_id)
+        resource.name = pdf_name
+        if pdf_file:
+            resource.pdf_file = pdf_file
+        resource.save()
+        return Response(
+            {"message": f"Pdf updated sucessfully!"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to update pdf."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_pdf_lesson(request):
 
     try:
@@ -2647,9 +2721,8 @@ def create_pdf_lesson(request):
             if course_id:
                 course_instance = Course.objects.get(id=course_id)
                 course_template_instance = course_instance.course_template
-                live_session_id = lesson_data["live_session"]
+                live_session_id = lesson_data.get("live_session", None)
                 live_session = None
-                print(live_session_id)
                 if live_session_id:
                     live_session = LiveSessionSchedular.objects.get(id=live_session_id)
 
@@ -2659,7 +2732,7 @@ def create_pdf_lesson(request):
                     status=lesson_data["status"],
                     lesson_type=lesson_data["lesson_type"],
                     order=lesson_data["order"],
-                    drip_date=lesson_data["drip_date"],
+                    drip_date=lesson_data.get("drip_date", None),
                     live_session=live_session,
                 )
 
@@ -2698,11 +2771,12 @@ def create_pdf_lesson(request):
     except CourseTemplate.DoesNotExist:
         return Response({"message": "Course Template does not exist."})
     except Exception as e:
+        print(str(e))
         return Response({"message": "Failed to create pdf lesson."})
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_pdf_lesson(request, pk):
     try:
         pdf_lesson = PdfLesson.objects.get(id=pk)
@@ -2748,7 +2822,7 @@ def update_pdf_lesson(request, pk):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_course_template_status(request):
     course_template_id = request.data.get("course_template_id")
     selected_status = request.data.get("status")
@@ -2771,7 +2845,7 @@ def update_course_template_status(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_course_status(request):
     try:
         course_id = request.data.get("course_id")
@@ -2792,7 +2866,7 @@ def update_course_status(request):
 
 
 @api_view(["PUT"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def lesson_update_status(request):
     if request.method == "PUT":
         serializer = LessonUpdateSerializer(data=request.data)
@@ -2878,13 +2952,13 @@ class FileDownloadView(APIView):
 class DownloadableLessonCreateView(generics.CreateAPIView):
     queryset = DownloadableLesson.objects.all()
     serializer_class = DownloadableLessonSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
 
 class DownloadableLessonUpdateView(generics.UpdateAPIView):
     queryset = DownloadableLesson.objects.all()
     serializer_class = DownloadableLessonSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
 
 class FeedbackEmailValidation(APIView):
@@ -3000,7 +3074,7 @@ class EditAllowedFeedbackLesson(APIView):
 
 
 class DuplicateLesson(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def post(self, request):
         try:
@@ -3224,7 +3298,9 @@ class GetAssessmentsOfBatch(APIView):
                         "total_learners_count": assessment.participants_observers.count(),
                         "total_responses_count": total_responses_count,
                         "created_at": assessment.created_at,
-                        "automated_reminder": assessment.automated_reminder,
+                        "whatsapp_reminder": assessment.whatsapp_reminder,
+                        "email_reminder": assessment.email_reminder,
+                        "reminders": assessment.reminders,
                         "batch_name": batch.name,
                         "questionnaire": assessment.questionnaire.id,
                         "organisation": assessment.organisation.id,
@@ -3498,14 +3574,16 @@ def download_consolidated_project_report(request, project_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_nudges_by_project_id(request, project_id):
     # Retrieve nudges filtered by project_id
-    nudges = Nudge.objects.filter(course__batch__project__id=project_id)
+    nudges = Nudge.objects.filter(batch__project__id=project_id)
     serializer = NudgeSerializer(nudges, many=True)
     return Response(serializer.data)
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def send_nudge_to_email(request, nudge_id):
     email = request.data.get("email")
     try:
@@ -3528,78 +3606,54 @@ def send_nudge_to_email(request, nudge_id):
 
 
 @api_view(["POST"])
-def duplicate_nudge(request, nudge_id, course_id):
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def duplicate_nudge(request, nudge_id, batch_id):
     order = request.data.get("order")
     try:
         original_nudge = Nudge.objects.get(id=nudge_id)
-        course = Course.objects.get(id=course_id)  # Fetch the course instance
+        batch = SchedularBatch.objects.get(id=batch_id)  # Fetch the batch instance
         duplicated_nudge = Nudge.objects.create(
             name=f"{original_nudge.name}",
             content=original_nudge.content,
             file=original_nudge.file,
             order=order,
-            course=course,  # Use the fetched course instance
+            batch=batch,
             is_sent=False,  # Assuming the duplicated nudge is not sent yet
         )
         return Response({"message": "Nudge duplicated successfully."})
     except Nudge.DoesNotExist:
         return Response({"error": "Nudge not found"}, status=404)
-    except Course.DoesNotExist:
-        return Response({"error": "Course not found"}, status=404)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=404)
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_nps_project_wise(request):
     projects = SchedularProject.objects.all()
     res = {}
     for project in projects:
         nps = 0
-        total_questions = 0  # Track the total number of questions
-        feedback_lessons = FeedbackLesson.objects.filter(
-            lesson__course__batch__project=project
+        answers = Answer.objects.filter(
+            question__type="rating_0_to_10",
+            question__feedbacklesson__lesson__course__batch__project=project,
         )
-        for feedback_lesson in feedback_lessons:
-            feedback_lesson_reponses = FeedbackLessonResponse.objects.filter(
-                feedback_lesson=feedback_lesson
+        facilitator_id = request.query_params.get("facilitator_id", None)
+        if facilitator_id:
+            answers = answers.filter(
+                question__feedbacklesson__live_session__facilitator=facilitator_id
             )
-
-            questions_serializer = QuestionSerializer(
-                feedback_lesson.questions, many=True
-            )
-            question_data = {
-                question["id"]: {**question, "descriptive_answers": [], "ratings": []}
-                for question in questions_serializer.data
-            }
-            for response in feedback_lesson_reponses:
-                for answer in response.answers.all():
-                    question_id = answer.question.id
-                    if answer.question.type.startswith("rating"):
-                        question_data[question_id]["ratings"].append(answer.rating)
-                    elif answer.question.type == "descriptive_answer":
-                        question_data[question_id]["descriptive_answers"].append(
-                            answer.text_answer
-                        )
-
-            for question_id, data in question_data.items():
-                ratings = data["ratings"]
-                if ratings:
-                    if data["type"] == "rating_0_to_10":
-
-                        nps += calculate_nps(ratings)
-                        total_questions += 1
-
-        if total_questions > 0:
-            average_nps = nps / total_questions
-        else:
-            average_nps = 0
-
-        res[project.id] = average_nps
+        ratings = []
+        for answer in answers:
+            ratings.append(answer.rating)
+        if ratings:
+            nps = calculate_nps(ratings)
+        res[project.id] = nps
     return Response(res)
 
 
 class GetAllNudgesOfSchedularProjects(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request, project_id):
         try:
@@ -3613,9 +3667,18 @@ class GetAllNudgesOfSchedularProjects(APIView):
             if hr_id:
                 courses = courses.filter(batch__project__hr__id=hr_id)
             for course in courses:
-                nudges = get_nudges_of_course(course)
+                today_date = date.today()
+                nudges = Nudge.objects.filter(
+                    batch__id=course.batch.id,
+                    is_sent=False,
+                    batch__project__nudges=True,
+                    batch__project__status="ongoing",
+                    trigger_date__isnull=False,
+                )
+                if hr_id:
+                    nudges = nudges.filter(is_switched_on=True)
+                nudges = NudgeSerializer(nudges, many=True).data
                 data = list(data) + list(nudges)
-
             return Response(data)
         except Exception as e:
             print(str(e))
@@ -3623,7 +3686,7 @@ class GetAllNudgesOfSchedularProjects(APIView):
 
 
 class CreateAssignmentLesson(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def post(self, request):
         try:
@@ -3651,7 +3714,7 @@ class CreateAssignmentLesson(APIView):
                     name=request.data["name"],
                     status=request.data["status"],
                     lesson_type="assignment",
-                    drip_date=request.data["drip_date"],
+                    drip_date=(request.data.get("drip_date", None)),
                     order=int(request.data["order"]),
                     live_session=live_session,
                 )
@@ -3674,7 +3737,7 @@ class CreateAssignmentLesson(APIView):
 
 class UpdateAssignmentLesson(APIView):
     def put(self, request, assignment_id):
-        permission_classes = [IsAuthenticated]
+        permission_classes = [IsAuthenticated, IsInRoles("pmo")]
         try:
 
             assignment_lesson = AssignmentLesson.objects.get(
@@ -3685,16 +3748,22 @@ class UpdateAssignmentLesson(APIView):
 
             assignment_lesson.save()
             lesson = Lesson.objects.get(id=assignment_lesson.lesson.id)
-            lesson.name = request.data["name"]
-            lesson.drip_date = request.data["drip_date"]
-            live_session_id = request.data["live_session"]
-            live_session = None
-            if live_session_id != "null":
-                live_session = LiveSessionSchedular.objects.get(id=live_session_id)
-            lesson.live_session = live_session
+            if lesson.course:
+                lesson.name = request.data["name"]
+                lesson.drip_date = request.data.get("drip_date", None)
+                live_session_id = request.data["live_session"]
+                live_session = None
+                if live_session_id != "null":
+                    live_session = LiveSessionSchedular.objects.get(id=live_session_id)
+                lesson.live_session = live_session
+            else:
+                lesson.name = request.data["name"]
             lesson.save()
+            assignment_lesson_serializer = AssignmentSerializerDepthOne(
+                assignment_lesson
+            )
             return Response(
-                {"message": f"Assignment Lesson Updated."}, status=status.HTTP_200_OK
+                assignment_lesson_serializer.data, status=status.HTTP_200_OK
             )
         except Exception as e:
             print(str(e))
@@ -3705,7 +3774,7 @@ class UpdateAssignmentLesson(APIView):
 
 
 class GetAllAssignmentsResponses(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "learner", "coach")]
 
     def get(self, request, user_type, user_id):
 
@@ -3742,7 +3811,7 @@ class GetAllAssignmentsResponses(APIView):
 
 
 class CreateAssignmentLessonResponse(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("learner")]
 
     def post(self, request):
         try:
@@ -3771,7 +3840,7 @@ class CreateAssignmentLessonResponse(APIView):
 
 
 class GetAssignmentsResponses(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "coach", "facilitator")]
 
     def get(self, request, assignment_id, learner_id):
         try:
@@ -3790,7 +3859,7 @@ class GetAssignmentsResponses(APIView):
 
 
 class UpdateAssignmentLessonFile(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("learner", "pmo", "coach")]
 
     def put(self, request):
         try:
@@ -3813,10 +3882,9 @@ class UpdateAssignmentLessonFile(APIView):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "pmo")])
 def submit_feedback(request, feedback_id, learner_id):
     try:
-
         feedback = get_object_or_404(Feedback, id=feedback_id)
         learner = get_object_or_404(Learner, id=learner_id)
     except (
@@ -3826,7 +3894,6 @@ def submit_feedback(request, feedback_id, learner_id):
         return Response(
             {"error": "Failed to submit feedback."}, status=status.HTTP_404_NOT_FOUND
         )
-
     caas_session_id = request.data.get("caas_session_id", "")
     schedular_session_id = request.data.get("schedular_session_id", "")
     caas_session = None
@@ -3863,7 +3930,7 @@ def submit_feedback(request, feedback_id, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach")])
 def get_feedback(request, feedback_id):
     feedback = Feedback.objects.get(id=feedback_id)
     serializer = FeedbackDepthOneSerializer(feedback)
@@ -3871,7 +3938,7 @@ def get_feedback(request, feedback_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_end_meeting_feedback_response_data(request):
 
     try:
@@ -3936,7 +4003,7 @@ def get_end_meeting_feedback_response_data(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_coach_session_feedback_response_data(request, feedback_response_id):
 
     try:
@@ -3966,21 +4033,62 @@ def get_coach_session_feedback_response_data(request, feedback_response_id):
 
 
 class FacilitatorWiseFeedback(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "facilitator")]
 
     def get(self, request, feedback_id):
         try:
             feedback = FeedbackLesson.objects.get(id=feedback_id)
         except Exception as e:
             return Response(
-                {"message": f"Failed to update file."},
+                {"error": f"Failed to update file."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_live_sessions_by_course(request, course_id):
     live_sessions = LiveSession.objects.filter(batch__course__id=course_id)
     live_sessions_serializer = LiveSessionSchedularSerializer(live_sessions, many=True)
     return Response(live_sessions_serializer.data)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def delete_pdf(request):
+    try:
+        delete_pdf_id = request.data.get("pdf_id")
+        print(delete_pdf_id, Resources.objects.all())
+
+        resource = Resources.objects.get(id=delete_pdf_id)
+        resource.delete()
+        return Response(
+            {"message": f"Pdf deleted sucessfully!"},
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to delete pdf."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def update_nudge_status(request, nudge_id):
+    nudge = Nudge.objects.get(id=nudge_id)
+    is_switched_on = request.data.get("is_switched_on")
+    nudge_sent_date = request.data.get("date")  # YYYY-MM-DD format
+    if is_switched_on:
+        # schedule new periodic task
+        desired_time = time(8, 30)
+        nudge_sent_date = datetime.strptime(nudge_sent_date, "%Y-%m-%d")
+        nudge.trigger_date = nudge_sent_date.date()
+        nudge.is_switched_on = True
+    else:
+        # find the periodic task and switch
+        nudge.is_switched_on = False
+    nudge.save()
+    nudge_serializer = NudgeSerializer(nudge)
+    return Response(nudge_serializer.data)

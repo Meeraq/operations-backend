@@ -72,9 +72,11 @@ from .serializers import (
     FacilitatorSerializer,
     APILogSerializer,
     PmoSerializerAll,
+    TaskSerializer,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor
+from .permissions import IsInRoles
 from rest_framework import generics
 from django.utils.crypto import get_random_string
 import jwt
@@ -132,6 +134,7 @@ from .models import (
     FinalizeCoachActivity,
     APILog,
     Facilitator,
+    Task,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -172,7 +175,6 @@ from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
 from zohoapi.models import Vendor
 from courses.models import CourseEnrollment
-
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
 import pdfkit
@@ -755,6 +757,14 @@ FIELD_NAME_VALUES = {
     "topic": "Topic",
 }
 
+SESSIONS_WITH_STAKEHOLDERS = [
+    "tripartite",
+    "mid_review",
+    "end_review",
+    "stakeholder_without_coach",
+    "stakeholder_interview",
+]
+
 
 def add_contact_in_wati(user_type, name, phone):
     try:
@@ -837,8 +847,20 @@ def check_if_the_avalibility_is_already_booked(user_id, availability):
     return False
 
 
+def create_task(task_details, number_of_days):
+    triggered_date = datetime.now() + timedelta(days=number_of_days)
+    triggered_date = triggered_date.replace(hour=8, minute=0, second=0, microsecond=0)
+    task_details["trigger_date"] = triggered_date
+    serializer = TaskSerializer(data=task_details)
+    if serializer.is_valid():
+        task_instance = serializer.save()
+        return task_instance
+    else:
+        return None
+
+
 @api_view(["POST"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
 def create_pmo(request):
     # Get data from request
     name = request.data.get("name")
@@ -898,7 +920,7 @@ def create_pmo(request):
 
 
 @api_view(["PUT"])
-@permission_classes([AllowAny])
+@permission_classes([AllowAny, IsInRoles("superadmin")])
 def edit_pmo(request):
     # Get data from request
     name = request.data.get("name")
@@ -936,7 +958,7 @@ def edit_pmo(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def approve_coach(request):
     try:
         # Get the Coach object
@@ -946,6 +968,7 @@ def approve_coach(request):
 
         # Change the is_approved field to True
         coach.is_approved = True
+        coach.active_inactive = True
         coach.room_id = room_id
         coach.save()
 
@@ -982,12 +1005,10 @@ def approve_facilitator(request):
     try:
         # Get the Coach object
         unapproved_coach = request.data["coach"]
-        room_id = request.data["room_id"]
         coach = Facilitator.objects.get(id=unapproved_coach["id"])
 
         # Change the is_approved field to True
         coach.is_approved = True
-        coach.room_id = room_id
         coach.save()
 
         path = f"/profile"
@@ -1018,12 +1039,10 @@ def approve_facilitator(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def update_coach_profile(request, id):
-
     try:
         coach = Coach.objects.get(id=id)
-
     except Coach.DoesNotExist:
         return Response(status=404)
 
@@ -1109,11 +1128,11 @@ def update_coach_profile(request, id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def get_coaches(request):
     try:
         # Get all the Coach objects
-        coaches = Coach.objects.filter(is_approved=True, active_inactive=True)
+        coaches = Coach.objects.filter(is_approved=True)
 
         # Serialize the Coach objects
         serializer = CoachSerializer(coaches, many=True)
@@ -1196,7 +1215,7 @@ def get_management_token(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_project_cass(request):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_name"]
@@ -1258,6 +1277,7 @@ def create_project_cass(request):
         )
 
         project.save()
+
         try:
             userId = request.data.get("user_id")
             user_who_created = User.objects.get(id=userId)
@@ -1277,29 +1297,47 @@ def create_project_cass(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to create project."}, status=400)
-    hr_emails = []
-    project_name = project.name
 
     for hr in request.data["hr"]:
         single_hr = HR.objects.get(id=hr)
-        # print(single_hr)
         project.hr.add(single_hr)
-        # Send email notification to the HR
-        # subject = f'Hey HR! You have been assigned to a project {project_name}'
-        # message = f'Dear {single_hr.first_name},\n\n You can use your email to log-in via OTP.'
-        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [single_hr.email])
 
-    # hrs= create_hr(request.data['hr'])
-    # for hr in hrs:
-    #     project.hr.add(hr)
+    # create tasks for the pmo
+    try:
+        print("creating tasks here")
+        create_task(
+            {
+                "task": "add_project_structure",
+                "caas_project": project.id,
+                "priority": "high",
+                "status": "pending",
+                "remarks": [],
+            },
+            30,
+        )
+        create_task(
+            {
+                "task": "add_coach",
+                "caas_project": project.id,
+                "priority": "high",
+                "status": "pending",
+                "remarks": [],
+            },
+            7,
+        )
+        create_task(
+            {
+                "task": "add_coach_contract",
+                "caas_project": project.id,
+                "priority": "high",
+                "status": "pending",
+                "remarks": [],
+            },
+            1,
+        )
+    except Exception as e:
+        print("Error", str(e))
 
-    # try:
-    #     path = f"/projects/caas/progress/{project.id}"
-    #     message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
-    #     create_notification(project.hr.first().user.user, path, message)
-    # except Exception as e:
-    #     print(f"Error occurred while creating notification: {str(e)}")
-    # return Response({"message": "Project created succesfully"}, status=200)
     try:
         path = f"/projects/caas/progress/{project.id}"
         message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
@@ -1397,7 +1435,7 @@ def create_learners(learners_data):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_ongoing_projects(request):
     try:
         pmo_id = request.query_params.get("pmo")
@@ -1426,7 +1464,7 @@ def get_ongoing_projects(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_project_updates(request, project_id):
     updates = Update.objects.filter(project__id=project_id).order_by("-created_at")
     serializer = UpdateDepthOneSerializer(updates, many=True)
@@ -1434,7 +1472,7 @@ def get_project_updates(request, project_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_project_update(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
@@ -1458,7 +1496,7 @@ def add_project_update(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "pmo")])
 def get_projects_of_learner(request, learner_id):
     projects = Project.objects.filter(engagement__learner__id=learner_id)
     serializer = ProjectDepthTwoSerializer(projects, many=True)
@@ -1466,7 +1504,7 @@ def get_projects_of_learner(request, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("hr")])
 def get_ongoing_projects_of_hr(request, hr_id):
     projects = Project.objects.filter(hr__id=hr_id, steps__project_live="pending")
     schedular_projects = SchedularProject.objects.filter(hr__id=hr_id)
@@ -1484,7 +1522,7 @@ def get_ongoing_projects_of_hr(request, hr_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_hr(request):
     try:
         # Get all the Coach objects
@@ -1502,7 +1540,7 @@ def get_hr(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_projects_and_sessions_by_coach(request, coach_id):
     projects = Project.objects.filter(
         coaches_status__coach__id=coach_id, coaches_status__is_consent_asked=True
@@ -1512,7 +1550,7 @@ def get_projects_and_sessions_by_coach(request, coach_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def coach_session_list(request, coach_id):
     projects = Project.objects.filter(
         coaches_status__coach__id=coach_id, coaches_status__is_consent_asked=True
@@ -1544,7 +1582,7 @@ def coach_session_list(request, coach_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_coach(request):
     # Get data from request
     first_name = request.data.get("first_name")
@@ -1727,43 +1765,43 @@ def add_coach(request):
         )
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def delete_coach(request):
-    coach_id = request.data.get("coach_id", None)
-    user_id = request.data.get("user_id")
-    if coach_id:
-        try:
-            coach = Coach.objects.get(id=coach_id)
-            coach_name = coach.first_name + " " + coach.last_name
-            coach_user_profile = coach.user
-            is_delete_user = True
-            for role in coach_user_profile.roles.all():
-                if not role.name == "coach":
-                    # don't delete user if any other role exists
-                    is_delete_user = False
-                else:
-                    coach_user_profile.roles.remove(role)
-                    coach_user_profile.save()
-            if is_delete_user:
-                user = coach.user.user
-                user.delete()
-            else:
-                coach.delete()
-            timestamp = timezone.now()
-            current_user = User.objects.get(id=user_id)
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# def delete_coach(request):
+#     coach_id = request.data.get("coach_id", None)
+#     user_id = request.data.get("user_id")
+#     if coach_id:
+#         try:
+#             coach = Coach.objects.get(id=coach_id)
+#             coach_name = coach.first_name + " " + coach.last_name
+#             coach_user_profile = coach.user
+#             is_delete_user = True
+#             for role in coach_user_profile.roles.all():
+#                 if not role.name == "coach":
+#                     # don't delete user if any other role exists
+#                     is_delete_user = False
+#                 else:
+#                     coach_user_profile.roles.remove(role)
+#                     coach_user_profile.save()
+#             if is_delete_user:
+#                 user = coach.user.user
+#                 user.delete()
+#             else:
+#                 coach.delete()
+#             timestamp = timezone.now()
+#             current_user = User.objects.get(id=user_id)
 
-            deleteCoachProfile = DeleteCoachProfileActivity.objects.create(
-                user_who_got_deleted=coach_name,
-                user_who_deleted=current_user,
-                timestamp=timestamp,
-            )
-            deleteCoachProfile.save()
-            return Response({"message": "Coach deleted."}, status=200)
-        except ObjectDoesNotExist:
-            return Response({"message": "Failed to delete coach profile"}, status=400)
-    else:
-        return Response({"message": "Failed to delete coach profile"}, status=400)
+#             deleteCoachProfile = DeleteCoachProfileActivity.objects.create(
+#                 user_who_got_deleted=coach_name,
+#                 user_who_deleted=current_user,
+#                 timestamp=timestamp,
+#             )
+#             deleteCoachProfile.save()
+#             return Response({"message": "Coach deleted."}, status=200)
+#         except ObjectDoesNotExist:
+#             return Response({"message": "Failed to delete coach profile"}, status=400)
+#     else:
+#         return Response({"message": "Failed to delete coach profile"}, status=400)
 
 
 @api_view(["GET"])
@@ -1878,6 +1916,7 @@ def get_user_data(user):
                 "user": {**serializer.data["user"], "type": user_profile_role},
             }
         else:
+
             return None
     elif user_profile_role == "facilitator":
         serializer = FacilitatorDepthOneSerializer(user.profile.facilitator)
@@ -1952,13 +1991,13 @@ def generate_otp(request):
                 return Response(
                     {"error": "User with the given email does not exist."}, status=400
                 )
+        print(user)
         try:
             # Check if OTP already exists for the user
             otp_obj = OTP.objects.get(user=user)
             otp_obj.delete()
         except OTP.DoesNotExist:
             pass
-
         # Generate OTP and save it to the database
         otp = get_random_string(length=6, allowed_chars="0123456789")
         created_otp = OTP.objects.create(user=user, otp=otp)
@@ -1999,11 +2038,14 @@ def generate_otp(request):
 
     except User.DoesNotExist:
         # Handle the case where the user with the given email does not exist
+        print("hello 2 ", str(e))
+
         return Response(
             {"error": "User with the given email does not exist."}, status=400
         )
 
     except Exception as e:
+        print("hello", str(e))
         # Handle any other exceptions
         return Response({"error": str(e)}, status=500)
 
@@ -2073,7 +2115,7 @@ def get_organisation(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_organisation(request):
     print(request.data.get("image_url", ""))
     org = Organisation.objects.create(
@@ -2088,7 +2130,7 @@ def add_organisation(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_organisation(request, org_id):
     try:
         org = Organisation.objects.get(id=org_id)
@@ -2107,7 +2149,7 @@ def update_organisation(request, org_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_hr(request):
     try:
         email = request.data.get("email", "").strip().lower()
@@ -2155,11 +2197,12 @@ def add_hr(request):
             )
 
     except Exception as e:
-        return Response({"error": "User email already exist."}, status=400)
+        print(str(e))
+        return Response({"error": "Failed to add HR"}, status=400)
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_hr(request, hr_id):
     try:
         hr = HR.objects.get(id=hr_id)
@@ -2220,36 +2263,36 @@ def update_hr(request, hr_id):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-def delete_hr(request, hr_id):
-    try:
-        hr = HR.objects.get(id=hr_id)
-        user_profile = hr.user
-        is_delete_user = True
-        for role in user_profile.roles.all():
-            if not role.name == "hr":
-                is_delete_user = False
-            else:
-                user_profile.roles.remove(role)
-                user_profile.save()
-        if is_delete_user:
-            user = user_profile.user
-            user.delete()
-        else:
-            hr.delete()
-        return Response(
-            {"message": "HR deleted successfully"}, status=status.HTTP_200_OK
-        )
-    except ObjectDoesNotExist:
-        return Response(
-            {"message": "Failed to delete HR profile"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+# @api_view(["DELETE"])
+# @permission_classes([IsAuthenticated])
+# def delete_hr(request, hr_id):
+#     try:
+#         hr = HR.objects.get(id=hr_id)
+#         user_profile = hr.user
+#         is_delete_user = True
+#         for role in user_profile.roles.all():
+#             if not role.name == "hr":
+#                 is_delete_user = False
+#             else:
+#                 user_profile.roles.remove(role)
+#                 user_profile.save()
+#         if is_delete_user:
+#             user = user_profile.user
+#             user.delete()
+#         else:
+#             hr.delete()
+#         return Response(
+#             {"message": "HR deleted successfully"}, status=status.HTTP_200_OK
+#         )
+#     except ObjectDoesNotExist:
+#         return Response(
+#             {"message": "Failed to delete HR profile"},
+#             status=status.HTTP_400_BAD_REQUEST,
+#         )
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_project_struture(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2258,18 +2301,33 @@ def add_project_struture(request):
     project.project_structure = request.data.get("project_structure", [])
     project.currency = request.data.get("currency", "")
     project.save()
+    tasks = Task.objects.filter(
+        task="add_project_structure", status="pending", caas_project=project
+    )
+    tasks.update(status="completed")
+
+    if project.steps["project_structure"]["status"] == "complete":
+        #  update project structure for  all coaches
+        for coach_status in project.coaches_status.all():
+            coach_status.project_structure = project.project_structure
+            coach_status.save()
+        if not project.coach_consent_mandatory:
+            for coach_status in project.coaches_status.filter(is_consent_asked=True):
+                if not coach_status.status["consent"]["status"] == "reject":
+                    coach_status.status["consent"]["status"] = "select"
+                    coach_status.status["project_structure"]["status"] = "select"
+                coach_status.save()
     return Response({"message": "Structure added", "details": ""}, status=200)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def send_consent(request):
     # Get the project
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-
     # Get the list of coach IDs
     coach_list = request.data.get("coach_list", [])
     for coach_status in project.coaches_status.filter(
@@ -2278,7 +2336,30 @@ def send_consent(request):
         coach_status.consent_expiry_date = request.data["consent_expiry_date"]
         coach_status.is_consent_asked = True
         coach_status.save()
-
+        if project.coach_consent_mandatory:
+            create_task(
+                {
+                    "task": "give_consent",
+                    "caas_project": project.id,
+                    "coach": coach_status.coach.id,
+                    "priority": "medium",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                7,
+            )
+            if project.steps["project_structure"]["status"] == "complete":
+                create_task(
+                    {
+                        "task": "agree_project_structure",
+                        "caas_project": project.id,
+                        "coach": coach_status.coach.id,
+                        "priority": "medium",
+                        "status": "pending",
+                        "remarks": [],
+                    },
+                    7,
+                )
     # Update project's coach_status and steps
     project.steps["coach_list"]["status"] = "complete"
     project.save()
@@ -2317,7 +2398,7 @@ def send_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("leanrer", "pmo")])
 def get_project_details(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
@@ -2333,7 +2414,7 @@ def get_project_details(request, project_id):
 # "coach_id": 1
 # "status": Consent Approved/Consent Rejected
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach")])
 def receive_coach_consent(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2343,11 +2424,26 @@ def receive_coach_consent(request):
         try:
             if coach_status.coach.id == request.data.get("coach_id", ""):
                 coach_status.status["consent"]["status"] = request.data["status"]
+                tasks = Task.objects.filter(
+                    task="give_consent",
+                    status="pending",
+                    coach=coach_status.coach,
+                    caas_project=project,
+                )
+                tasks.update(status="completed")
                 if project.steps["project_structure"]["status"] == "complete":
+                    tasks = Task.objects.filter(
+                        task="agree_project_structure",
+                        status="pending",
+                        coach=coach_status.coach,
+                        caas_project=project,
+                    )
+                    tasks.update(status="completed")
                     coach_status.status["project_structure"]["status"] = request.data[
                         "status"
                     ]
                 coach_status.save()
+
                 try:
                     pmo_user = User.objects.filter(profile__roles__name="pmo").first()
                     pmo = Pmo.objects.get(email=pmo_user.email)
@@ -2399,7 +2495,7 @@ def receive_coach_consent(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach")])
 def update_project_structure_consent_by_coach(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2441,7 +2537,7 @@ def update_project_structure_consent_by_coach(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def complete_coach_consent(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2453,7 +2549,7 @@ def complete_coach_consent(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def complete_coach_list_to_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2471,7 +2567,7 @@ def complete_coach_list_to_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def complete_interviews_step(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2489,7 +2585,7 @@ def complete_interviews_step(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def complete_empanelment(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2501,7 +2597,7 @@ def complete_empanelment(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def complete_project_structure(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -2513,7 +2609,7 @@ def complete_project_structure(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_interview_data(request, project_id):
     sessions = SessionRequestCaas.objects.filter(
         project__id=project_id, session_type="interview"
@@ -2523,7 +2619,7 @@ def get_interview_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_chemistry_session_data(request, project_id):
     sessions = SessionRequestCaas.objects.filter(
         project__id=project_id, session_type="chemistry"
@@ -2533,7 +2629,7 @@ def get_chemistry_session_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_session_requests_of_hr(request, hr_id):
     sessions = SessionRequestCaas.objects.filter(hr__id=hr_id).all()
     serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
@@ -2541,7 +2637,7 @@ def get_session_requests_of_hr(request, hr_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_session_requests_of_learner(request, learner_id):
     sessions = SessionRequestCaas.objects.filter(learner__id=learner_id).all()
     print(sessions, "session")
@@ -2550,7 +2646,7 @@ def get_session_requests_of_learner(request, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_upcoming_booked_session_of_coach(request, coach_id):
     current_time = int(timezone.now().timestamp() * 1000)
     # convert current time to milliseconds
@@ -2564,7 +2660,7 @@ def get_upcoming_booked_session_of_coach(request, coach_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "learner", "hr")])
 def book_session_caas(request):
     session_request = SessionRequestCaas.objects.get(
         id=request.data.get("session_request")
@@ -2601,6 +2697,47 @@ def book_session_caas(request):
     session_request.status = "booked"
     session_request.invitees = get_trimmed_emails(request.data.get("invitees", []))
     session_request.save()
+
+    # create tasks
+    tasks = Task.objects.filter(
+        task="update_session_status", session_caas=session_request
+    )
+    if not tasks.exists():
+        create_task(
+            {
+                "task": "update_session_status",
+                "caas_project": session_request.project.id,
+                "coach": session_request.coach.id if session_request.coach else None,
+                "session_caas": session_request.id,
+                "priority": "high",
+                "status": "pending",
+                "remarks": [],
+            },
+            1,
+        )
+    tasks = Task.objects.filter(task="add_invitees", session_caas=session_request)
+    if tasks.exists():
+        if len(session_request.invitees) > 0:
+            tasks.update(status="completed")
+    else:
+        if (
+            session_request.session_type in SESSIONS_WITH_STAKEHOLDERS
+            and len(session_request.invitees) == 0
+        ):
+            create_task(
+                {
+                    "task": "add_invitees",
+                    "caas_project": session_request.project.id,
+                    "coach": (
+                        session_request.coach.id if session_request.coach else None
+                    ),
+                    "session_caas": session_request.id,
+                    "priority": "high",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                1,
+            )
 
     # # Send email notification to the learner
     if session_request.session_type == "interview":
@@ -2804,7 +2941,7 @@ def get_slot_message(availability):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def create_session_request_caas(request):
     time_arr = create_time_arr(request.data["availibility"])
 
@@ -2880,7 +3017,7 @@ def create_session_request_caas(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_session_requests_of_coach(request, coach_id):
     sessions = SessionRequestCaas.objects.filter(coach__id=coach_id).all()
     serializer = SessionRequestCaasDepthTwoSerializer(sessions, many=True)
@@ -2888,7 +3025,7 @@ def get_session_requests_of_coach(request, coach_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def accept_coach_caas_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3050,7 +3187,7 @@ def accept_coach_caas_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def add_learner_to_project(request):
     coacheeCounts = int(0)
     try:
@@ -3061,6 +3198,12 @@ def add_learner_to_project(request):
         learners = create_learners(request.data["learners"])
         for learner in learners:
             create_engagement(learner, project)
+            try:
+                tasks = Task.objects.filter(task="add_coachee", project=project)
+                tasks.update(status="completed")
+            except Exception as e:
+                print(str(e))
+
             if project.enable_emails_to_hr_and_coachee:
                 try:
                     path = f"/projects/caas/progress/{project.id}"
@@ -3170,12 +3313,26 @@ def create_engagement(learner, project):
             )
         engagement = Engagement(learner=learner, project=project, status="active")
         engagement.save()
+        #  create task
+        try:
+            create_task(
+                {
+                    "task": "select_a_coach",
+                    "engagement": engagement.id,
+                    "priority": "high",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                30,
+            )
+        except Exception as e:
+            print(str(e))
         return engagement
     return existing_engagement
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def accept_coach_caas_learner(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3198,6 +3355,11 @@ def accept_coach_caas_learner(request):
                 )
                 engagement.coach = coach.coach
                 engagement.save()
+                # update select a coach task
+                tasks = Task.objects.filter(
+                    task="select_a_coach", engagement=engagement
+                )
+                tasks.update(status="completed")
                 sessions = SessionRequestCaas.objects.filter(
                     learner__id=request.data.get("learner_id"),
                     session_type="chemistry_session",
@@ -3234,7 +3396,7 @@ def accept_coach_caas_learner(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def complete_cass_step(request):
     try:
         step = request.data.get("step")
@@ -3247,7 +3409,7 @@ def complete_cass_step(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def mark_as_incomplete(request):
     stepList = [
         "coach_list",
@@ -3281,7 +3443,7 @@ def mark_as_incomplete(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def send_project_strure_to_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3302,6 +3464,17 @@ def send_project_strure_to_hr(request):
                 coach_status.status["consent"]["status"] = "select"
                 if project.steps["project_structure"]["status"] == "complete":
                     coach_status.status["project_structure"]["status"] = "select"
+                    create_task(
+                        {
+                            "task": "agree_project_structure",
+                            "caas_project": project.id,
+                            "coach": coach_status.coach.id,
+                            "priority": "medium",
+                            "status": "pending",
+                            "remarks": [],
+                        },
+                        7,
+                    )
             coach_status.save()
     try:
         path = f"/projects/caas/progress/{project.id}"
@@ -3314,7 +3487,7 @@ def send_project_strure_to_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def send_reject_reason(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3333,7 +3506,7 @@ def send_reject_reason(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("hr")])
 def project_structure_agree_by_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3345,7 +3518,7 @@ def project_structure_agree_by_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("hr")])
 def request_more_profiles_by_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3379,7 +3552,7 @@ def request_more_profiles_by_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def edit_learner(request):
     try:
         learner = Learner.objects.get(id=request.data.get("learner_id", ""))
@@ -3408,7 +3581,26 @@ def edit_learner(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "superadmin")])
+def edit_individual_learner(request, user_id):
+    try:
+        learner = Learner.objects.get(id=user_id)
+        serializer = LearnerSerializer(learner, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            if learner.phone:
+                add_contact_in_wati("learner", learner.name, learner.phone)
+
+            return Response({"message": "Learner details updated."}, status=200)
+        else:
+            print(serializer.errors)
+            return Response({"message": "Failed to edit learner"}, status=500)
+    except Exception as e:
+        return Response({"message": "Failed to edit learner"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def mark_finalized_list_complete(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3420,7 +3612,7 @@ def mark_finalized_list_complete(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def send_list_to_hr(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3490,7 +3682,7 @@ def send_list_to_hr(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def finalized_coach_from_coach_consent(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3509,7 +3701,7 @@ def finalized_coach_from_coach_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_coach_field_values(request):
     job_roles = set()
     languages = set()
@@ -3556,7 +3748,7 @@ def get_coach_field_values(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def add_mulitple_coaches(request):
     # Get data from request
     coaches = request.data.get("coaches")
@@ -3752,7 +3944,7 @@ def add_mulitple_coaches(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_notifications(request, user_id):
     notifications = Notification.objects.filter(user__id=user_id).order_by(
         "-created_at"
@@ -3762,7 +3954,7 @@ def get_notifications(request, user_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def mark_all_notifications_as_read(request):
     notifications = Notification.objects.filter(
         read_status=False, user__id=request.data["user_id"]
@@ -3772,7 +3964,7 @@ def mark_all_notifications_as_read(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def mark_notifications_as_read(request):
     user_id = request.data.get("user_id")
     notification_ids = request.data.get("notification_ids")
@@ -3791,14 +3983,14 @@ def mark_notifications_as_read(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def unread_notification_count(request, user_id):
     count = Notification.objects.filter(user__id=user_id, read_status=False).count()
     return Response({"count": count})
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def mark_project_as_sold(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -3821,7 +4013,7 @@ def mark_project_as_sold(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_session_requests_of_user_on_date(request, user_type, user_id, date):
     date_obj = datetime.strptime(date, "%Y-%m-%d")
     start_time = date_obj.replace(hour=0, minute=0, second=0)
@@ -3851,7 +4043,7 @@ def get_session_requests_of_user_on_date(request, user_type, user_id, date):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def request_reschedule(request, session_id):
     session = SessionRequestCaas.objects.get(id=session_id)
     session.reschedule_request.append(
@@ -3866,7 +4058,7 @@ def request_reschedule(request, session_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def reschedule_session(request):
     existing_session = SessionRequestCaas.objects.get(
         id=request.data["existing_session_id"]
@@ -3944,7 +4136,7 @@ def reschedule_session(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def get_engagement_in_projects(request, project_id):
     engagements = Engagement.objects.filter(project__id=project_id)
     engagements_data = []
@@ -3972,7 +4164,7 @@ def get_engagement_in_projects(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("hr")])
 def get_engagements_of_hr(request, user_id):
     engagements = Engagement.objects.filter(project__hr__id=user_id)
     engagements_data = []
@@ -4011,7 +4203,7 @@ def get_engagements_of_hr(request, user_id):
 
 
 class SessionCountsForAllLearners(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "coach", "hr")]
 
     def get(self, request, user_type, user_id, format=None):
         try:
@@ -4073,7 +4265,7 @@ def get_learner_engagement_of_project(request, project_id, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def get_learners_engagement(request, learner_id):
     engagements = Engagement.objects.filter(learner__id=learner_id)
     serializer = EngagementDepthOneSerializer(engagements, many=True)
@@ -4081,7 +4273,7 @@ def get_learners_engagement(request, learner_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
 def create_session_request_by_learner(request, session_id):
     # print(request.user)
     # if request.user.profile.type != "learner":
@@ -4095,7 +4287,7 @@ def create_session_request_by_learner(request, session_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def get_session_requests_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
@@ -4134,7 +4326,7 @@ def get_session_requests_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def get_session_pending_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
@@ -4168,7 +4360,7 @@ def get_session_pending_of_user(request, user_type, user_id):
 
 # used  for hr report section
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def get_all_sessions_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
@@ -4204,7 +4396,7 @@ def get_all_sessions_of_user(request, user_type, user_id):
 
 # used for pmo report section
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
     session_requests = []
     schedular_sessions = []
@@ -4354,7 +4546,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -4414,7 +4606,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -4554,7 +4746,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -4617,7 +4809,7 @@ def get_past_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def new_get_past_sessions_of_user(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -4757,7 +4949,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "hr", "learner")])
 def edit_session_status(request, session_id):
     try:
         session_request = SessionRequestCaas.objects.get(id=session_id)
@@ -4770,11 +4962,30 @@ def edit_session_status(request, session_id):
     current_time = datetime.now()
     session_request.status_updated_at = current_time
     session_request.save()
+    try:
+        engagement = Engagement.objects.get(
+            learner=session_request.learner, project=session_request.project
+        )
+        if session_request.session_type == "goal_setting":
+            tasks = Task.objects.filter(task="add_goal", engagement=engagement)
+            if not tasks.exists():
+                create_task(
+                    {
+                        "task": "add_goal",
+                        "engagement": engagement.id,
+                        "priority": "high",
+                        "status": "pending",
+                        "remarks": [],
+                    },
+                    7,
+                )
+    except Exception as e:
+        print(str(e))
     return Response({"message": "Session status updated successfully."}, status=200)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "hr", "learner")])
 def edit_session_availability(request, session_id):
     time_arr = create_time_arr(request.data["availibility"])
     try:
@@ -4798,7 +5009,7 @@ def edit_session_availability(request, session_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "hr")])
 def get_coachee_of_user(request, user_type, user_id):
     learners_data = []
     if user_type == "pmo":
@@ -4873,7 +5084,7 @@ def get_coachee_of_user(request, user_type, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "hr")])
 def get_learner_of_user_optimized(request, user_type, user_id):
     try:
         learners = None
@@ -4895,7 +5106,7 @@ def get_learner_of_user_optimized(request, user_type, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "learner", "hr")])
 def get_learner_course_enrolled_of_user_optimized(request, user_type, user_id):
     try:
         learners = None
@@ -4928,7 +5139,7 @@ def get_learner_course_enrolled_of_user_optimized(request, user_type, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "learner", "hr")])
 def get_project_organisation_learner_of_user_optimized(request, user_type, user_id):
     try:
         learners = None
@@ -5007,7 +5218,7 @@ def get_project_organisation_learner_of_user_optimized(request, user_type, user_
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "hr")])
 def get_learner_data(request, learner_id):
     learner = Learner.objects.get(id=learner_id)
     serializer = LearnerSerializer(learner)
@@ -5016,7 +5227,7 @@ def get_learner_data(request, learner_id):
 
 # updating the availability and coach in the first pending chemistry available for learner
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "hr", "pmo")])
 def request_chemistry_session(request, project_id, learner_id):
     session = SessionRequestCaas.objects.filter(
         learner__id=learner_id,
@@ -5059,7 +5270,7 @@ def request_chemistry_session(request, project_id, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "hr", "coach")])
 def get_learner_sessions_in_project(request, project_id, learner_id):
     sessions = SessionRequestCaas.objects.filter(
         project__id=project_id, learner__id=learner_id
@@ -5069,7 +5280,7 @@ def get_learner_sessions_in_project(request, project_id, learner_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
 def request_session(request, session_id, coach_id):
     session = SessionRequestCaas.objects.get(id=session_id)
     coach = Coach.objects.get(id=coach_id)
@@ -5098,7 +5309,7 @@ def request_session(request, session_id, coach_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def reschedule_session_of_coachee(request, session_id):
     session = SessionRequestCaas.objects.get(id=session_id)
     session.is_archive = True
@@ -5122,18 +5333,35 @@ def reschedule_session_of_coachee(request, session_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach")])
 def create_goal(request):
     user_email = request.data.get("email")
     serializer = GoalSerializer(data=request.data)
     goal_name = request.data["name"]
     engagement_id = request.data.get("engagement")
-
     if not Goal.objects.filter(name=goal_name, engagement__id=engagement_id).exists():
         if Goal.objects.filter(engagement__id=engagement_id).count() < 10:
             if serializer.is_valid():
-                serializer.save()
+                goal_instance = serializer.save()
                 try:
+                    tasks = Task.objects.filter(
+                        task="add_goal", engagement=engagement_id
+                    )
+                    tasks.update(status="completed")
+                except Exception as e:
+                    print(str(e))
+                try:
+                    create_task(
+                        {
+                            "task": "add_competency",
+                            "engagement": int(engagement_id),
+                            "goal": goal_instance.id,
+                            "priority": "high",
+                            "status": "pending",
+                            "remarks": [],
+                        },
+                        1,
+                    )
                     user_instance = User.objects.get(username=user_email)
                     AddGoalActivity.objects.create(
                         user=user_instance,
@@ -5154,7 +5382,7 @@ def create_goal(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_engagement_goals(request, engagement_id):
     goals = Goal.objects.filter(engagement__id=engagement_id)
     serializer = GetGoalSerializer(goals, many=True)
@@ -5162,7 +5390,7 @@ def get_engagement_goals(request, engagement_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach")])
 def edit_goal(request, goal_id):
     try:
         goal = Goal.objects.get(id=goal_id)
@@ -5192,7 +5420,7 @@ def edit_goal(request, goal_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach")])
 def delete_goal(request, goal_id):
     try:
         goal = Goal.objects.get(id=goal_id)
@@ -5203,7 +5431,7 @@ def delete_goal(request, goal_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach")])
 def create_competency(request):
     serializer = CompetencySerializer(data=request.data)
     goal_id = request.data.get("goal")
@@ -5212,6 +5440,12 @@ def create_competency(request):
     if competency_count < 10:
         if serializer.is_valid():
             competency = serializer.save()
+            # update tasks
+            try:
+                tasks = Task.objects.filter(task="add_competency", goal__id=goal_id)
+                tasks.update(status="completed")
+            except Exception as e:
+                print(str(e))
             return Response({"message": "Competency added successfully"}, status=201)
         return Response(serializer.errors, status=400)
     else:
@@ -5222,7 +5456,7 @@ def create_competency(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach")])
 def edit_competency(request, competency_id):
     try:
         competency = Competency.objects.get(id=competency_id)
@@ -5250,7 +5484,7 @@ def edit_competency(request, competency_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "pmo")])
 def delete_competency(request, competency_id):
     try:
         competency = Competency.objects.get(id=competency_id)
@@ -5261,7 +5495,7 @@ def delete_competency(request, competency_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_engagement_competency(request, engagement_id):
     competentcy = Competency.objects.filter(goal__engagement__id=engagement_id)
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
@@ -5269,7 +5503,7 @@ def get_engagement_competency(request, engagement_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach")])
 def add_score_to_competency(request, competency_id):
     try:
         competency = Competency.objects.get(id=competency_id)
@@ -5297,7 +5531,7 @@ def add_score_to_competency(request, competency_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_competency_by_goal(request, goal_id):
     competentcy = Competency.objects.filter(goal__id=goal_id)
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
@@ -5305,7 +5539,7 @@ def get_competency_by_goal(request, goal_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach")])
 def create_action_item(request):
     serializer = ActionItemSerializer(data=request.data)
     competency_id = request.data.get("competency")
@@ -5323,7 +5557,7 @@ def create_action_item(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_engagement_action_items(request, engagement_id):
     action_items = ActionItem.objects.filter(
         competency__goal__engagement__id=engagement_id
@@ -5333,7 +5567,7 @@ def get_engagement_action_items(request, engagement_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_action_items_by_competency(request, competency_id):
     action_items = ActionItem.objects.filter(competency__id=competency_id)
     serializer = GetActionItemDepthOneSerializer(action_items, many=True)
@@ -5341,7 +5575,7 @@ def get_action_items_by_competency(request, competency_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach")])
 def edit_action_item(request, action_item_id):
     try:
         action_item = ActionItem.objects.get(id=action_item_id)
@@ -5355,7 +5589,7 @@ def edit_action_item(request, action_item_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach")])
 def delete_action_item(request, action_item_id):
     try:
         action_item = ActionItem.objects.get(id=action_item_id)
@@ -5366,11 +5600,11 @@ def delete_action_item(request, action_item_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def mark_session_as_complete(request, session_id):
     try:
         session = SessionRequestCaas.objects.get(id=session_id)
-    except ActionItem.DoesNotExist:
+    except SessionRequestCaas.DoesNotExist:
         return Response({"error": "Session not found."}, status=404)
     session.status = "completed"
     session.save()
@@ -5378,7 +5612,7 @@ def mark_session_as_complete(request, session_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def update_engagement_status(request, status, engagement_id):
     try:
         engagement = Engagement.objects.get(id=engagement_id)
@@ -5390,7 +5624,7 @@ def update_engagement_status(request, status, engagement_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def get_all_competencies(request):
     goals_with_competencies = Goal.objects.prefetch_related("competency_set").all()
 
@@ -5408,8 +5642,18 @@ def get_all_competencies(request):
             if goal.engagement and goal.engagement.learner
             else "N/A"
         )
+        coachee_email = (
+            goal.engagement.learner.email
+            if goal.engagement and goal.engagement.learner
+            else "N/A"
+        )
         coach_name = (
             goal.engagement.coach.first_name + " " + goal.engagement.coach.last_name
+            if goal.engagement and goal.engagement.coach
+            else "N/A"
+        )
+        coach_email = (
+            goal.engagement.coach.email
             if goal.engagement and goal.engagement.coach
             else "N/A"
         )
@@ -5425,7 +5669,9 @@ def get_all_competencies(request):
                     "created_at": competency.created_at.isoformat(),
                     "project_name": project_name,
                     "learner_name": coachee_name,
+                    "learner_email": coachee_email,
                     "coach_name": coach_name,
+                    "coach_email": coach_email,
                 }
                 competency_list.append(competency_data)
         else:
@@ -5438,7 +5684,9 @@ def get_all_competencies(request):
                 "created_at": None,
                 "project_name": project_name,
                 "learner_name": coachee_name,
+                "learner_email": coachee_email,
                 "coach_name": coach_name,
+                "coach_email": coach_email,
             }
             competency_list.append(competency_data)
 
@@ -5446,7 +5694,9 @@ def get_all_competencies(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("coach", "learner", "pmo", "hr", "facilitator")]
+)
 def get_current_session(request, user_type, room_id, user_id):
     five_minutes_in_milliseconds = 300000
     current_time = int(timezone.now().timestamp() * 1000)
@@ -5566,7 +5816,7 @@ def get_current_session_of_stakeholder(request, room_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "learner", "hr")])
 def schedule_session_directly(request, session_id):
     with transaction.atomic():
         try:
@@ -5632,6 +5882,44 @@ def schedule_session_directly(request, session_id):
         session.status = "booked"
         session.invitees = get_trimmed_emails(request.data.get("invitees", []))
         session.save()
+        tasks = Task.objects.filter(task="update_session_status", session_caas=session)
+        if not tasks.exists():
+            create_task(
+                {
+                    "task": "update_session_status",
+                    "caas_project": session.project.id,
+                    "coach": session.coach.id if session.coach else None,
+                    "session_caas": session.id,
+                    "priority": "high",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                1,
+            )
+        if (
+            session.session_type in SESSIONS_WITH_STAKEHOLDERS
+            and len(session.invitees) == 0
+        ):
+            create_task(
+                {
+                    "task": "add_invitees",
+                    "caas_project": session.project.id,
+                    "coach": session.coach.id if session.coach else None,
+                    "session_caas": session.id,
+                    "priority": "high",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                1,
+            )
+        if session.coach and session.learner and session.project:
+            tasks = Task.objects.filter(
+                task="book_session",
+                engagement__project=session.project,
+                engagement__learner=session.learner,
+            )
+            tasks.update(status="completed")
+
         coach = None
         if request.data["user_type"] == "coach":
             coach = Coach.objects.get(id=request.data["user_id"])
@@ -5756,7 +6044,7 @@ def schedule_session_directly(request, session_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def delete_learner_from_project(request, engagement_id):
     try:
         engagement = Engagement.objects.get(id=engagement_id)
@@ -5784,7 +6072,7 @@ def delete_learner_from_project(request, engagement_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def reset_consent(request):
     try:
         coach_status = get_object_or_404(
@@ -5804,7 +6092,7 @@ def reset_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "learner", "hr")])
 def get_competency_averages(request, hr_id):
     # Step 1: Retrieve the data from the Competency model
     competencies = Competency.objects.filter(goal__engagement__project__hr__id=hr_id)
@@ -5835,7 +6123,7 @@ def get_competency_averages(request, hr_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "pmo", "hr")])
 def get_learner_competency_averages(request, learner_id):
     competencies = Competency.objects.filter(goal__engagement__learner__id=learner_id)
     serializer = CompetencyDepthOneSerializer(competencies, many=True)
@@ -5843,7 +6131,7 @@ def get_learner_competency_averages(request, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("hr")])
 def get_upcoming_session_count(request, hr_id):
     current_time = int(timezone.now().timestamp() * 1000)
     session_requests = []
@@ -5875,7 +6163,7 @@ def get_upcoming_session_count(request, hr_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("hr")])
 def get_requests_count(request, hr_id):
     session_requests = SessionRequestCaas.objects.filter(
         Q(confirmed_availability=None) & Q(project__hr__id=hr_id) & ~Q(status="pending")
@@ -5892,7 +6180,7 @@ def get_requests_count(request, hr_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("hr")])
 def get_completed_sessions_count(request, hr_id):
     session_requests = SessionRequestCaas.objects.filter(
         Q(project__hr__id=hr_id) & Q(status="completed")
@@ -5909,7 +6197,7 @@ def get_completed_sessions_count(request, hr_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
 def get_completed_learner_sessions_count(request, learner_id):
     learner_session_requests = SessionRequestCaas.objects.filter(
         Q(learner__id=learner_id) & Q(status="completed")
@@ -5928,7 +6216,7 @@ def get_completed_learner_sessions_count(request, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
 def get_total_goals_for_learner(request, learner_id):
     try:
         total_goals = Goal.objects.filter(engagement__learner_id=learner_id).count()
@@ -5944,7 +6232,7 @@ def get_total_goals_for_learner(request, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
 def get_total_competencies_for_learner(request, learner_id):
     try:
         total_competencies = Competency.objects.filter(
@@ -5962,7 +6250,7 @@ def get_total_competencies_for_learner(request, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("hr")])
 def get_learners_without_sessions(request, hr_id):
     # Get the learners associated with the given hr_id who don't have any sessions with status = "requested" or "booked".
     learners = (
@@ -5979,7 +6267,7 @@ def get_learners_without_sessions(request, hr_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def select_coach_for_coachee(request):
     try:
         coach_status = CoachStatus.objects.get(id=request.data["coach_status_id"])
@@ -5993,11 +6281,13 @@ def select_coach_for_coachee(request):
     coach_status.save()
     engagement.coach = coach_status.coach
     engagement.save()
+    tasks = Task.objects.filter(task="select_a_coach", engagement=engagement)
+    tasks.update(status="completed")
     return Response({"message": "Coach finalized for coachee"}, status=201)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr", "coach")])
 def add_past_session(request, session_id):
     # print("request data",request.data)
     try:
@@ -6049,7 +6339,7 @@ def add_past_session(request, session_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
 def get_pending_action_items_by_competency(request, learner_id):
     action_items = ActionItem.objects.filter(
         competency__goal__engagement__learner_id=learner_id, status="not_done"
@@ -6059,7 +6349,7 @@ def get_pending_action_items_by_competency(request, learner_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("hr")])
 def get_all_competencies_of_hr(request, hr_id):
     goals_with_competencies = Goal.objects.prefetch_related("competency_set").filter(
         engagement__project__hr=hr_id
@@ -6118,7 +6408,7 @@ def get_all_competencies_of_hr(request, hr_id):
 
 
 class UpdateInviteesView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "coach", "hr")]
 
     def put(self, request, session_request_id):
         try:
@@ -6227,7 +6517,7 @@ class UpdateInviteesView(APIView):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def remove_coach_from_project(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
@@ -6309,46 +6599,64 @@ def remove_coach_from_project(request, project_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "coach", "facilitator", "learner")]
+)
 def standard_field_request(request, user_id):
     try:
-        value = request.data.get("value").strip()
-        userType = request.data.get("userType")
+        with transaction.atomic():
+            value = request.data.get("value").strip()
+            userType = request.data.get("userType")
 
-        field_name = request.data.get(
-            "field_name"
-        )  # Adjust this based on your field name
-        standardized_field, created = StandardizedField.objects.get_or_create(
-            field=field_name
-        )
-        if userType == "coach":
-            user_instance = Coach.objects.get(id=user_id)
-            standardized_field_request = StandardizedFieldRequest(
-                standardized_field_name=standardized_field,
-                coach=user_instance,
-                value=value,
-                status="pending",
+            field_name = request.data.get(
+                "field_name"
+            )  # Adjust this based on your field name
+            standardized_field, created = StandardizedField.objects.get_or_create(
+                field=field_name
             )
-            standardized_field_request.save()
 
-        elif userType == "facilitator":
-            user_instance = Facilitator.objects.get(id=user_id)
-            standardized_field_request = StandardizedFieldRequest(
-                standardized_field_name=standardized_field,
-                facilitator=user_instance,
-                value=value,
-                status="pending",
-            )
-            standardized_field_request.save()
+            if value not in standardized_field.values:
+                standardized_field.values.append(value)
+                standardized_field.save()
+            else:
+                return Response({"error": "Value already present."}, status=404)
 
-        return Response({"message": "Request sent."}, status=200)
+            if userType == "coach":
+                user_instance = Coach.objects.get(id=user_id)
+                standardized_field_request = StandardizedFieldRequest(
+                    standardized_field_name=standardized_field,
+                    coach=user_instance,
+                    value=value,
+                    status="pending",
+                )
+                standardized_field_request.save()
+
+            elif userType == "facilitator":
+                user_instance = Facilitator.objects.get(id=user_id)
+                standardized_field_request = StandardizedFieldRequest(
+                    standardized_field_name=standardized_field,
+                    facilitator=user_instance,
+                    value=value,
+                    status="pending",
+                )
+                standardized_field_request.save()
+            elif userType == "learner":
+                user_instance = Learner.objects.get(id=user_id)
+                standardized_field_request = StandardizedFieldRequest(
+                    standardized_field_name=standardized_field,
+                    learner=user_instance,
+                    value=value,
+                    status="pending",
+                )
+                standardized_field_request.save()
+            return Response({"message": "Request sent."}, status=200)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to create request."}, status=500)
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def coaches_which_are_included_in_projects(request):
     coachesId = []
     projects = Project.objects.all()
@@ -6517,7 +6825,7 @@ def calculate_and_send_session_data(user_id):
 
 
 class SessionsProgressOfAllCoacheeForAnHr(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("hr")]
 
     def get(self, request, user_id, format=None):
         session_data = calculate_session_progress_data_for_hr(user_id)
@@ -6586,6 +6894,7 @@ class AddRegisteredCoach(APIView):
                     phone=phone,
                     phone_country_code=phone_country_code,
                     is_approved=is_approved,
+                    active_inactive=True,
                 )
 
                 # Approve coach
@@ -6689,9 +6998,7 @@ class AddRegisteredFacilitator(APIView):
                         username=email, password=temp_password, email=email
                     )
                     profile = Profile.objects.create(user=user)
-                    print("createing new user and profile.")
                 else:
-                    print("hello.")
                     profile = Profile.objects.get(user=user)
 
                 facilitator_role, created = Role.objects.get_or_create(
@@ -6699,7 +7006,6 @@ class AddRegisteredFacilitator(APIView):
                 )
                 profile.roles.add(facilitator_role)
                 profile.save()
-
                 # Create the Facilitator User using the Profile
                 facilitator_user = Facilitator.objects.create(
                     user=profile,
@@ -6763,7 +7069,7 @@ class AddRegisteredFacilitator(APIView):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_registered_coaches(request):
     try:
         # Filter coaches where isapproved is False
@@ -6781,7 +7087,7 @@ def get_registered_coaches(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_registered_facilitators(request):
     try:
         # Filter facilitators where isapproved is False
@@ -6890,7 +7196,7 @@ def get_registered_facilitators(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_all_engagements(request):
     # Get all engagements
     engagements = Engagement.objects.all()
@@ -6912,7 +7218,6 @@ def get_all_engagements(request):
             .exclude(Q(billable_session_number__isnull=True, session_type="chemistry"))
             .count()
         )
-
         # Count total sessions for the learner in this engagement
         total_sessions_count = SessionRequestCaas.objects.filter(
             learner__id=engagement.learner.id,
@@ -6970,7 +7275,7 @@ def get_all_engagements(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def edit_project_caas(request, project_id):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_id"]
@@ -7051,7 +7356,7 @@ def edit_project_caas(request, project_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def project_status(request, project_id):
     try:
         # Use get_object_or_404 to retrieve the project or return a 404 response if it doesn't exist
@@ -7091,7 +7396,7 @@ def project_status(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo")])
 def completed_projects(request, user_id):
     projects = Project.objects.filter(
         coaches_status__coach__id=user_id, coaches_status__is_consent_asked=True
@@ -7105,7 +7410,7 @@ def completed_projects(request, user_id):
 
 
 class ActivitySummary(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request):
         try:
@@ -7306,7 +7611,9 @@ def send_reset_password_link(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr", "facilitator")]
+)
 def create_coach_profile_template(request):
     coach_id = request.data.get("coach")
     project_id = request.data.get("project")
@@ -7343,7 +7650,9 @@ def create_coach_profile_template(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr", "facilitator")]
+)
 def get_coach_profile_template(request, project_id):
     try:
         coach_profile_templates = CoachProfileTemplate.objects.filter(
@@ -7356,7 +7665,7 @@ def get_coach_profile_template(request, project_id):
 
 
 class StandardizedFieldAPI(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "facilitator", "pmo")]
 
     def get(self, request):
         standardized_fields = StandardizedField.objects.all()
@@ -7374,7 +7683,7 @@ class StandardizedFieldAPI(APIView):
 
 
 class StandardizedFieldRequestAPI(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "facilitator", "pmo")]
 
     def get(self, request):
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -7403,7 +7712,7 @@ class StandardizedFieldRequestAPI(APIView):
 
 
 class StandardFieldAddValue(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def post(self, request):
         try:
@@ -7444,7 +7753,7 @@ class StandardFieldAddValue(APIView):
 
 
 class StandardFieldEditValue(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def put(self, request):
         try:
@@ -7500,8 +7809,42 @@ class StandardFieldEditValue(APIView):
             )
 
 
+models_to_update = {
+    "Coach": [
+        "location",
+        "other_certification",
+        "area_of_expertise",
+        "job_roles",
+        "companies_worked_in",
+        "language",
+        "education",
+        "domain",
+        "client_companies",
+        "educational_qualification",
+    ],
+    "Facilitator": [
+        "location",
+        "other_certification",
+        "area_of_expertise",
+        "job_roles",
+        "companies_worked_in",
+        "language",
+        "education",
+        "domain",
+        "client_companies",
+        "educational_qualification",
+        "city",
+        "country",
+        "topic",
+    ],
+    "Learner": [
+        "job_roles",
+    ],
+}
+
+
 class StandardizedFieldRequestAcceptReject(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def put(self, request):
         status = request.data.get("status")
@@ -7509,27 +7852,44 @@ class StandardizedFieldRequestAcceptReject(APIView):
 
         try:
             request_instance = StandardizedFieldRequest.objects.get(id=request_id)
+            field_name = request_instance.standardized_field_name.field
+            value = request_instance.value
 
+            standardized_field, created = StandardizedField.objects.get_or_create(
+                field=field_name
+            )
             if status == "accepted":
                 request_instance.status = status
                 request_instance.save()
 
-                field_name = request_instance.standardized_field_name.field
-                value = request_instance.value
-
-                standardized_field, created = StandardizedField.objects.get_or_create(
-                    field=field_name
-                )
-
-                if value not in standardized_field.values:
-                    standardized_field.values.append(value)
-                    standardized_field.save()
-                else:
-                    return Response({"error": "Value already present."}, status=404)
+                # if value not in standardized_field.values:
+                #     standardized_field.values.append(value)
+                #     standardized_field.save()
+                # else:
+                #     return Response({"error": "Value already present."}, status=404)
                 return Response({"message": f"Request {status}"}, status=200)
             else:
                 request_instance.status = status
                 request_instance.save()
+
+                if value in standardized_field.values:
+                    standardized_field.values.remove(value)
+                    standardized_field.save()
+
+                for model_name, fields in models_to_update.items():
+                    model_class = globals()[model_name]
+                    instances = model_class.objects.all()
+
+                    for instance in instances:
+                        for field in fields:
+                            field_value = getattr(instance, field, None)
+                            if field_value is not None:
+                                if (
+                                    isinstance(field_value, list)
+                                    and value in field_value
+                                ):
+                                    field_value.remove(value)
+                                    instance.save()
 
                 return Response({"message": f"Request {status}"}, status=200)
         except StandardizedFieldRequest.DoesNotExist:
@@ -7537,7 +7897,7 @@ class StandardizedFieldRequestAcceptReject(APIView):
 
 
 class StandardFieldDeleteValue(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def delete(self, request):
         try:
@@ -7580,7 +7940,7 @@ class StandardFieldDeleteValue(APIView):
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def template_list_create_view(request):
     if request.method == "GET":
         templates = Template.objects.all()
@@ -7596,7 +7956,7 @@ def template_list_create_view(request):
 
 
 @api_view(["GET", "PUT", "DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def template_retrieve_update_destroy_view(request, pk):
     try:
         template = Template.objects.get(pk=pk)
@@ -7620,7 +7980,7 @@ def template_retrieve_update_destroy_view(request, pk):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def create_project_contract(request):
     serializer = ProjectContractSerializer(data=request.data)
     if serializer.is_valid():
@@ -7630,7 +7990,7 @@ def create_project_contract(request):
 
 
 class ProjectContractAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo")]
 
     def get(self, request, format=None):
         contracts = ProjectContract.objects.all()
@@ -7639,7 +7999,7 @@ class ProjectContractAPIView(APIView):
 
 
 class ProjectContractDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo")]
 
     def get(self, request, project_id, format=None):
         print(project_id)
@@ -7656,7 +8016,7 @@ class ProjectContractDetailView(APIView):
 
 
 class CoachContractList(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo")]
 
     def get(self, request, format=None):
         contracts = CoachContract.objects.all()
@@ -7738,7 +8098,7 @@ class CoachContractDetail(APIView):
 
 
 class UpdateCoachContract(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "coach")]
 
     def put(self, request, format=None):
         coach_id = request.data.get("coach")
@@ -7775,7 +8135,7 @@ class UpdateCoachContract(APIView):
 
 
 class AssignCoachContractAndProjectContract(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def post(self, request, format=None):
         project_id = request.data.get("project")
@@ -7790,8 +8150,28 @@ class AssignCoachContractAndProjectContract(APIView):
         else:
             contract = existing_contract
 
-        current_date = timezone.now().date()
+        # update the tasks
+        try:
+            tasks = Task.objects.filter(
+                task="add_coach_contract", status="pending", caas_project=project_id
+            )
+            tasks.update(status="completed")
+            # create task
+            create_task(
+                {
+                    "task": "add_coachee",
+                    "project": project_id,
+                    "priority": "medium",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                7,
+            )
+        except Exception as e:
+            print(str(e))
+            pass
 
+        current_date = timezone.now().date()
         project_id = request.data.get("project")
 
         try:
@@ -7850,7 +8230,7 @@ class AssignCoachContractAndProjectContract(APIView):
 
 
 class ApprovedCoachContract(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "coach")]
 
     def get(self, request, project_id, coach_id, format=None):
         try:
@@ -7871,7 +8251,7 @@ class ApprovedCoachContract(APIView):
 
 
 class CoachWithApprovedContractsInProject(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo", "learner")]
 
     def get(self, request, project_id, format=None):
         try:
@@ -7894,7 +8274,7 @@ class CoachWithApprovedContractsInProject(APIView):
 
 
 class SendContractReminder(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def post(self, request, format=None):
         try:
@@ -8045,7 +8425,7 @@ def change_user_role(request, user_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "superadmin")])
 def get_users(request):
     user_profiles = Profile.objects.all()
     res = []
@@ -8093,7 +8473,7 @@ def get_weeks_for_current_month():
 
 
 class SessionData(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request, format=None):
         now = date.today()
@@ -8354,7 +8734,10 @@ def microsoft_callback(request):
 
 
 class UserTokenAvaliableCheck(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [
+        IsAuthenticated,
+        IsInRoles("pmo", "coach", "facilitator", "hr", "learner"),
+    ]
 
     def get(self, request, user_mail, format=None):
         user_token_present = False
@@ -8368,7 +8751,7 @@ class UserTokenAvaliableCheck(APIView):
 
 
 class DownloadCoachContract(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
     def get(self, request, coach_contract_id, format=None):
         try:
@@ -8432,6 +8815,7 @@ class DownloadCoachContract(APIView):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin", "pmo")])
 def add_pmo(request):
     try:
         with transaction.atomic():
@@ -8477,6 +8861,7 @@ def add_pmo(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin", "pmo")])
 def get_pmo(request):
     try:
         pmos = Pmo.objects.all()
@@ -8487,6 +8872,7 @@ def get_pmo(request):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin", "pmo")])
 def get_junior_pmo(request, user_id):
     try:
         pmos = Pmo.objects.filter(sub_role="junior_pmo").exclude(id=user_id)
@@ -8529,7 +8915,7 @@ ACTIVITIES_PER_USER_TYPE = {
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin", "pmo")])
 def get_api_logs(request):
     start_date = request.GET.get("start_date")
     end_date = request.GET.get("end_date")
@@ -8589,7 +8975,7 @@ def get_api_logs(request):
 
 
 @api_view(["GET"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def get_skill_training_projects(request):
     hr_id = request.query_params.get("hr", None)
     projects = SchedularProject.objects.all()
@@ -8607,7 +8993,7 @@ def get_skill_training_projects(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_reminders_of_project(request):
 
     try:
@@ -8634,7 +9020,7 @@ def update_reminders_of_project(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_reminders_of_caas_project(request):
 
     try:
@@ -8661,7 +9047,7 @@ def update_reminders_of_caas_project(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_extra_session_in_caas(request, learner_id, project_id):
     try:
 
@@ -8705,7 +9091,7 @@ def add_extra_session_in_caas(request, learner_id, project_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_coaches_to_project(request):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -8783,11 +9169,17 @@ def add_coaches_to_project(request):
     # Update project's coach_status and steps
     project.coaches_status.add(*coach_status)
     project.save()
+
+    tasks = Task.objects.filter(
+        task="add_coach", status="pending", caas_project=project
+    )
+    tasks.update(status="completed")
+
     return Response({"message": "Coaches added to project successfully!"})
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_coach_project_structure(request, coach_id):
     try:
         project = Project.objects.get(id=request.data.get("project_id", ""))
@@ -8806,7 +9198,7 @@ def update_coach_project_structure(request, coach_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def blacklist_coach(request):
     try:
         coach_id = request.data.get("coach_id")
@@ -8831,7 +9223,7 @@ def blacklist_coach(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "superadmin")])
 def get_all_api_logs(request):
     paginator = PageNumberPagination()
     paginator.page_size = 200
@@ -8839,48 +9231,186 @@ def get_all_api_logs(request):
 
     start_date = request.query_params.get("start_date")
     end_date = request.query_params.get("end_date")
+    username = request.query_params.get("username")
 
     if start_date and end_date:
-
         start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
         end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
         logs = logs.filter(created_at__date__range=(start_date, end_date))
+
+    if username:
+        logs = logs.filter(user__username__contains=username)
 
     result_page = paginator.paginate_queryset(logs, request)
     serializer = APILogSerializer(result_page, many=True)
     return paginator.get_paginated_response(serializer.data)
 
 
-@api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
-def delete_pmo(request):
+# @api_view(["DELETE"])
+# @permission_classes([IsAuthenticated])
+# def delete_pmo(request):
+#     try:
+#         with transaction.atomic():
+#             pmo_email = request.data.get("email").strip().lower()
+#             if pmo_email:
+
+#                 pmo = Pmo.objects.get(email=pmo_email)
+
+#                 pmo_user_profile = pmo.user
+#                 is_delete_user = True
+#                 for role in pmo_user_profile.roles.all():
+#                     if not role.name == "pmo":
+#                         # don't delete user if any other role exists
+#                         is_delete_user = False
+#                     else:
+#                         pmo_user_profile.roles.remove(role)
+#                         pmo_user_profile.save()
+#                 if is_delete_user:
+#                     user = pmo.user.user
+#                     user.delete()
+#                 else:
+#                     pmo.delete()
+
+#                 return Response({"message": "Pmo deleted successfully"})
+
+#     except Exception as e:
+#         print(str(e))
+#         return Response(
+#             {"error": "Failed to delete pmo."},
+#             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#         )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def add_remark_to_task(request):
+    task_id = request.data.get("task_id", "")
     try:
-        with transaction.atomic():
-            pmo_email = request.data.get("email").strip().lower()
-            if pmo_email:
-
-                pmo = Pmo.objects.get(email=pmo_email)
-
-                pmo_user_profile = pmo.user
-                is_delete_user = True
-                for role in pmo_user_profile.roles.all():
-                    if not role.name == "pmo":
-                        # don't delete user if any other role exists
-                        is_delete_user = False
-                    else:
-                        pmo_user_profile.roles.remove(role)
-                        pmo_user_profile.save()
-                if is_delete_user:
-                    user = pmo.user.user
-                    user.delete()
-                else:
-                    pmo.delete()
-
-                return Response({"message": "Pmo deleted successfully"})
-
-    except Exception as e:
-        print(str(e))
+        task = Task.objects.get(id=task_id)
+    except Task.DoesNotExist:
+        return Response({"error": "Task not found"}, status=status.HTTP_404_NOT_FOUND)
+    message = request.data.get("message", "")
+    if not message:
         return Response(
-            {"error": "Failed to delete pmo."},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            {"error": "message is required"}, status=status.HTTP_400_BAD_REQUEST
         )
+    task.add_remark(message)
+    return Response(
+        {"message": "Remark added successfully"}, status=status.HTTP_201_CREATED
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def get_tasks(request):
+    # Retrieve tasks that are pending and have a trigger date before or equal to current time
+    tasks = Task.objects.filter(trigger_date__lte=timezone.now())
+    # Initialize a list to store task details
+    task_details = []
+    junior_pmo_id = request.query_params.get("junior_pmo")
+    if junior_pmo_id:
+        tasks = tasks.filter(
+            Q(caas_project__junior_pmo=junior_pmo_id)
+            | Q(session_caas__project__junior_pmo=junior_pmo_id)
+            | Q(engagement__project__junior_pmo=junior_pmo_id)
+            | Q(goal__engagement__project__junior_pmo=junior_pmo_id)
+        )
+
+    # Iterate through each task
+    for task in tasks:
+        # Extract the latest remark message or set it to None if remarks are empty
+        latest_remark = task.remarks[-1]["message"] if task.remarks else None
+
+        # Determine the coach name associated with the task
+        coach_name = (
+            task.coach.__str__()
+            if task.coach
+            else (
+                task.engagement.coach.__str__()
+                if task.engagement and task.engagement.coach
+                else (
+                    task.goal.engagement.coach.__str__()
+                    if task.goal and task.goal.engagement.coach
+                    else (
+                        task.session_caas.coach.__str__()
+                        if task.session_caas and task.session_caas.coach
+                        else ""
+                    )
+                )
+            )
+        )
+        learner_name = (
+            task.engagement.learner.name
+            if task.engagement
+            else (
+                task.goal.engagement.learner.name
+                if task.goal
+                else (
+                    task.session_caas.learner.name
+                    if task.session_caas and task.session_caas.learner
+                    else ""
+                )
+            )
+        )
+        session_name = (
+            SESSION_TYPE_VALUE[task.session_caas.session_type]
+            if task.session_caas
+            else ""
+        )
+        # Retrieve vendor name associated with the task, handling exceptions gracefully
+        vendor_name = None
+        if task.vendor_user:
+            try:
+                vendor = Vendor.objects.get(user__user=task.vendor_user)
+                vendor_name = vendor.name
+            except Vendor.DoesNotExist:
+                pass
+
+        # Determine the project name associated with the task
+        project_name = (
+            task.caas_project.name
+            if task.caas_project
+            else (
+                task.session_caas.project.name
+                if task.session_caas
+                else (
+                    task.engagement.project.name
+                    if task.engagement
+                    else task.goal.engagement.project.name if task.goal else ""
+                )
+            )
+        )
+
+        # Serialize task data
+        serialized_data = TaskSerializer(task).data
+
+        # Append task details to the list
+        task_details.append(
+            {
+                **serialized_data,
+                "learner_name": learner_name,
+                "project_name": project_name,
+                "latest_remark": latest_remark,
+                "coach_name": coach_name,
+                "vendor_name": vendor_name,
+                "session_name": session_name,
+            }
+        )
+    return Response(task_details)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def complete_task(request):
+    task_id = request.data.get("task_id", "")
+    try:
+        task = Task.objects.get(id=task_id)
+    except Task.DoesNotExist:
+        return Response({"error": "Task not found"}, status=status.HTTP_404_NOT_FOUND)
+    task.status = "completed"
+    task.save()
+    message = f"{request.user.username} completed this task."
+    task.add_remark(message)
+    return Response(
+        {"message": "Task marked as completed."}, status=status.HTTP_201_CREATED
+    )

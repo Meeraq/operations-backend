@@ -102,6 +102,8 @@ from courses.models import (
     LaserCoachingSession,
     LiveSessionLesson,
     Lesson,
+    Certificate,
+    Answer,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import (
@@ -114,6 +116,7 @@ from courses.views import (
     create_or_get_learner,
     add_question_to_feedback_lesson,
     nps_default_feed_questions,
+    create_lessons_for_batch,
 )
 from assessmentApi.models import (
     Assessment,
@@ -146,9 +149,11 @@ import environ
 import re
 from rest_framework.views import APIView
 from api.views import get_user_data
-from zohoapi.models import Vendor
+from zohoapi.models import Vendor, InvoiceData
 from zohoapi.views import fetch_purchase_orders
 from zohoapi.tasks import organization_id
+from courses.views import calculate_nps
+from api.permissions import IsInRoles
 
 env = environ.Env()
 
@@ -249,7 +254,7 @@ def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_project_schedular(request):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_name"]
@@ -321,7 +326,9 @@ def create_project_schedular(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+)
 def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
     pmo_id = request.query_params.get("pmo")
@@ -404,92 +411,138 @@ def delete_facilitator_pricing(batch, facilitator):
             ).delete()
 
 
-# @api_view(["POST"])
-# def save_live_session(request):
-#     data = request.data
-
-#     if "requestData" not in data or "otherData" not in data:
-#         return Response(
-#             {"error": "Invalid data format in request"},
-#             status=status.HTTP_400_BAD_REQUEST,
-#         )
-
-#     requestData = data["requestData"]
-
-#     if not requestData:
-#         return Response(
-#             {"error": "requestData is empty"},
-#             status=status.HTTP_400_BAD_REQUEST,
-#         )
-
-#     live_sessions = []
-
-#     for item in requestData:
-#         zoom_id = item.get("zoom_id", None)
-#         batch_id = item.get("batch_id", None)
-#         live_session_number = item.get("live_session_number", None)
-#         live_session_order = item.get("live_session_order", None)
-#         if None in [zoom_id, batch_id]:
-#             return Response(
-#                 {"error": "Missing one or more required fields in request data"},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-
-#         live_session = LiveSession.objects.create(
-#             zoom_id=zoom_id,
-#             batch_id=batch_id,
-#             live_session_number=live_session_number,
-#             live_session_order=live_session_order,
-#         )
-
-#         live_sessions.append(live_session)
-
-#     return Response(status=status.HTTP_201_CREATED)
+def create_coach_pricing(batch, coach):
+    project_structure = batch.project.project_structure
+    for session in project_structure:
+        if session["session_type"] in [
+            "laser_coaching_session",
+            "mentoring_session",
+        ]:
+            coaching_session = CoachingSession.objects.filter(
+                batch=batch,
+                order=session["order"],
+                session_type=session["session_type"],
+            ).first()
+            coach_pricing, created = CoachPricing.objects.get_or_create(
+                project=batch.project,
+                coach=coach,
+                session_type=coaching_session.session_type,
+                coaching_session_number=coaching_session.coaching_session_number,
+                order=coaching_session.order,
+            )
+            if created:
+                coach_pricing.price = session["price"]
+                coach_pricing.save()
 
 
-# @api_view(["POST"])
-# def save_coaching_session(request):
-#     data = request.data
+def create_batch_calendar(batch):
+    for session_data in batch.project.project_structure:
+        order = session_data.get("order")
+        duration = session_data.get("duration")
+        session_type = session_data.get("session_type")
 
-#     try:
-#         requestData = data.get("requestData", [])[0]  # Get the first element of the requestData list
+        if session_type in [
+            "live_session",
+            "check_in_session",
+            "in_person_session",
+            "kickoff_session",
+            "virtual_session",
+        ]:
+            session_number = (
+                LiveSession.objects.filter(
+                    batch=batch, session_type=session_type
+                ).count()
+                + 1
+            )
+            live_session = LiveSession.objects.create(
+                batch=batch,
+                live_session_number=session_number,
+                order=order,
+                duration=duration,
+                session_type=session_type,
+            )
+        elif session_type == "laser_coaching_session":
+            coaching_session_number = (
+                CoachingSession.objects.filter(
+                    batch=batch, session_type=session_type
+                ).count()
+                + 1
+            )
+            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+            coaching_session = CoachingSession.objects.create(
+                batch=batch,
+                coaching_session_number=coaching_session_number,
+                order=order,
+                duration=duration,
+                booking_link=booking_link,
+                session_type=session_type,
+            )
+        elif session_type == "mentoring_session":
+            coaching_session_number = (
+                CoachingSession.objects.filter(
+                    batch=batch, session_type=session_type
+                ).count()
+                + 1
+            )
 
-#         coaching_session = CoachingSession.objects.create(
-#             booking_link=requestData["booking_link"],
-#             batch_id=requestData["batch_id"],
-#             coaching_session_number=requestData["coaching_session_number"],
-#             coaching_session_order=requestData["coaching_session_order"],
-#             start_date=datetime.strptime(requestData["start_date"], "%d-%m-%y"),
-#             end_date=datetime.strptime(requestData["end_date"], "%d-%m-%y"),
-#             expiry_date=datetime.strptime(requestData["expiry_date"], "%d-%m-%Y"),
-#         )
+            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
+            coaching_session = CoachingSession.objects.create(
+                batch=batch,
+                coaching_session_number=coaching_session_number,
+                order=order,
+                duration=duration,
+                booking_link=booking_link,
+                session_type=session_type,
+            )
 
-#         # Now, let's handle the otherData:
-#         sessions_data = data.get("otherData", {}).get("sessions", {}).get("index", {})
 
-#         session_type = sessions_data.get("sessionType", "")
-#         duration = sessions_data.get("duration", "")
+def delete_sessions_and_create_new_batch_calendar_and_lessons(project):
+    # deletion of related details
+    lessons = Lesson.objects.filter(
+        lesson_type="feedback",
+        feedbacklesson__live_session__isnull=False,
+        course__batch__project=project,
+    )
+    lessons.delete()
+    lessons = Lesson.objects.filter(
+        lesson_type="live_session", course__batch__project=project
+    )
+    lessons.delete()
+    lessons = Lesson.objects.filter(
+        lesson_type="laser_coaching", course__batch__project=project
+    )
+    lessons.delete()
+    coach_pricings = CoachPricing.objects.filter(project=project)
+    coach_pricings.delete()
+    facilitator_pricings = FacilitatorPricing.objects.filter(project=project)
+    facilitator_pricings.delete()
+    calendar_invites = CalendarInvites.objects.filter(
+        live_session__batch__project=project
+    )
+    for calendar_invite in calendar_invites:
+        delete_outlook_calendar_invite(calendar_invite)
 
-#         # You can add session_type and duration to the coaching_session if needed
-#         coaching_session.session_type = session_type
-#         coaching_session.duration = duration
+    live_sessions = LiveSession.objects.filter(batch__project=project)
+    live_sessions.delete()
+    coaching_sessions = CoachingSession.objects.filter(batch__project=project)
+    coaching_sessions.delete()
 
-#         coaching_session.save()
+    # create new batch calendar for all batches
+    batches = SchedularBatch.objects.filter(project=project)
+    for batch in batches:
+        create_batch_calendar(batch)
+        # dont change the order of create batch calendar and create lessons -> lessons will be created after batch calendar
+        create_lessons_for_batch(batch)
 
-#         return Response(
-#             {"message": "Coaching session created successfully."},
-#             status=200,
-#         )
+        for coach in batch.coaches.all():
+            create_coach_pricing(batch, coach)
 
-#     except Exception as e:
-#         return Response(
-#             {"message": f"Failed to create coaching session. Error: {str(e)}"},
-#             status=400,
-#         )
+    return None
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@transaction.atomic
 def create_project_structure(request, project_id):
     try:
         project = get_object_or_404(SchedularProject, id=project_id)
@@ -498,6 +551,10 @@ def create_project_structure(request, project_id):
             is_editing = len(project.project_structure) > 0
             project.project_structure = serializer.data
             project.save()
+
+            batches = SchedularBatch.objects.filter(project=project)
+            if batches.exists():
+                delete_sessions_and_create_new_batch_calendar_and_lessons(project)
 
             return Response(
                 {
@@ -517,7 +574,9 @@ def create_project_structure(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+)
 def get_schedular_batches(request):
     try:
         project_id = request.GET.get("project_id")
@@ -625,7 +684,9 @@ def generate_slots(start, end, duration):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+)
 def get_batch_calendar(request, batch_id):
     try:
         live_sessions = LiveSession.objects.filter(batch__id=batch_id)
@@ -728,6 +789,7 @@ def get_batch_calendar(request, batch_id):
             print(str(e))
             course = None
         batch_for_response = SchedularBatch.objects.filter(id=batch_id).first()
+        certificate = Certificate.objects.filter(courses=course).first()
         return Response(
             {
                 "sessions": sorted_sessions,
@@ -738,6 +800,8 @@ def get_batch_calendar(request, batch_id):
                 "facilitator": facilitator_serializer.data,
                 "batch_name": batch_for_response.name,
                 "project_id": batch_for_response.project.id,
+                "project_name": batch_for_response.project.name,
+                "certificate_present": True if certificate else False,
             }
         )
     except SchedularProject.DoesNotExist:
@@ -747,7 +811,7 @@ def get_batch_calendar(request, batch_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_live_session(request, live_session_id):
     try:
         with transaction.atomic():
@@ -782,19 +846,34 @@ def update_live_session(request, live_session_id):
                             update_live_session.pt_30_min_before.save()
                         live_session.pt_30_min_before = periodic_task
                         live_session.save()
+
+                        periodic_task = PeriodicTask.objects.create(
+                            name=f"send_live_session_link_whatsapp_to_facilitators_30_min_before{uuid.uuid1()}",
+                            task="schedularApi.tasks.send_live_session_link_whatsapp_to_facilitators_30_min_before",
+                            args=[update_live_session.id],
+                            clocked=clocked,
+                            one_off=True,
+                        )
+                        periodic_task.save()
+                        if update_live_session.pt_30_min_before:
+                            update_live_session.pt_30_min_before.enabled = False
+                            update_live_session.pt_30_min_before.save()
+                        live_session.pt_30_min_before = periodic_task
+                        live_session.save()
                     except Exception as e:
                         print(str(e))
                         pass
                 live_session_lesson = LiveSessionLesson.objects.filter(
                     live_session=live_session
                 ).first()
-                lesson = live_session_lesson.lesson
+                if live_session_lesson:
+                    lesson = live_session_lesson.lesson
 
-                lesson.drip_date = live_session.date_time + timedelta(
-                    hours=5, minutes=30
-                )
+                    lesson.drip_date = live_session.date_time + timedelta(
+                        hours=5, minutes=30
+                    )
 
-                lesson.save()
+                    lesson.save()
 
                 AIR_INDIA_PROJECT_ID = 3
                 if (
@@ -902,7 +981,7 @@ def update_live_session(request, live_session_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_coaching_session(request, coaching_session_id):
     try:
         with transaction.atomic():
@@ -917,9 +996,11 @@ def update_coaching_session(request, coaching_session_id):
                 coaching_session_lesson = LaserCoachingSession.objects.filter(
                     coaching_session=coaching_session
                 ).first()
-                lesson = coaching_session_lesson.lesson
-                lesson.drip_date = coaching_session.start_date
-                lesson.save()
+                if coaching_session_lesson:
+                    lesson = coaching_session_lesson.lesson
+                    lesson.drip_date = coaching_session.start_date
+                    lesson.save()
+
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
@@ -1040,7 +1121,7 @@ def send_test_mails(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner")])
 def participants_list(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
@@ -1060,7 +1141,7 @@ def getSavedTemplates(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner")])
 def get_batches(request):
     batches = SchedularBatch.objects.all()
     serializer = BatchSerializer(batches, many=True)
@@ -1146,7 +1227,7 @@ def deleteEmailTemplate(request, template_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def get_all_schedular_availabilities(request):
     coach_id = request.GET.get("coach_id")
     if coach_id:
@@ -1158,7 +1239,7 @@ def get_all_schedular_availabilities(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def create_coach_schedular_availibilty(request):
     if request.method == "POST":
         serializer = RequestAvailibiltySerializer(data=request.data)
@@ -1199,7 +1280,6 @@ def create_coach_schedular_availibilty(request):
                 recipient_list = [coach.email]
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
@@ -1247,7 +1327,7 @@ def edit_slot_request(request, request_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_batch(request, project_id):
     try:
         with transaction.atomic():
@@ -1276,66 +1356,9 @@ def add_batch(request, project_id):
                     batch = SchedularBatch.objects.create(
                         name=batch_name, project=project
                     )
+                    create_batch_calendar(batch)
 
                     # Create Live Sessions and Coaching Sessions based on project structure
-                    for session_data in project.project_structure:
-                        order = session_data.get("order")
-                        duration = session_data.get("duration")
-                        session_type = session_data.get("session_type")
-
-                        if session_type in [
-                            "live_session",
-                            "check_in_session",
-                            "in_person_session",
-                            "kickoff_session",
-                            "virtual_session",
-                        ]:
-                            session_number = (
-                                LiveSession.objects.filter(
-                                    batch=batch, session_type=session_type
-                                ).count()
-                                + 1
-                            )
-                            live_session = LiveSession.objects.create(
-                                batch=batch,
-                                live_session_number=session_number,
-                                order=order,
-                                duration=duration,
-                                session_type=session_type,
-                            )
-                        elif session_type == "laser_coaching_session":
-                            coaching_session_number = (
-                                CoachingSession.objects.filter(
-                                    batch=batch, session_type=session_type
-                                ).count()
-                                + 1
-                            )
-                            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
-                            coaching_session = CoachingSession.objects.create(
-                                batch=batch,
-                                coaching_session_number=coaching_session_number,
-                                order=order,
-                                duration=duration,
-                                booking_link=booking_link,
-                                session_type=session_type,
-                            )
-                        elif session_type == "mentoring_session":
-                            coaching_session_number = (
-                                CoachingSession.objects.filter(
-                                    batch=batch, session_type=session_type
-                                ).count()
-                                + 1
-                            )
-
-                            booking_link = f"{env('CAAS_APP_URL')}/coaching/book/{str(uuid.uuid4())}"  # Generate a unique UUID for the booking link
-                            coaching_session = CoachingSession.objects.create(
-                                batch=batch,
-                                coaching_session_number=coaching_session_number,
-                                order=order,
-                                duration=duration,
-                                booking_link=booking_link,
-                                session_type=session_type,
-                            )
 
                 # Check if participant with the same email exists
 
@@ -1386,7 +1409,9 @@ def add_batch(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "hr", "coach", "facilitator", "leanrer")]
+)
 def get_coaches(request):
     coaches = Coach.objects.filter(is_approved=True)
     serializer = CoachBasicDetailsSerializer(coaches, many=True)
@@ -1394,7 +1419,7 @@ def get_coaches(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_batch(request, batch_id):
     existing_coaches = None
     coaches = request.data.get("coaches")
@@ -1406,29 +1431,7 @@ def update_batch(request, batch_id):
             for coach_id in coaches:
                 coach = Coach.objects.get(id=coach_id)
                 if coach not in existing_coaches:
-                    project_structure = batch.project.project_structure
-
-                    for session in project_structure:
-
-                        if session["session_type"] in [
-                            "laser_coaching_session",
-                            "mentoring_session",
-                        ]:
-                            coaching_session = CoachingSession.objects.filter(
-                                batch=batch,
-                                order=session["order"],
-                                session_type=session["session_type"],
-                            ).first()
-                            coach_pricing, created = CoachPricing.objects.get_or_create(
-                                project=batch.project,
-                                coach=coach,
-                                session_type=coaching_session.session_type,
-                                coaching_session_number=coaching_session.coaching_session_number,
-                                order=coaching_session.order,
-                            )
-                            if created:
-                                coach_pricing.price = session["price"]
-                                coach_pricing.save()
+                    create_coach_pricing(batch, coach)
 
             serializer = SchedularBatchSerializer(
                 batch, data=request.data, partial=True
@@ -1444,6 +1447,17 @@ def update_batch(request, batch_id):
         return Response(
             {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = SchedularBatchSerializer(batch)
+    return Response({**serializer.data, "is_nudge_enabled": batch.project.nudges})
 
 
 @api_view(["GET"])
@@ -2045,7 +2059,7 @@ def schedule_session_fixed(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def reschedule_session(request, session_id):
     try:
         with transaction.atomic():
@@ -2336,7 +2350,7 @@ def reschedule_session(request, session_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def create_coach_availabilities(request):
     try:
         slots_data = request.data.get("slots", [])
@@ -2493,7 +2507,7 @@ def get_sessions_by_type(request, sessions_type):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def edit_session_status(request, session_id):
     try:
         session = SchedularSessions.objects.get(id=session_id)
@@ -2508,7 +2522,7 @@ def edit_session_status(request, session_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def update_session_date_time(request, session_id):
     try:
         session = SchedularSessions.objects.get(id=session_id)
@@ -2573,7 +2587,7 @@ def get_current_session_of_learner(request, room_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach")])
 def get_requests_of_coach(request, coach_id):
     try:
         coach = get_object_or_404(Coach, id=coach_id)
@@ -2605,7 +2619,7 @@ def get_requests_of_coach(request, coach_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("coach")])
 def get_slots_of_request(request, request_id):
     coach_id = request.GET.get("coach_id")
     if coach_id:
@@ -2621,7 +2635,7 @@ def get_slots_of_request(request, request_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def get_upcoming_slots_of_coach(request, coach_id):
     current_time = timezone.now()
     timestamp_milliseconds = str(int(current_time.timestamp() * 1000))
@@ -2633,7 +2647,7 @@ def get_upcoming_slots_of_coach(request, coach_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def delete_slots(request):
     slot_ids = request.data.get("slot_ids", [])
     # Assuming slot_ids is a list of integers
@@ -2646,7 +2660,7 @@ def delete_slots(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def send_unbooked_coaching_session_mail(request):
     try:
         celery_send_unbooked_coaching_session_mail.delay(request.data)
@@ -2749,7 +2763,7 @@ def export_available_slot(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_participant_to_batch(request, batch_id):
     # batch_id = request.data.get("batch_id")
     with transaction.atomic():
@@ -2838,7 +2852,7 @@ def add_participant_to_batch(request, batch_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def finalize_project_structure(request, project_id):
     try:
         project = get_object_or_404(SchedularProject, id=project_id)
@@ -2856,11 +2870,14 @@ def finalize_project_structure(request, project_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def send_live_session_link(request):
     live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
     for learner in live_session.batch.learners.all():
         # Only send email if project status is ongoing
+        is_not_in_person_session = (
+            False if live_session.session_type == "in_person_session" else True
+        )
         if live_session.batch.project.status == "ongoing":
             send_mail_templates(
                 "send_live_session_link.html",
@@ -2874,6 +2891,7 @@ def send_live_session_link(request):
                         live_session.description if live_session.description else ""
                     ),
                     "meeting_link": live_session.meeting_link,
+                    "is_not_in_person_session": is_not_in_person_session,
                 },
                 [],
             )
@@ -3048,8 +3066,10 @@ def project_report_download_live_session_wise(request, project_id, batch_id):
             for learner in session.batch.learners.all():
 
                 participant_name = learner.name
+                participant_email = learner.email
                 data = {
                     "Participant name": participant_name,
+                    "Email": participant_email,
                     "Batch name": session.batch.name,
                     "Attended": "Yes" if learner.id in session.attendees else "No",
                 }
@@ -3099,17 +3119,20 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
                 ).first()
 
                 participant_name = learner.name
+                participant_email = learner.email
 
                 if session_exist:
                     attendance = "YES" if session_exist.status == "completed" else "NO"
                     data = {
                         "Participant name": participant_name,
+                        "Email": participant_email,
                         "Batch name": session.batch.name,
                         "Completed": attendance,
                     }
                 else:
                     data = {
                         "Participant name": participant_name,
+                        "Email": participant_email,
                         "Batch name": session.batch.name,
                         "Completed": "Not Scheduled",
                     }
@@ -3133,7 +3156,7 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_facilitator(request):
     first_name = request.data.get("first_name", "")
     last_name = request.data.get("last_name", "")
@@ -3295,7 +3318,7 @@ def add_facilitator(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_facilitators(request):
     try:
         # Get all the Coach objects
@@ -3362,7 +3385,7 @@ def get_facilitators(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_multiple_facilitator(request):
     data = request.data.get("coaches", [])
     print(data)
@@ -3459,7 +3482,7 @@ def add_multiple_facilitator(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
 def update_facilitator_profile(request, id):
     try:
         with transaction.atomic():
@@ -3534,34 +3557,34 @@ def update_facilitator_profile(request, id):
         )
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def delete_facilitator(request):
-    data = request.data
-    facilitator_id = data.get("facilitator_id")
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# def delete_facilitator(request):
+#     data = request.data
+#     facilitator_id = data.get("facilitator_id")
 
-    if facilitator_id is None:
-        return Response(
-            {"error": "Facilitator ID is missing in the request data"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+#     if facilitator_id is None:
+#         return Response(
+#             {"error": "Facilitator ID is missing in the request data"},
+#             status=status.HTTP_400_BAD_REQUEST,
+#         )
 
-    try:
-        facilitator = Facilitator.objects.get(pk=facilitator_id)
-    except Facilitator.DoesNotExist:
-        return Response(
-            {"error": "Facilitator not found"}, status=status.HTTP_404_NOT_FOUND
-        )
+#     try:
+#         facilitator = Facilitator.objects.get(pk=facilitator_id)
+#     except Facilitator.DoesNotExist:
+#         return Response(
+#             {"error": "Facilitator not found"}, status=status.HTTP_404_NOT_FOUND
+#         )
 
-    facilitator.delete()
-    return Response(
-        {"message": "Facilitator deleted successfully"},
-        status=200,
-    )
+#     facilitator.delete()
+#     return Response(
+#         {"message": "Facilitator deleted successfully"},
+#         status=200,
+#     )
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
 def get_facilitator_field_values(request):
     job_roles = set()
     languages = set()
@@ -3624,7 +3647,7 @@ def get_facilitator_field_values(request):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def delete_learner_from_course(request):
     learner_id = request.data.get("learnerId")
     batch_id = request.data.get("batchId")
@@ -3681,7 +3704,7 @@ def delete_learner_from_course(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def edit_schedular_project(request, project_id):
     try:
         project = SchedularProject.objects.get(pk=project_id)
@@ -3743,7 +3766,7 @@ def edit_schedular_project(request, project_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_schedular_project_update(request, project_id):
     try:
         project = SchedularProject.objects.get(id=project_id)
@@ -3767,7 +3790,7 @@ def add_schedular_project_update(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_schedular_project_updates(request, project_id):
     updates = SchedularUpdate.objects.filter(project__id=project_id).order_by(
         "-created_at"
@@ -3910,7 +3933,7 @@ def get_facilitator_sessions(request, facilitator_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_certificate_status(request):
     try:
         participant_id = request.data.get("participantId")
@@ -3941,7 +3964,7 @@ def update_certificate_status(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_new_session_in_project_structure(request):
     try:
         with transaction.atomic():
@@ -3965,7 +3988,7 @@ def add_new_session_in_project_structure(request):
                 "description": description,
                 "price": price,
             }
-         
+
             # Update the project structure
             prev_structure.append(new_session)
             project.project_structure = prev_structure
@@ -4098,7 +4121,9 @@ def add_new_session_in_project_structure(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer")]
+)
 def get_completed_sessions_for_project(request, project_id):
     try:
         current_datetime = timezone.now()
@@ -4157,7 +4182,7 @@ def get_completed_sessions_for_project(request, project_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def delete_session_from_project_structure(request):
     try:
         with transaction.atomic():
@@ -4336,7 +4361,7 @@ def delete_session_from_project_structure(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_certificate_status_for_multiple_participants(request):
     try:
         with transaction.atomic():
@@ -4365,6 +4390,11 @@ def update_certificate_status_for_multiple_participants(request):
 
 
 class GetAllBatchesCoachDetails(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer"),
+    ]
+
     def get(self, request, project_id):
         try:
             batches = SchedularBatch.objects.filter(project__id=project_id)
@@ -4424,10 +4454,20 @@ class GetAllBatchesCoachDetails(APIView):
 
 
 class GetAllBatchesParticipantDetails(APIView):
+    permission_classes = [
+        IsAuthenticated,
+        IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer"),
+    ]
+
     def get(self, request, project_id):
         try:
             batches = SchedularBatch.objects.filter(project__id=project_id)
+            facilitator_id = request.query_params.get("facilitator_id")
 
+            if facilitator_id:
+                batches = SchedularBatch.objects.filter(
+                    livesession__facilitator__id=facilitator_id
+                )
             learner_data_dict = {}
 
             for batch in batches:
@@ -4438,15 +4478,18 @@ class GetAllBatchesParticipantDetails(APIView):
                             "id": learner_id,
                             "name": learner.name,
                             "email": learner.email,
-                            "batchNames": [
+                            "batchNames": {
                                 batch.name
-                            ],  # Initialize with list containing batch name
+                            },  # Initialize with list containing batch name
                             "phone": learner.phone,
                         }
                     else:
-                        learner_data_dict[learner_id]["batchNames"].append(batch.name)
+                        learner_data_dict[learner_id]["batchNames"].add(batch.name)
 
-            unique_learner_data = list(learner_data_dict.values())
+            unique_learner_data = [
+                {**data, "batchNames": list(data["batchNames"])}  # Convert set to list
+                for data in learner_data_dict.values()
+            ]
 
             return Response(unique_learner_data, status=status.HTTP_200_OK)
 
@@ -4459,7 +4502,9 @@ class GetAllBatchesParticipantDetails(APIView):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer")]
+)
 def coach_inside_skill_training_or_not(request, project_id, batch_id):
     try:
         if batch_id == "all":
@@ -4481,7 +4526,9 @@ def coach_inside_skill_training_or_not(request, project_id, batch_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "coach", "facilitator", "hr", "learner")]
+)
 def facilitator_inside_that_batch(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
@@ -4495,7 +4542,7 @@ def facilitator_inside_that_batch(request, batch_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def delete_coach_from_that_batch(request):
     try:
         with transaction.atomic():
@@ -4538,7 +4585,7 @@ def delete_coach_from_that_batch(request):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def delete_facilitator_from_that_batch(request):
     try:
         batch_id = request.data.get("batch_id")
@@ -4561,7 +4608,7 @@ def delete_facilitator_from_that_batch(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_project_status(request):
     project_id = request.data.get("id")
 
@@ -4587,8 +4634,15 @@ def update_project_status(request):
         )
 
 
+def calculate_nps_from_answers(answers):
+    ratings = [answer.rating for answer in answers]
+    if ratings:
+        return calculate_nps(ratings)
+    return None
+
+
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_skill_dashboard_card_data(request, project_id):
     try:
         hr_id = request.query_params.get("hr", None)
@@ -4619,6 +4673,27 @@ def get_skill_dashboard_card_data(request, project_id):
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )
+            if not hr_id:
+                virtual_session_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                    question__feedbacklesson__live_session__session_type="virtual_session",
+                )
+                virtual_nps = calculate_nps_from_answers(virtual_session_answer)
+
+                # In-person session NPS calculation
+                in_person_session_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                    question__feedbacklesson__live_session__session_type="in_person_session",
+                )
+                print(in_person_session_answer)
+                in_person_nps = calculate_nps_from_answers(in_person_session_answer)
+
+                # Overall NPS calculation
+                overall_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                )
+                overall_nps = calculate_nps_from_answers(overall_answer)
+
         else:
             start_timestamp, end_timestamp = get_current_date_timestamps()
             # schedular sessions scheduled today
@@ -4648,12 +4723,45 @@ def get_skill_dashboard_card_data(request, project_id):
             )
             if hr_id:
                 completed_assessments = completed_assessments.filter(hr__id=hr_id)
+            if not hr_id:
+                virtual_session_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                    question__feedbacklesson__live_session__session_type="virtual_session",
+                    question__feedbacklesson__live_session__batch__project__id=int(
+                        project_id
+                    ),
+                )
+
+                virtual_nps = calculate_nps_from_answers(virtual_session_answer)
+
+                # In-person session NPS calculation
+                in_person_session_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                    question__feedbacklesson__live_session__session_type="in_person_session",
+                    question__feedbacklesson__live_session__batch__project__id=int(
+                        project_id
+                    ),
+                )
+                in_person_nps = calculate_nps_from_answers(in_person_session_answer)
+
+                # Overall NPS calculation
+                overall_answer = Answer.objects.filter(
+                    question__type="rating_0_to_10",
+                    question__feedbacklesson__live_session__batch__project__id=int(
+                        project_id
+                    ),
+                )
+                overall_nps = calculate_nps_from_answers(overall_answer)
+
         return Response(
             {
                 "today_coaching_sessions": len(today_sessions),
                 "today_live_sessions": len(today_live_sessions),
                 "ongoing_assessments": len(ongoing_assessment),
                 "completed_assessments": len(completed_assessments),
+                "virtual_session_nps": virtual_nps,
+                "in_person_session_nps": in_person_nps,
+                "overall_nps": overall_nps,
             },
             status=200,
         )
@@ -4669,6 +4777,86 @@ def get_skill_dashboard_card_data(request, project_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitator_id):
+
+    try:
+        if project_id == "all":
+
+            virtual_session_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
+                question__feedbacklesson__live_session__session_type="virtual_session",
+            )
+            virtual_nps = calculate_nps_from_answers(virtual_session_answer)
+
+            # In-person session NPS calculation
+            in_person_session_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
+                question__feedbacklesson__live_session__session_type="in_person_session",
+            )
+            in_person_nps = calculate_nps_from_answers(in_person_session_answer)
+
+            # Overall NPS calculation
+            overall_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
+            )
+            overall_nps = calculate_nps_from_answers(overall_answer)
+
+        else:
+
+            virtual_session_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
+                question__feedbacklesson__live_session__session_type="virtual_session",
+                question__feedbacklesson__live_session__batch__project__id=int(
+                    project_id
+                ),
+            )
+            virtual_nps = calculate_nps_from_answers(virtual_session_answer)
+
+            # In-person session NPS calculation
+            in_person_session_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
+                question__feedbacklesson__live_session__session_type="in_person_session",
+                question__feedbacklesson__live_session__batch__project__id=int(
+                    project_id
+                ),
+            )
+            in_person_nps = calculate_nps_from_answers(in_person_session_answer)
+
+            # Overall NPS calculation
+            overall_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedbacklesson__live_session__facilitator__id=facilitator_id,
+                question__feedbacklesson__live_session__batch__project__id=int(
+                    project_id
+                ),
+            )
+            overall_nps = calculate_nps_from_answers(overall_answer)
+
+        return Response(
+            {
+                "virtual_session_nps": virtual_nps,
+                "in_person_session_nps": in_person_nps,
+                "overall_nps": overall_nps,
+            },
+            status=200,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {
+                "error": "Failed to get data",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_upcoming_coaching_session_dashboard_data(request, project_id):
     try:
         hr_id = request.query_params.get("hr", None)
@@ -4713,7 +4901,7 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_past_coaching_session_dashboard_data(request, project_id):
     try:
         hr_id = request.query_params.get("hr", "")
@@ -4759,7 +4947,7 @@ def get_past_coaching_session_dashboard_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_upcoming_live_session_dashboard_data(request, project_id):
     try:
         hr_id = request.query_params.get("hr", None)
@@ -4812,7 +5000,7 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_past_live_session_dashboard_data(request, project_id):
     try:
         hr_id = request.query_params.get("hr", None)
@@ -4866,7 +5054,7 @@ def get_past_live_session_dashboard_data(request, project_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def pre_post_assessment_or_nudge_update_in_project(request):
     try:
 
@@ -4899,7 +5087,7 @@ def pre_post_assessment_or_nudge_update_in_project(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_facilitator_to_batch(request, batch_id):
     try:
         batch = SchedularBatch.objects.get(id=batch_id)
@@ -4951,7 +5139,7 @@ def get_sessions_pricing_for_a_facilitator(request, facilitator_id, project_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_facilitator_price(request, facilitator_price_id):
     try:
         price = request.data.get("price")
@@ -4968,7 +5156,7 @@ def update_facilitator_price(request, facilitator_price_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_coach_price(request, coach_price_id):
     try:
         price = request.data.get("price")
@@ -4985,7 +5173,7 @@ def update_coach_price(request, coach_price_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_price_in_project_structure(request):
     try:
 
@@ -5261,7 +5449,11 @@ def get_project_wise_progress_data(request, project_id):
 
             for participant in batch.learners.all():
 
-                temp = {"participant_name": participant.name, "batch_name": batch.name}
+                temp = {
+                    "participant_name": participant.name,
+                    "Email": participant.email,
+                    "batch_name": batch.name,
+                }
 
                 pre_participant_response = ParticipantResponse.objects.filter(
                     assessment=pre_assessment, participant=participant
@@ -5340,7 +5532,7 @@ def get_project_wise_progress_data(request, project_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def delete_request_with_availabilities(request, request_id):
     try:
         request_obj = RequestAvailibilty.objects.get(pk=request_id)
@@ -5451,10 +5643,8 @@ def get_session_progress_data_for_dashboard(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_coach_session_progress_data_for_skill_training_project(request, batch_id):
     try:
-
         batch = SchedularBatch.objects.get(id=batch_id)
         data = {}
-
         for coach in batch.coaches.all():
             schedular_sessions = SchedularSessions.objects.filter(
                 coaching_session__batch=batch, availibility__coach=coach
@@ -5464,7 +5654,6 @@ def get_coach_session_progress_data_for_skill_training_project(request, batch_id
             for schedular_session in schedular_sessions:
                 if schedular_session.status == "completed":
                     count += 1
-
             data[coach.id] = (count / total) * 100 if total > 0 else 0
         return Response(data)
     except Exception as e:
@@ -5483,7 +5672,7 @@ def get_purchase_order(purchase_orders, purchase_order_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_facilitators_and_pricing_for_project(request, project_id):
     try:
         facilitators = Facilitator.objects.filter(
@@ -5500,17 +5689,33 @@ def get_facilitators_and_pricing_for_project(request, project_id):
                 vendor_id = Vendor.objects.get(user=facilitator.user).vendor_id
             facilitator_data = serializer.data
             pricing = facilitators_pricing.filter(facilitator__id=facilitator.id)
+            is_delete_purchase_order_allowed = True
             purchase_order = None
             if pricing.exists():
-                pricing_serializer = FacilitatorPricingSerializer(pricing.first())
-                if pricing_serializer.data["purchase_order_id"]:
+                first_pricing = pricing.first()
+                if first_pricing.purchase_order_id:
                     purchase_order = get_purchase_order(
-                        purchase_orders, pricing_serializer.data["purchase_order_id"]
+                        purchase_orders, first_pricing.purchase_order_id
                     )
+                    # when no po found remove po number and id from fac. pricings
+                    if not purchase_order:
+                        first_pricing.purchase_order_id = ""
+                        first_pricing.purchase_order_no = ""
+                        first_pricing.save()
+                    else:
+                        invoices = InvoiceData.objects.filter(
+                            purchase_order_id=first_pricing.purchase_order_id
+                        )
+                        if invoices.exists():
+                            is_delete_purchase_order_allowed = False
+                pricing_serializer = FacilitatorPricingSerializer(first_pricing)
             else:
                 pricing_serializer = None
             facilitator_data["pricing_details"] = (
                 pricing_serializer.data if pricing_serializer else None
+            )
+            facilitator_data["is_delete_purchase_order_allowed"] = (
+                is_delete_purchase_order_allowed
             )
             facilitator_data["vendor_id"] = vendor_id
             facilitator_data["purchase_order"] = purchase_order
@@ -5522,7 +5727,7 @@ def get_facilitators_and_pricing_for_project(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_coaches_and_pricing_for_project(request, project_id):
     try:
         coaches = Coach.objects.filter(
@@ -5543,18 +5748,32 @@ def get_coaches_and_pricing_for_project(request, project_id):
             pricing = coaches_pricing.filter(coach__id=coach.id)
             all_pricings_serializer = CoachPricingSerializer(coaches_pricing, many=True)
             purchase_order = None
+            is_delete_purchase_order_allowed = True
             if pricing.exists():
-                pricing_serializer = CoachPricingSerializer(pricing.first())
-                if pricing_serializer.data["purchase_order_id"]:
+                first_pricing = pricing.first()
+                if first_pricing.purchase_order_id:
                     purchase_order = get_purchase_order(
-                        purchase_orders, pricing_serializer.data["purchase_order_id"]
+                        purchase_orders, first_pricing.purchase_order_id
                     )
+                    if not purchase_order:
+                        CoachPricing.objects.filter(
+                            purchase_order_id=first_pricing.purchase_order_id
+                        ).update(purchase_order_id="", purchase_order_no="")
+                    else:
+                        invoices = InvoiceData.objects.filter(
+                            purchase_order_id=first_pricing.purchase_order_id
+                        )
+                        if invoices.exists():
+                            is_delete_purchase_order_allowed = False
+                pricing_serializer = CoachPricingSerializer(pricing.first())
             else:
                 pricing_serializer = None
             coach_data["pricing_details"] = (
                 pricing_serializer.data if pricing_serializer else None
             )
-
+            coach_data["is_delete_purchase_order_allowed"] = (
+                is_delete_purchase_order_allowed
+            )
             coach_data["vendor_id"] = vendor_id
             coach_data["purchase_order"] = purchase_order
             coach_data["all_pricings"] = all_pricings_serializer.data
@@ -5566,7 +5785,7 @@ def get_coaches_and_pricing_for_project(request, project_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_facilitator_pricing(request):
     serializer = FacilitatorPricingSerializer(data=request.data)
     if serializer.is_valid():
@@ -5576,7 +5795,7 @@ def add_facilitator_pricing(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def edit_facilitator_pricing(request, facilitator_pricing_id):
     pricing_instance = get_object_or_404(FacilitatorPricing, id=facilitator_pricing_id)
     serializer = FacilitatorPricingSerializer(pricing_instance, data=request.data)
@@ -5587,7 +5806,7 @@ def edit_facilitator_pricing(request, facilitator_pricing_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
 def create_expense(request):
     try:
         name = request.data.get("name")
@@ -5597,7 +5816,7 @@ def create_expense(request):
         batch = request.data.get("batch")
         facilitator = request.data.get("facilitator")
         file = request.data.get("file")
-       
+
         if not file:
             return Response(
                 {"error": "Please upload file."},
@@ -5638,7 +5857,7 @@ def create_expense(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
 def edit_expense(request):
     try:
         name = request.data.get("name")
@@ -5694,7 +5913,7 @@ def edit_expense(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
 def get_expense_for_facilitator(request, batch_id, usertype, user_id):
     try:
         expenses = []
@@ -5711,13 +5930,13 @@ def get_expense_for_facilitator(request, batch_id, usertype, user_id):
     except Exception as e:
         print(str(e))
         return Response(
-            {"error": "Failed to create expense"},
+            {"error": "Failed to get expense"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def edit_status_expense(request):
     try:
         status = request.data.get("status")
@@ -5735,3 +5954,49 @@ def edit_status_expense(request):
             {"error": f"Failed to {status.title()} the expense."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_courses_for_all_batches(request):
+    try:
+        facilitator_id = request.query_params.get("facilitator_id", None)
+        batches = SchedularBatch.objects.filter(
+            livesession__facilitator__id=facilitator_id
+        )
+        courses = Course.objects.filter(batch__in=batches)
+        course_serializer = CourseSerializer(courses, many=True)
+        return Response(course_serializer.data)
+    except SchedularBatch.DoesNotExist:
+        return Response(
+            {"error": "Couldn't find batches with the specified facilitator."},
+            status=400,
+        )
+    except Course.DoesNotExist:
+        return Response(
+            {"error": "Couldn't find courses for the specified batch and facilitator."},
+            status=400,
+        )
+    except Exception as e:
+        print(str(e))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def check_if_project_structure_edit_allowed(request, project_id):
+    try:
+        current_time_seeq = timezone.now()
+        is_allowed = True
+        past_live_sessions = LiveSession.objects.filter(
+            date_time__lt=current_time_seeq, batch__project__id=project_id
+        )
+        scheduler_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__id=project_id
+        )
+        if past_live_sessions.exists():
+            is_allowed = False
+        elif scheduler_sessions.exists():
+            is_allowed = False
+        return Response({"is_allowed_to_edit": is_allowed})
+    except Exception as e:
+        return Response({"error": "Failed to get details"}, status=400)
