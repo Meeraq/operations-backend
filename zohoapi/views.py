@@ -45,7 +45,7 @@ from .tasks import (
     send_mail_templates,
     fetch_purchase_orders,
     filter_purchase_order_data,
-    get_vendor
+    get_vendor,
 )
 from .models import InvoiceData, AccessToken, Vendor, InvoiceStatusUpdate
 import base64
@@ -206,8 +206,6 @@ def get_organization_data():
         return Response({}, status=400)
     else:
         return Response({}, status=400)
-
-
 
 
 def add_45_days(date_str):
@@ -653,7 +651,7 @@ def add_invoice_data(request):
         invoice_instance = serializer.save()
         vendor_details = get_vendor(request.data["vendor_id"])
         invoice_instance.vendor_name = vendor_details["contact_name"]
-        invoice_instance.save() 
+        invoice_instance.save()
         approver_email = serializer.data["approver_email"]
         invoice_data = get_invoice_data_for_pdf(invoice_instance)
         send_mail_templates(
@@ -1042,12 +1040,12 @@ def add_vendor(request):
 
         try:
             vendor_details = get_vendor(vendor_id)
-            name = vendor_details["contact_name"] 
-       
+            name = vendor_details["contact_name"]
+
             # Check if the user with the given email already exists
             user_profile = Profile.objects.get(user__email=email)
             user = user_profile.user
-            
+
             # Check if the user has the role 'vendor'
             if user_profile.roles.filter(name="vendor").exists():
                 return Response(
@@ -1340,7 +1338,7 @@ def edit_vendor(request, vendor_id):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         vendor_details = get_vendor(vendor_id)
-        name = vendor_details["contact_name"] 
+        name = vendor_details["contact_name"]
         vendor.user.user.username = email
         vendor.user.user.email = email
         vendor.user.user.save()
@@ -1515,16 +1513,19 @@ def delete_purchase_order(request, user_type, purchase_order_id):
         print(response.json())
         if response.status_code == 200:
             if user_type == "coach":
-                CoachPricing.objects.filter(purchase_order_id=purchase_order_id).update(purchase_order_id="", purchase_order_no="")
+                CoachPricing.objects.filter(purchase_order_id=purchase_order_id).update(
+                    purchase_order_id="", purchase_order_no=""
+                )
             elif user_type == "facilitator":
-                FacilitatorPricing.objects.filter(purchase_order_id=purchase_order_id).update(purchase_order_id="", purchase_order_no="")
+                FacilitatorPricing.objects.filter(
+                    purchase_order_id=purchase_order_id
+                ).update(purchase_order_id="", purchase_order_no="")
             return Response({"message": "Purchase Order deleted successfully."})
         else:
             return Response(status=401)
     except Exception as e:
         print(str(e))
         return Response(status=404)
-
 
 
 def get_current_financial_year():
@@ -1656,9 +1657,11 @@ def get_coach_wise_finances(request):
                     "paid_amount": vendor_invoice_amounts.get(
                         vendor_id, {"paid_amount": Decimal(0)}
                     )["paid_amount"],
-                    "currency_symbol": vendor_invoice_amounts[vendor_id][
-                        "currency_symbol"
-                    ],
+                    "currency_symbol": (
+                        vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                        if vendor_id in vendor_invoice_amounts
+                        else None
+                    ),
                 }
             )
         return Response(res)
