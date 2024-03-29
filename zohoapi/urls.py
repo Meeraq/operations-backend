@@ -172,6 +172,11 @@ urlpatterns = [
         views.create_invoice,
         name="create_invoice",
     ),
+      path(
+        "edit-so-invoice/<str:invoice_id>/",
+        views.edit_so_invoice,
+        name="edit_so_invoice",
+    ),
     path(
         "sales-order/create/",
         views.create_sales_order,

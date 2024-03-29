@@ -11,7 +11,15 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from api.models import Coach, OTP, UserLoginActivity, Profile, Role, CoachStatus, Project
+from api.models import (
+    Coach,
+    OTP,
+    UserLoginActivity,
+    Profile,
+    Role,
+    CoachStatus,
+    Project,
+)
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 import json
@@ -1617,7 +1625,7 @@ def coching_purchase_order_create(request, coach_id, project_id):
 
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
-def delete_coaching_purchase_order(request,  purchase_order_id):
+def delete_coaching_purchase_order(request, purchase_order_id):
     try:
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
         if not access_token:
@@ -1629,7 +1637,9 @@ def delete_coaching_purchase_order(request,  purchase_order_id):
         response = requests.delete(api_url, headers=auth_header)
         print(response.json())
         if response.status_code == 200:
-            CoachStatus.objects.filter(purchase_order_id=purchase_order_id).update(purchase_order_id="", purchase_order_no="")
+            CoachStatus.objects.filter(purchase_order_id=purchase_order_id).update(
+                purchase_order_id="", purchase_order_no=""
+            )
             return Response({"message": "Purchase Order deleted successfully."})
         else:
             return Response(status=401)
@@ -1983,6 +1993,27 @@ def create_invoice(request):
         print(str(e))
         return Response(status=404)
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def edit_so_invoice(request,invoice_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/invoices/{invoice_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header, data=request.data)
+        print(response.json())
+        if response.status_code == 201:
+            return Response({"message": "Invoice created successfully."})
+        else:
+            print(response.json())
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -2148,7 +2179,9 @@ def add_so_to_project(request, project_id):
                     mapping = orders_and_project_mapping.first()
                     if mapping.project and mapping.project.id != project.id:
                         return Response(
-                            {"error": f"SO already exist in project: {mapping.project.name}"},
+                            {
+                                "error": f"SO already exist in project: {mapping.project.name}"
+                            },
                             status=status.HTTP_400_BAD_REQUEST,
                         )
                     break

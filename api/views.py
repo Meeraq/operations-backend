@@ -174,7 +174,7 @@ from schedularApi.serializers import (
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-from zohoapi.models import Vendor,InvoiceData
+from zohoapi.models import Vendor, InvoiceData
 from courses.models import CourseEnrollment
 
 from urllib.parse import urlencode
@@ -8377,6 +8377,25 @@ def change_user_role(request, user_id):
         if not user.profile.finance.active_inactive:
             return None
         serializer = FinanceDepthOneSerializer(user.profile.finance)
+        organization = get_organization_data()
+        zoho_vendor = get_vendor(user.profile.vendor.vendor_id)
+        
+        return Response(
+            {
+                **serializer.data,
+                "roles": roles,
+                "user": {
+                    **serializer.data["user"],
+                    "type": user_profile_role,
+                    "last_login": user.last_login,
+                    "vendor_id": user.profile.vendor.vendor_id,
+                },
+                "last_login": user.last_login,
+                "organization": organization,
+                "zoho_vendor": zoho_vendor,
+                "message": f"Role changed to Finance",
+            }
+        )
     elif user_profile_role == "facilitator":
         if not user.profile.facilitator.active_inactive:
             return None
@@ -9476,11 +9495,13 @@ def complete_task(request):
         {"message": "Task marked as completed."}, status=status.HTTP_201_CREATED
     )
 
+
 def get_purchase_order(purchase_orders, purchase_order_id):
     for po in purchase_orders:
         if po.get("purchaseorder_id") == purchase_order_id:
             return po
     return None
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -9506,7 +9527,7 @@ def get_coaches_in_project_is_vendor(request, project_id):
             if is_vendor:
                 vendor_id = Vendor.objects.get(user=coach_status.coach.user).vendor_id
 
-            purchase_order =  None
+            purchase_order = None
             if purchase_order_id:
                 purchase_order = get_purchase_order(purchase_orders, purchase_order_id)
                 if not purchase_order:
@@ -9516,7 +9537,9 @@ def get_coaches_in_project_is_vendor(request, project_id):
                     purchase_order_id = None
                     purchase_order_no = None
                 else:
-                    invoices = InvoiceData.objects.filter(purchase_order_id = purchase_order_id)
+                    invoices = InvoiceData.objects.filter(
+                        purchase_order_id=purchase_order_id
+                    )
                     if invoices.exists():
                         is_delete_purchase_order_allowed = False
 
@@ -9525,7 +9548,7 @@ def get_coaches_in_project_is_vendor(request, project_id):
                 "purchase_order_id": purchase_order_id,
                 "purchase_order_no": purchase_order_no,
                 "purchase_order": purchase_order,
-                "is_delete_purchase_order_allowed" : is_delete_purchase_order_allowed
+                "is_delete_purchase_order_allowed": is_delete_purchase_order_allowed,
             }
         return Response(data)
     except Exception as e:
