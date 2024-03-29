@@ -130,6 +130,16 @@ urlpatterns = [
         name="get_all_the_invoices_counts",
     ),
     path(
+        "get-individual-vendor-data/<int:vendor_id>/",
+        views.get_individual_vendor_data,
+        name="get_individual_vendor_data",
+    ),
+    path(
+        "get-invoices-for-vendor/<int:vendor_id>/<str:purchase_order_id>/",
+        views.get_invoices_for_vendor,
+        name="get_invoices_for_vendor",
+    ),
+    path(
         "purchase-order/delete/<str:user_type>/<str:purchase_order_id>/",
         views.delete_purchase_order,
         name="delete_purchase_order",

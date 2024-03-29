@@ -1784,3 +1784,90 @@ def get_all_the_invoices_counts(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to load"}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_individual_vendor_data(request, vendor_id):
+    try:
+        access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if access_token_purchase_data:
+            api_url = f"{base_url}/purchaseorders/?organization_id={organization_id}&vendor_id={vendor_id}"
+            auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
+            response = requests.get(api_url, headers=auth_header)
+            if response.status_code == 200:
+                purchase_orders = response.json().get("purchaseorders", [])
+                purchase_orders = filter_purchase_order_data(purchase_orders)
+
+                return Response(purchase_orders, status=status.HTTP_200_OK)
+            else:
+                return Response(
+                    {"error": "Failed to fetch purchase orders"},
+                    status=response.status_code,
+                )
+        else:
+            return Response(
+                {
+                    "error": "Access token not found. Please generate an access token first."
+                },
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to load"}, status=400)
+    
+    
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_invoices_for_vendor(request, vendor_id, purchase_order_id):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
+        if purchase_order_id == "all":
+            invoices = InvoiceData.objects.filter(vendor_id=vendor_id)
+
+            invoices = filter_invoice_data(invoices)
+
+            url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&vendor_id={vendor_id}"
+            bills_response = requests.get(url, headers=headers)
+        else:
+            invoices = InvoiceData.objects.filter(purchase_order_id=purchase_order_id)
+            invoices = filter_invoice_data(invoices)
+            url = f"{base_url}/bills?organization_id={env('ZOHO_ORGANIZATION_ID')}&purchaseorder_id={purchase_order_id}"
+            bills_response = requests.get(
+                url,
+                headers=headers,
+            )
+        if bills_response.json()["message"] == "success":
+            invoice_serializer = InvoiceDataSerializer(invoices, many=True)
+            bills = bills_response.json()["bills"]
+            invoice_res = []
+            for invoice in invoice_serializer.data:
+                hsn_or_sac = Vendor.objects.get(
+                    vendor_id=invoice["vendor_id"]
+                ).hsn_or_sac
+                matching_bill = next(
+                    (
+                        bill
+                        for bill in bills
+                        if (
+                            bill.get(env("INVOICE_FIELD_NAME"))
+                            == invoice["invoice_number"]
+                            and bill.get("vendor_id") == invoice["vendor_id"]
+                        )
+                    ),
+                    None,
+                )
+                invoice_res.append(
+                    {
+                        **invoice,
+                        "bill": matching_bill,
+                        "hsn_or_sac": hsn_or_sac if hsn_or_sac else "",
+                    }
+                )
+            return Response(invoice_res)
+        else:
+            return Response({}, status=400)
+    else:
+        return Response({}, status=400)
