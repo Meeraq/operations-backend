@@ -4244,38 +4244,33 @@ class DownloadParticipantResponseStatusData(APIView):
                 or assessment.assessment_type == "self"
             ):
                 df = pd.DataFrame(response_data)
-                excel_writer = pd.ExcelWriter("temp_excel_file.xlsx", engine="openpyxl")
+                excel_writer = BytesIO()
                 df.to_excel(excel_writer, index=False)
-                excel_writer.close()
-                with open("temp_excel_file.xlsx", "rb") as excel_file:
-                    response = HttpResponse(
-                        excel_file.read(),
-                        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                    response["Content-Disposition"] = (
-                        f'attachment; filename="{assessment.name}_response_status.xlsx"'
-                    )
+                excel_writer.seek(0)
+                response = HttpResponse(
+                    excel_writer.getvalue(),
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+                response["Content-Disposition"] = (
+                    f'attachment; filename="{assessment.name}_response_status.xlsx"'
+                )
 
                 return response
             elif assessment.assessment_type == "360":
                 participants_df = pd.DataFrame(response_data["Participants"])
                 observers_df = pd.DataFrame(response_data["Observers"])
-                excel_writer = pd.ExcelWriter(
-                    "assessment_responses.xlsx", engine="openpyxl"
+                excel_writer = BytesIO()
+                with pd.ExcelWriter(excel_writer, engine="openpyxl") as writer:
+                    participants_df.to_excel(writer, sheet_name="Participants", index=False)
+                    observers_df.to_excel(writer, sheet_name="Observers", index=False)
+                excel_writer.seek(0)
+                response = HttpResponse(
+                    excel_writer.getvalue(),
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
-                participants_df.to_excel(
-                    excel_writer, sheet_name="Participants", index=False
+                response["Content-Disposition"] = (
+                    f'attachment; filename="{assessment.name}_response_status.xlsx"'
                 )
-                observers_df.to_excel(excel_writer, sheet_name="Observers", index=False)
-                excel_writer.close()
-                with open("assessment_responses.xlsx", "rb") as excel_file:
-                    response = HttpResponse(
-                        excel_file.read(),
-                        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                    response["Content-Disposition"] = (
-                        f'attachment; filename="{assessment.name}_response_status.xlsx"'
-                    )
                 return response
 
         except Assessment.DoesNotExist:
@@ -4290,7 +4285,6 @@ class DownloadParticipantResponseStatusData(APIView):
                 {"error": "Failed to get download response data."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
 
 class GetParticipantReleasedResults(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo")]
