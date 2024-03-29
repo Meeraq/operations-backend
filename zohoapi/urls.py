@@ -129,4 +129,9 @@ urlpatterns = [
         views.get_all_the_invoices_counts,
         name="get_all_the_invoices_counts",
     ),
+    path(
+        "purchase-order/delete/<str:user_type>/<str:purchase_order_id>/",
+        views.delete_purchase_order,
+        name="delete_purchase_order",
+    ),
 ]
