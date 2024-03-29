@@ -137,6 +137,7 @@ class SuperAdmin(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
+    active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
@@ -146,6 +147,7 @@ class Finance(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
+    active_inactive = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -168,6 +170,7 @@ class Pmo(models.Model):
         max_length=50, choices=SUB_ROLE_CHOICES, blank=True, default="manager"
     )
     room_id = models.CharField(max_length=50, blank=True)
+    active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
@@ -214,7 +217,7 @@ class Coach(models.Model):
     linkedin_profile_link = models.CharField(max_length=500, blank=True)
     companies_worked_in = models.JSONField(default=list, blank=True)
     other_certification = models.JSONField(default=list, blank=True)
-    active_inactive = models.BooleanField(blank=True, default=False)
+    active_inactive = models.BooleanField(default=True)
     currency = models.CharField(max_length=100, blank=True, default="")
     internal_coach = models.BooleanField(blank=True, default=False)
     organization_of_coach = models.CharField(max_length=100, blank=True)
@@ -274,6 +277,7 @@ class Facilitator(models.Model):
     fees_per_day = models.CharField(max_length=20, blank=True)
     topic = models.JSONField(default=list, blank=True)
     is_approved = models.BooleanField(blank=True, default=False)
+    active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -288,7 +292,8 @@ class Learner(models.Model):
     area_of_expertise = models.CharField(max_length=100, blank=True)
     years_of_experience = models.IntegerField(default=0, blank=True)
     job_roles = models.JSONField(default=list, blank=True)
-    
+    active_inactive = models.BooleanField(default=True)
+
     def __str__(self):
         return self.name
 
@@ -308,6 +313,7 @@ class HR(models.Model):
     email = models.EmailField()
     phone = models.CharField(max_length=25)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
+    active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -327,6 +333,8 @@ class CoachStatus(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     consent_expiry_date = models.DateField(blank=True, null=True)
     is_consent_asked = models.BooleanField(default=True)
+    purchase_order_id = models.CharField(max_length=200, default="", blank=True)
+    purchase_order_no = models.CharField(max_length=200, default="", blank=True)
 
     def __str__(self):
         return f"{self.id} {self.coach.first_name} {self.coach.last_name}"
@@ -387,6 +395,7 @@ class Project(models.Model):
         on_delete=models.SET_NULL,
         blank=True,
     )
+    finance = models.BooleanField(blank=True, default=False)
 
     class Meta:
         ordering = ["-created_at"]
