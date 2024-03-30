@@ -84,6 +84,8 @@ from .models import (
     SchedularBatch,
     SchedularUpdate,
     CalendarInvites,
+    CoachContract,
+    ProjectContract,
     CoachPricing,
     FacilitatorPricing,
     Expense,
@@ -93,6 +95,7 @@ from api.serializers import (
     FacilitatorBasicDetailsSerializer,
     CoachSerializer,
     FacilitatorDepthOneSerializer,
+    CoachContractSerializer,
 )
 
 from courses.models import (
@@ -334,7 +337,7 @@ def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
     pmo_id = request.query_params.get("pmo")
     coach_id = request.query_params.get("coach_id")
-    projects = None
+    projects = SchedularProject.objects.all()
     if pmo_id:
         pmo = Pmo.objects.get(id=int(pmo_id))
         if pmo.sub_role == "junior_pmo":
@@ -346,7 +349,7 @@ def get_all_Schedular_Projects(request):
         projects = SchedularProject.objects.filter(
             Q(schedularbatch__coaches=coach)
         ).distinct()
-   
+
     if status:
         projects = projects.exclude(status="completed")
 
@@ -1290,6 +1293,7 @@ def create_coach_schedular_availibilty(request):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def edit_slot_request(request, request_id):
@@ -1432,7 +1436,6 @@ def get_coaches(request):
 def update_batch(request, batch_id):
     existing_coaches = None
     coaches = request.data.get("coaches")
-
     try:
         with transaction.atomic():
             batch = SchedularBatch.objects.get(id=batch_id)
@@ -1448,13 +1451,37 @@ def update_batch(request, batch_id):
 
             if serializer.is_valid():
                 serializer.save()
-
+                contract = ProjectContract.objects.get(
+                    schedular_project__id=batch.project.id
+                )
+                for coach in batch.coaches.all():
+                    existing_coach_contract = CoachContract.objects.filter(
+                        schedular_project=batch.project, coach=coach.id
+                    ).exists()
+                    if not existing_coach_contract:
+                        contract_data = {
+                            "project_contract": contract.id,
+                            "schedular_project": batch.project.id,
+                            "status": "pending",
+                            "coach": coach.id,
+                        }
+                        contract_serializer = CoachContractSerializer(
+                            data=contract_data
+                        )
+                        if contract_serializer.is_valid():
+                            contract_serializer.save()
+                        else:
+                            return Response(
+                                {"error": "Failed to perform task."},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            )
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         print(str(e))
         return Response(
-            {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
+            {"error": "Failed to perform task."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
@@ -5990,8 +6017,6 @@ def get_all_courses_for_all_batches(request):
         print(str(e))
 
 
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
@@ -6016,7 +6041,7 @@ def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
             for s in session_counts
             if s["session_type"] == "mentoring_session"
         )
-
+        print(total_laser_coaching_session)
         # Get merged dates for coaching sessions
         batches = SchedularBatch.objects.filter(project=project)
         merged_dates = get_merged_date_of_coaching_session_for_a_batches(batches)
@@ -6024,35 +6049,55 @@ def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
         last_end_date = merged_dates[-1][1] if merged_dates else None
 
         # Convert dates to datetime objects
-        first_start_datetime = datetime.combine(first_start_date, datetime.min.time()) if first_start_date else None
-        last_end_datetime = datetime.combine(last_end_date, datetime.min.time()) if last_end_date else None
-
-        # Get timestamps for start and end dates
-        start_timestamp = first_start_datetime.timestamp() * 1000 if first_start_datetime else None
-        end_timestamp = (last_end_datetime + timedelta(days=1)).timestamp() * 1000 if last_end_datetime else None
-
-        # Count available slots
-        avaliable_solts = CoachSchedularAvailibilty.objects.filter(
-            coach=coach,
-            start_time__gte=start_timestamp,
-            end_time__lte=end_timestamp,
-           is_confirmed=False
+        first_start_datetime = (
+            datetime.combine(first_start_date, datetime.min.time())
+            if first_start_date
+            else None
+        )
+        last_end_datetime = (
+            datetime.combine(last_end_date, datetime.min.time())
+            if last_end_date
+            else None
         )
 
-        # Count booked slots (pending sessions)
+        # Get timestamps for start and end dates
+        start_timestamp = (
+            first_start_datetime.timestamp() * 1000 if first_start_datetime else None
+        )
+        end_timestamp = (
+            (last_end_datetime + timedelta(days=1)).timestamp() * 1000
+            if last_end_datetime
+            else None
+        )
+
+        avaliable_solts = []
+
+        if start_timestamp and end_timestamp:
+            # Count available slots
+            avaliable_solts = CoachSchedularAvailibilty.objects.filter(
+                coach=coach,
+                start_time__gte=start_timestamp,
+                end_time__lte=end_timestamp,
+                is_confirmed=False,
+            )
+
         booked_slots = SchedularSessions.objects.filter(
-            coaching_session__batch__coaches=coach,
-            coaching_session__batch__project=project,
+            Q(coaching_session__batch__coaches=coach)
+            | Q(coaching_session__batch__coaches__isnull=True),
+            Q(coaching_session__batch__project=project)
+            | Q(coaching_session__batch__project__isnull=True),
             status="pending",
         ).count()
 
         # Count completed sessions
         completed_sessions = SchedularSessions.objects.filter(
-            coaching_session__batch__coaches=coach,
-            coaching_session__batch__project=project,
+            Q(coaching_session__batch__coaches=coach)
+            | Q(coaching_session__batch__coaches__isnull=True),
+            Q(coaching_session__batch__project=project)
+            | Q(coaching_session__batch__project__isnull=True),
             status="completed",
         ).count()
-       
+
         return Response(
             {
                 "total_laser_coaching_session": total_laser_coaching_session,
@@ -6063,7 +6108,7 @@ def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
                 "last_end_date": (
                     last_end_date.strftime("%d-%m-%Y") if last_end_date else None
                 ),
-                "available_slots": avaliable_solts.count(),
+                "available_slots": len(avaliable_solts),
                 "booked_slots": booked_slots,
                 "completed_sessions": completed_sessions,
             },

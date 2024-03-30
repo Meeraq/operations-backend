@@ -28,8 +28,6 @@ from .models import (
     RemoveCoachActivity,
     PastSessionActivity,
     Template,
-    ProjectContract,
-    CoachContract,
     Update,
     UserToken,
     CalendarEvent,
@@ -42,6 +40,7 @@ from .models import (
     Task,
 )
 from django.contrib.auth.models import User
+from schedularApi.models import ProjectContract, CoachContract
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -402,6 +401,7 @@ class CoachContractSerializer(serializers.ModelSerializer):
     class Meta:
         model = CoachContract
         fields = "__all__"
+
 
 
 class UserTokenSerializer(serializers.ModelSerializer):

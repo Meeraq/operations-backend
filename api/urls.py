@@ -24,6 +24,8 @@ from .views import (
     UserTokenAvaliableCheck,
     SessionData,
     DownloadCoachContract,
+    ProjectContractListWithDepth,
+    GetCoachContractFromProject,
     AddRegisteredFacilitator,
 )
 
@@ -312,9 +314,14 @@ urlpatterns = [
     path("create-project-contract/", views.create_project_contract),
     path("get-project-contracts/", ProjectContractAPIView.as_view()),
     path("coach-contracts/", CoachContractList.as_view()),
+    path("project-contracts-with-depth/", ProjectContractListWithDepth.as_view()),
     path("coach-contracts/<int:pk>/", CoachContractDetail.as_view()),
     path("handle-assign/", AssignCoachContractAndProjectContract.as_view()),
     path("project-contracts/<int:project_id>/", ProjectContractDetailView.as_view()),
+    path(
+        "get-coach-contracts-of-project/<int:project_id>/",
+        GetCoachContractFromProject.as_view(),
+    ),
     path("update-contract/", UpdateCoachContract.as_view()),
     path("send-contract-reminder/", SendContractReminder.as_view()),
     path(
