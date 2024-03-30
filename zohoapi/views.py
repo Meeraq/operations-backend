@@ -1309,20 +1309,32 @@ def get_invoices_by_status(request, status):
         print(str(e))
         return Response({"error": "Failed to load"}, status=400)
 
-def get_purchase_order_ids_for_project(project_id):
-    coach_pricings = CoachPricing.objects.filter(project__id=project_id)
-    facilitator_pricings = FacilitatorPricing.objects.filter(project__id=project_id)
+
+def get_purchase_order_ids_for_project(project_id, project_type):
     purchase_order_set = {}
-    for coach_pricing in coach_pricings:
-        if coach_pricing.purchase_order_id in purchase_order_set:
-            continue
-        purchase_order_set[coach_pricing.purchase_order_id]
-    for facilitator_pricing in facilitator_pricings:
-        if facilitator_pricing.purchase_order_id in purchase_order_set:
-            continue
-        purchase_order_set[facilitator_pricing.purchase_order_id]
+    if project_type == "SEEQ":
+        coach_pricings = CoachPricing.objects.filter(project__id=project_id)
+        facilitator_pricings = FacilitatorPricing.objects.filter(project__id=project_id)
+
+        for coach_pricing in coach_pricings:
+            if coach_pricing.purchase_order_id in purchase_order_set:
+                continue
+            purchase_order_set[coach_pricing.purchase_order_id]
+        for facilitator_pricing in facilitator_pricings:
+            if facilitator_pricing.purchase_order_id in purchase_order_set:
+                continue
+            purchase_order_set[facilitator_pricing.purchase_order_id]
+    elif project_type == "CAAS":
+        coach_statuses = CoachStatus.objects.filter(project__id=project_id)
+
+        for coach_status in coach_statuses:
+            if coach_status.purchase_order_id:
+                if coach_status.purchase_order_id in purchase_order_set:
+                    continue
+                purchase_order_set[coach_status.purchase_order_id]
 
     return list(purchase_order_set)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1331,13 +1343,18 @@ def get_invoices_by_status_for_founders(request, status):
     try:
         all_invoices = fetch_invoices(organization_id)
         project_id = request.query_params.get("project_id")
-        if project_id:
-            purchase_order_ids = get_purchase_order_ids_for_project(project_id)
-
+        project_type = request.query_params.get("projectType")
+        if project_id and project_type:
+            purchase_order_ids = get_purchase_order_ids_for_project(
+                project_id, project_type
+            )
         res = []
-        
+
         for invoice_data in all_invoices:
-            if project_id and invoice_data["purchase_order_id"] not in purchase_order_ids:
+            if (
+                project_id
+                and invoice_data["purchase_order_id"] not in purchase_order_ids
+            ):
                 continue
             if status == "in_review":
                 if not invoice_data["bill"] and invoice_data["status"] == "in_review":
@@ -1912,8 +1929,57 @@ def delete_expense_purchase_order(request, purchase_order_id):
 @permission_classes([IsAuthenticated])
 def get_all_sales_orders(request):
     try:
+
         all_sales_orders = fetch_sales_orders(organization_id)
         return Response(all_sales_orders, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def get_so_for_project(project_id, project_type):
+    try:
+        sales_order_ids_set = set()
+        if project_type == "CAAS":
+            orders_project_mapping = OrdersAndProjectMapping.objects.filter(
+                project__id=project_id
+            )
+            for mapping in orders_project_mapping:
+                sales_order_ids_set.update(mapping.sales_order_ids)
+        elif project_type == "SEEQ":
+            orders_project_mapping = OrdersAndProjectMapping.objects.filter(
+                schedular_project__id=project_id
+            )
+            for mapping in orders_project_mapping:
+                sales_order_ids_set.update(mapping.sales_order_ids)
+
+        sales_order_ids = list(sales_order_ids_set)
+
+        all_sales_orders = []
+        for salesorder_id in sales_order_ids:
+            access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+            if access_token_sales_order:
+                api_url = f"{base_url}/salesorders/{salesorder_id}?organization_id={organization_id}"
+                auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
+                response = requests.get(api_url, headers=auth_header)
+                if response.status_code == 200:
+                    sales_order = response.json().get("salesorder")
+                    all_sales_orders.append(sales_order)
+
+        return all_sales_orders
+
+    except Exception as e:
+        print(str(e))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_sales_orders_of_project(request, project_id, project_type):
+    try:
+        all_sales_orders = get_so_for_project(project_id, project_type)
+
+        return Response(all_sales_orders)
+
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -2014,9 +2080,10 @@ def create_invoice(request):
         print(str(e))
         return Response(status=404)
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def edit_so_invoice(request,invoice_id):
+def edit_so_invoice(request, invoice_id):
     try:
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
         if not access_token:
@@ -2035,6 +2102,7 @@ def edit_so_invoice(request,invoice_id):
     except Exception as e:
         print(str(e))
         return Response(status=404)
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -2100,6 +2168,17 @@ def create_sales_order(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_client_invoices(request):
+    try:
+        all_client_invoices = fetch_client_invoices(organization_id)
+        return Response(all_client_invoices, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_client_invoices_for_project(request):
     try:
         all_client_invoices = fetch_client_invoices(organization_id)
         return Response(all_client_invoices, status=status.HTTP_200_OK)
@@ -2226,4 +2305,39 @@ def add_so_to_project(request, project_id):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_so_data_of_project(request, project_id, project_type):
+    try:
+        all_sales_orders = get_so_for_project(project_id, project_type)
 
+        total = 0
+        invoiced_amount = 0
+        not_invoiced_amount = 0
+        paid_amount = 0
+        currency_code = None
+        for sales_order in all_sales_orders:
+            total += sales_order["total"]
+            currency_code = sales_order["currency_code"]
+
+            for invoice in sales_order["invoices"]:
+                invoiced_amount += invoice["total"]
+            not_invoiced_amount += sales_order["total"] - invoiced_amount
+
+            for invoice in sales_order["invoices"]:
+                if invoice["status"] == "paid":
+                    paid_amount += invoice["total"]
+
+        return Response(
+            {
+                "total": total,
+                "invoiced_amount": invoiced_amount,
+                "not_invoiced_amount": not_invoiced_amount,
+                "paid_amount": paid_amount,
+                "currency_code": currency_code,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

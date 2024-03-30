@@ -50,6 +50,7 @@ from api.models import (
     Role,
     UserToken,
     Facilitator,
+    CoachStatus,
 )
 from .serializers import (
     SchedularProjectSerializer,
@@ -159,7 +160,7 @@ import environ
 import re
 from rest_framework.views import APIView
 from api.views import get_user_data
-from zohoapi.models import Vendor,InvoiceData
+from zohoapi.models import Vendor, InvoiceData
 from zohoapi.views import fetch_purchase_orders
 from zohoapi.tasks import organization_id
 from courses.views import calculate_nps
@@ -420,7 +421,7 @@ def delete_facilitator_pricing(batch, facilitator):
                 price=session["price"],
             ).delete()
 
-            
+
 def create_coach_pricing(batch, coach):
     project_structure = batch.project.project_structure
     for session in project_structure:
@@ -548,6 +549,7 @@ def delete_sessions_and_create_new_batch_calendar_and_lessons(project):
             create_coach_pricing(batch, coach)
 
     return None
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -764,7 +766,7 @@ def get_batch_calendar(request, batch_id):
                     When(user__vendor__isnull=False, then=F("user__vendor__vendor_id")),
                     default=None,
                     output_field=CharField(max_length=255, null=True),
-                ),  
+                ),
             )
         )
 
@@ -774,24 +776,34 @@ def get_batch_calendar(request, batch_id):
         try:
             purchase_orders = fetch_purchase_orders(organization_id)
             for facilitator_item in facilitator_serializer.data:
-                expense = Expense.objects.filter(batch__id=batch_id , facilitator__id = facilitator_item['id']).first()
-                facilitator_item['purchase_order_id'] = expense.purchase_order_id
-                facilitator_item['purchase_order_no'] = expense.purchase_order_no
+                expense = Expense.objects.filter(
+                    batch__id=batch_id, facilitator__id=facilitator_item["id"]
+                ).first()
+                facilitator_item["purchase_order_id"] = expense.purchase_order_id
+                facilitator_item["purchase_order_no"] = expense.purchase_order_no
                 is_delete_purchase_order_allowed = True
-                if facilitator_item['purchase_order_id']:
-                    purchase_order = get_purchase_order(purchase_orders, facilitator_item['purchase_order_id'])
+                if facilitator_item["purchase_order_id"]:
+                    purchase_order = get_purchase_order(
+                        purchase_orders, facilitator_item["purchase_order_id"]
+                    )
                     if not purchase_order:
-                        Expense.objects.filter(batch__id=batch_id , facilitator__id = facilitator_item['id']).update(purchase_order_id="", purchase_order_no="")
-                        facilitator_item['purchase_order_id'] = None
-                        facilitator_item['purchase_order_no'] = None
+                        Expense.objects.filter(
+                            batch__id=batch_id, facilitator__id=facilitator_item["id"]
+                        ).update(purchase_order_id="", purchase_order_no="")
+                        facilitator_item["purchase_order_id"] = None
+                        facilitator_item["purchase_order_no"] = None
                     else:
-                        invoices = InvoiceData.objects.filter(purchase_order_id = facilitator_item['purchase_order_id'])
+                        invoices = InvoiceData.objects.filter(
+                            purchase_order_id=facilitator_item["purchase_order_id"]
+                        )
                         if invoices.exists():
                             is_delete_purchase_order_allowed = False
-                    facilitator_item["is_delete_purchase_order_allowed"] = is_delete_purchase_order_allowed
-                    facilitator_item['purchase_order'] = purchase_order
+                    facilitator_item["is_delete_purchase_order_allowed"] = (
+                        is_delete_purchase_order_allowed
+                    )
+                    facilitator_item["purchase_order"] = purchase_order
                 else:
-                    facilitator_item['purchase_order'] = None
+                    facilitator_item["purchase_order"] = None
         except Exception as e:
             print(str(e))
 
@@ -1027,7 +1039,7 @@ def update_coaching_session(request, coaching_session_id):
                     lesson = coaching_session_lesson.lesson
                     lesson.drip_date = coaching_session.start_date
                     lesson.save()
-  
+
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
@@ -1473,9 +1485,6 @@ def update_batch(request, batch_id):
         return Response(
             {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
         )
-    
-    
-
 
 
 @api_view(["GET"])
@@ -1487,8 +1496,6 @@ def get_batch(request, batch_id):
         return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
     serializer = SchedularBatchSerializer(batch)
     return Response({**serializer.data, "is_nudge_enabled": batch.project.nudges})
-
-
 
 
 @api_view(["GET"])
@@ -6008,33 +6015,49 @@ def check_if_project_structure_edit_allowed(request, project_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_all_project_purchase_orders_for_finance(request, project_id):
+def get_all_project_purchase_orders_for_finance(request, project_id, project_type):
     try:
-        coach_pricings = CoachPricing.objects.filter(project__id=project_id)
-        facilitator_pricings = FacilitatorPricing.objects.filter(project__id=project_id)
-        purchase_orders = fetch_purchase_orders(organization_id)
         purchase_order_set = {}
         all_purchase_orders = []
-        for coach_pricing in coach_pricings:
-            if coach_pricing.purchase_order_id in purchase_order_set:
-                continue
-            purchase_order = get_purchase_order(
-                purchase_orders, coach_pricing.purchase_order_id
+        purchase_orders = fetch_purchase_orders(organization_id)
+
+        if project_type == "SEEQ":
+            coach_pricings = CoachPricing.objects.filter(project__id=project_id)
+            facilitator_pricings = FacilitatorPricing.objects.filter(
+                project__id=project_id
             )
-            all_purchase_orders.append(purchase_order)
-            purchase_order_set[coach_pricing.purchase_order_id]
-        for facilitator_pricing in facilitator_pricings:
-            if facilitator_pricing.purchase_order_id in purchase_order_set:
-                continue
-            purchase_order = get_purchase_order(
-                purchase_orders, facilitator_pricing.purchase_order_id
-            )
-            all_purchase_orders.append(purchase_order)
-            purchase_order_set[facilitator_pricing.purchase_order_id]
+
+            for coach_pricing in coach_pricings:
+                if coach_pricing.purchase_order_id in purchase_order_set:
+                    continue
+                purchase_order = get_purchase_order(
+                    purchase_orders, coach_pricing.purchase_order_id
+                )
+                all_purchase_orders.append(purchase_order)
+                purchase_order_set[coach_pricing.purchase_order_id]
+            for facilitator_pricing in facilitator_pricings:
+                if facilitator_pricing.purchase_order_id in purchase_order_set:
+                    continue
+                purchase_order = get_purchase_order(
+                    purchase_orders, facilitator_pricing.purchase_order_id
+                )
+                all_purchase_orders.append(purchase_order)
+                purchase_order_set[facilitator_pricing.purchase_order_id]
+
+        elif project_type == "CAAS":
+            coach_statuses = CoachStatus.objects.filter(project__id=project_id)
+
+            for coach_status in coach_statuses:
+                if coach_status.purchase_order_id:
+                    if coach_status.purchase_order_id in purchase_order_set:
+                        continue
+                    purchase_order = get_purchase_order(
+                        purchase_orders, coach_status.purchase_order_id
+                    )
+                    all_purchase_orders.append(purchase_order)
+                    purchase_order_set[coach_status.purchase_order_id]
 
         return Response(all_purchase_orders)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
-
-

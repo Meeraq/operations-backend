@@ -346,7 +346,7 @@ urlpatterns = [
         views.check_if_project_structure_edit_allowed,
     ),
     path(
-        "get-all-project-purchase-orders-for-finance/<int:project_id>/",
+        "get-all-project-purchase-orders-for-finance/<int:project_id>/<str:project_type>/",
         views.get_all_project_purchase_orders_for_finance,
     ),
 ]

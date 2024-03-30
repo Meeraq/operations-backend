@@ -148,6 +148,16 @@ urlpatterns = [
         name="get_all_sales_orders",
     ),
     path(
+        "get-all-sales-orders-for-project/<int:project_id>/<str:project_type>/",
+        views.get_all_sales_orders_of_project,
+        name="get_all_sales_orders_of_project",
+    ),
+    path(
+        "get-so-data-of-project/<int:project_id>/<str:project_type>/",
+        views.get_so_data_of_project,
+        name="get_so_data_of_project",
+    ),
+    path(
         "get-sales-order-data-pdf/<int:salesorder_id>/",
         views.get_sales_order_data_pdf,
         name="get_sales_order_data",
@@ -172,7 +182,7 @@ urlpatterns = [
         views.create_invoice,
         name="create_invoice",
     ),
-      path(
+    path(
         "edit-so-invoice/<str:invoice_id>/",
         views.edit_so_invoice,
         name="edit_so_invoice",
