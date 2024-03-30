@@ -1050,6 +1050,11 @@ def update_coach_profile(request, id):
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
     new_email = request.data.get("email", "").strip().lower()
+    remove_education_upload_file = request.data.get(
+        "remove_education_upload_file", None
+    )
+    remove_profile_pic = request.data.get("remove_profile_pic", None)
+    remove_education_pic = request.data.get("remove_education_pic", None)
     #  other user exists with the new email
     if (
         new_email
@@ -1101,7 +1106,16 @@ def update_coach_profile(request, id):
     add_contact_in_wati("coach", name, coach.phone)
 
     if serializer.is_valid():
-        serializer.save()
+        coach_instance = serializer.save()
+        if remove_education_upload_file:
+            coach_instance.education_upload_file = None
+            coach_instance.save()
+        if remove_profile_pic:
+            coach_instance.profile_pic = None
+            coach_instance.save()
+        if remove_education_pic:
+            coach_instance.education_pic = None
+            coach_instance.save()
         depth_serializer = CoachDepthOneSerializer(coach)
         is_caas_allowed = Project.objects.filter(
             coaches_status__coach=user.profile.coach
