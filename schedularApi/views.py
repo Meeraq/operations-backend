@@ -23,7 +23,7 @@ from django.utils import timezone
 from openpyxl import Workbook
 from django.http import HttpResponse
 import pandas as pd
-from django.db.models import Q, F, Case, When, Value, IntegerField
+from django.db.models import Q, F, Case, When, Value, IntegerField, Count, Q
 from time import sleep
 import json
 from django.core.exceptions import ObjectDoesNotExist
@@ -42,6 +42,7 @@ from api.models import (
     UserToken,
     Facilitator,
 )
+
 from .serializers import (
     SchedularProjectSerializer,
     SchedularBatchSerializer,
@@ -332,12 +333,20 @@ def create_project_schedular(request):
 def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
     pmo_id = request.query_params.get("pmo")
-    projects = SchedularProject.objects.all()
+    coach_id = request.query_params.get("coach_id")
+    projects = None
     if pmo_id:
         pmo = Pmo.objects.get(id=int(pmo_id))
         if pmo.sub_role == "junior_pmo":
             projects = SchedularProject.objects.filter(junior_pmo=pmo)
-
+        else:
+            projects = SchedularProject.objects.all()
+    elif coach_id:
+        coach = Coach.objects.get(id=int(coach_id))
+        projects = SchedularProject.objects.filter(
+            Q(schedularbatch__coaches=coach)
+        ).distinct()
+   
     if status:
         projects = projects.exclude(status="completed")
 
@@ -5979,6 +5988,93 @@ def get_all_courses_for_all_batches(request):
         )
     except Exception as e:
         print(str(e))
+
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
+    try:
+        project = SchedularProject.objects.get(id=project_id)
+        coach = Coach.objects.get(id=coach_id)
+
+        # Count total laser coaching sessions and mentoring sessions
+        session_counts = (
+            CoachingSession.objects.filter(batch__coaches=coach, batch__project=project)
+            .values("session_type")
+            .annotate(count=Count("id"))
+        )
+
+        total_laser_coaching_session = sum(
+            s["count"]
+            for s in session_counts
+            if s["session_type"] == "laser_coaching_session"
+        )
+        total_mentoring_session = sum(
+            s["count"]
+            for s in session_counts
+            if s["session_type"] == "mentoring_session"
+        )
+
+        # Get merged dates for coaching sessions
+        batches = SchedularBatch.objects.filter(project=project)
+        merged_dates = get_merged_date_of_coaching_session_for_a_batches(batches)
+        first_start_date = merged_dates[0][0] if merged_dates else None
+        last_end_date = merged_dates[-1][1] if merged_dates else None
+
+        # Convert dates to datetime objects
+        first_start_datetime = datetime.combine(first_start_date, datetime.min.time()) if first_start_date else None
+        last_end_datetime = datetime.combine(last_end_date, datetime.min.time()) if last_end_date else None
+
+        # Get timestamps for start and end dates
+        start_timestamp = first_start_datetime.timestamp() * 1000 if first_start_datetime else None
+        end_timestamp = (last_end_datetime + timedelta(days=1)).timestamp() * 1000 if last_end_datetime else None
+
+        # Count available slots
+        avaliable_solts = CoachSchedularAvailibilty.objects.filter(
+            coach=coach,
+            start_time__gte=start_timestamp,
+            end_time__lte=end_timestamp,
+           is_confirmed=False
+        )
+
+        # Count booked slots (pending sessions)
+        booked_slots = SchedularSessions.objects.filter(
+            coaching_session__batch__coaches=coach,
+            coaching_session__batch__project=project,
+            status="pending",
+        ).count()
+
+        # Count completed sessions
+        completed_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__coaches=coach,
+            coaching_session__batch__project=project,
+            status="completed",
+        ).count()
+       
+        return Response(
+            {
+                "total_laser_coaching_session": total_laser_coaching_session,
+                "total_mentoring_session": total_mentoring_session,
+                "first_start_date": (
+                    first_start_date.strftime("%d-%m-%Y") if first_start_date else None
+                ),
+                "last_end_date": (
+                    last_end_date.strftime("%d-%m-%Y") if last_end_date else None
+                ),
+                "available_slots": avaliable_solts.count(),
+                "booked_slots": booked_slots,
+                "completed_sessions": completed_sessions,
+            },
+            status=200,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to get data."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["GET"])
