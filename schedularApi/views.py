@@ -128,6 +128,7 @@ from api.views import (
     send_mail_templates,
     create_outlook_calendar_invite,
     delete_outlook_calendar_invite,
+    
 )
 from django.db.models import Max
 import io
@@ -138,6 +139,7 @@ from schedularApi.tasks import (
     get_current_date_timestamps,
     get_coaching_session_according_to_time,
     get_live_session_according_to_time,
+    send_emails_in_bulk
 )
 
 # Create your views here.
@@ -2871,14 +2873,15 @@ def finalize_project_structure(request, project_id):
 @permission_classes([IsAuthenticated])
 def send_live_session_link(request):
     live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
+    email_contents = []
     for learner in live_session.batch.learners.all():
         # Only send email if project status is ongoing
         if live_session.batch.project.status == "ongoing":
-            send_mail_templates(
-                "send_live_session_link.html",
-                [learner.email],
-                "Meeraq - Live Session",
-                {
+            email_contents.append(
+               {"file_name": "send_live_session_link.html",
+                 "user_email" : learner.email,
+                 "email_subject": "Meeraq - Live Session",
+                 "content" :{
                     "participant_name": learner.name,
                     "live_session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
                     "project_name": live_session.batch.project.name,
@@ -2887,9 +2890,9 @@ def send_live_session_link(request):
                     ),
                     "meeting_link": live_session.meeting_link,
                 },
-                [],
+                 "bcc_emails": []}
             )
-            sleep(4)
+    send_emails_in_bulk.delay(email_contents)
     return Response({"message": "Emails sent successfully"})
 
 
