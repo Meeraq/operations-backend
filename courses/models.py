@@ -58,7 +58,7 @@ class Lesson(models.Model):
         ("ppt", "PPT"),
         ("downloadable_file", "Downloadable File"),
         ("assignment", "Assignment"),
-        ("facilitator","Facilitator Lesson"),
+        ("facilitator", "Facilitator Lesson"),
     )
     STATUS_CHOICES = (
         ("draft", "Draft"),
@@ -283,15 +283,19 @@ class Nudge(models.Model):
     batch = models.ForeignKey(
         SchedularBatch, on_delete=models.CASCADE, null=True, blank=True, default=None
     )
+    trigger_date = models.DateField(default=None, blank=True, null=True)
     is_sent = models.BooleanField(default=False)
+    is_switched_on = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
-    
+
+
 class FacilitatorLesson(models.Model):
     lesson = models.OneToOneField(Lesson, on_delete=models.CASCADE)
+
 
 class Feedback(models.Model):
     questions = models.ManyToManyField(Question)

@@ -20,6 +20,7 @@ from api.models import (
     CoachStatus,
     Project,
 )
+
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 import json
@@ -55,6 +56,7 @@ from .tasks import (
     fetch_purchase_orders,
     fetch_sales_orders,
     filter_purchase_order_data,
+    get_vendor,
     fetch_customers_from_zoho,
     fetch_client_invoices,
 )
@@ -89,6 +91,7 @@ from schedularApi.models import (
 from api.models import Facilitator
 from decimal import Decimal
 from collections import defaultdict
+from api.permissions import IsInRoles
 
 env = environ.Env()
 
@@ -97,6 +100,20 @@ wkhtmltopdf_path = os.environ.get(
 )
 
 pdfkit_config = pdfkit.configuration(wkhtmltopdf=f"{wkhtmltopdf_path}")
+
+
+SESSION_TYPE_VALUE = {
+    "chemistry": "Chemistry",
+    "tripartite": "Tripartite",
+    "goal_setting": "Goal Setting",
+    "coaching_session": "Coaching Session",
+    "mid_review": "Mid Review",
+    "end_review": "End Review",
+    "closure_session": "Closure Session",
+    "stakeholder_without_coach": "Tripartite Without Coach",
+    "interview": "Interview",
+    "stakeholder_interview": "Stakeholder Interview",
+}
 
 
 def get_line_items_details(invoices):
@@ -226,25 +243,6 @@ def get_organization_data():
             and organization_response.json()["organization"]
         ):
             return organization_response.json()["organization"]
-        return Response({}, status=400)
-    else:
-        return Response({}, status=400)
-
-
-def get_vendor(vendor_id):
-    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-    if access_token:
-        headers = {"Authorization": f"Bearer {access_token}"}
-        url = f"{base_url}/contacts/{vendor_id}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
-        vendor_response = requests.get(
-            url,
-            headers=headers,
-        )
-        if (
-            vendor_response.json()["message"] == "success"
-            and vendor_response.json()["contact"]
-        ):
-            return vendor_response.json()["contact"]
         return Response({}, status=400)
     else:
         return Response({}, status=400)
@@ -469,7 +467,7 @@ def login_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor","pmo","finance")])
 def get_purchase_orders(request, vendor_id):
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_data:
@@ -494,7 +492,7 @@ def get_purchase_orders(request, vendor_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo", "finance")])
 def get_invoices_with_status(request, vendor_id, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -549,7 +547,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor","pmo", "finance")])
 def get_purchase_order_data(request, purchaseorder_id):
     access_token_purchase_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_order:
@@ -669,7 +667,7 @@ def get_line_items_for_template(line_items):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def add_invoice_data(request):
     invoices = InvoiceData.objects.filter(
         vendor_id=request.data["vendor_id"],
@@ -693,6 +691,9 @@ def add_invoice_data(request):
     serializer = InvoiceDataSerializer(data=request.data)
     if serializer.is_valid():
         invoice_instance = serializer.save()
+        vendor_details = get_vendor(request.data["vendor_id"])
+        invoice_instance.vendor_name = vendor_details["contact_name"]
+        invoice_instance.save()
         approver_email = serializer.data["approver_email"]
         invoice_data = get_invoice_data_for_pdf(invoice_instance)
         send_mail_templates(
@@ -715,7 +716,7 @@ def add_invoice_data(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def edit_invoice(request, invoice_id):
     invoice = get_object_or_404(InvoiceData, id=invoice_id)
     if (
@@ -754,7 +755,7 @@ def edit_invoice(request, invoice_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor", "finance", "pmo")])
 def delete_invoice(request, invoice_id):
     try:
         invoice = get_object_or_404(InvoiceData, id=invoice_id)
@@ -768,7 +769,7 @@ def delete_invoice(request, invoice_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo","finance")])
 def get_purchase_order_and_invoices(request, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -798,7 +799,7 @@ def get_purchase_order_and_invoices(request, purchase_order_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo", "finance")])
 def get_bank_account_data(
     request,
     vendor_id,
@@ -974,7 +975,7 @@ def export_invoice_data(request):
 
 
 class DownloadInvoice(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "vendor", "finance")]
 
     def get(self, request, record_id):
         try:
@@ -1002,34 +1003,6 @@ class DownloadInvoice(APIView):
                 f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
             )
             return response
-        except Exception as e:
-            print(str(e))
-            return Response(
-                {"error": "Failed to download invoice."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-
-class DownloadAttatchedInvoice(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, record_id):
-        try:
-            invoice = get_object_or_404(InvoiceData, id=record_id)
-            serializer = InvoiceDataSerializer(invoice)
-            response = requests.get(serializer.data["attatched_invoice"])
-            if response.status_code == 200:
-                file_content = response.content
-                content_type = response.headers.get("Content-Type", f"application/pdf")
-                file_response = HttpResponse(file_content, content_type=content_type)
-                file_response["Content-Disposition"] = (
-                    f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
-                )
-                return file_response
-            else:
-                return HttpResponse(
-                    "Failed to download the file", status=response.status_code
-                )
 
         except Exception as e:
             print(str(e))
@@ -1040,7 +1013,7 @@ class DownloadAttatchedInvoice(APIView):
 
 
 class DownloadAttatchedInvoice(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "vendor", "finance")]
 
     def get(self, request, record_id):
         try:
@@ -1069,17 +1042,20 @@ class DownloadAttatchedInvoice(APIView):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "superadmin", "finance")])
 def add_vendor(request):
     # Extract data from the request
     with transaction.atomic():
         data = request.data
-        name = data.get("name", "")
+        # name = data.get("name", "")
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
 
         try:
+            vendor_details = get_vendor(vendor_id)
+            name = vendor_details["contact_name"]
+
             # Check if the user with the given email already exists
             user_profile = Profile.objects.get(user__email=email)
             user = user_profile.user
@@ -1178,6 +1154,7 @@ def add_vendor(request):
                 )
 
             except Exception as e:
+                print(str(e))
                 return Response(
                     {"detail": f"Error creating vendor: {str(e)}"},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1185,7 +1162,9 @@ def add_vendor(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "finance", "superadmin")]
+)
 def get_all_vendors(request):
     try:
         vendors = Vendor.objects.all()
@@ -1201,7 +1180,9 @@ def get_all_vendors(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "vendor", "superadmin", "finance")]
+)
 def get_all_purchase_orders(request):
     try:
         all_purchase_orders = fetch_purchase_orders(organization_id)
@@ -1212,7 +1193,7 @@ def get_all_purchase_orders(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_all_purchase_orders_for_pmo(request):
     try:
         all_purchase_orders = fetch_purchase_orders(organization_id)
@@ -1255,7 +1236,7 @@ def fetch_invoices(organization_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_all_invoices(request):
     try:
         all_invoices = fetch_invoices(organization_id)
@@ -1266,7 +1247,7 @@ def get_all_invoices(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_invoices_for_pmo(request):
     try:
         all_invoices = fetch_invoices(organization_id)
@@ -1284,7 +1265,7 @@ def get_invoices_for_pmo(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_invoices_by_status(request, status):
     try:
         all_invoices = fetch_invoices(organization_id)
@@ -1337,9 +1318,8 @@ def get_purchase_order_ids_for_project(project_id, project_type):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_invoices_by_status_for_founders(request, status):
-
     try:
         all_invoices = fetch_invoices(organization_id)
         project_id = request.query_params.get("project_id")
@@ -1349,6 +1329,8 @@ def get_invoices_by_status_for_founders(request, status):
                 project_id, project_type
             )
         res = []
+        status_counts = defaultdict(int)
+
 
         for invoice_data in all_invoices:
             if (
@@ -1356,26 +1338,36 @@ def get_invoices_by_status_for_founders(request, status):
                 and invoice_data["purchase_order_id"] not in purchase_order_ids
             ):
                 continue
-            if status == "in_review":
-                if not invoice_data["bill"] and invoice_data["status"] == "in_review":
+            # if status == "in_review":
+            if not invoice_data["bill"] and invoice_data["status"] == "in_review":
+                status_counts["in_review"] += 1
+                if status == "in_review":
                     res.append(invoice_data)
-            elif status == "approved":
-                if not invoice_data["bill"] and invoice_data["status"] == "approved":
+            # elif status == "approved":
+            if not invoice_data["bill"] and invoice_data["status"] == "approved":
+                status_counts["approved"] += 1
+                if status == "approved":
                     res.append(invoice_data)
-            elif status == "rejected":
-                if not invoice_data["bill"] and invoice_data["status"] == "rejected":
+            # elif status == "rejected":
+            if not invoice_data["bill"] and invoice_data["status"] == "rejected":
+                status_counts["rejected"] += 1
+                if status == "rejected":
                     res.append(invoice_data)
-            if status == "accepted":
-                if invoice_data["bill"]:
-                    if (
-                        "status" in invoice_data["bill"]
-                        and not invoice_data["bill"]["status"] == "paid"
-                    ):
+            # if status == "accepted":
+            if invoice_data["bill"]:
+                if (
+                    "status" in invoice_data["bill"]
+                    and not invoice_data["bill"]["status"] == "paid"
+                ):
+                    status_counts["accepted"] += 1
+                    if status == "accepted":
                         res.append(invoice_data)
-            elif status == "paid":
-                if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid":
+            # elif status == "paid":
+            if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid":
+                status_counts["paid"] += 1
+                if status == "paid":
                     res.append(invoice_data)
-        return Response(res, status=200)
+        return Response({"invoice_counts": status_counts, "invoices": res}, status=200)
 
     except Exception as e:
         print(str(e))
@@ -1383,12 +1375,15 @@ def get_invoices_by_status_for_founders(request, status):
 
 
 @api_view(["PUT"])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "vendor", "superadmin", "finance")]
+)
 def edit_vendor(request, vendor_id):
     try:
         vendor = Vendor.objects.get(id=vendor_id)
 
         data = request.data
-        name = data.get("name", "")
+        # name = data.get("name", "")
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
@@ -1400,6 +1395,8 @@ def edit_vendor(request, vendor_id):
                 {"error": "User with this email already exists."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        vendor_details = get_vendor(vendor_id)
+        name = vendor_details["contact_name"]
         vendor.user.user.username = email
         vendor.user.user.email = email
         vendor.user.user.save()
@@ -1421,7 +1418,7 @@ def edit_vendor(request, vendor_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def update_invoice_status(request, invoice_id):
     try:
         invoice = InvoiceData.objects.get(pk=invoice_id)
@@ -1473,7 +1470,7 @@ def update_invoice_status(request, invoice_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "vendor", "superadmin")])
 def get_invoice_updates(request, invoice_id):
     try:
         updates = InvoiceStatusUpdate.objects.filter(invoice_id=invoice_id).order_by(
@@ -1486,7 +1483,7 @@ def get_invoice_updates(request, invoice_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "superadmin")])
 def get_vendor_details_from_zoho(request, vendor_id):
     try:
 
@@ -1511,7 +1508,7 @@ def get_vendor_details_from_zoho(request, vendor_id):
 
 # creating a PO in zoho and adding the create po id and number in either coach pricing or facilitator pricing
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def create_purchase_order(request, user_type, facilitator_pricing_id):
     try:
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -1559,6 +1556,36 @@ def create_purchase_order(request, user_type, facilitator_pricing_id):
         return Response(status=404)
 
 
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
+def delete_purchase_order(request, user_type, purchase_order_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders/{purchase_order_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.delete(api_url, headers=auth_header)
+        print(response.json())
+        if response.status_code == 200:
+            if user_type == "coach":
+                CoachPricing.objects.filter(purchase_order_id=purchase_order_id).update(
+                    purchase_order_id="", purchase_order_no=""
+                )
+            elif user_type == "facilitator":
+                FacilitatorPricing.objects.filter(
+                    purchase_order_id=purchase_order_id
+                ).update(purchase_order_id="", purchase_order_no="")
+            return Response({"message": "Purchase Order deleted successfully."})
+        else:
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
+
+
 def get_current_financial_year():
     today = date.today()
     current_year = today.year
@@ -1592,7 +1619,7 @@ def generate_new_po_number(po_list, regex_to_match):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_po_number_to_create(request):
     try:
         purchase_orders = fetch_purchase_orders(organization_id)
@@ -1606,7 +1633,7 @@ def get_po_number_to_create(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def update_purchase_order_status(request, purchase_order_id, status):
     try:
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -1720,7 +1747,7 @@ def expense_purchase_order_create(request, facilitator_id, batch_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_coach_wise_finances(request):
     try:
         # Fetch all invoices and purchase orders
@@ -1780,9 +1807,11 @@ def get_coach_wise_finances(request):
                     "paid_amount": vendor_invoice_amounts.get(
                         vendor_id, {"paid_amount": Decimal(0)}
                     )["paid_amount"],
-                    "currency_symbol": vendor_invoice_amounts[vendor_id][
-                        "currency_symbol"
-                    ],
+                    "currency_symbol": (
+                        vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                        if vendor_id in vendor_invoice_amounts
+                        else None
+                    ),
                 }
             )
         return Response(res)
@@ -1814,7 +1843,7 @@ def create_purchase_order_project_mapping():
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_project_wise_finances(request):
     try:
         purchase_order_project_mapping = create_purchase_order_project_mapping()
@@ -1931,6 +1960,55 @@ def get_all_sales_orders(request):
     try:
 
         all_sales_orders = fetch_sales_orders(organization_id)
+
+        for sales_order in all_sales_orders:
+            project = None
+            sales_order["matching_project_structure"] = "Project Not Assigned"
+            for order_project_mapping in OrdersAndProjectMapping.objects.all():
+                if (
+                    str(sales_order["salesorder_id"])
+                    in order_project_mapping.sales_order_ids
+                ):
+                    if order_project_mapping.project:
+                        project = Project.objects.get(
+                            id=order_project_mapping.project.id
+                        )
+                    elif order_project_mapping.schedular_project:
+                        project = SchedularProject.objects.get(
+                            id=order_project_mapping.schedular_project.id
+                        )
+                    if project:
+                        data = project.project_structure
+                        for item in data:
+                            if (
+                                "session_type" in item
+                                and item["session_type"] in SESSION_TYPE_VALUE
+                                and item.get("price") is not None
+                                and item.get("session_duration") is not None
+                                and item.get("no_of_sessions") is not None
+                            ):
+                                result = (
+                                    float(item["price"])
+                                    * float(item["session_duration"])
+                                    * float(item["no_of_sessions"])
+                                ) / 60
+
+                                item["price"] = float(result)
+
+                                item["session_type"] = SESSION_TYPE_VALUE[
+                                    item["session_type"]
+                                ]
+                        total_price = sum(
+                            float(session["price"])
+                            for session in data
+                            if session.get("price") is not None
+                        )
+
+                        if total_price == sales_order["total"]:
+                            sales_order["matching_project_structure"] = "Matching"
+                        else:
+                            sales_order["matching_project_structure"] = "Not Matching"
+
         return Response(all_sales_orders, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -2287,13 +2365,16 @@ def add_so_to_project(request, project_id):
                     break
         if orders_and_project_mapping.exists():
             mapping = orders_and_project_mapping.first()
-            existing_sales_order_ids = mapping.sales_order_ids
-            set_of_sales_order_ids = set(existing_sales_order_ids)
-            for id in sales_order_ids:
-                set_of_sales_order_ids.add(id)
-            final_list_of_sales_order_ids = list(set_of_sales_order_ids)
-            mapping.sales_order_ids = final_list_of_sales_order_ids
-            mapping.project = project
+            if len(sales_order_ids) == 0:
+                mapping.sales_order_ids = sales_order_ids
+            else:
+                existing_sales_order_ids = mapping.sales_order_ids
+                set_of_sales_order_ids = set(existing_sales_order_ids)
+                for id in sales_order_ids:
+                    set_of_sales_order_ids.add(id)
+                final_list_of_sales_order_ids = list(set_of_sales_order_ids)
+                mapping.sales_order_ids = final_list_of_sales_order_ids
+                mapping.project = project
             mapping.save()
         else:
             OrdersAndProjectMapping.objects.create(
@@ -2303,6 +2384,110 @@ def add_so_to_project(request, project_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def assign_so_to_po(request):
+    try:
+        purchase_order_id = request.data.get("purchase_order_id")
+        sales_order_ids = request.data.get("sales_order_ids")
+
+        mapping_instance = None
+        for order_project_mapping in OrdersAndProjectMapping.objects.all():
+            if str(purchase_order_id) in order_project_mapping.purchase_order_ids:
+                mapping_instance = order_project_mapping
+
+        if not mapping_instance:
+            mapping_instance = OrdersAndProjectMapping.objects.create(
+                purchase_order_ids=[str(purchase_order_id)]
+            )
+        unique_sales_order_ids = set(mapping_instance.sales_order_ids)
+        unique_sales_order_ids.update(sales_order_ids)
+        mapping_instance.sales_order_ids = list(unique_sales_order_ids)
+        mapping_instance.save()
+
+        return Response({"message": "Sales orders added to purchase order"})
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_sales_order_for_po(request, purchase_order_id):
+    try:
+
+        mapping_instance = None
+        for order_project_mapping in OrdersAndProjectMapping.objects.all():
+            if str(purchase_order_id) in order_project_mapping.purchase_order_ids:
+
+                mapping_instance = order_project_mapping
+                break
+        if mapping_instance:
+            return Response(mapping_instance.sales_order_ids)
+        else:
+            return Response(
+                {"message": "No sales orders found for the given purchase order ID"},
+                status=500,
+            )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_salesorders_fields_data(request):
+    try:
+
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if access_token:
+            headers = {"Authorization": f"Bearer {access_token}"}
+            url = f"{base_url}/salesorders/editpage?organization_id={env('ZOHO_ORGANIZATION_ID')}"
+            vendor_response = requests.get(
+                url,
+                headers=headers,
+            )
+
+            json_data = vendor_response.json()
+            salesperson_options = [
+                {"value": person["salesperson_id"], "label": person["salesperson_name"]}
+                for person in json_data.get("salespersons", [])
+            ]
+            if vendor_response.status_code == 200:
+                return Response(salesperson_options)
+            else:
+
+                return Response(
+                    {"error": "Failed to fetch vendor fields"},
+                    status=vendor_response.status_code,
+                )
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to create vendor"}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_sales_order_status(request, sales_order_id, status):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/salesorders/{sales_order_id}/status/{status}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header)
+        if response.status_code == 200:
+            return Response({"message": f"Sales Order changed to {status}."})
+        else:
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
 
 
 @api_view(["GET"])
