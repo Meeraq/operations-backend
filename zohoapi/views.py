@@ -2174,11 +2174,16 @@ def get_client_invoice_data_pdf(request, invoice_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_project_sales_orders(request, project_id):
+def get_project_sales_orders(request, project_type, project_id):
     try:
-        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
-            project=project_id
-        )
+        if project_type == "CAAS":
+            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                project=project_id
+            )
+        elif project_type == "SEEQ":
+            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                schedular_project=project_id
+            )
         res = {}
         res["sales_orders"] = []
         if orders_and_project_mapping.exists():
@@ -2200,12 +2205,21 @@ def get_project_sales_orders(request, project_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def add_so_to_project(request, project_id):
+def add_so_to_project(request, project_type, project_id):
     try:
-        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
-            project=project_id
-        )
-        project = Project.objects.get(id=project_id)
+        if project_type == "CAAS":
+            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                project=project_id
+            )
+            project = Project.objects.get(id=project_id)
+            schedular_project = None
+        elif project_type == "SEEQ":
+            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                schedular_project=project_id
+            )
+            schedular_project = SchedularProject.objects.get(id=project_id)
+            project = None
+
         sales_order_ids = request.data.get("sales_order_ids", [])
         if not orders_and_project_mapping.exists():
             for id in sales_order_ids:
@@ -2214,13 +2228,41 @@ def add_so_to_project(request, project_id):
                 )
                 if orders_and_project_mapping.exists():
                     mapping = orders_and_project_mapping.first()
-                    if mapping.project and mapping.project.id != project.id:
-                        return Response(
-                            {
-                                "error": f"SO already exist in project: {mapping.project.name}"
-                            },
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
+                    if project_type == "CAAS":
+                        if mapping.schedular_project:
+                            return Response(
+                                {
+                                    "error": f"SO already exist in Schedular Project: {mapping.schedular_project.name}"
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
+                        if mapping.project and mapping.project.id != project.id:
+                            return Response(
+                                {
+                                    "error": f"SO already exist in project: {mapping.project.name}"
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
+                    if project_type == "SEEQ":
+                        if mapping.project:
+                            return Response(
+                                {
+                                    "error": f"SO already exist in Coaching Project: {mapping.project.name}"
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        if (
+                            mapping.schedular_project
+                            and mapping.schedular_project.id != schedular_project.id
+                        ):
+                            return Response(
+                                {
+                                    "error": f"SO already exist in project: {mapping.schedular_project.name}"
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
                     break
         if orders_and_project_mapping.exists():
             mapping = orders_and_project_mapping.first()
@@ -2231,10 +2273,11 @@ def add_so_to_project(request, project_id):
             final_list_of_sales_order_ids = list(set_of_sales_order_ids)
             mapping.sales_order_ids = final_list_of_sales_order_ids
             mapping.project = project
+            mapping.schedular_project = schedular_project
             mapping.save()
         else:
             OrdersAndProjectMapping.objects.create(
-                project=project, sales_order_ids=sales_order_ids
+                project=project, sales_order_ids=sales_order_ids,schedular_project=schedular_project
             )
         return Response({"message": "Sales orders added to project"})
     except Exception as e:

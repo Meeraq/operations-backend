@@ -193,12 +193,12 @@ urlpatterns = [
         name="get_client_invoice_data",
     ),
     path(
-        "project/caas/sales-orders/<int:project_id>/",
+        "project/sales-orders/<str:project_type>/<int:project_id>/",
         views.get_project_sales_orders,
         name="get_project_sales_orders",
     ),
     path(
-        "add-so-to-project/<int:project_id>/",
+        "add-so-to-project/<str:project_type>/<int:project_id>/",
         views.add_so_to_project,
         name="add_so_to_project",
     ),
