@@ -395,6 +395,7 @@ class Project(models.Model):
         on_delete=models.SET_NULL,
         blank=True,
     )
+    is_archive = models.BooleanField(default=False)
     finance = models.BooleanField(blank=True, default=False)
 
     class Meta:

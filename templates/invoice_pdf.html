@@ -137,7 +137,11 @@
 								</div>
 							</td>
 							<td style="width: 50%; text-align: right; vertical-align: top; font-size: 13pt">
-								<div style="font-size: 18pt; margin: 0pt; padding:0pt;">TAX INVOICE</div><br />
+								{% if invoice.is_oversea or invoice.vendor_gst == "" %}
+									<div style="font-size: 18pt; margin: 0pt; padding: 0pt;">INVOICE</div><br />
+								{% else %}
+									<div style="font-size: 18pt; margin: 0pt; padding: 0pt;">TAX INVOICE</div><br />
+								{% endif %}
 								<div style="font-size: 12pt; margin: 0pt; padding:0pt;">Original For Recipient</div>
 								<div style="font-size: 12pt; margin: 0pt; padding:0pt;">Invoice No.: <b>{{ invoice.invoice_number }}</b>
 								</div>

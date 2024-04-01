@@ -9,6 +9,7 @@ from datetime import datetime
 from django.template.loader import render_to_string
 from django.core.mail import send_mail, EmailMessage
 from operationsBackend import settings
+from rest_framework.response import Response
 
 
 base_url = os.environ.get("ZOHO_API_BASE_URL")
@@ -114,6 +115,25 @@ purchase_orders_allowed = [
     "Meeraq/PO/22-23/0045",
 ]
 
+
+
+def get_vendor(vendor_id):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
+        url = f"{base_url}/contacts/{vendor_id}?organization_id={env('ZOHO_ORGANIZATION_ID')}"
+        vendor_response = requests.get(
+            url,
+            headers=headers,
+        )
+        if (
+            vendor_response.json()["message"] == "success"
+            and vendor_response.json()["contact"]
+        ):
+            return vendor_response.json()["contact"]
+        return Response({}, status=400)
+    else:
+        return Response({}, status=400)
 
 def filter_purchase_order_data(purchase_orders):
     try:
@@ -404,10 +424,12 @@ def import_invoices_for_vendor_from_zoho(vendor, headers, res, bill_details_res)
                                 bill[env("INVOICE_FIELD_NAME")],
                             )
                         else:
+                            vendor_details = get_vendor(vendor.vendor_id)
+                            name = vendor_details["contact_name"] 
                             invoice = InvoiceData.objects.create(
                                 invoice_number=bill[env("INVOICE_FIELD_NAME")],
                                 vendor_id=vendor.vendor_id,
-                                vendor_name=vendor.name,
+                                vendor_name=name,
                                 vendor_email=vendor.email,
                                 vendor_billing_address="",
                                 vendor_gst="",
