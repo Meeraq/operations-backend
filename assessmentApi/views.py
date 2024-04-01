@@ -1735,7 +1735,7 @@ class StartAssessmentDataForObserver(APIView):
 
 
 class GetObserversUniqueIds(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr","learner")]
 
     def get(self, request, assessment_id):
         try:
