@@ -73,6 +73,7 @@ from .serializers import (
     APILogSerializer,
     PmoSerializerAll,
     TaskSerializer,
+    ProjectDepthTwoSerializerArchiveCheck,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor
@@ -1446,8 +1447,15 @@ def get_ongoing_projects(request):
             if pmo.sub_role == "junior_pmo":
                 projects = projects.filter(junior_pmo=int(pmo_id))
 
-        projects = projects.filter(steps__project_live="pending")
-        serializer = ProjectDepthTwoSerializer(projects, many=True)
+        projects = projects.filter(steps__project_live="pending").annotate(
+            is_archive_enabled=Case(
+                When(coaches_status__isnull=True, then=True),
+                default=False,
+                output_field=BooleanField(),
+            )
+        )
+
+        serializer = ProjectDepthTwoSerializerArchiveCheck(projects, many=True)
         for project_data in serializer.data:
             latest_update = (
                 Update.objects.filter(project__id=project_data["id"])
@@ -2398,7 +2406,7 @@ def send_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("leanrer", "pmo", "hr", "coach")])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach")])
 def get_project_details(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
@@ -3575,7 +3583,7 @@ def edit_learner(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "superadmin")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "superadmin","learner")])
 def edit_individual_learner(request, user_id):
     try:
         learner = Learner.objects.get(id=user_id)
@@ -5212,7 +5220,7 @@ def get_project_organisation_learner_of_user_optimized(request, user_type, user_
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "hr")])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "hr","learner")])
 def get_learner_data(request, learner_id):
     learner = Learner.objects.get(id=learner_id)
     serializer = LearnerSerializer(learner)
@@ -6464,7 +6472,7 @@ class UpdateInviteesView(APIView):
                 print(str(e))
 
             return Response(
-                {"message": " Invitees Updated Sucessfully"}, status=status.HTTP_200_OK
+                {"message": "Invitees Updated Sucessfully"}, status=status.HTTP_200_OK
             )
         except Exception as e:
             return Response(
@@ -7653,7 +7661,7 @@ def get_coach_profile_template(request, project_id):
 
 
 class StandardizedFieldAPI(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("coach", "facilitator", "pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "facilitator", "pmo","hr","learner")]
 
     def get(self, request):
         standardized_fields = StandardizedField.objects.all()
@@ -7978,7 +7986,7 @@ def create_project_contract(request):
 
 
 class ProjectContractAPIView(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo","learner")]
 
     def get(self, request, format=None):
         contracts = ProjectContract.objects.all()
@@ -9396,6 +9404,50 @@ def complete_task(request):
     task.save()
     message = f"{request.user.username} completed this task."
     task.add_remark(message)
-    return Response(
-        {"message": "Task marked as completed."}, status=status.HTTP_201_CREATED
-    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def archive_project(request):
+    try:
+        project_id = request.data.get("project_id")
+        project_type = request.data.get("project_type")
+        if project_type == "SEEQ":
+            project = SchedularProject.objects.get(id=project_id)
+        elif project_type == "CAAS":
+            project = Project.objects.get(id=project_id)
+
+        if project.is_archive:
+            project.is_archive = False
+        else:
+            project.is_archive = True
+
+        project.save()
+
+        return Response(
+            {"message": "Project Archived Sucessfully!"}, status=status.HTTP_201_CREATED
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to archive project!"}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def change_user_password(request):
+    try:
+        
+        with transaction.atomic():
+            email = request.data.get("email", None)
+            password = request.data.get("password", None)
+    
+            if email and password:
+                user = User.objects.get(username=email)
+                user.set_password(password)
+                user.save()
+                return Response({"message": "Password reset successful!"}, status=200)
+            else:
+                return Response({"error": "Failed to reset password!"}, status=500)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to reset password!"}, status=500)

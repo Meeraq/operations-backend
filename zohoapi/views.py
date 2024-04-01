@@ -1636,9 +1636,11 @@ def get_coach_wise_finances(request):
                     "paid_amount": vendor_invoice_amounts.get(
                         vendor_id, {"paid_amount": Decimal(0)}
                     )["paid_amount"],
-                    "currency_symbol": vendor_invoice_amounts[vendor_id][
-                        "currency_symbol"
-                    ],
+                    "currency_symbol": (
+                        vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                        if vendor_id in vendor_invoice_amounts
+                        else None
+                    ),
                 }
             )
         return Response(res)

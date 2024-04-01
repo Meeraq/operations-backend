@@ -401,4 +401,6 @@ urlpatterns = [
     path("tasks/", views.get_tasks),
     path("tasks/add-remark/", views.add_remark_to_task),
     path("tasks/complete/", views.complete_task),
+    path("archive-project/", views.archive_project),
+    path("change-user-password/", views.change_user_password),
 ]

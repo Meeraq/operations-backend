@@ -69,6 +69,7 @@ from .serializers import (
     CoachPricingSerializer,
     ExpenseSerializerDepthOne,
     ExpenseSerializer,
+    SchedularProjectSerializerArchiveCheck,
 )
 from .models import (
     SchedularBatch,
@@ -142,6 +143,7 @@ from schedularApi.tasks import (
     get_coaching_session_according_to_time,
     get_live_session_according_to_time,
 )
+from django.db.models import BooleanField, F, Exists, OuterRef
 
 # Create your views here.
 from itertools import chain
@@ -341,7 +343,17 @@ def get_all_Schedular_Projects(request):
     if status:
         projects = projects.exclude(status="completed")
 
-    serializer = SchedularProjectSerializer(projects, many=True)
+    projects = projects.annotate(
+        is_archive_enabled=Case(
+            When(
+                Exists(SchedularBatch.objects.filter(project=OuterRef("id"))),
+                then=False,
+            ),
+            default=True,
+            output_field=BooleanField(),
+        )
+    )
+    serializer = SchedularProjectSerializerArchiveCheck(projects, many=True)
     for project_data in serializer.data:
         latest_update = (
             SchedularUpdate.objects.filter(project__id=project_data["id"])
