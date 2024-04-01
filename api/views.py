@@ -2398,7 +2398,7 @@ def send_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("leanrer", "pmo", "hr", "coach")])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach")])
 def get_project_details(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
@@ -3575,7 +3575,7 @@ def edit_learner(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "superadmin")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "superadmin","learner")])
 def edit_individual_learner(request, user_id):
     try:
         learner = Learner.objects.get(id=user_id)
@@ -5212,7 +5212,7 @@ def get_project_organisation_learner_of_user_optimized(request, user_type, user_
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "hr")])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "hr","learner")])
 def get_learner_data(request, learner_id):
     learner = Learner.objects.get(id=learner_id)
     serializer = LearnerSerializer(learner)
@@ -7653,7 +7653,7 @@ def get_coach_profile_template(request, project_id):
 
 
 class StandardizedFieldAPI(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("coach", "facilitator", "pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "facilitator", "pmo","hr","learner")]
 
     def get(self, request):
         standardized_fields = StandardizedField.objects.all()
@@ -7978,7 +7978,7 @@ def create_project_contract(request):
 
 
 class ProjectContractAPIView(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo","learner")]
 
     def get(self, request, format=None):
         contracts = ProjectContract.objects.all()
