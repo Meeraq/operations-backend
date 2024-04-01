@@ -212,4 +212,14 @@ urlpatterns = [
         views.get_all_sales_order_for_po,
         name="get_all_sales_order_for_po",
     ),
+    path(
+        "get-salesorders-fields-data/",
+        views.get_salesorders_fields_data,
+        name="get_salesorders_fields_data",
+    ),
+    path(
+        "update-sales-order-status/<str:sales_order_id>/<str:status>/",
+        views.update_sales_order_status,
+        name="update_sales_order_status",
+    ),
 ]

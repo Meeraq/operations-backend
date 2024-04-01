@@ -1926,12 +1926,13 @@ def get_all_sales_orders(request):
                     if project:
                         data = project.project_structure
                         for item in data:
-
                             if (
                                 "session_type" in item
                                 and item["session_type"] in SESSION_TYPE_VALUE
+                                and item.get("price") is not None
+                                and item.get("session_duration") is not None
+                                and item.get("no_of_sessions") is not None
                             ):
-
                                 result = (
                                     float(item["price"])
                                     * float(item["session_duration"])
@@ -1943,7 +1944,11 @@ def get_all_sales_orders(request):
                                 item["session_type"] = SESSION_TYPE_VALUE[
                                     item["session_type"]
                                 ]
-                        total_price = sum(float(session["price"]) for session in data)
+                        total_price = sum(
+                            float(session["price"])
+                            for session in data
+                            if session.get("price") is not None
+                        )
 
                         if total_price == sales_order["total"]:
                             sales_order["matching_project_structure"] = "Matching"
@@ -2224,13 +2229,16 @@ def add_so_to_project(request, project_id):
                     break
         if orders_and_project_mapping.exists():
             mapping = orders_and_project_mapping.first()
-            existing_sales_order_ids = mapping.sales_order_ids
-            set_of_sales_order_ids = set(existing_sales_order_ids)
-            for id in sales_order_ids:
-                set_of_sales_order_ids.add(id)
-            final_list_of_sales_order_ids = list(set_of_sales_order_ids)
-            mapping.sales_order_ids = final_list_of_sales_order_ids
-            mapping.project = project
+            if len(sales_order_ids) == 0:
+                mapping.sales_order_ids = sales_order_ids
+            else:
+                existing_sales_order_ids = mapping.sales_order_ids
+                set_of_sales_order_ids = set(existing_sales_order_ids)
+                for id in sales_order_ids:
+                    set_of_sales_order_ids.add(id)
+                final_list_of_sales_order_ids = list(set_of_sales_order_ids)
+                mapping.sales_order_ids = final_list_of_sales_order_ids
+                mapping.project = project
             mapping.save()
         else:
             OrdersAndProjectMapping.objects.create(
@@ -2290,3 +2298,57 @@ def get_all_sales_order_for_po(request, purchase_order_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_salesorders_fields_data(request):
+    try:
+
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if access_token:
+            headers = {"Authorization": f"Bearer {access_token}"}
+            url = f"{base_url}/salesorders/editpage?organization_id={env('ZOHO_ORGANIZATION_ID')}"
+            vendor_response = requests.get(
+                url,
+                headers=headers,
+            )
+
+            json_data = vendor_response.json()
+            salesperson_options = [
+                {"value": person["salesperson_id"], "label": person["salesperson_name"]}
+                for person in json_data.get("salespersons", [])
+            ]
+            if vendor_response.status_code == 200:
+                return Response(salesperson_options)
+            else:
+
+                return Response(
+                    {"error": "Failed to fetch vendor fields"},
+                    status=vendor_response.status_code,
+                )
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to create vendor"}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_sales_order_status(request, sales_order_id, status):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/salesorders/{sales_order_id}/status/{status}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header)
+        if response.status_code == 200:
+            return Response({"message": f"Sales Order changed to {status}."})
+        else:
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
