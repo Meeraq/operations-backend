@@ -4283,7 +4283,7 @@ class GetParticipantReleasedResults(APIView):
 
 
 class GetAllAssessments(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr")]
 
     def get(self, request):
         pmo = Pmo.objects.filter(email=request.user.username).first()
