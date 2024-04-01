@@ -2,7 +2,7 @@
 
 
 from django.db import migrations, models
-from courses.views import create_learner
+from schedularApi.tasks import create_learner
 from django.utils import timezone
 
 
