@@ -1735,7 +1735,7 @@ class StartAssessmentDataForObserver(APIView):
 
 
 class GetObserversUniqueIds(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr","learner")]
 
     def get(self, request, assessment_id):
         try:
@@ -2150,6 +2150,7 @@ class AddMultipleParticipants(APIView):
                 {"error": "Failed to add participants."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
 
 class CreateObserverType(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo")]
@@ -4137,7 +4138,10 @@ def getParticipantsResponseStatusForAssessment(assessment):
     try:
         response_data = []
 
-        if assessment.assessment_timing == "pre":
+        if (
+            assessment.assessment_timing == "pre"
+            or assessment.assessment_type == "self"
+        ):
             for participant_observers in assessment.participants_observers.all():
                 participant_responses = ParticipantResponse.objects.filter(
                     assessment=assessment,
@@ -4145,15 +4149,15 @@ def getParticipantsResponseStatusForAssessment(assessment):
                 ).first()
 
                 data = {
-                    "name": participant_observers.participant.name.title(),
-                    "email": participant_observers.participant.email,
-                    "response_status": (
+                    "Participant Name": participant_observers.participant.name.title(),
+                    "Participant Email": participant_observers.participant.email,
+                    "Participant Response Status": (
                         "Responded" if participant_responses else "Not Responded"
                     ),
                 }
 
                 response_data.append(data)
-
+            return response_data
         elif assessment.assessment_timing == "post":
             for participant_observers in assessment.participants_observers.all():
                 post_participant_responses = ParticipantResponse.objects.filter(
@@ -4169,20 +4173,63 @@ def getParticipantsResponseStatusForAssessment(assessment):
                 ).first()
 
                 data = {
-                    "name": participant_observers.participant.name.title(),
-                    "email": participant_observers.participant.email,
-                    "pre_response_status": (
+                    "Participant Name": participant_observers.participant.name.title(),
+                    "Participant Email": participant_observers.participant.email,
+                    "Participant pre_response_status": (
                         "Responded" if pre_participant_responses else "Not Responded"
                     ),
-                    "post_response_status": (
+                    "Participant post_response_status": (
                         "Responded" if post_participant_responses else "Not Responded"
                     ),
                 }
-
                 response_data.append(data)
-        return response_data
+            return response_data
+        elif assessment.assessment_type == "360":
+            response_data = {"Participants": [], "Observers": []}
+            for participant_observers in assessment.participants_observers.all():
+                participant_responses = ParticipantResponse.objects.filter(
+                    assessment=assessment,
+                    participant__id=participant_observers.participant.id,
+                ).first()
+                participant_name = participant_observers.participant.name.title()
+                participant_email = participant_observers.participant.email
+                temp = {
+                    "Participant name": participant_name,
+                    "Participant email": participant_email,
+                    "Participant response_status": (
+                        "Responded" if participant_responses else "Not Responded"
+                    ),
+                }
+                response_data["Participants"].append(temp)
+
+                # Initialize an empty list to store observer data for each participant
+                observers_data = []
+
+                for observer in participant_observers.observers.all():
+                    observer_response = ObserverResponse.objects.filter(
+                        assessment=assessment,
+                        participant__id=participant_observers.participant.id,
+                        observer=observer,
+                    ).first()
+                    observer_data = {
+                        "Participant name": participant_name,
+                        "Participant email": participant_email,
+                        "Observer Name": observer.name,
+                        "Observer Email": observer.email,
+                        "Observer Response": (
+                            "Responded" if observer_response else "Not Responded"
+                        ),
+                    }
+                    observers_data.append(observer_data)
+
+                # Append observer data for this participant to the response_data
+                response_data["Observers"].extend(observers_data)
+            return response_data
     except Exception as e:
         print(str(e))
+
+
+import pandas as pd
 
 
 class DownloadParticipantResponseStatusData(APIView):
@@ -4191,59 +4238,40 @@ class DownloadParticipantResponseStatusData(APIView):
     def get(self, request, assessment_id):
         try:
             assessment = Assessment.objects.get(id=assessment_id)
-
             response_data = getParticipantsResponseStatusForAssessment(assessment)
-
-            # Create an Excel workbook
-            wb = Workbook()
-            ws = wb.active
-
-            # headers = ['Participant Name', 'Email', 'Response Status']
-
-            headers = [
-                "Participant Name",
-                "Email",
-                "Pre Response Status",
-                "Post Response Status",
-            ]
-            ws.append(headers)
-            if assessment.assessment_timing == "pre" or "post":
-                data = [
-                    {
-                        "name": item.get("name", ""),
-                        "email": item.get("email", ""),
-                        "pre_response_status": item.get("pre_response_status", ""),
-                        "post_response_status": item.get("post_response_status", ""),
-                    }
-                    for item in response_data
-                ]
-            else:
-                return Response(
-                    {"error": "Invalid assessment timing."},
-                    status=status.HTTP_400_BAD_REQUEST,
+            if (
+                assessment.assessment_timing in ["pre", "post"]
+                or assessment.assessment_type == "self"
+            ):
+                df = pd.DataFrame(response_data)
+                excel_writer = BytesIO()
+                df.to_excel(excel_writer, index=False)
+                excel_writer.seek(0)
+                response = HttpResponse(
+                    excel_writer.getvalue(),
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+                response["Content-Disposition"] = (
+                    f'attachment; filename="{assessment.name}_response_status.xlsx"'
                 )
 
-            # ws.append(headers)
-
-            for item in data:
-                ws.append(
-                    [
-                        item.get("name", ""),
-                        item.get("email", ""),
-                        item.get("pre_response_status", ""),
-                        item.get("post_response_status", ""),
-                    ]
+                return response
+            elif assessment.assessment_type == "360":
+                participants_df = pd.DataFrame(response_data["Participants"])
+                observers_df = pd.DataFrame(response_data["Observers"])
+                excel_writer = BytesIO()
+                with pd.ExcelWriter(excel_writer, engine="openpyxl") as writer:
+                    participants_df.to_excel(writer, sheet_name="Participants", index=False)
+                    observers_df.to_excel(writer, sheet_name="Observers", index=False)
+                excel_writer.seek(0)
+                response = HttpResponse(
+                    excel_writer.getvalue(),
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
-
-            response = HttpResponse(
-                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            response["Content-Disposition"] = (
-                f'attachment; filename="{assessment.name}_response_status.xlsx"'
-            )
-            wb.save(response)
-
-            return response
+                response["Content-Disposition"] = (
+                    f'attachment; filename="{assessment.name}_response_status.xlsx"'
+                )
+                return response
 
         except Assessment.DoesNotExist:
             return Response(
@@ -4257,7 +4285,6 @@ class DownloadParticipantResponseStatusData(APIView):
                 {"error": "Failed to get download response data."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
 
 class GetParticipantReleasedResults(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo")]
@@ -4283,7 +4310,7 @@ class GetParticipantReleasedResults(APIView):
 
 
 class GetAllAssessments(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr")]
 
     def get(self, request):
         pmo = Pmo.objects.filter(email=request.user.username).first()
