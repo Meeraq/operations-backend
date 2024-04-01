@@ -66,6 +66,7 @@ from schedularApi.models import FacilitatorPricing, CoachPricing, SchedularProje
 from decimal import Decimal
 from collections import defaultdict
 
+from api.permissions import IsInRoles
 
 env = environ.Env()
 
@@ -425,7 +426,7 @@ def login_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor","pmo","finance")])
 def get_purchase_orders(request, vendor_id):
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_data:
@@ -450,7 +451,7 @@ def get_purchase_orders(request, vendor_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo", "finance")])
 def get_invoices_with_status(request, vendor_id, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -505,7 +506,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor","pmo", "finance")])
 def get_purchase_order_data(request, purchaseorder_id):
     access_token_purchase_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_order:
@@ -625,7 +626,7 @@ def get_line_items_for_template(line_items):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def add_invoice_data(request):
     invoices = InvoiceData.objects.filter(
         vendor_id=request.data["vendor_id"],
@@ -674,7 +675,7 @@ def add_invoice_data(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def edit_invoice(request, invoice_id):
     invoice = get_object_or_404(InvoiceData, id=invoice_id)
     if (
@@ -713,7 +714,7 @@ def edit_invoice(request, invoice_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor", "finance", "pmo")])
 def delete_invoice(request, invoice_id):
     try:
         invoice = get_object_or_404(InvoiceData, id=invoice_id)
@@ -727,7 +728,7 @@ def delete_invoice(request, invoice_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo","finance")])
 def get_purchase_order_and_invoices(request, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -757,7 +758,7 @@ def get_purchase_order_and_invoices(request, purchase_order_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo", "finance")])
 def get_bank_account_data(
     request,
     vendor_id,
@@ -933,7 +934,7 @@ def export_invoice_data(request):
 
 
 class DownloadInvoice(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "vendor", "finance")]
 
     def get(self, request, record_id):
         try:
@@ -961,34 +962,6 @@ class DownloadInvoice(APIView):
                 f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
             )
             return response
-        except Exception as e:
-            print(str(e))
-            return Response(
-                {"error": "Failed to download invoice."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-
-class DownloadAttatchedInvoice(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, record_id):
-        try:
-            invoice = get_object_or_404(InvoiceData, id=record_id)
-            serializer = InvoiceDataSerializer(invoice)
-            response = requests.get(serializer.data["attatched_invoice"])
-            if response.status_code == 200:
-                file_content = response.content
-                content_type = response.headers.get("Content-Type", f"application/pdf")
-                file_response = HttpResponse(file_content, content_type=content_type)
-                file_response["Content-Disposition"] = (
-                    f'attachment; filename={f"{invoice.invoice_number}_invoice.pdf"}'
-                )
-                return file_response
-            else:
-                return HttpResponse(
-                    "Failed to download the file", status=response.status_code
-                )
 
         except Exception as e:
             print(str(e))
@@ -999,7 +972,7 @@ class DownloadAttatchedInvoice(APIView):
 
 
 class DownloadAttatchedInvoice(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "vendor", "finance")]
 
     def get(self, request, record_id):
         try:
@@ -1028,7 +1001,7 @@ class DownloadAttatchedInvoice(APIView):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "superadmin", "finance")])
 def add_vendor(request):
     # Extract data from the request
     with transaction.atomic():
@@ -1148,7 +1121,9 @@ def add_vendor(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "finance", "superadmin")]
+)
 def get_all_vendors(request):
     try:
         vendors = Vendor.objects.all()
@@ -1164,7 +1139,9 @@ def get_all_vendors(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "vendor", "superadmin", "finance")]
+)
 def get_all_purchase_orders(request):
     try:
         all_purchase_orders = fetch_purchase_orders(organization_id)
@@ -1175,7 +1152,7 @@ def get_all_purchase_orders(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_all_purchase_orders_for_pmo(request):
     try:
         all_purchase_orders = fetch_purchase_orders(organization_id)
@@ -1218,7 +1195,7 @@ def fetch_invoices(organization_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_all_invoices(request):
     try:
         all_invoices = fetch_invoices(organization_id)
@@ -1229,7 +1206,7 @@ def get_all_invoices(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_invoices_for_pmo(request):
     try:
         all_invoices = fetch_invoices(organization_id)
@@ -1247,7 +1224,7 @@ def get_invoices_for_pmo(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_invoices_by_status(request, status):
     try:
         all_invoices = fetch_invoices(organization_id)
@@ -1274,9 +1251,8 @@ def get_invoices_by_status(request, status):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_invoices_by_status_for_founders(request, status):
-
     try:
         all_invoices = fetch_invoices(organization_id)
         res = []
@@ -1320,6 +1296,9 @@ def get_invoices_by_status_for_founders(request, status):
 
 
 @api_view(["PUT"])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "vendor", "superadmin", "finance")]
+)
 def edit_vendor(request, vendor_id):
     try:
         vendor = Vendor.objects.get(id=vendor_id)
@@ -1360,7 +1339,7 @@ def edit_vendor(request, vendor_id):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def update_invoice_status(request, invoice_id):
     try:
         invoice = InvoiceData.objects.get(pk=invoice_id)
@@ -1412,7 +1391,7 @@ def update_invoice_status(request, invoice_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "vendor", "superadmin")])
 def get_invoice_updates(request, invoice_id):
     try:
         updates = InvoiceStatusUpdate.objects.filter(invoice_id=invoice_id).order_by(
@@ -1425,7 +1404,7 @@ def get_invoice_updates(request, invoice_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "superadmin")])
 def get_vendor_details_from_zoho(request, vendor_id):
     try:
 
@@ -1450,7 +1429,7 @@ def get_vendor_details_from_zoho(request, vendor_id):
 
 # creating a PO in zoho and adding the create po id and number in either coach pricing or facilitator pricing
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def create_purchase_order(request, user_type, facilitator_pricing_id):
     try:
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -1499,7 +1478,7 @@ def create_purchase_order(request, user_type, facilitator_pricing_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def delete_purchase_order(request, user_type, purchase_order_id):
     try:
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -1561,7 +1540,7 @@ def generate_new_po_number(po_list, regex_to_match):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_po_number_to_create(request):
     try:
         purchase_orders = fetch_purchase_orders(organization_id)
@@ -1575,7 +1554,7 @@ def get_po_number_to_create(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def update_purchase_order_status(request, purchase_order_id, status):
     try:
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -1597,7 +1576,7 @@ def update_purchase_order_status(request, purchase_order_id, status):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_coach_wise_finances(request):
     try:
         # Fetch all invoices and purchase orders
@@ -1693,7 +1672,7 @@ def create_purchase_order_project_mapping():
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_project_wise_finances(request):
     try:
         purchase_order_project_mapping = create_purchase_order_project_mapping()
