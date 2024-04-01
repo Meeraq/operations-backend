@@ -396,8 +396,7 @@ class Project(models.Model):
         blank=True,
     )
     finance = models.BooleanField(blank=True, default=False)
-    is_archive = models.BooleanField(default=False)
-    
+
     class Meta:
         ordering = ["-created_at"]
 
