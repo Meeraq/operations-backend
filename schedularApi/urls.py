@@ -43,6 +43,10 @@ urlpatterns = [
     path("save_template/", views.addEmailTemplate),
     path("send_test_mails/", views.send_test_mails),
     path("get-learner-by-batch/<str:batch_id>/", views.participants_list),
+    path(
+        "get-learner-by-project/<str:project_type>/<int:project_id>/",
+        views.get_learner_by_project,
+    ),
     path("saved_emailsTemplates/", views.getSavedTemplates),
     path("all_batches/", views.get_batches, name="batch-list"),
     path("send_mails/", views.send_mails),
@@ -333,6 +337,10 @@ urlpatterns = [
         views.edit_status_expense,
     ),
     path(
+        "edit-amount-expense/",
+        views.edit_expense_amount,
+    ),
+    path(
         "get-all-courses-for-all-batches/",
         views.get_all_courses_for_all_batches,
         name="get_all_courses_for_all_batches",
@@ -342,4 +350,8 @@ urlpatterns = [
         views.check_if_project_structure_edit_allowed,
     ),
  
+    path(
+        "get-all-project-purchase-orders-for-finance/<int:project_id>/<str:project_type>/",
+        views.get_all_project_purchase_orders_for_finance,
+    ),
 ]

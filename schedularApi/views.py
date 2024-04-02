@@ -23,7 +23,16 @@ from django.utils import timezone
 from openpyxl import Workbook
 from django.http import HttpResponse
 import pandas as pd
-from django.db.models import Q, F, Case, When, Value, IntegerField
+from django.db.models import (
+    Q,
+    F,
+    Case,
+    When,
+    Value,
+    IntegerField,
+    BooleanField,
+    CharField,
+)
 from time import sleep
 import json
 from django.core.exceptions import ObjectDoesNotExist
@@ -41,6 +50,7 @@ from api.models import (
     Role,
     UserToken,
     Facilitator,
+    CoachStatus,
 )
 from .serializers import (
     SchedularProjectSerializer,
@@ -69,6 +79,7 @@ from .serializers import (
     CoachPricingSerializer,
     ExpenseSerializerDepthOne,
     ExpenseSerializer,
+    SchedularProjectSerializerArchiveCheck,
 )
 from .models import (
     SchedularBatch,
@@ -89,6 +100,7 @@ from .models import (
 )
 from api.serializers import (
     FacilitatorSerializer,
+    FacilitatorSerializerIsVendor,
     FacilitatorBasicDetailsSerializer,
     CoachSerializer,
     FacilitatorDepthOneSerializer,
@@ -142,6 +154,7 @@ from schedularApi.tasks import (
     get_coaching_session_according_to_time,
     get_live_session_according_to_time,
 )
+from django.db.models import BooleanField, F, Exists, OuterRef
 
 # Create your views here.
 from itertools import chain
@@ -335,13 +348,26 @@ def get_all_Schedular_Projects(request):
     projects = SchedularProject.objects.all()
     if pmo_id:
         pmo = Pmo.objects.get(id=int(pmo_id))
+
         if pmo.sub_role == "junior_pmo":
             projects = SchedularProject.objects.filter(junior_pmo=pmo)
+        else:
+            projects = SchedularProject.objects.all()
 
     if status:
         projects = projects.exclude(status="completed")
 
-    serializer = SchedularProjectSerializer(projects, many=True)
+    projects = projects.annotate(
+        is_archive_enabled=Case(
+            When(
+                Exists(SchedularBatch.objects.filter(project=OuterRef("id"))),
+                then=False,
+            ),
+            default=True,
+            output_field=BooleanField(),
+        )
+    )
+    serializer = SchedularProjectSerializerArchiveCheck(projects, many=True)
     for project_data in serializer.data:
         latest_update = (
             SchedularUpdate.objects.filter(project__id=project_data["id"])
@@ -746,11 +772,59 @@ def get_batch_calendar(request, batch_id):
         participants = Learner.objects.filter(schedularbatch__id=batch_id)
         participants_serializer = LearnerSerializer(participants, many=True)
         coaches = Coach.objects.filter(schedularbatch__id=batch_id)
-        facilitator = Facilitator.objects.filter(
-            livesession__batch__id=batch_id
-        ).distinct()
+        facilitator = (
+            Facilitator.objects.filter(livesession__batch__id=batch_id)
+            .distinct()
+            .annotate(
+                is_vendor=Case(
+                    When(user__vendor__isnull=False, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                ),
+                vendor_id=Case(
+                    When(user__vendor__isnull=False, then=F("user__vendor__vendor_id")),
+                    default=None,
+                    output_field=CharField(max_length=255, null=True),
+                ),
+            )
+        )
+
         coaches_serializer = CoachSerializer(coaches, many=True)
-        facilitator_serializer = FacilitatorSerializer(facilitator, many=True)
+        facilitator_serializer = FacilitatorSerializerIsVendor(facilitator, many=True)
+
+        try:
+            purchase_orders = fetch_purchase_orders(organization_id)
+            for facilitator_item in facilitator_serializer.data:
+                expense = Expense.objects.filter(
+                    batch__id=batch_id, facilitator__id=facilitator_item["id"]
+                ).first()
+                facilitator_item["purchase_order_id"] = expense.purchase_order_id
+                facilitator_item["purchase_order_no"] = expense.purchase_order_no
+                is_delete_purchase_order_allowed = True
+                if facilitator_item["purchase_order_id"]:
+                    purchase_order = get_purchase_order(
+                        purchase_orders, facilitator_item["purchase_order_id"]
+                    )
+                    if not purchase_order:
+                        Expense.objects.filter(
+                            batch__id=batch_id, facilitator__id=facilitator_item["id"]
+                        ).update(purchase_order_id="", purchase_order_no="")
+                        facilitator_item["purchase_order_id"] = None
+                        facilitator_item["purchase_order_no"] = None
+                    else:
+                        invoices = InvoiceData.objects.filter(
+                            purchase_order_id=facilitator_item["purchase_order_id"]
+                        )
+                        if invoices.exists():
+                            is_delete_purchase_order_allowed = False
+                    facilitator_item["is_delete_purchase_order_allowed"] = (
+                        is_delete_purchase_order_allowed
+                    )
+                    facilitator_item["purchase_order"] = purchase_order
+                else:
+                    facilitator_item["purchase_order"] = None
+        except Exception as e:
+            print(str(e))
 
         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
@@ -1087,9 +1161,6 @@ def send_test_mails(request):
         subject = request.data.get("subject")
         # email_content = request.data.get('email_content', '')  # Assuming you're sending email content too
         temp1 = request.data.get("htmlContent", "")
-
-        print(emails, "emails")
-
         # if not subject:
         #     return Response({'error': "Subject is required."}, status=400)
 
@@ -1128,6 +1199,23 @@ def participants_list(request, batch_id):
     except SchedularBatch.DoesNotExist:
         return Response({"detail": "Batch not found"}, status=404)
     learners = batch.learners.all()
+    serializer = LearnerSerializer(learners, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_learner_by_project(request, project_type, project_id):
+    if project_type == "caas":
+        learners = Learner.objects.filter(engagement__project__id=project_id).distinct()
+    elif project_type == "skill_training":
+        learners = Learner.objects.filter(
+            schedularbatch__project__id=project_id
+        ).distinct()
+    else:
+        return Response(
+            {"error": "Failed to get learners"}, status=status.HTTP_400_BAD_REQUEST
+        )
     serializer = LearnerSerializer(learners, many=True)
     return Response(serializer.data)
 
@@ -3988,7 +4076,6 @@ def add_new_session_in_project_structure(request):
                 "description": description,
                 "price": price,
             }
-
             # Update the project structure
             prev_structure.append(new_session)
             project.project_structure = prev_structure
@@ -5816,7 +5903,7 @@ def create_expense(request):
         batch = request.data.get("batch")
         facilitator = request.data.get("facilitator")
         file = request.data.get("file")
-
+        amount = request.data.get("amount")
         if not file:
             return Response(
                 {"error": "Please upload file."},
@@ -5827,7 +5914,7 @@ def create_expense(request):
                 {"error": "Failed to create expense."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        if name and date_of_expense and description:
+        if name and date_of_expense and description and amount:
             facilitator = Facilitator.objects.get(id=int(facilitator))
             batch = SchedularBatch.objects.get(id=int(batch))
             if live_session:
@@ -5840,6 +5927,7 @@ def create_expense(request):
                 batch=batch,
                 facilitator=facilitator,
                 file=file,
+                amount=amount,
             )
 
             return Response({"message": "Expense created successfully!"}, status=201)
@@ -5852,6 +5940,35 @@ def create_expense(request):
         print(str(e))
         return Response(
             {"error": "Failed to create expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_expense_amount(request):
+    try:
+
+        amount = request.data.get("amount")
+        expense_id = int(request.data.get("expense_id"))
+
+        if amount:
+            expense = Expense.objects.get(
+                id=expense_id,
+            )
+            expense.amount = amount
+            expense.save()
+            return Response({"message": "Amount updated successfully!"}, status=201)
+        else:
+            return Response(
+                {"error": "Fill in the required feild"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to update amount"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -5999,4 +6116,55 @@ def check_if_project_structure_edit_allowed(request, project_id):
             is_allowed = False
         return Response({"is_allowed_to_edit": is_allowed})
     except Exception as e:
+        print(str(e))
         return Response({"error": "Failed to get details"}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_project_purchase_orders_for_finance(request, project_id, project_type):
+    try:
+        purchase_order_set = {}
+        all_purchase_orders = []
+        purchase_orders = fetch_purchase_orders(organization_id)
+
+        if project_type == "SEEQ":
+            coach_pricings = CoachPricing.objects.filter(project__id=project_id)
+            facilitator_pricings = FacilitatorPricing.objects.filter(
+                project__id=project_id
+            )
+
+            for coach_pricing in coach_pricings:
+                if coach_pricing.purchase_order_id in purchase_order_set:
+                    continue
+                purchase_order = get_purchase_order(
+                    purchase_orders, coach_pricing.purchase_order_id
+                )
+                all_purchase_orders.append(purchase_order)
+                purchase_order_set[coach_pricing.purchase_order_id]
+            for facilitator_pricing in facilitator_pricings:
+                if facilitator_pricing.purchase_order_id in purchase_order_set:
+                    continue
+                purchase_order = get_purchase_order(
+                    purchase_orders, facilitator_pricing.purchase_order_id
+                )
+                all_purchase_orders.append(purchase_order)
+                purchase_order_set[facilitator_pricing.purchase_order_id]
+
+        elif project_type == "CAAS":
+            coach_statuses = CoachStatus.objects.filter(project__id=project_id)
+
+            for coach_status in coach_statuses:
+                if coach_status.purchase_order_id:
+                    if coach_status.purchase_order_id in purchase_order_set:
+                        continue
+                    purchase_order = get_purchase_order(
+                        purchase_orders, coach_status.purchase_order_id
+                    )
+                    all_purchase_orders.append(purchase_order)
+                    purchase_order_set[coach_status.purchase_order_id]
+
+        return Response(all_purchase_orders)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)
