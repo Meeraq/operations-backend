@@ -3653,7 +3653,7 @@ def get_nps_project_wise(request):
 
 
 class GetAllNudgesOfSchedularProjects(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request, project_id):
         try:

@@ -1483,6 +1483,7 @@ def get_ongoing_projects(request):
                 output_field=BooleanField(),
             )
         )
+        projects = projects.distinct()
 
         serializer = ProjectDepthTwoSerializerArchiveCheck(projects, many=True)
         for project_data in serializer.data:
@@ -3244,7 +3245,7 @@ def add_learner_to_project(request):
         for learner in learners:
             create_engagement(learner, project)
             try:
-                tasks = Task.objects.filter(task="add_coachee", project=project)
+                tasks = Task.objects.filter(task="add_coachee", caas_project=project)
                 tasks.update(status="completed")
             except Exception as e:
                 print(str(e))
@@ -8408,26 +8409,7 @@ def change_user_role(request, user_id):
     elif user_profile_role == "finance":
         if not user.profile.finance.active_inactive:
             return None
-        serializer = FinanceDepthOneSerializer(user.profile.finance)
-        organization = get_organization_data()
-        zoho_vendor = get_vendor(user.profile.vendor.vendor_id)
-        
-        return Response(
-            {
-                **serializer.data,
-                "roles": roles,
-                "user": {
-                    **serializer.data["user"],
-                    "type": user_profile_role,
-                    "last_login": user.last_login,
-                    "vendor_id": user.profile.vendor.vendor_id,
-                },
-                "last_login": user.last_login,
-                "organization": organization,
-                "zoho_vendor": zoho_vendor,
-                "message": f"Role changed to Finance",
-            }
-        )
+        serializer = FinanceDepthOneSerializer(user.profile.finance)        
     elif user_profile_role == "facilitator":
         if not user.profile.facilitator.active_inactive:
             return None
