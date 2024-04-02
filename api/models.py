@@ -150,7 +150,7 @@ class Finance(models.Model):
     active_inactive = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    active_inactive = models.BooleanField(default=True)
+  
 
     def __str__(self):
         return self.name

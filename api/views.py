@@ -139,6 +139,7 @@ from .models import (
     Facilitator,
     SuperAdmin,
     Task,
+    Finance,
     ZoomToken,
 )
 from rest_framework.pagination import PageNumberPagination
@@ -1260,6 +1261,8 @@ def get_user_for_active_inactive(role, email):
             user = SuperAdmin.objects.get(email=email)
         if role == "facilitator":
             user = Facilitator.objects.get(email=email)
+        if role == "finance":
+            user = Finance.objects.get(email=email)
         return user
     except Exception as e:
         print(str(e))
