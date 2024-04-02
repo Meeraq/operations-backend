@@ -24,6 +24,14 @@ class SchedularProjectSerializer(serializers.ModelSerializer):
         depth = 1
 
 
+class SchedularProjectSerializerArchiveCheck(serializers.ModelSerializer):
+    is_archive_enabled = serializers.BooleanField()
+    class Meta:
+        model = SchedularProject
+        fields = "__all__"
+        depth = 1
+
+
 class SessionItemSerializer(serializers.Serializer):
     session_type = serializers.CharField()
     duration = serializers.IntegerField()
