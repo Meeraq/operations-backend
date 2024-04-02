@@ -8525,25 +8525,7 @@ def change_user_role(request, user_id):
         if not user.profile.finance.active_inactive:
             return None
         serializer = FinanceDepthOneSerializer(user.profile.finance)
-        organization = get_organization_data()
-        zoho_vendor = get_vendor(user.profile.vendor.vendor_id)
-        
-        return Response(
-            {
-                **serializer.data,
-                "roles": roles,
-                "user": {
-                    **serializer.data["user"],
-                    "type": user_profile_role,
-                    "last_login": user.last_login,
-                    "vendor_id": user.profile.vendor.vendor_id,
-                },
-                "last_login": user.last_login,
-                "organization": organization,
-                "zoho_vendor": zoho_vendor,
-                "message": f"Role changed to Finance",
-            }
-        )
+ 
     elif user_profile_role == "facilitator":
         if not user.profile.facilitator.active_inactive:
             return None
@@ -8624,10 +8606,11 @@ def get_users(request):
         # existing_roles = [item.name for item in profile.roles.all()]
         for role in profile.roles.all():
             user = get_user_for_active_inactive(role.name, profile.user.username)
-            if user.active_inactive:
-                active_roles.append(role.name)
-            else:
-                inactive_roles.append(role.name)
+            if user:
+                if user.active_inactive:
+                    active_roles.append(role.name)
+                else:
+                    inactive_roles.append(role.name)
         email = profile.user.email
         res.append(
             {
@@ -9769,3 +9752,4 @@ def change_user_password(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to reset password!"}, status=500)
+
