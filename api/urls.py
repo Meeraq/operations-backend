@@ -25,6 +25,7 @@ from .views import (
     SessionData,
     DownloadCoachContract,
     AddRegisteredFacilitator,
+    UpdateUserRoles,
 )
 
 urlpatterns = [
@@ -162,7 +163,6 @@ urlpatterns = [
         "new/sessions/past/<str:user_type>/<int:user_id>/",
         views.new_get_past_sessions_of_user,
     ),
-    path("sessions/edit/<int:session_id>/", views.edit_session_availability),
     path("learners/<str:user_type>/<int:user_id>/", views.get_coachee_of_user),
     path("learner/<int:learner_id>/", views.get_learner_data),
     path(
@@ -399,9 +399,14 @@ urlpatterns = [
     #     views.delete_pmo,
     # ),
     path("edit-pmo/", views.edit_pmo),
+    path("get-coaches-in-project-is-vendor/<int:project_id>/", views.get_coaches_in_project_is_vendor),
+    path("update-user-roles/", UpdateUserRoles.as_view()),
     path("tasks/", views.get_tasks),
     path("tasks/add-remark/", views.add_remark_to_task),
     path("tasks/complete/", views.complete_task),
+    path("archive-project/", views.archive_project),
+    path("change-user-password/", views.change_user_password),
+    path("all-users/", views.get_all_users),
     path(
         "zoom/auth/",
         views.zoom_auth,
