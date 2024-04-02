@@ -14,6 +14,7 @@ urlpatterns = [
         name="create_project_structure",
     ),
     path("create-project-schedular/", views.create_project_schedular),
+    path("handover/<str:project_type>/<int:project_id>/", views.get_project_handover),
     path(
         "schedular-batches/",
         views.get_schedular_batches,

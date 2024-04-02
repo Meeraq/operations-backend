@@ -50,6 +50,7 @@ from api.models import (
     Role,
     UserToken,
     Facilitator,
+    Project
 )
 from .serializers import (
     SchedularProjectSerializer,
@@ -78,6 +79,7 @@ from .serializers import (
     CoachPricingSerializer,
     ExpenseSerializerDepthOne,
     ExpenseSerializer,
+    HandoverDetailsSerializer
 )
 from .models import (
     SchedularBatch,
@@ -95,6 +97,7 @@ from .models import (
     CoachPricing,
     FacilitatorPricing,
     Expense,
+    HandoverDetails
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -159,7 +162,7 @@ import environ
 import re
 from rest_framework.views import APIView
 from api.views import get_user_data
-from zohoapi.models import Vendor,InvoiceData
+from zohoapi.models import Vendor,InvoiceData, OrdersAndProjectMapping
 from zohoapi.views import fetch_purchase_orders
 from zohoapi.tasks import organization_id
 from courses.views import calculate_nps
@@ -261,36 +264,91 @@ def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
     serializer = AvailabilitySerializer(upcoming_availabilities, many=True)
     return serializer.data
 
+def add_so_to_project(project_type, project_id, sales_order_ids):
+    if project_type == "CAAS":
+        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+            project=project_id
+        )
+        project = Project.objects.get(id=project_id)
+        schedular_project = None
+    elif project_type == "SEEQ":
+        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+            schedular_project=project_id
+        )
+        schedular_project = SchedularProject.objects.get(id=project_id)
+        project = None
+
+    if not orders_and_project_mapping.exists():
+        for id in sales_order_ids:
+            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                sales_order_ids__contains=id
+            )
+            if orders_and_project_mapping.exists():
+                mapping = orders_and_project_mapping.first()
+                if project_type == "CAAS":
+                    if mapping.schedular_project:
+                        raise Exception(f"SO already exist in Schedular Project: {mapping.schedular_project.name}")
+                    if mapping.project and mapping.project.id != project.id:
+                        raise Exception(f"SO already exist in project: {mapping.project.name}")
+
+                if project_type == "SEEQ":
+                    if mapping.project:
+                        raise Exception( f"SO already exist in Coaching Project: {mapping.project.name}")
+                    if (
+                        mapping.schedular_project
+                        and mapping.schedular_project.id != schedular_project.id
+                    ):
+                        raise Exception(f"SO already exist in project: {mapping.schedular_project.name}")
+                break
+    if orders_and_project_mapping.exists():
+        mapping = orders_and_project_mapping.first()
+        existing_sales_order_ids = mapping.sales_order_ids
+        set_of_sales_order_ids = set(existing_sales_order_ids)
+        for id in sales_order_ids:
+            set_of_sales_order_ids.add(id)
+        final_list_of_sales_order_ids = list(set_of_sales_order_ids)
+        mapping.sales_order_ids = final_list_of_sales_order_ids
+        mapping.project = project
+        mapping.schedular_project = schedular_project
+        mapping.save()
+    else:
+        OrdersAndProjectMapping.objects.create(
+            project=project, sales_order_ids=sales_order_ids,schedular_project=schedular_project
+        )
+
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@transaction.atomic
 def create_project_schedular(request):
+    project_details = request.data.get('project_details')
     organisation = Organisation.objects.filter(
-        id=request.data["organisation_name"]
+        id=project_details["organisation_name"]
     ).first()
     junior_pmo = None
-    if "junior_pmo" in request.data:
-        junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
+    if "junior_pmo" in project_details:
+        junior_pmo = Pmo.objects.filter(id=project_details["junior_pmo"]).first()
     if not organisation:
         organisation = Organisation(
-            name=request.data["organisation_name"], image_url=request.data["image_url"]
+            name=project_details["organisation_name"], image_url=project_details["image_url"]
         )
     organisation.save()
     existing_projects_with_same_name = SchedularProject.objects.filter(
-        name=request.data["project_name"]
+        name=project_details["project_name"]
     )
     if existing_projects_with_same_name.exists():
         return Response({"error": "Project with same name already exists."}, status=400)
     try:
         schedularProject = SchedularProject(
-            name=request.data["project_name"],
+            name=project_details["project_name"],
             organisation=organisation,
-            email_reminder=request.data["email_reminder"],
-            whatsapp_reminder=request.data["whatsapp_reminder"],
-            calendar_invites=request.data["calendar_invites"],
-            nudges=request.data["nudges"],
-            pre_post_assessment=request.data["pre_post_assessment"],
-            is_finance_enabled=request.data["finance"],
+            email_reminder=project_details["email_reminder"],
+            whatsapp_reminder=project_details["whatsapp_reminder"],
+            calendar_invites=project_details["calendar_invites"],
+            nudges=project_details["nudges"],
+            pre_post_assessment=project_details["pre_post_assessment"],
+            is_finance_enabled=project_details["finance"],
             junior_pmo=junior_pmo,
         )
         schedularProject.save()
@@ -298,29 +356,20 @@ def create_project_schedular(request):
         return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
         return Response({"error": "Failed to create project."}, status=400)
-    hr_emails = []
-    project_name = schedularProject.name
-    print(request.data["hr"], "HR ID")
-    for hr in request.data["hr"]:
+    
+    for hr in project_details["hr"]:
         single_hr = HR.objects.get(id=hr)
-        # print(single_hr)
         schedularProject.hr.add(single_hr)
-        # Send email notification to the HR
-        # subject = f'Hey HR! You have been assigned to a project {project_name}'
-        # message = f'Dear {single_hr.first_name},\n\n You can use your email to log-in via OTP.'
-        # send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [single_hr.email])
 
-    # hrs= create_hr(request.data['hr'])
-    # for hr in hrs:
-    #     project.hr.add(hr)
+    handover_details = request.data.get('handover_details')
+    handover_details['schedular_project'] = schedularProject.id
+    serializer = HandoverDetailsSerializer(data=handover_details)
+    if serializer.is_valid():
+        serializer.save()
+        add_so_to_project("SEEQ", schedularProject.id, handover_details.get("sales_order_ids",[]))
+    else:
+        print(serializer.errors)
 
-    # try:
-    #     path = f"/projects/caas/progress/{project.id}"
-    #     message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
-    #     create_notification(project.hr.first().user.user, path, message)
-    # except Exception as e:
-    #     print(f"Error occurred while creating notification: {str(e)}")
-    # return Response({"message": "Project created succesfully"}, status=200)
     try:
         path = ""
         message = f"A new project - {schedularProject.name} has been created for the organisation - {schedularProject.organisation.name}"
@@ -333,6 +382,16 @@ def create_project_schedular(request):
         status=200,
     )
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_project_handover(request, project_type, project_id):
+    if project_type =="SEEQ":
+        handover = HandoverDetails.objects.get(schedular_project=project_id)
+    elif project_type == "CAAS":
+        handover = HandoverDetails.objects.get(caas_project=project_id)
+    serializer = HandoverDetailsSerializer(handover)
+    return Response(serializer.data)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -3727,6 +3786,7 @@ def delete_learner_from_course(request):
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
+@transaction.atomic
 def edit_schedular_project(request, project_id):
     try:
         project = SchedularProject.objects.get(pk=project_id)
@@ -3734,13 +3794,14 @@ def edit_schedular_project(request, project_id):
         return Response(
             {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
         )
+    project_details = request.data.get('project_details')
     junior_pmo = None
-    if "junior_pmo" in request.data:
-        junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
-    # Assuming 'request.data' contains the updated project information
-    project_name = request.data.get("project_name")
-    organisation_id = request.data.get("organisation_id")
-    hr_ids = request.data.get("hr", [])
+    if "junior_pmo" in project_details:
+        junior_pmo = Pmo.objects.filter(id=project_details["junior_pmo"]).first()
+
+    project_name = project_details.get("project_name")
+    organisation_id = project_details.get("organisation_id")
+    hr_ids = project_details.get("hr", [])
     if project_name:
         project.name = project_name
     if organisation_id:
@@ -3763,14 +3824,27 @@ def edit_schedular_project(request, project_id):
                 {"error": f"HR with ID {hr_id} not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
-    project.email_reminder = request.data.get("email_reminder")
-    project.whatsapp_reminder = request.data.get("whatsapp_reminder")
-    project.calendar_invites = request.data.get("calendar_invites")
-    project.nudges = request.data.get("nudges")
-    project.pre_post_assessment = request.data.get("pre_post_assessment")
-    project.is_finance_enabled = request.data.get("finance")
+    project.email_reminder = project_details.get("email_reminder")
+    project.whatsapp_reminder = project_details.get("whatsapp_reminder")
+    project.calendar_invites = project_details.get("calendar_invites")
+    project.nudges = project_details.get("nudges")
+    project.pre_post_assessment = project_details.get("pre_post_assessment")
+    project.is_finance_enabled = project_details.get("finance")
     project.junior_pmo = junior_pmo
     project.save()
+    handover_details = request.data.get('handover_details')
+    handover_details['schedular_project'] = project.id
+    try:
+        handover_instance = HandoverDetails.objects.get(schedular_project=project.id)
+    except HandoverDetails.DoesNotExist:
+        handover_instance = None
+    serializer = HandoverDetailsSerializer(handover_instance, data=handover_details, partial=True)
+    if serializer.is_valid():
+        add_so_to_project("SEEQ", project.id, handover_details.get("sales_order_ids",[]))
+        serializer.save()
+    else:
+        print(serializer.errors)
+
     if not project.pre_post_assessment:
         batches = SchedularBatch.objects.filter(project=project)
         if batches:

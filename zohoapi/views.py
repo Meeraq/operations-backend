@@ -1925,25 +1925,24 @@ def get_all_sales_orders(request):
                         )
                     if project:
                         data = project.project_structure
+                        print(data)
                         for item in data:
-
                             if (
                                 "session_type" in item
                                 and item["session_type"] in SESSION_TYPE_VALUE
                             ):
-
-                                result = (
-                                    float(item["price"])
-                                    * float(item["session_duration"])
-                                    * float(item["no_of_sessions"])
-                                ) / 60
-
+                                result = 0
+                                if ('price' in item) and item['price']:
+                                    result = (
+                                        float(item["price"])
+                                        * float(item["session_duration"])
+                                        * float(item["no_of_sessions"])
+                                    ) / 60    
                                 item["price"] = float(result)
-
                                 item["session_type"] = SESSION_TYPE_VALUE[
                                     item["session_type"]
                                 ]
-                        total_price = sum(float(session["price"]) for session in data)
+                        total_price = sum(float(session.get("price", 0)) for session in data)
 
                         if total_price == sales_order["total"]:
                             sales_order["matching_project_structure"] = "Matching"
