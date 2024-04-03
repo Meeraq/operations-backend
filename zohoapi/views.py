@@ -1380,9 +1380,7 @@ def get_invoices_by_status_for_founders(request, status):
 def edit_vendor(request, vendor_id):
     try:
         vendor = Vendor.objects.get(id=vendor_id)
-
         data = request.data
-        # name = data.get("name", "")
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
@@ -1414,6 +1412,26 @@ def edit_vendor(request, vendor_id):
         return Response(
             {"error": "Failed to update vendor"}, status=status.HTTP_404_NOT_FOUND
         )
+
+
+
+
+@api_view(["PUT"])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "superadmin", "finance")]
+)
+def update_invoice_allowed(request, vendor_id):
+    try:
+        vendor = Vendor.objects.get(id=vendor_id)
+    except Vendor.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    serializer = VendorEditSerializer(vendor, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(["PUT"])

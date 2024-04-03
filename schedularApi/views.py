@@ -1369,6 +1369,7 @@ def create_coach_schedular_availibilty(request):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def edit_slot_request(request, request_id):
@@ -4729,9 +4730,12 @@ def calculate_nps_from_answers(answers):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def get_skill_dashboard_card_data(request, project_id):
     try:
+        virtual_nps = 0
+        overall_nps = 0
+        in_person_nps = 0
         hr_id = request.query_params.get("hr", None)
         if project_id == "all":
             start_timestamp, end_timestamp = get_current_date_timestamps()
@@ -4772,7 +4776,6 @@ def get_skill_dashboard_card_data(request, project_id):
                     question__type="rating_0_to_10",
                     question__feedbacklesson__live_session__session_type="in_person_session",
                 )
-                print(in_person_session_answer)
                 in_person_nps = calculate_nps_from_answers(in_person_session_answer)
 
                 # Overall NPS calculation
@@ -4943,7 +4946,7 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def get_upcoming_coaching_session_dashboard_data(request, project_id):
     try:
         hr_id = request.query_params.get("hr", None)
@@ -5034,7 +5037,7 @@ def get_past_coaching_session_dashboard_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def get_upcoming_live_session_dashboard_data(request, project_id):
     try:
         hr_id = request.query_params.get("hr", None)
@@ -5942,7 +5945,6 @@ def create_expense(request):
             {"error": "Failed to create expense"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
 
 
 @api_view(["PUT"])
