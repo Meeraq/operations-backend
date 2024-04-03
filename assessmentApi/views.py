@@ -4314,9 +4314,9 @@ class GetAllAssessments(APIView):
 
     def get(self, request):
         pmo = Pmo.objects.filter(email=request.user.username).first()
-        if pmo.sub_role == "junior_pmo":
+        if pmo and pmo.sub_role == "junior_pmo":
             assessments = Assessment.objects.filter(
-                assessment_modal__lesson__course__batch__project__pmo=pmo
+                assessment_modal__lesson__course__batch__project__junior_pmo=pmo
             )
         else:
             assessments = Assessment.objects.all()
