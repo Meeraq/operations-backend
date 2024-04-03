@@ -1292,7 +1292,7 @@ def get_invoices_by_status(request, status):
 
 
 def get_purchase_order_ids_for_project(project_id, project_type):
-    purchase_order_set = {}
+    purchase_order_set = set()
     if project_type == "SEEQ":
         coach_pricings = CoachPricing.objects.filter(project__id=project_id)
         facilitator_pricings = FacilitatorPricing.objects.filter(project__id=project_id)
@@ -1300,19 +1300,18 @@ def get_purchase_order_ids_for_project(project_id, project_type):
         for coach_pricing in coach_pricings:
             if coach_pricing.purchase_order_id in purchase_order_set:
                 continue
-            purchase_order_set[coach_pricing.purchase_order_id]
+            purchase_order_set.add(coach_pricing.purchase_order_id)
         for facilitator_pricing in facilitator_pricings:
             if facilitator_pricing.purchase_order_id in purchase_order_set:
                 continue
-            purchase_order_set[facilitator_pricing.purchase_order_id]
+            purchase_order_set.add(facilitator_pricing.purchase_order_id)
     elif project_type == "CAAS":
         coach_statuses = CoachStatus.objects.filter(project__id=project_id)
-
         for coach_status in coach_statuses:
             if coach_status.purchase_order_id:
                 if coach_status.purchase_order_id in purchase_order_set:
                     continue
-                purchase_order_set[coach_status.purchase_order_id]
+                purchase_order_set.add(coach_status.purchase_order_id)
 
     return list(purchase_order_set)
 
@@ -1958,9 +1957,7 @@ def delete_expense_purchase_order(request, purchase_order_id):
 @permission_classes([IsAuthenticated])
 def get_all_sales_orders(request):
     try:
-
-        all_sales_orders = fetch_sales_orders(organization_id)
-
+        all_sales_orders = fetch_sales_orders(organization_id, "&salesorder_ids=123")
         for sales_order in all_sales_orders:
             project = None
             sales_order["matching_project_structure"] = "Project Not Assigned"
