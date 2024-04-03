@@ -1957,7 +1957,7 @@ def delete_expense_purchase_order(request, purchase_order_id):
 @permission_classes([IsAuthenticated])
 def get_all_sales_orders(request):
     try:
-        all_sales_orders = fetch_sales_orders(organization_id, "&salesorder_ids=123")
+        all_sales_orders = fetch_sales_orders(organization_id)
         for sales_order in all_sales_orders:
             project = None
             sales_order["matching_project_structure"] = "Project Not Assigned"
