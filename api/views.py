@@ -1943,7 +1943,10 @@ def get_user_data(user):
     user_profile_role = user.profile.roles.all().exclude(name="vendor").first().name
     roles = []
     for role in user.profile.roles.all():
-        roles.append(role.name)
+        user_data = get_user_for_active_inactive(role.name, user.profile.user.username)
+        if user_data and user_data.active_inactive:
+            roles.append(role.name)
+
     if user_profile_role == "coach":
         if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
@@ -8382,7 +8385,9 @@ def change_user_role(request, user_id):
         return Response({"error": "User role not found."}, status=400)
     roles = []
     for role in user.profile.roles.all():
-        roles.append(role.name)
+        user_data = get_user_for_active_inactive(role.name, user.profile.user.username)
+        if user_data and user_data.active_inactive:
+            roles.append(role.name)
     if user_profile_role == "coach":
         if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
