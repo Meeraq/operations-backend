@@ -147,9 +147,10 @@ class Finance(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
+    active_inactive = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    active_inactive = models.BooleanField(default=True)
+  
 
     def __str__(self):
         return self.name
@@ -224,12 +225,9 @@ class Coach(models.Model):
     reason_for_inactive = models.JSONField(default=list, blank=True)
     client_companies = models.JSONField(default=list, blank=True)
     education_pic = models.ImageField(upload_to="post_images", blank=True)
-
     educational_qualification = models.JSONField(default=list, blank=True)
-
-    # education_upload_file = models.ImageField(upload_to="post_images", blank=True)
     education_upload_file = models.FileField(
-        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+        upload_to="pdf_files", blank=True, null=True, validators=[validate_pdf_extension]
     )
 
     def __str__(self):
@@ -395,6 +393,7 @@ class Project(models.Model):
         on_delete=models.SET_NULL,
         blank=True,
     )
+    is_archive = models.BooleanField(default=False)
     finance = models.BooleanField(blank=True, default=False)
 
     class Meta:

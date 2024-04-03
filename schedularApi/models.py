@@ -41,6 +41,7 @@ class SchedularProject(models.Model):
         on_delete=models.SET_NULL,
         blank=True,
     )
+    is_archive = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_at"]

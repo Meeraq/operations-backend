@@ -84,6 +84,11 @@ urlpatterns = [
     ),
     path("vendors/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
     path(
+        "vendors/update-invoice-allowed/<int:vendor_id>/",
+        views.update_invoice_allowed,
+        name="update_invoice_allowed",
+    ),
+    path(
         "invoices/<str:status>/",
         views.get_invoices_by_status,
         name="get_invoices_by_status",
@@ -134,6 +139,11 @@ urlpatterns = [
     path("coach/finances/", views.get_coach_wise_finances),
     path("project/finances/", views.get_project_wise_finances),
     path(
+        "purchase-order/delete/<str:user_type>/<str:purchase_order_id>/",
+        views.delete_purchase_order,
+        name="delete_purchase_order",
+    ),
+    path(
         "expense-purchase-order/create/<int:facilitator_id>/<int:batch_id>/",
         views.expense_purchase_order_create,
     ),
@@ -146,6 +156,16 @@ urlpatterns = [
         "get-all-sales-orders/",
         views.get_all_sales_orders,
         name="get_all_sales_orders",
+    ),
+    path(
+        "get-all-sales-orders-for-project/<int:project_id>/<str:project_type>/",
+        views.get_all_sales_orders_of_project,
+        name="get_all_sales_orders_of_project",
+    ),
+    path(
+        "get-so-data-of-project/<int:project_id>/<str:project_type>/",
+        views.get_so_data_of_project,
+        name="get_so_data_of_project",
     ),
     path(
         "get-sales-order-data-pdf/<int:salesorder_id>/",
@@ -171,6 +191,11 @@ urlpatterns = [
         "create-invoice/",
         views.create_invoice,
         name="create_invoice",
+    ),
+    path(
+        "edit-so-invoice/<str:invoice_id>/",
+        views.edit_so_invoice,
+        name="edit_so_invoice",
     ),
     path(
         "sales-order/create/",
@@ -211,5 +236,15 @@ urlpatterns = [
         "get-all-sales-orders-for-purchase-order/<int:purchase_order_id>/",
         views.get_all_sales_order_for_po,
         name="get_all_sales_order_for_po",
+    ),
+    path(
+        "get-salesorders-fields-data/",
+        views.get_salesorders_fields_data,
+        name="get_salesorders_fields_data",
+    ),
+    path(
+        "update-sales-order-status/<str:sales_order_id>/<str:status>/",
+        views.update_sales_order_status,
+        name="update_sales_order_status",
     ),
 ]
