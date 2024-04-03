@@ -1051,7 +1051,6 @@ def update_coach_profile(request, id):
     except Coach.DoesNotExist:
         return Response(status=404)
 
-    remove_education_upload_file = request.data.get("remove_education_upload_file", False)
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
@@ -1061,6 +1060,8 @@ def update_coach_profile(request, id):
     )
     remove_profile_pic = request.data.get("remove_profile_pic", None)
     remove_education_pic = request.data.get("remove_education_pic", None)
+    remove_certificate_one = request.data.get("remove_certificate_one", None)
+    remove_certificate_two = request.data.get("remove_certificate_two", None)
     #  other user exists with the new email
     if (
         new_email
@@ -1115,13 +1116,15 @@ def update_coach_profile(request, id):
         coach_instance = serializer.save()
         if remove_education_upload_file:
             coach_instance.education_upload_file = None
-            coach_instance.save()
         if remove_profile_pic:
             coach_instance.profile_pic = None
-            coach_instance.save()
         if remove_education_pic:
             coach_instance.education_pic = None
-            coach_instance.save()
+        if remove_certificate_one:
+            coach_instance.certificate_one = None
+        if remove_certificate_two:
+            coach_instance.certificate_two = None
+        coach_instance.save()
         depth_serializer = CoachDepthOneSerializer(coach)
         is_caas_allowed = Project.objects.filter(
             coaches_status__coach=user.profile.coach
@@ -1681,6 +1684,8 @@ def add_coach(request):
     education_pic = request.data.get("education_pic", None)
     educational_qualification = json.loads(request.data["educational_qualification"])
     education_upload_file = request.data.get("education_upload_file", None)
+    certificate_one = request.data.get("certificate_one", None)
+    certificate_two = request.data.get("certificate_two", None)
 
     # Check if required data is provided
     if not all(
@@ -1770,6 +1775,8 @@ def add_coach(request):
                 education_pic=education_pic,
                 educational_qualification=educational_qualification,
                 education_upload_file=education_upload_file,
+                certificate_one=certificate_one,
+                certificate_two=certificate_two
             )
 
             # Approve coach
