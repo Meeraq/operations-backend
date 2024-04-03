@@ -6126,7 +6126,7 @@ def check_if_project_structure_edit_allowed(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_all_project_purchase_orders_for_finance(request, project_id, project_type):
     try:
-        purchase_order_set = {}
+        purchase_order_set = set()
         all_purchase_orders = []
         purchase_orders = fetch_purchase_orders(organization_id)
 
@@ -6143,7 +6143,7 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
                     purchase_orders, coach_pricing.purchase_order_id
                 )
                 all_purchase_orders.append(purchase_order)
-                purchase_order_set[coach_pricing.purchase_order_id]
+                purchase_order_set.add(coach_pricing.purchase_order_id)
             for facilitator_pricing in facilitator_pricings:
                 if facilitator_pricing.purchase_order_id in purchase_order_set:
                     continue
@@ -6151,11 +6151,9 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
                     purchase_orders, facilitator_pricing.purchase_order_id
                 )
                 all_purchase_orders.append(purchase_order)
-                purchase_order_set[facilitator_pricing.purchase_order_id]
-
+                purchase_order_set.add(facilitator_pricing.purchase_order_id)
         elif project_type == "CAAS":
             coach_statuses = CoachStatus.objects.filter(project__id=project_id)
-
             for coach_status in coach_statuses:
                 if coach_status.purchase_order_id:
                     if coach_status.purchase_order_id in purchase_order_set:
@@ -6164,8 +6162,7 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
                         purchase_orders, coach_status.purchase_order_id
                     )
                     all_purchase_orders.append(purchase_order)
-                    purchase_order_set[coach_status.purchase_order_id]
-
+                    purchase_order_set.add(coach_status.purchase_order_id)
         return Response(all_purchase_orders)
     except Exception as e:
         print(str(e))
