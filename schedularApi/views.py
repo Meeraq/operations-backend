@@ -1369,6 +1369,7 @@ def create_coach_schedular_availibilty(request):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def edit_slot_request(request, request_id):
@@ -4729,9 +4730,12 @@ def calculate_nps_from_answers(answers):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def get_skill_dashboard_card_data(request, project_id):
     try:
+        virtual_nps = 0
+        overall_nps = 0
+        in_person_nps = 0
         hr_id = request.query_params.get("hr", None)
         if project_id == "all":
             start_timestamp, end_timestamp = get_current_date_timestamps()
@@ -4772,7 +4776,6 @@ def get_skill_dashboard_card_data(request, project_id):
                     question__type="rating_0_to_10",
                     question__feedbacklesson__live_session__session_type="in_person_session",
                 )
-                print(in_person_session_answer)
                 in_person_nps = calculate_nps_from_answers(in_person_session_answer)
 
                 # Overall NPS calculation
@@ -4943,7 +4946,7 @@ def get_skill_dashboard_card_data_for_facilitator(request, project_id, facilitat
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def get_upcoming_coaching_session_dashboard_data(request, project_id):
     try:
         hr_id = request.query_params.get("hr", None)
@@ -5034,7 +5037,7 @@ def get_past_coaching_session_dashboard_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def get_upcoming_live_session_dashboard_data(request, project_id):
     try:
         hr_id = request.query_params.get("hr", None)
@@ -5944,7 +5947,6 @@ def create_expense(request):
         )
 
 
-
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def edit_expense_amount(request):
@@ -6124,7 +6126,7 @@ def check_if_project_structure_edit_allowed(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_all_project_purchase_orders_for_finance(request, project_id, project_type):
     try:
-        purchase_order_set = {}
+        purchase_order_set = set()
         all_purchase_orders = []
         purchase_orders = fetch_purchase_orders(organization_id)
 
@@ -6141,7 +6143,7 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
                     purchase_orders, coach_pricing.purchase_order_id
                 )
                 all_purchase_orders.append(purchase_order)
-                purchase_order_set[coach_pricing.purchase_order_id]
+                purchase_order_set.add(coach_pricing.purchase_order_id)
             for facilitator_pricing in facilitator_pricings:
                 if facilitator_pricing.purchase_order_id in purchase_order_set:
                     continue
@@ -6149,11 +6151,9 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
                     purchase_orders, facilitator_pricing.purchase_order_id
                 )
                 all_purchase_orders.append(purchase_order)
-                purchase_order_set[facilitator_pricing.purchase_order_id]
-
+                purchase_order_set.add(facilitator_pricing.purchase_order_id)
         elif project_type == "CAAS":
             coach_statuses = CoachStatus.objects.filter(project__id=project_id)
-
             for coach_status in coach_statuses:
                 if coach_status.purchase_order_id:
                     if coach_status.purchase_order_id in purchase_order_set:
@@ -6162,8 +6162,7 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
                         purchase_orders, coach_status.purchase_order_id
                     )
                     all_purchase_orders.append(purchase_order)
-                    purchase_order_set[coach_status.purchase_order_id]
-
+                    purchase_order_set.add(coach_status.purchase_order_id)
         return Response(all_purchase_orders)
     except Exception as e:
         print(str(e))

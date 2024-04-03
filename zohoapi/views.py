@@ -1292,7 +1292,7 @@ def get_invoices_by_status(request, status):
 
 
 def get_purchase_order_ids_for_project(project_id, project_type):
-    purchase_order_set = {}
+    purchase_order_set = set()
     if project_type == "SEEQ":
         coach_pricings = CoachPricing.objects.filter(project__id=project_id)
         facilitator_pricings = FacilitatorPricing.objects.filter(project__id=project_id)
@@ -1300,19 +1300,18 @@ def get_purchase_order_ids_for_project(project_id, project_type):
         for coach_pricing in coach_pricings:
             if coach_pricing.purchase_order_id in purchase_order_set:
                 continue
-            purchase_order_set[coach_pricing.purchase_order_id]
+            purchase_order_set.add(coach_pricing.purchase_order_id)
         for facilitator_pricing in facilitator_pricings:
             if facilitator_pricing.purchase_order_id in purchase_order_set:
                 continue
-            purchase_order_set[facilitator_pricing.purchase_order_id]
+            purchase_order_set.add(facilitator_pricing.purchase_order_id)
     elif project_type == "CAAS":
         coach_statuses = CoachStatus.objects.filter(project__id=project_id)
-
         for coach_status in coach_statuses:
             if coach_status.purchase_order_id:
                 if coach_status.purchase_order_id in purchase_order_set:
                     continue
-                purchase_order_set[coach_status.purchase_order_id]
+                purchase_order_set.add(coach_status.purchase_order_id)
 
     return list(purchase_order_set)
 
@@ -1381,9 +1380,7 @@ def get_invoices_by_status_for_founders(request, status):
 def edit_vendor(request, vendor_id):
     try:
         vendor = Vendor.objects.get(id=vendor_id)
-
         data = request.data
-        # name = data.get("name", "")
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
@@ -1415,6 +1412,26 @@ def edit_vendor(request, vendor_id):
         return Response(
             {"error": "Failed to update vendor"}, status=status.HTTP_404_NOT_FOUND
         )
+
+
+
+
+@api_view(["PUT"])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "superadmin", "finance")]
+)
+def update_invoice_allowed(request, vendor_id):
+    try:
+        vendor = Vendor.objects.get(id=vendor_id)
+    except Vendor.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    serializer = VendorEditSerializer(vendor, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(["PUT"])
@@ -1958,9 +1975,7 @@ def delete_expense_purchase_order(request, purchase_order_id):
 @permission_classes([IsAuthenticated])
 def get_all_sales_orders(request):
     try:
-
         all_sales_orders = fetch_sales_orders(organization_id)
-
         for sales_order in all_sales_orders:
             project = None
             sales_order["matching_project_structure"] = "Project Not Assigned"

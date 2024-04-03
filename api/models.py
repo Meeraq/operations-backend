@@ -225,12 +225,9 @@ class Coach(models.Model):
     reason_for_inactive = models.JSONField(default=list, blank=True)
     client_companies = models.JSONField(default=list, blank=True)
     education_pic = models.ImageField(upload_to="post_images", blank=True)
-
     educational_qualification = models.JSONField(default=list, blank=True)
-
-    # education_upload_file = models.ImageField(upload_to="post_images", blank=True)
     education_upload_file = models.FileField(
-        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+        upload_to="pdf_files", blank=True, null=True, validators=[validate_pdf_extension]
     )
 
     def __str__(self):
