@@ -139,6 +139,7 @@ from .models import (
     Facilitator,
     SuperAdmin,
     Task,
+    Finance,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -1147,6 +1148,8 @@ def get_user_for_active_inactive(role, email):
             user = SuperAdmin.objects.get(email=email)
         if role == "facilitator":
             user = Facilitator.objects.get(email=email)
+        if role == "finance":
+            user = Finance.objects.get(email=email)
         return user
     except Exception as e:
         print(str(e))
@@ -8490,10 +8493,11 @@ def get_users(request):
         # existing_roles = [item.name for item in profile.roles.all()]
         for role in profile.roles.all():
             user = get_user_for_active_inactive(role.name, profile.user.username)
-            if user.active_inactive:
-                active_roles.append(role.name)
-            else:
-                inactive_roles.append(role.name)
+            if user:
+                if user.active_inactive:
+                    active_roles.append(role.name)
+                else:
+                    inactive_roles.append(role.name)
         email = profile.user.email
         res.append(
             {
@@ -9635,3 +9639,4 @@ def change_user_password(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to reset password!"}, status=500)
+
