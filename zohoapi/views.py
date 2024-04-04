@@ -1240,6 +1240,13 @@ def fetch_invoices(organization_id):
 def get_all_invoices(request):
     try:
         all_invoices = fetch_invoices(organization_id)
+        project_id = request.query_params.get("project_id")
+        project_type = request.query_params.get("projectType")
+        if project_id and project_type:
+            purchase_order_ids = get_purchase_order_ids_for_project(
+                project_id, project_type
+            )
+            all_invoices =  [invoice for invoice in all_invoices if invoice['purchase_order_id'] in purchase_order_ids]
         return Response(all_invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
