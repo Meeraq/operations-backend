@@ -64,7 +64,7 @@ urlpatterns = [
     path("create-project-cass/", views.create_project_cass),
     path("add_project_structure/", views.add_project_struture),
     path("send_consent/", views.send_consent),
-    path("project/caas/<int:project_id>/", views.get_project_details),
+    path("project/<str:project_type>/<int:project_id>/", views.get_project_details),
     path("receive_coach_consent/", views.receive_coach_consent),
     path(
         "coach/update_project_structure_consent/",

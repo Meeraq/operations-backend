@@ -467,7 +467,7 @@ def login_view(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("vendor","pmo","finance")])
+@permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo", "finance")])
 def get_purchase_orders(request, vendor_id):
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_data:
@@ -547,7 +547,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("vendor","pmo", "finance")])
+@permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo", "finance")])
 def get_purchase_order_data(request, purchaseorder_id):
     access_token_purchase_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_order:
@@ -769,7 +769,7 @@ def delete_invoice(request, invoice_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo","finance")])
+@permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo", "finance")])
 def get_purchase_order_and_invoices(request, purchase_order_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -1162,9 +1162,7 @@ def add_vendor(request):
 
 
 @api_view(["GET"])
-@permission_classes(
-    [IsAuthenticated, IsInRoles("pmo", "finance", "superadmin")]
-)
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "superadmin")])
 def get_all_vendors(request):
     try:
         vendors = Vendor.objects.all()
@@ -1330,7 +1328,6 @@ def get_invoices_by_status_for_founders(request, status):
         res = []
         status_counts = defaultdict(int)
 
-
         for invoice_data in all_invoices:
             if (
                 project_id
@@ -1414,12 +1411,8 @@ def edit_vendor(request, vendor_id):
         )
 
 
-
-
 @api_view(["PUT"])
-@permission_classes(
-    [IsAuthenticated, IsInRoles("pmo", "superadmin", "finance")]
-)
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "superadmin", "finance")])
 def update_invoice_allowed(request, vendor_id):
     try:
         vendor = Vendor.objects.get(id=vendor_id)
@@ -1431,7 +1424,6 @@ def update_invoice_allowed(request, vendor_id):
         serializer.save()
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 @api_view(["PUT"])
@@ -1487,7 +1479,9 @@ def update_invoice_status(request, invoice_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "vendor", "superadmin")])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "finance", "vendor", "superadmin")]
+)
 def get_invoice_updates(request, invoice_id):
     try:
         updates = InvoiceStatusUpdate.objects.filter(invoice_id=invoice_id).order_by(
@@ -1995,13 +1989,15 @@ def get_all_sales_orders(request):
                     if project:
                         data = project.project_structure
                         for item in data:
+
                             if (
                                 "session_type" in item
                                 and item["session_type"] in SESSION_TYPE_VALUE
-                                and item.get("price") is not None
-                                and item.get("session_duration") is not None
-                                and item.get("no_of_sessions") is not None
+                                and item.get("price")
+                                and item.get("session_duration")
+                                and item.get("no_of_sessions")
                             ):
+
                                 result = (
                                     float(item["price"])
                                     * float(item["session_duration"])
@@ -2016,9 +2012,9 @@ def get_all_sales_orders(request):
                         total_price = sum(
                             float(session["price"])
                             for session in data
-                            if session.get("price") is not None
+                            if session.get("price")
                         )
-
+                     
                         if total_price == sales_order["total"]:
                             sales_order["matching_project_structure"] = "Matching"
                         else:

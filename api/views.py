@@ -2458,13 +2458,18 @@ def send_consent(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach")])
-def get_project_details(request, project_id):
+def get_project_details(request, project_type, project_id):
     try:
-        project = Project.objects.get(id=project_id)
-        serializer = ProjectDepthTwoSerializer(project)
+        if project_type == "caas":
+            project = Project.objects.get(id=project_id)
+            serializer = ProjectDepthTwoSerializer(project)
+        else:
+            project = SchedularProject.objects.get(id=project_id)
+            serializer = SchedularProjectSerializer(project)
         return Response(serializer.data)
-    except Project.DoesNotExist:
-        return Response({"message": "Project does not exist"}, status=400)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=400)
 
 
 # Filter API for Coaches
