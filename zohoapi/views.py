@@ -1329,7 +1329,7 @@ def get_invoices_by_status_for_founders(request, status):
             )
         res = []
         status_counts = defaultdict(int)
-
+    
 
         for invoice_data in all_invoices:
             if (
@@ -1340,17 +1340,17 @@ def get_invoices_by_status_for_founders(request, status):
             # if status == "in_review":
             if not invoice_data["bill"] and invoice_data["status"] == "in_review":
                 status_counts["in_review"] += 1
-                if status == "in_review":
+                if status == "in_review" or status == "all" :
                     res.append(invoice_data)
             # elif status == "approved":
-            if not invoice_data["bill"] and invoice_data["status"] == "approved":
+            if not invoice_data["bill"] and invoice_data["status"] == "approved" :
                 status_counts["approved"] += 1
-                if status == "approved":
+                if status == "approved"or status == "all" :
                     res.append(invoice_data)
             # elif status == "rejected":
-            if not invoice_data["bill"] and invoice_data["status"] == "rejected":
+            if not invoice_data["bill"] and invoice_data["status"] == "rejected" :
                 status_counts["rejected"] += 1
-                if status == "rejected":
+                if status == "rejected"or status == "all" :
                     res.append(invoice_data)
             # if status == "accepted":
             if invoice_data["bill"]:
@@ -1359,12 +1359,12 @@ def get_invoices_by_status_for_founders(request, status):
                     and not invoice_data["bill"]["status"] == "paid"
                 ):
                     status_counts["accepted"] += 1
-                    if status == "accepted":
+                    if status == "accepted"  or status == "all":
                         res.append(invoice_data)
             # elif status == "paid":
-            if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid":
+            if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid" or status == "all":
                 status_counts["paid"] += 1
-                if status == "paid":
+                if status == "paid"  or status == "all":
                     res.append(invoice_data)
         return Response({"invoice_counts": status_counts, "invoices": res}, status=200)
 
