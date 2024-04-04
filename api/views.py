@@ -1157,6 +1157,8 @@ def get_user_for_active_inactive(role, email):
             user = Facilitator.objects.get(email=email)
         if role == "finance":
             user = Finance.objects.get(email=email)
+        if role == "sales":
+            user = Sales.objects.get(email=email)
         return user
     except Exception as e:
         print(str(e))
