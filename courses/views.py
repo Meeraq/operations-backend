@@ -2227,7 +2227,7 @@ def calculate_nps(ratings):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def get_all_feedbacks_report(request):
     res = []
     feedbacks = FeedbackLesson.objects.filter(
