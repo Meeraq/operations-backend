@@ -208,6 +208,11 @@ urlpatterns = [
         name="get_all_client_invoices",
     ),
     path(
+        "get-client-invoices/",
+        views.get_client_invoices,
+        name="get_client_invoices",
+    ),
+    path(
         "get-client-invoice-data-pdf/<int:invoice_id>/",
         views.get_client_invoice_data_pdf,
         name="get_client_invoice_data",
