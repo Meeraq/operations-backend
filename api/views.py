@@ -1057,38 +1057,53 @@ def update_coach_profile(request, id):
     user = coach.user.user
     new_email = request.data.get("email", "").strip().lower()
     #  other user exists with the new email
-    if (
-        new_email
-        and User.objects.filter(username=new_email).exclude(id=user.id).exists()
-    ):
-        return Response(
-            {"error": "Email already exists. Please choose a different email."},
-            status=400,
-        )
+    if new_email and new_email != user.email:
+        if (
+            new_email
+            and User.objects.filter(username=new_email).exclude(id=user.id).exists()
+        ):
+            existing_user_with_same_email = User.objects.filter(username=new_email).exclude(id=user.id).first()
+            current_user_profile = user.profile
+            existing_profile_with_same_email = existing_user_with_same_email.profile
+            # coach exists with the new email
+            if existing_profile_with_same_email.roles.filter(name="coach").exists():
+                return Response(
+                {"error": "Coach with the same email already exists."},
+                status=400,
+                )
+            # another user exists with the new email
+            else:
+                coach_role, created = Role.objects.get_or_create(name="coach")
+                existing_profile_with_same_email.roles.add(coach_role)
+                coach.email = new_email
+                current_user_profile.roles.remove(coach_role)
+                coach.save()
+                current_user_profile.save()
+                existing_profile_with_same_email.save()
 
-    # no other user exists with the new email
-    elif new_email and new_email != user.email:
-        user.email = new_email
-        user.username = new_email
-        user.save()
-        # updating emails in all user's
-        for role in user.profile.roles.all():
-            if role.name == "pmo":
-                pmo = Pmo.objects.get(user=user.profile)
-                pmo.email = new_email
-                pmo.save()
-            if role.name == "hr":
-                hr = HR.objects.get(user=user.profile)
-                hr.email = new_email
-                hr.save()
-            if role.name == "learner":
-                learner = Learner.objects.get(user=user.profile)
-                learner.email = new_email
-                learner.save()
-            if role.name == "vendor":
-                vendor = Vendor.objects.get(user=user.profile)
-                vendor.email = new_email
-                vendor.save()
+        # no other user exists with the new email
+        else :
+            user.email = new_email
+            user.username = new_email
+            user.save()
+            # updating emails in all user's
+            for role in user.profile.roles.all():
+                if role.name == "pmo":
+                    pmo = Pmo.objects.get(user=user.profile)
+                    pmo.email = new_email
+                    pmo.save()
+                if role.name == "hr":
+                    hr = HR.objects.get(user=user.profile)
+                    hr.email = new_email
+                    hr.save()
+                if role.name == "learner":
+                    learner = Learner.objects.get(user=user.profile)
+                    learner.email = new_email
+                    learner.save()
+                if role.name == "vendor":
+                    vendor = Vendor.objects.get(user=user.profile)
+                    vendor.email = new_email
+                    vendor.save()
 
     if internal_coach and not organization_of_coach:
         return Response(
