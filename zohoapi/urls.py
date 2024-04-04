@@ -89,6 +89,11 @@ urlpatterns = [
     ),
     path("vendors/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
     path(
+        "vendors/update-invoice-allowed/<int:vendor_id>/",
+        views.update_invoice_allowed,
+        name="update_invoice_allowed",
+    ),
+    path(
         "invoices/<str:status>/",
         views.get_invoices_by_status,
         name="get_invoices_by_status",
@@ -218,12 +223,12 @@ urlpatterns = [
         name="get_client_invoice_data",
     ),
     path(
-        "project/caas/sales-orders/<int:project_id>/",
+        "project/sales-orders/<str:project_type>/<int:project_id>/",
         views.get_project_sales_orders,
         name="get_project_sales_orders",
     ),
     path(
-        "add-so-to-project/<int:project_id>/",
+        "add-so-to-project/<str:project_type>/<int:project_id>/",
         views.add_so_to_project,
         name="add_so_to_project",
     ),

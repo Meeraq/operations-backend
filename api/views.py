@@ -1054,6 +1054,7 @@ def update_coach_profile(request, id):
     except Coach.DoesNotExist:
         return Response(status=404)
 
+    remove_education_upload_file = request.data.get("remove_education_upload_file", False)
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
@@ -1109,7 +1110,10 @@ def update_coach_profile(request, id):
     add_contact_in_wati("coach", name, coach.phone)
 
     if serializer.is_valid():
-        serializer.save()
+        coach_instance =  serializer.save()
+        if remove_education_upload_file:
+            coach_instance.education_upload_file = None
+            coach_instance.save()
         depth_serializer = CoachDepthOneSerializer(coach)
         is_caas_allowed = Project.objects.filter(
             coaches_status__coach=user.profile.coach
@@ -1489,6 +1493,7 @@ def get_ongoing_projects(request):
                 output_field=BooleanField(),
             )
         )
+        projects = projects.distinct()
 
         serializer = ProjectDepthTwoSerializerArchiveCheck(projects, many=True)
         for project_data in serializer.data:
@@ -1941,7 +1946,10 @@ def get_user_data(user):
     user_profile_role = user.profile.roles.all().exclude(name="vendor").first().name
     roles = []
     for role in user.profile.roles.all():
-        roles.append(role.name)
+        user_data = get_user_for_active_inactive(role.name, user.profile.user.username)
+        if user_data and user_data.active_inactive:
+            roles.append(role.name)
+
     if user_profile_role == "coach":
         if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
@@ -3254,7 +3262,7 @@ def add_learner_to_project(request):
         for learner in learners:
             create_engagement(learner, project)
             try:
-                tasks = Task.objects.filter(task="add_coachee", project=project)
+                tasks = Task.objects.filter(task="add_coachee", caas_project=project)
                 tasks.update(status="completed")
             except Exception as e:
                 print(str(e))
@@ -8384,7 +8392,9 @@ def change_user_role(request, user_id):
         return Response({"error": "User role not found."}, status=400)
     roles = []
     for role in user.profile.roles.all():
-        roles.append(role.name)
+        user_data = get_user_for_active_inactive(role.name, user.profile.user.username)
+        if user_data and user_data.active_inactive:
+            roles.append(role.name)
     if user_profile_role == "coach":
         if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
@@ -8418,26 +8428,7 @@ def change_user_role(request, user_id):
     elif user_profile_role == "finance":
         if not user.profile.finance.active_inactive:
             return None
-        serializer = FinanceDepthOneSerializer(user.profile.finance)
-        organization = get_organization_data()
-        zoho_vendor = get_vendor(user.profile.vendor.vendor_id)
-        
-        return Response(
-            {
-                **serializer.data,
-                "roles": roles,
-                "user": {
-                    **serializer.data["user"],
-                    "type": user_profile_role,
-                    "last_login": user.last_login,
-                    "vendor_id": user.profile.vendor.vendor_id,
-                },
-                "last_login": user.last_login,
-                "organization": organization,
-                "zoho_vendor": zoho_vendor,
-                "message": f"Role changed to Finance",
-            }
-        )
+        serializer = FinanceDepthOneSerializer(user.profile.finance)        
     elif user_profile_role == "facilitator":
         if not user.profile.facilitator.active_inactive:
             return None
@@ -8522,10 +8513,11 @@ def get_users(request):
         # existing_roles = [item.name for item in profile.roles.all()]
         for role in profile.roles.all():
             user = get_user_for_active_inactive(role.name, profile.user.username)
-            if user.active_inactive:
-                active_roles.append(role.name)
-            else:
-                inactive_roles.append(role.name)
+            if user:
+                if user.active_inactive:
+                    active_roles.append(role.name)
+                else:
+                    inactive_roles.append(role.name)
         email = profile.user.email
         res.append(
             {
@@ -9666,7 +9658,6 @@ def change_user_password(request):
                 return Response({"error": "Failed to reset password!"}, status=500)
     except Exception as e:
         print(str(e))
-        return Response({"error": "Failed to reset password!"}, status=500)
     
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])

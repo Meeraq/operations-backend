@@ -1306,7 +1306,7 @@ def get_invoices_by_status(request, status):
 
 
 def get_purchase_order_ids_for_project(project_id, project_type):
-    purchase_order_set = {}
+    purchase_order_set = set()
     if project_type == "SEEQ":
         coach_pricings = CoachPricing.objects.filter(project__id=project_id)
         facilitator_pricings = FacilitatorPricing.objects.filter(project__id=project_id)
@@ -1314,19 +1314,18 @@ def get_purchase_order_ids_for_project(project_id, project_type):
         for coach_pricing in coach_pricings:
             if coach_pricing.purchase_order_id in purchase_order_set:
                 continue
-            purchase_order_set[coach_pricing.purchase_order_id]
+            purchase_order_set.add(coach_pricing.purchase_order_id)
         for facilitator_pricing in facilitator_pricings:
             if facilitator_pricing.purchase_order_id in purchase_order_set:
                 continue
-            purchase_order_set[facilitator_pricing.purchase_order_id]
+            purchase_order_set.add(facilitator_pricing.purchase_order_id)
     elif project_type == "CAAS":
         coach_statuses = CoachStatus.objects.filter(project__id=project_id)
-
         for coach_status in coach_statuses:
             if coach_status.purchase_order_id:
                 if coach_status.purchase_order_id in purchase_order_set:
                     continue
-                purchase_order_set[coach_status.purchase_order_id]
+                purchase_order_set.add(coach_status.purchase_order_id)
 
     return list(purchase_order_set)
 
@@ -1395,9 +1394,7 @@ def get_invoices_by_status_for_founders(request, status):
 def edit_vendor(request, vendor_id):
     try:
         vendor = Vendor.objects.get(id=vendor_id)
-
         data = request.data
-        # name = data.get("name", "")
         email = data.get("email", "").strip().lower()
         vendor_id = data.get("vendor", "")
         phone = data.get("phone", "")
@@ -1429,6 +1426,26 @@ def edit_vendor(request, vendor_id):
         return Response(
             {"error": "Failed to update vendor"}, status=status.HTTP_404_NOT_FOUND
         )
+
+
+
+
+@api_view(["PUT"])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("pmo", "superadmin", "finance")]
+)
+def update_invoice_allowed(request, vendor_id):
+    try:
+        vendor = Vendor.objects.get(id=vendor_id)
+    except Vendor.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    serializer = VendorEditSerializer(vendor, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(["PUT"])
@@ -1972,9 +1989,7 @@ def delete_expense_purchase_order(request, purchase_order_id):
 @permission_classes([IsAuthenticated])
 def get_all_sales_orders(request):
     try:
-
         all_sales_orders = fetch_sales_orders(organization_id)
-
         for sales_order in all_sales_orders:
             project = None
             sales_order["matching_project_structure"] = "Project Not Assigned"
@@ -1993,6 +2008,7 @@ def get_all_sales_orders(request):
                         )
                     if project:
                         data = project.project_structure
+                        print(data)
                         for item in data:
                             if (
                                 "session_type" in item
@@ -2001,19 +2017,19 @@ def get_all_sales_orders(request):
                                 and item.get("session_duration") is not None
                                 and item.get("no_of_sessions") is not None
                             ):
-                                result = (
-                                    float(item["price"])
-                                    * float(item["session_duration"])
-                                    * float(item["no_of_sessions"])
-                                ) / 60
-
+                                result = 0
+                                if ('price' in item) and item['price']:                                   
+                                    result = (
+                                        float(item["price"])
+                                        * float(item["session_duration"])
+                                        * float(item["no_of_sessions"])
+                                    ) / 60    
                                 item["price"] = float(result)
-
                                 item["session_type"] = SESSION_TYPE_VALUE[
                                     item["session_type"]
                                 ]
                         total_price = sum(
-                            float(session["price"])
+                            float(session.get("price", 0))
                             for session in data
                             if session.get("price") is not None
                         )
@@ -2329,11 +2345,16 @@ def get_client_invoice_data_pdf(request, invoice_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_project_sales_orders(request, project_id):
+def get_project_sales_orders(request, project_type, project_id):
     try:
-        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
-            project=project_id
-        )
+        if project_type == "CAAS":
+            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                project=project_id
+            )
+        elif project_type == "SEEQ":
+            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                schedular_project=project_id
+            )
         res = {}
         res["sales_orders"] = []
         if orders_and_project_mapping.exists():
@@ -2355,12 +2376,21 @@ def get_project_sales_orders(request, project_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def add_so_to_project(request, project_id):
+def add_so_to_project(request, project_type, project_id):
     try:
-        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
-            project=project_id
-        )
-        project = Project.objects.get(id=project_id)
+        if project_type == "CAAS":
+            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                project=project_id
+            )
+            project = Project.objects.get(id=project_id)
+            schedular_project = None
+        elif project_type == "SEEQ":
+            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                schedular_project=project_id
+            )
+            schedular_project = SchedularProject.objects.get(id=project_id)
+            project = None
+
         sales_order_ids = request.data.get("sales_order_ids", [])
         if not orders_and_project_mapping.exists():
             for id in sales_order_ids:
@@ -2369,13 +2399,41 @@ def add_so_to_project(request, project_id):
                 )
                 if orders_and_project_mapping.exists():
                     mapping = orders_and_project_mapping.first()
-                    if mapping.project and mapping.project.id != project.id:
-                        return Response(
-                            {
-                                "error": f"SO already exist in project: {mapping.project.name}"
-                            },
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
+                    if project_type == "CAAS":
+                        if mapping.schedular_project:
+                            return Response(
+                                {
+                                    "error": f"SO already exist in Schedular Project: {mapping.schedular_project.name}"
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
+                        if mapping.project and mapping.project.id != project.id:
+                            return Response(
+                                {
+                                    "error": f"SO already exist in project: {mapping.project.name}"
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
+                    if project_type == "SEEQ":
+                        if mapping.project:
+                            return Response(
+                                {
+                                    "error": f"SO already exist in Coaching Project: {mapping.project.name}"
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        if (
+                            mapping.schedular_project
+                            and mapping.schedular_project.id != schedular_project.id
+                        ):
+                            return Response(
+                                {
+                                    "error": f"SO already exist in project: {mapping.schedular_project.name}"
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
                     break
         if orders_and_project_mapping.exists():
             mapping = orders_and_project_mapping.first()
@@ -2389,10 +2447,11 @@ def add_so_to_project(request, project_id):
                 final_list_of_sales_order_ids = list(set_of_sales_order_ids)
                 mapping.sales_order_ids = final_list_of_sales_order_ids
                 mapping.project = project
+            mapping.schedular_project = schedular_project
             mapping.save()
         else:
             OrdersAndProjectMapping.objects.create(
-                project=project, sales_order_ids=sales_order_ids
+                project=project, sales_order_ids=sales_order_ids,schedular_project=schedular_project
             )
         return Response({"message": "Sales orders added to project"})
     except Exception as e:
