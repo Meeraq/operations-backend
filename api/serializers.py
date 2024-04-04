@@ -40,6 +40,7 @@ from .models import (
     Facilitator,
     APILog,
     Task,
+    Sales,
 )
 from django.contrib.auth.models import User
 
@@ -63,6 +64,11 @@ class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+class SalesDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sales
+        fields = "__all__"
+        depth = 1
 
 class FinanceDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
@@ -503,6 +509,11 @@ class APILogSerializer(serializers.ModelSerializer):
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
+        fields = "__all__"
+        
+class SalesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sales
         fields = "__all__"
 
 

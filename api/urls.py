@@ -407,4 +407,6 @@ urlpatterns = [
     path("archive-project/", views.archive_project),
     path("change-user-password/", views.change_user_password),
     path("all-users/", views.get_all_users),
+    path("add/sales-user/",views.add_sales_user),
+    path("get-sales-user/",views.get_sales_user),
 ]
