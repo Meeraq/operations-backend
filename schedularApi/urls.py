@@ -330,7 +330,7 @@ urlpatterns = [
     path("create-expense/", views.create_expense),
     path("edit-expense/", views.edit_expense),
     path(
-        "expenses/<int:batch_id>/<str:usertype>/<int:user_id>/",
+        "expenses/<int:batch_or_project_id>/<str:usertype>/<int:user_id>/",
         views.get_expense_for_facilitator,
     ),
     path(

@@ -19,6 +19,7 @@ from api.models import (
     Role,
     CoachStatus,
     Project,
+    Engagement,
 )
 
 from api.serializers import CoachDepthOneSerializer
@@ -59,6 +60,7 @@ from .tasks import (
     get_vendor,
     fetch_customers_from_zoho,
     fetch_client_invoices,
+    get_all_so_of_po,
 )
 from .models import (
     InvoiceData,
@@ -1737,11 +1739,22 @@ def delete_coaching_purchase_order(request, purchase_order_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def expense_purchase_order_create(request, facilitator_id, batch_id):
+def expense_purchase_order_create(request, facilitator_id, batch_or_project_id):
     try:
+        is_all_batch = request.query_params.get("is_all_batch")
+        expenses = []
+
         facilitator = Facilitator.objects.get(id=facilitator_id)
-        batch = SchedularBatch.objects.get(id=batch_id)
-        expenses = Expense.objects.filter(facilitator=facilitator, batch=batch)
+
+        if is_all_batch:
+            expenses = Expense.objects.filter(
+                facilitator=facilitator, batch__project__id=batch_or_project_id
+            )
+        else:
+            expenses = Expense.objects.filter(
+                facilitator=facilitator, batch__id=batch_or_project_id
+            )
+
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
         if not access_token:
             raise Exception(
@@ -1998,6 +2011,7 @@ def get_all_sales_orders(request):
                             id=order_project_mapping.schedular_project.id
                         )
                     if project:
+
                         data = project.project_structure
                         print(data)
                         for item in data:
@@ -2025,6 +2039,18 @@ def get_all_sales_orders(request):
                             for session in data
                             if session.get("price")
                         )
+                        total_learner = 0
+                        if isinstance(project, SchedularProject):
+
+                            batches = SchedularBatch.objects.filter(project=project)
+                            for batch in batches:
+                                total_learner += batch.learners.count()
+
+                        else:
+                            total_learner = Engagement.objects.filter(
+                                project=project
+                            ).count()
+                        total_price *= total_learner
 
                         if total_price == sales_order["total"]:
                             sales_order["matching_project_structure"] = "Matching"
@@ -2485,12 +2511,7 @@ def assign_so_to_po(request):
 def get_all_sales_order_for_po(request, purchase_order_id):
     try:
 
-        mapping_instance = None
-        for order_project_mapping in OrdersAndProjectMapping.objects.all():
-            if str(purchase_order_id) in order_project_mapping.purchase_order_ids:
-
-                mapping_instance = order_project_mapping
-                break
+        mapping_instance = get_all_so_of_po(purchase_order_id)
         if mapping_instance:
             return Response(mapping_instance.sales_order_ids)
         else:

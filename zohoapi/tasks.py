@@ -1,5 +1,5 @@
 from celery import shared_task
-from .models import Vendor, AccessToken, InvoiceData
+from .models import Vendor, AccessToken, InvoiceData, OrdersAndProjectMapping
 from .serializers import InvoiceDataSerializer
 import requests
 from django.utils import timezone
@@ -116,6 +116,19 @@ purchase_orders_allowed = [
 ]
 
 
+def get_all_so_of_po(purchase_order_id):
+    try:
+        mapping_instance = None
+        for order_project_mapping in OrdersAndProjectMapping.objects.all():
+            if str(purchase_order_id) in order_project_mapping.purchase_order_ids:
+
+                mapping_instance = order_project_mapping
+                break
+        return mapping_instance
+
+    except Exception as e:
+        print(str(e))
+
 
 def get_vendor(vendor_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -135,11 +148,19 @@ def get_vendor(vendor_id):
     else:
         return Response({}, status=400)
 
+
 def filter_purchase_order_data(purchase_orders):
     try:
         filtered_purchase_orders = []
         for order in purchase_orders:
             purchaseorder_number = order.get("purchaseorder_number", "").strip()
+            mapping_instance = get_all_so_of_po(
+                order.get("purchaseorder_id", "").strip()
+            )
+            if mapping_instance:
+                order["assigned_sales_order_ids"] = mapping_instance.sales_order_ids
+            else:
+                order["assigned_sales_order_ids"] = []
             created_time_str = order.get("created_time", "").strip()
             if created_time_str:
                 created_time = datetime.strptime(
@@ -150,6 +171,7 @@ def filter_purchase_order_data(purchase_orders):
                     or created_time.year >= 2024
                 ):
                     filtered_purchase_orders.append(order)
+            
         return filtered_purchase_orders
     except Exception as e:
         print(str(e))
@@ -200,9 +222,7 @@ def fetch_sales_orders(organization_id, queryParams=""):
     page = 1
 
     while has_more_page:
-        api_url = (
-            f"{base_url}/salesorders/?organization_id={organization_id}&page={page}{queryParams}"
-        )
+        api_url = f"{base_url}/salesorders/?organization_id={organization_id}&page={page}{queryParams}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.get(api_url, headers=auth_header)
 
@@ -425,7 +445,7 @@ def import_invoices_for_vendor_from_zoho(vendor, headers, res, bill_details_res)
                             )
                         else:
                             vendor_details = get_vendor(vendor.vendor_id)
-                            name = vendor_details["contact_name"] 
+                            name = vendor_details["contact_name"]
                             invoice = InvoiceData.objects.create(
                                 invoice_number=bill[env("INVOICE_FIELD_NAME")],
                                 vendor_id=vendor.vendor_id,

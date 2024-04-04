@@ -51,7 +51,7 @@ from api.models import (
     UserToken,
     Facilitator,
     CoachStatus,
-    Project
+    Project,
 )
 from .serializers import (
     SchedularProjectSerializer,
@@ -99,7 +99,7 @@ from .models import (
     CoachPricing,
     FacilitatorPricing,
     Expense,
-    HandoverDetails
+    HandoverDetails,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -268,6 +268,7 @@ def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
     serializer = AvailabilitySerializer(upcoming_availabilities, many=True)
     return serializer.data
 
+
 def add_so_to_project(project_type, project_id, sales_order_ids):
     if project_type == "CAAS":
         orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
@@ -291,18 +292,26 @@ def add_so_to_project(project_type, project_id, sales_order_ids):
                 mapping = orders_and_project_mapping.first()
                 if project_type == "CAAS":
                     if mapping.schedular_project:
-                        raise Exception(f"SO already exist in Schedular Project: {mapping.schedular_project.name}")
+                        raise Exception(
+                            f"SO already exist in Schedular Project: {mapping.schedular_project.name}"
+                        )
                     if mapping.project and mapping.project.id != project.id:
-                        raise Exception(f"SO already exist in project: {mapping.project.name}")
+                        raise Exception(
+                            f"SO already exist in project: {mapping.project.name}"
+                        )
 
                 if project_type == "SEEQ":
                     if mapping.project:
-                        raise Exception( f"SO already exist in Coaching Project: {mapping.project.name}")
+                        raise Exception(
+                            f"SO already exist in Coaching Project: {mapping.project.name}"
+                        )
                     if (
                         mapping.schedular_project
                         and mapping.schedular_project.id != schedular_project.id
                     ):
-                        raise Exception(f"SO already exist in project: {mapping.schedular_project.name}")
+                        raise Exception(
+                            f"SO already exist in project: {mapping.schedular_project.name}"
+                        )
                 break
     if orders_and_project_mapping.exists():
         mapping = orders_and_project_mapping.first()
@@ -317,16 +326,17 @@ def add_so_to_project(project_type, project_id, sales_order_ids):
         mapping.save()
     else:
         OrdersAndProjectMapping.objects.create(
-            project=project, sales_order_ids=sales_order_ids,schedular_project=schedular_project
+            project=project,
+            sales_order_ids=sales_order_ids,
+            schedular_project=schedular_project,
         )
-
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 @transaction.atomic
 def create_project_schedular(request):
-    project_details = request.data.get('project_details')
+    project_details = request.data.get("project_details")
     organisation = Organisation.objects.filter(
         id=project_details["organisation_name"]
     ).first()
@@ -335,7 +345,8 @@ def create_project_schedular(request):
         junior_pmo = Pmo.objects.filter(id=project_details["junior_pmo"]).first()
     if not organisation:
         organisation = Organisation(
-            name=project_details["organisation_name"], image_url=project_details["image_url"]
+            name=project_details["organisation_name"],
+            image_url=project_details["image_url"],
         )
     organisation.save()
     existing_projects_with_same_name = SchedularProject.objects.filter(
@@ -360,17 +371,19 @@ def create_project_schedular(request):
         return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
         return Response({"error": "Failed to create project."}, status=400)
-    
+
     for hr in project_details["hr"]:
         single_hr = HR.objects.get(id=hr)
         schedularProject.hr.add(single_hr)
 
-    handover_details = request.data.get('handover_details')
-    handover_details['schedular_project'] = schedularProject.id
+    handover_details = request.data.get("handover_details")
+    handover_details["schedular_project"] = schedularProject.id
     serializer = HandoverDetailsSerializer(data=handover_details)
     if serializer.is_valid():
         serializer.save()
-        add_so_to_project("SEEQ", schedularProject.id, handover_details.get("sales_order_ids",[]))
+        add_so_to_project(
+            "SEEQ", schedularProject.id, handover_details.get("sales_order_ids", [])
+        )
     else:
         print(serializer.errors)
 
@@ -390,7 +403,7 @@ def create_project_schedular(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_project_handover(request, project_type, project_id):
-    if project_type =="SEEQ":
+    if project_type == "SEEQ":
         handover = HandoverDetails.objects.get(schedular_project=project_id)
     elif project_type == "CAAS":
         handover = HandoverDetails.objects.get(caas_project=project_id)
@@ -402,7 +415,6 @@ def get_project_handover(request, project_type, project_id):
 @permission_classes(
     [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
 )
-
 def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
     pmo_id = request.query_params.get("pmo")
@@ -943,6 +955,9 @@ def get_batch_calendar(request, batch_id):
         return Response(
             {"error": "Couldn't find project to add project structure."}, status=400
         )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=400)
 
 
 @api_view(["PUT"])
@@ -3863,7 +3878,7 @@ def edit_schedular_project(request, project_id):
         return Response(
             {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
         )
-    project_details = request.data.get('project_details')
+    project_details = request.data.get("project_details")
     junior_pmo = None
     if "junior_pmo" in project_details:
         junior_pmo = Pmo.objects.filter(id=project_details["junior_pmo"]).first()
@@ -3901,15 +3916,19 @@ def edit_schedular_project(request, project_id):
     project.is_finance_enabled = project_details.get("finance")
     project.junior_pmo = junior_pmo
     project.save()
-    handover_details = request.data.get('handover_details')
-    handover_details['schedular_project'] = project.id
+    handover_details = request.data.get("handover_details")
+    handover_details["schedular_project"] = project.id
     try:
         handover_instance = HandoverDetails.objects.get(schedular_project=project.id)
     except HandoverDetails.DoesNotExist:
         handover_instance = None
-    serializer = HandoverDetailsSerializer(handover_instance, data=handover_details, partial=True)
+    serializer = HandoverDetailsSerializer(
+        handover_instance, data=handover_details, partial=True
+    )
     if serializer.is_valid():
-        add_so_to_project("SEEQ", project.id, handover_details.get("sales_order_ids",[]))
+        add_so_to_project(
+            "SEEQ", project.id, handover_details.get("sales_order_ids", [])
+        )
         serializer.save()
     else:
         print(serializer.errors)
@@ -4552,6 +4571,7 @@ def update_certificate_status_for_multiple_participants(request):
         print(str(e))
         return Response({"error": "Failed to release certificate"}, status=500)
 
+
 class GetAllBatchesCoachDetails(APIView):
     permission_classes = [
         IsAuthenticated,
@@ -4563,6 +4583,7 @@ class GetAllBatchesCoachDetails(APIView):
             batches = SchedularBatch.objects.filter(project__id=project_id)
             all_coaches = {}
             all_facilitators = {}
+            purchase_orders = fetch_purchase_orders(organization_id)
             for batch in batches:
                 coaches_data = []
                 for coach in batch.coaches.all():
@@ -4574,11 +4595,68 @@ class GetAllBatchesCoachDetails(APIView):
                     coach_data["batchNames"].add(batch.name)
 
                 facilitators_data = []
-                for facilitator in Facilitator.objects.filter(livesession__batch=batch):
+                for facilitator in Facilitator.objects.filter(
+                    livesession__batch=batch
+                ).annotate(
+                    is_vendor=Case(
+                        When(user__vendor__isnull=False, then=Value(True)),
+                        default=Value(False),
+                        output_field=BooleanField(),
+                    ),
+                    vendor_id=Case(
+                        When(
+                            user__vendor__isnull=False,
+                            then=F("user__vendor__vendor_id"),
+                        ),
+                        default=None,
+                        output_field=CharField(max_length=255, null=True),
+                    ),
+                ):
                     facilitator_data = all_facilitators.get(facilitator.id)
                     if not facilitator_data:
+
                         facilitator_data = FacilitatorSerializer(facilitator).data
                         facilitator_data["batchNames"] = set()
+                        try:
+                            expense = Expense.objects.filter(
+                                batch=batch, facilitator__id=facilitator_data["id"]
+                            ).first()
+
+                            facilitator_data["purchase_order_id"] = (
+                                expense.purchase_order_id
+                            )
+                            facilitator_data["purchase_order_no"] = (
+                                expense.purchase_order_no
+                            )
+                            is_delete_purchase_order_allowed = True
+                            if facilitator_data["purchase_order_id"]:
+                                purchase_order = get_purchase_order(
+                                    purchase_orders,
+                                    facilitator_data["purchase_order_id"],
+                                )
+                                if not purchase_order:
+                                    Expense.objects.filter(
+                                        batch=batch,
+                                        facilitator__id=facilitator_data["id"],
+                                    ).update(purchase_order_id="", purchase_order_no="")
+                                    facilitator_data["purchase_order_id"] = None
+                                    facilitator_data["purchase_order_no"] = None
+                                else:
+                                    invoices = InvoiceData.objects.filter(
+                                        purchase_order_id=facilitator_data[
+                                            "purchase_order_id"
+                                        ]
+                                    )
+                                    if invoices.exists():
+                                        is_delete_purchase_order_allowed = False
+                                facilitator_data["is_delete_purchase_order_allowed"] = (
+                                    is_delete_purchase_order_allowed
+                                )
+                                facilitator_data["purchase_order"] = purchase_order
+                            else:
+                                facilitator_data["purchase_order"] = None
+                        except Exception as e:
+                            print(str(e))
                         all_facilitators[facilitator.id] = facilitator_data
                     facilitator_data["batchNames"].add(batch.name)
             return Response(
@@ -4595,6 +4673,7 @@ class GetAllBatchesCoachDetails(APIView):
                 {"error": "Failed to get coaches data."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
 
 class GetAllBatchesParticipantDetails(APIView):
     permission_classes = [
@@ -4621,7 +4700,7 @@ class GetAllBatchesParticipantDetails(APIView):
                             "id": learner_id,
                             "name": learner.name,
                             "email": learner.email,
-                            "batchNames": set(), 
+                            "batchNames": set(),
                             "phone": learner.phone,
                         }
                         learner_data_dict[learner_id]["batchNames"].add(batch.name)
@@ -6087,18 +6166,24 @@ def edit_expense(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
-def get_expense_for_facilitator(request, batch_id, usertype, user_id):
+def get_expense_for_facilitator(request, batch_or_project_id, usertype, user_id):
     try:
-        expenses = []
-        if usertype == "facilitator":
-            expenses = Expense.objects.filter(
-                batch__id=batch_id, facilitator__id=user_id
-            )
+        is_all_batch = request.query_params.get("is_all_batch")
+        if is_all_batch:
+            batches = SchedularBatch.objects.filter(project__id=batch_or_project_id)
+        else:
+            batches = SchedularBatch.objects.filter(id=batch_or_project_id)
 
-        elif usertype == "pmo":
-            expenses = Expense.objects.filter(batch__id=batch_id)
+        all_expenses = []
+        for batch in batches:
+            if usertype == "facilitator":
+                expenses = Expense.objects.filter(batch=batch, facilitator__id=user_id)
+            elif usertype == "pmo":
+                expenses = Expense.objects.filter(batch=batch)
 
-        serializer = ExpenseSerializerDepthOne(expenses, many=True)
+            all_expenses.extend(expenses)
+
+        serializer = ExpenseSerializerDepthOne(all_expenses, many=True)
         return Response(serializer.data)
     except Exception as e:
         print(str(e))
