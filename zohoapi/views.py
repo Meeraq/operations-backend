@@ -2541,3 +2541,46 @@ def get_so_data_of_project(request, project_id, project_type):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def fetch_client_invoices_page_wise(organization_id, page):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if not access_token:
+        raise Exception(
+            "Access token not found. Please generate an access token first."
+        )
+    api_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&perpage=200"
+    auth_header = {"Authorization": f"Bearer {access_token}"}
+    response = requests.get(api_url, headers=auth_header)
+    if response.status_code == 200:
+        invoices = response.json().get("invoices", [])
+        page_context_extra_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&response_option=2"
+        page_context_extra_response = requests.get(page_context_extra_url, headers=auth_header)
+        if page_context_extra_response.status_code == 200:
+            extra_page_context = page_context_extra_response.json().get("page_context", {})
+            page_context = response.json().get("page_context", {})
+            has_more_page = page_context.get("has_more_page", False)
+            return {
+                "count": extra_page_context.get("total", 0),
+                "next" :  has_more_page,
+                "prev" : False if page == 1 else True,
+                "results" : invoices
+            }
+        else:
+            print(page_context_extra_response.json())
+            raise Exception("Failed to fetch client invoices.")
+    else:
+        print(response.json())
+        raise Exception("Failed to fetch client invoices.")
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_client_invoices(request):
+    try:
+        page = request.query_params.get("page")
+        res = fetch_client_invoices_page_wise(organization_id, page)
+        return Response(res, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

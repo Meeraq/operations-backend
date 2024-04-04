@@ -116,7 +116,6 @@ purchase_orders_allowed = [
 ]
 
 
-
 def get_vendor(vendor_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token:
@@ -134,6 +133,7 @@ def get_vendor(vendor_id):
         return Response({}, status=400)
     else:
         return Response({}, status=400)
+
 
 def filter_purchase_order_data(purchase_orders):
     try:
@@ -200,9 +200,7 @@ def fetch_sales_orders(organization_id, queryParams=""):
     page = 1
 
     while has_more_page:
-        api_url = (
-            f"{base_url}/salesorders/?organization_id={organization_id}&page={page}{queryParams}"
-        )
+        api_url = f"{base_url}/salesorders/?organization_id={organization_id}&page={page}{queryParams}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.get(api_url, headers=auth_header)
 
@@ -238,7 +236,6 @@ def fetch_client_invoices(organization_id):
 
         if response.status_code == 200:
             client_invoices = response.json().get("invoices", [])
-            # client_invoices = filter_sales_order_data(client_invoices)
             all_client_invoices.extend(client_invoices)
 
             page_context = response.json().get("page_context", {})
@@ -425,7 +422,7 @@ def import_invoices_for_vendor_from_zoho(vendor, headers, res, bill_details_res)
                             )
                         else:
                             vendor_details = get_vendor(vendor.vendor_id)
-                            name = vendor_details["contact_name"] 
+                            name = vendor_details["contact_name"]
                             invoice = InvoiceData.objects.create(
                                 invoice_number=bill[env("INVOICE_FIELD_NAME")],
                                 vendor_id=vendor.vendor_id,
