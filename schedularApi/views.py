@@ -4552,59 +4552,39 @@ def update_certificate_status_for_multiple_participants(request):
         print(str(e))
         return Response({"error": "Failed to release certificate"}, status=500)
 
-
 class GetAllBatchesCoachDetails(APIView):
     permission_classes = [
         IsAuthenticated,
-        IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer"),
+        IsInRoles("pmo", "hr", "facilitator", "coach", "learner"),
     ]
 
     def get(self, request, project_id):
         try:
             batches = SchedularBatch.objects.filter(project__id=project_id)
-            all_coaches = []
-            all_facilitator = []
-
+            all_coaches = {}
+            all_facilitators = {}
             for batch in batches:
+                coaches_data = []
                 for coach in batch.coaches.all():
-                    coach_serializer = CoachSerializer(coach)
-                    coach_data = {
-                        **coach_serializer.data,
-                        "batchNames": [batch.name],
-                    }
-                    all_coaches.append(coach_data)
+                    coach_data = all_coaches.get(coach.id)
+                    if not coach_data:
+                        coach_data = CoachSerializer(coach).data
+                        coach_data["batchNames"] = set()
+                        all_coaches[coach.id] = coach_data
+                    coach_data["batchNames"].add(batch.name)
+
+                facilitators_data = []
                 for facilitator in Facilitator.objects.filter(livesession__batch=batch):
-                    facilitator_serializer = FacilitatorSerializer(facilitator)
-                    facilitator_data = {
-                        **facilitator_serializer.data,
-                        "batchNames": [batch.name],
-                    }
-                    all_facilitator.append(facilitator_data)
-
-            unique_coaches = {}
-            for coach_data in all_coaches:
-                coach_id = coach_data["id"]
-                if coach_id not in unique_coaches:
-                    unique_coaches[coach_id] = coach_data
-                else:
-                    unique_coaches[coach_id]["batchNames"].extend(
-                        coach_data["batchNames"]
-                    )
-
-            unique_facilitator = {}
-            for facilitator_data in all_facilitator:
-                facilitator_id = facilitator_data["id"]
-                if facilitator_id not in unique_facilitator:
-                    unique_facilitator[facilitator_id] = facilitator_data
-                else:
-                    unique_facilitator[facilitator_id]["batchNames"].extend(
-                        facilitator_data["batchNames"]
-                    )
-
+                    facilitator_data = all_facilitators.get(facilitator.id)
+                    if not facilitator_data:
+                        facilitator_data = FacilitatorSerializer(facilitator).data
+                        facilitator_data["batchNames"] = set()
+                        all_facilitators[facilitator.id] = facilitator_data
+                    facilitator_data["batchNames"].add(batch.name)
             return Response(
                 {
-                    "unique_coaches": list(unique_coaches.values()),
-                    "unique_facilitator": list(unique_facilitator.values()),
+                    "unique_coaches": list(all_coaches.values()),
+                    "unique_facilitator": list(all_facilitators.values()),
                 },
                 status=status.HTTP_200_OK,
             )
@@ -4615,7 +4595,6 @@ class GetAllBatchesCoachDetails(APIView):
                 {"error": "Failed to get coaches data."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
 
 class GetAllBatchesParticipantDetails(APIView):
     permission_classes = [
@@ -4642,11 +4621,10 @@ class GetAllBatchesParticipantDetails(APIView):
                             "id": learner_id,
                             "name": learner.name,
                             "email": learner.email,
-                            "batchNames": {
-                                batch.name
-                            },  # Initialize with list containing batch name
+                            "batchNames": set(), 
                             "phone": learner.phone,
                         }
+                        learner_data_dict[learner_id]["batchNames"].add(batch.name)
                     else:
                         learner_data_dict[learner_id]["batchNames"].add(batch.name)
 
