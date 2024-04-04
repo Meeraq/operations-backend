@@ -863,24 +863,21 @@ def create_task(task_details, number_of_days):
     else:
         return None
 
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
-def create_pmo(request):
-    # Get data from request
-    name = request.data.get("name")
-    email = request.data.get("email", "").strip().lower()
-    phone = request.data.get("phone")
-    username = email  # username and email are the same
-    password = request.data.get("password")
-    sub_role = request.data.get("sub_role")
-    room_id = generate_room_id(email)
-
-    # Check if required data is provided
-    if not all([name, email, phone, username, password, room_id]):
-        return Response({"error": "All required fields must be provided."}, status=400)
-
+def add_new_pmo(data):
     try:
+
+        name = data.get("name")
+        email = data.get("email", "").strip().lower()
+        phone = data.get("phone")
+        username = email  # username and email are the same
+        password = data.get("password")
+        sub_role = data.get("sub_role")
+        room_id = generate_room_id(email)
+
+        # Check if required data is provided
+        if not all([name, email, phone, username, password, room_id]):
+            return Response({"error": "All required fields must be provided."}, status=400)
+
         with transaction.atomic():
             # Check if the user already exists
             user = User.objects.filter(email=email).first()
@@ -911,17 +908,31 @@ def create_pmo(request):
             )
 
             name = pmo_user.name
-            add_contact_in_wati("pmo", name, pmo_user.phone)
+            if pmo_user.phone:
+                add_contact_in_wati("pmo", name, pmo_user.phone)
 
             # Return success response without room_id
-            return Response({"message": "PMO added successfully."}, status=201)
-
-    except IntegrityError as e:
-        return Response({"error": "User with this email already exists."}, status=400)
-
+            return True
+    
     except Exception as e:
-        # Return error response if any exception occurs
-        return Response({"error": str(e)}, status=500)
+        print(str(e))
+        return False
+        
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
+def create_pmo(request):
+    try:
+   
+        data = request.data
+        added = add_new_pmo(data=data)
+
+        if added :
+            return Response({"message": "PMO added successfully."}, status=201)
+        else:
+            return Response({"error": "Failed to add pmo"}, status=500)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to add pmo"}, status=500)
 
 
 @api_view(["PUT"])
@@ -1051,7 +1062,9 @@ def update_coach_profile(request, id):
     except Coach.DoesNotExist:
         return Response(status=404)
 
-    remove_education_upload_file = request.data.get("remove_education_upload_file", False)
+    remove_education_upload_file = request.data.get(
+        "remove_education_upload_file", False
+    )
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
@@ -1107,7 +1120,7 @@ def update_coach_profile(request, id):
     add_contact_in_wati("coach", name, coach.phone)
 
     if serializer.is_valid():
-        coach_instance =  serializer.save()
+        coach_instance = serializer.save()
         if remove_education_upload_file:
             coach_instance.education_upload_file = None
             coach_instance.save()
@@ -8416,7 +8429,7 @@ def change_user_role(request, user_id):
     elif user_profile_role == "finance":
         if not user.profile.finance.active_inactive:
             return None
-        serializer = FinanceDepthOneSerializer(user.profile.finance)        
+        serializer = FinanceDepthOneSerializer(user.profile.finance)
     elif user_profile_role == "facilitator":
         if not user.profile.facilitator.active_inactive:
             return None
@@ -9644,3 +9657,93 @@ def change_user_password(request):
         print(str(e))
         return Response({"error": "Failed to reset password!"}, status=500)
 
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_new_user(request):
+    try:
+        with transaction.atomic():
+            data = request.data
+            print(request.data)
+            name = data.get("name",None)
+            email = data.get("email","").strip().lower()
+            roles = data.get("role",None)
+            sub_role = data.get("sub_role","")
+            phone = data.get("phone","")
+            password = str(uuid.uuid4())
+            if not email or name or roles:
+                return Response({"error": "Please fill all the required feilds."}, status=500)
+
+            if "pmo" in  roles:
+                
+                add_new_pmo({
+                   "name":name,
+                   "email":email,
+                   "phone":phone,
+                   "password":password ,
+                   "sub_role": sub_role,
+                })
+            # if "sales" in roles:
+            #     add_new_sales_user({})
+
+            if "finance" in  roles:
+
+              
+                # Check if the user already exists
+                user = User.objects.filter(email=email).first()
+
+                if not user:
+                    # If the user does not exist, create a new user
+                    user = User.objects.create_user(
+                        username=email, password=password, email=email
+                    )
+                    profile = Profile.objects.create(user=user)
+
+                else:
+                    profile = Profile.objects.get(user=user)
+
+                # Create or get the "finance" role
+                finance_role, created = Role.objects.get_or_create(name="finance")
+                profile.roles.add(finance_role)
+                profile.save()
+
+                # Create the finance User using the Profile
+                finance_user = Finance.objects.create(
+                    user=profile,
+                    name=name,
+                    email=email,
+                    
+                )
+
+            if "sales" in  roles:
+              
+                # Check if the user already exists
+                user = User.objects.filter(email=email).first()
+
+                if not user:
+                    # If the user does not exist, create a new user
+                    user = User.objects.create_user(
+                        username=email, password=password, email=email
+                    )
+                    profile = Profile.objects.create(user=user)
+
+                else:
+                    profile = Profile.objects.get(user=user)
+
+                # Create or get the "sales" role
+                sales_role, created = Role.objects.get_or_create(name="sales")
+                profile.roles.add(sales_role)
+                profile.save()
+
+                # Create the sales User using the Profile
+                sales_user = Sales.objects.create(
+                    user=profile,
+                    name=name,
+                    email=email,
+                    
+                )
+
+        return Response({"message": "User added sucessfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to add user!"}, status=500)
