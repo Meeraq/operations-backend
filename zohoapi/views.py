@@ -1786,10 +1786,21 @@ def expense_purchase_order_create(request, facilitator_id, batch_or_project_id):
 def get_coach_wise_finances(request):
     try:
         # Fetch all invoices and purchase orders
+        coach_id = request.query_params.get("coach_id")
+        facilitator_id = request.query_params.get("facilitator_id")
         all_invoices = fetch_invoices(organization_id)
         all_purchase_orders = fetch_purchase_orders(organization_id)
         # Filter vendors who are coaches
-        vendors = Vendor.objects.filter(user__roles__name="coach")
+        vendors = []
+        if coach_id or facilitator_id:
+            vendor_user = None
+            if coach_id:
+                vendor_user = Coach.objects.get(id=int(coach_id))
+            else:
+                vendor_user = Facilitator.objects.get(id=int(facilitator_id))
+            vendors = Vendor.objects.filter(email=vendor_user.email.strip().lower())
+        else:
+            vendors = Vendor.objects.filter(user__roles__name="coach")
         # Calculate purchase order amounts
         vendor_po_amounts = {}
         for po in all_purchase_orders:
@@ -1824,6 +1835,7 @@ def get_coach_wise_finances(request):
                     "invoiced_amount": invoiced_amount,
                     "paid_amount": paid_amount,
                     "currency_symbol": invoice["currency_symbol"],
+                    "currency_code": invoice.get("currency_code", ""),
                 }
 
         # Prepare response
@@ -1844,6 +1856,11 @@ def get_coach_wise_finances(request):
                     )["paid_amount"],
                     "currency_symbol": (
                         vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                        if vendor_id in vendor_invoice_amounts
+                        else None
+                    ),
+                    "currency_code": (
+                        vendor_invoice_amounts[vendor_id]["currency_code"]
                         if vendor_id in vendor_invoice_amounts
                         else None
                     ),

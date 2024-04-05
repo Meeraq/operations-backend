@@ -399,7 +399,10 @@ urlpatterns = [
     #     views.delete_pmo,
     # ),
     path("edit-pmo/", views.edit_pmo),
-    path("get-coaches-in-project-is-vendor/<int:project_id>/", views.get_coaches_in_project_is_vendor),
+    path(
+        "get-coaches-in-project-is-vendor/<int:project_id>/",
+        views.get_coaches_in_project_is_vendor,
+    ),
     path("update-user-roles/", UpdateUserRoles.as_view()),
     path("tasks/", views.get_tasks),
     path("tasks/add-remark/", views.add_remark_to_task),
@@ -407,6 +410,11 @@ urlpatterns = [
     path("archive-project/", views.archive_project),
     path("change-user-password/", views.change_user_password),
     path("all-users/", views.get_all_users),
-    path("add/sales-user/",views.add_sales_user),
-    path("get-sales-user/",views.get_sales_user),
+    path("add/sales-user/", views.add_sales_user),
+    path("get-sales-user/", views.get_sales_user),
+    path("get-coach-summary-data/<int:coach_id>/", views.get_coach_summary_data),
+    path(
+        "get-facilitator-summary-data/<int:facilitator_id>/",
+        views.get_facilitator_summary_data,
+    ),
 ]

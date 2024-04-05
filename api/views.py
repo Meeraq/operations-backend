@@ -173,6 +173,8 @@ from schedularApi.models import (
     SchedularBatch,
     SchedularSessions,
     CalendarInvites,
+    CoachingSession,
+    LiveSession,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
@@ -182,7 +184,7 @@ from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
 from zohoapi.models import Vendor, InvoiceData
-from courses.models import CourseEnrollment
+from courses.models import CourseEnrollment, CoachingSessionsFeedbackResponse, Answer
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
 import pdfkit
@@ -214,6 +216,20 @@ def get_current_date_timestamps():
         int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
     )
     return start_timestamp, end_timestamp
+
+
+def calculate_nps(ratings):
+    promoters = sum(rating >= 9 for rating in ratings)
+    detractors = sum(rating <= 6 for rating in ratings)
+    nps = ((promoters - detractors) / len(ratings)) * 100
+    return nps
+
+
+def calculate_nps_from_answers(answers):
+    ratings = [answer.rating for answer in answers]
+    if ratings:
+        return calculate_nps(ratings)
+    return None
 
 
 def create_send_email(user_email, file_name):
@@ -1054,7 +1070,9 @@ def update_coach_profile(request, id):
     except Coach.DoesNotExist:
         return Response(status=404)
 
-    remove_education_upload_file = request.data.get("remove_education_upload_file", False)
+    remove_education_upload_file = request.data.get(
+        "remove_education_upload_file", False
+    )
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
@@ -1110,7 +1128,7 @@ def update_coach_profile(request, id):
     add_contact_in_wati("coach", name, coach.phone)
 
     if serializer.is_valid():
-        coach_instance =  serializer.save()
+        coach_instance = serializer.save()
         if remove_education_upload_file:
             coach_instance.education_upload_file = None
             coach_instance.save()
@@ -1477,7 +1495,7 @@ def create_learners(learners_data):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo","sales")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
 def get_ongoing_projects(request):
     try:
         pmo_id = request.query_params.get("pmo")
@@ -2469,7 +2487,9 @@ def send_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach","sales", "finance")])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach", "sales", "finance")]
+)
 def get_project_details(request, project_type, project_id):
     try:
         if project_type == "caas":
@@ -8435,7 +8455,7 @@ def change_user_role(request, user_id):
     elif user_profile_role == "finance":
         if not user.profile.finance.active_inactive:
             return None
-        serializer = FinanceDepthOneSerializer(user.profile.finance)        
+        serializer = FinanceDepthOneSerializer(user.profile.finance)
     elif user_profile_role == "facilitator":
         if not user.profile.facilitator.active_inactive:
             return None
@@ -9665,7 +9685,8 @@ def change_user_password(request):
                 return Response({"error": "Failed to reset password!"}, status=500)
     except Exception as e:
         print(str(e))
-    
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_sales_user(request):
@@ -9686,17 +9707,13 @@ def add_sales_user(request):
 
             if not user:
                 # If the user does not exist, create a new user
-                user = User.objects.create_user(
-                    username=username, email=email
-                )
+                user = User.objects.create_user(username=username, email=email)
                 temp_password = "".join(
-                        random.choices(
-                            string.ascii_uppercase
-                            + string.ascii_lowercase
-                            + string.digits,
-                            k=8,
-                        )
+                    random.choices(
+                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
+                        k=8,
                     )
+                )
                 user.set_password(temp_password)
                 user.save()
                 profile = Profile.objects.create(user=user)
@@ -9729,9 +9746,9 @@ def add_sales_user(request):
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
-    
-    
-@api_view(['GET'])
+
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_sales_user(request):
     try:
@@ -9743,5 +9760,98 @@ def get_sales_user(request):
         print(str(e))
         return Response(
             {"detail": f"Error fetching Sales user: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+def get_coach_overall_rating(coach_id):
+    try:
+        coach_feedback_responses = CoachingSessionsFeedbackResponse.objects.filter(
+            Q(caas_session__coach_id=coach_id)
+            | Q(schedular_session__availibility__coach_id=coach_id)
+        )
+
+        overall_rating = coach_feedback_responses.aggregate(
+            avg_rating=Avg(
+                "answers__rating", filter=Q(answers__question__type="rating_1_to_5")
+            )
+        )["avg_rating"]
+
+        return overall_rating if overall_rating is not None else 0
+    except Exception as e:
+        print(str(e))
+        return 0
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_summary_data(request, coach_id):
+    try:
+        coach = Coach.objects.get(id=coach_id)
+
+        coach_status_count = CoachStatus.objects.filter(coach=coach).count()
+
+        coach_batches = SchedularBatch.objects.filter(coaches=coach)
+        distinct_project_count = coach_batches.values("project").distinct().count()
+
+        laser_coaching_sessions = SchedularSessions.objects.filter(
+            availibility__coach=coach,
+            coaching_session__session_type="laser_coaching_session",
+        ).count()
+
+        pending_schedular_session = SchedularSessions.objects.filter(
+            availibility__coach=coach, status="pending"
+        ).count()
+
+        return Response(
+            {
+                "last_login": coach.user.user.last_login,
+                "coaching_projects": coach_status_count,
+                "training_projects": distinct_project_count,
+                "coach_rating": get_coach_overall_rating(coach.id),
+                "laser_coaching_sessions": laser_coaching_sessions,
+                "pending_session": pending_schedular_session,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_facilitator_summary_data(request, facilitator_id):
+    try:
+        facilitator = Facilitator.objects.get(id=facilitator_id)
+
+        live_sessions = LiveSession.objects.filter(facilitator=facilitator)
+        distinct_project_count = (
+            live_sessions.values("batch__project").distinct().count()
+        )
+
+        overall_answer = Answer.objects.filter(
+            question__type="rating_0_to_10",
+            question__feedbacklesson__live_session__facilitator__id=facilitator_id,
+        )
+
+        overall_nps = calculate_nps_from_answers(overall_answer)
+
+        return Response(
+            {
+                "last_login": facilitator.user.user.last_login,
+                "training_projects": distinct_project_count,
+                "overall_nps": overall_nps,
+                "live_sessions": live_sessions.count(),
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
