@@ -9454,6 +9454,94 @@ def add_remark_to_task(request):
     )
 
 
+def get_formatted_tasks(tasks):
+    try:
+        task_details = []
+        for task in tasks:
+            # Extract the latest remark message or set it to None if remarks are empty
+            latest_remark = task.remarks[-1]["message"] if task.remarks else None
+
+            # Determine the coach name associated with the task
+            coach_name = (
+                task.coach.__str__()
+                if task.coach
+                else (
+                    task.engagement.coach.__str__()
+                    if task.engagement and task.engagement.coach
+                    else (
+                        task.goal.engagement.coach.__str__()
+                        if task.goal and task.goal.engagement.coach
+                        else (
+                            task.session_caas.coach.__str__()
+                            if task.session_caas and task.session_caas.coach
+                            else ""
+                        )
+                    )
+                )
+            )
+            learner_name = (
+                task.engagement.learner.name
+                if task.engagement
+                else (
+                    task.goal.engagement.learner.name
+                    if task.goal
+                    else (
+                        task.session_caas.learner.name
+                        if task.session_caas and task.session_caas.learner
+                        else ""
+                    )
+                )
+            )
+            session_name = (
+                SESSION_TYPE_VALUE[task.session_caas.session_type]
+                if task.session_caas
+                else ""
+            )
+            # Retrieve vendor name associated with the task, handling exceptions gracefully
+            vendor_name = None
+            if task.vendor_user:
+                try:
+                    vendor = Vendor.objects.get(user__user=task.vendor_user)
+                    vendor_name = vendor.name
+                except Vendor.DoesNotExist:
+                    pass
+
+            # Determine the project name associated with the task
+            project_name = (
+                task.caas_project.name
+                if task.caas_project
+                else (
+                    task.session_caas.project.name
+                    if task.session_caas
+                    else (
+                        task.engagement.project.name
+                        if task.engagement
+                        else task.goal.engagement.project.name if task.goal else ""
+                    )
+                )
+            )
+
+            # Serialize task data
+            serialized_data = TaskSerializer(task).data
+
+            # Append task details to the list
+            task_details.append(
+                {
+                    **serialized_data,
+                    "learner_name": learner_name,
+                    "project_name": project_name,
+                    "latest_remark": latest_remark,
+                    "coach_name": coach_name,
+                    "vendor_name": vendor_name,
+                    "session_name": session_name,
+                }
+            )
+        return task_details
+    except Exception as e:
+        print(str(e))
+        return None
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_tasks(request):
@@ -9470,86 +9558,49 @@ def get_tasks(request):
             | Q(goal__engagement__project__junior_pmo=junior_pmo_id)
         )
 
-    # Iterate through each task
-    for task in tasks:
-        # Extract the latest remark message or set it to None if remarks are empty
-        latest_remark = task.remarks[-1]["message"] if task.remarks else None
+    task_details = get_formatted_tasks(tasks)
 
-        # Determine the coach name associated with the task
-        coach_name = (
-            task.coach.__str__()
-            if task.coach
-            else (
-                task.engagement.coach.__str__()
-                if task.engagement and task.engagement.coach
-                else (
-                    task.goal.engagement.coach.__str__()
-                    if task.goal and task.goal.engagement.coach
-                    else (
-                        task.session_caas.coach.__str__()
-                        if task.session_caas and task.session_caas.coach
-                        else ""
-                    )
-                )
-            )
-        )
-        learner_name = (
-            task.engagement.learner.name
-            if task.engagement
-            else (
-                task.goal.engagement.learner.name
-                if task.goal
-                else (
-                    task.session_caas.learner.name
-                    if task.session_caas and task.session_caas.learner
-                    else ""
-                )
-            )
-        )
-        session_name = (
-            SESSION_TYPE_VALUE[task.session_caas.session_type]
-            if task.session_caas
-            else ""
-        )
-        # Retrieve vendor name associated with the task, handling exceptions gracefully
-        vendor_name = None
-        if task.vendor_user:
-            try:
-                vendor = Vendor.objects.get(user__user=task.vendor_user)
-                vendor_name = vendor.name
-            except Vendor.DoesNotExist:
-                pass
+    return Response(task_details)
 
-        # Determine the project name associated with the task
-        project_name = (
-            task.caas_project.name
-            if task.caas_project
-            else (
-                task.session_caas.project.name
-                if task.session_caas
-                else (
-                    task.engagement.project.name
-                    if task.engagement
-                    else task.goal.engagement.project.name if task.goal else ""
-                )
-            )
-        )
 
-        # Serialize task data
-        serialized_data = TaskSerializer(task).data
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("coach")])
+def get_coach_tasks(request):
 
-        # Append task details to the list
-        task_details.append(
-            {
-                **serialized_data,
-                "learner_name": learner_name,
-                "project_name": project_name,
-                "latest_remark": latest_remark,
-                "coach_name": coach_name,
-                "vendor_name": vendor_name,
-                "session_name": session_name,
-            }
-        )
+    coach_id = request.query_params.get("coach_id")
+
+    coach = Coach.objects.get(id=int(coach_id))
+
+    tasks = Task.objects.filter(
+        Q(coach=coach)
+        | Q(engagement__coach=coach)
+        | Q(goal__engagement__coach=coach)
+        | Q(session_caas__coach=coach),
+        Q(trigger_date__lte=timezone.now()),
+    )
+
+    task_details = get_formatted_tasks(tasks)
+
+    return Response(task_details)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
+def get_learner_tasks(request):
+
+    learenr_id = request.query_params.get("learenr_id")
+
+    learner = Learner.objects.get(id=int(learenr_id))
+
+    tasks = Task.objects.filter(
+        Q(engagement__learner=learner)
+        | Q(goal__engagement__learner=learner)
+        | Q(session_caas__learner=learner),
+        Q(trigger_date__lte=timezone.now()),
+    )
+
+    task_details = get_formatted_tasks(tasks)
+
     return Response(task_details)
 
 

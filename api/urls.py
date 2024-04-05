@@ -405,6 +405,8 @@ urlpatterns = [
     ),
     path("update-user-roles/", UpdateUserRoles.as_view()),
     path("tasks/", views.get_tasks),
+    path("coach/tasks/", views.get_coach_tasks),
+    path("learner/tasks/", views.get_learner_tasks),
     path("tasks/add-remark/", views.add_remark_to_task),
     path("tasks/complete/", views.complete_task),
     path("archive-project/", views.archive_project),
