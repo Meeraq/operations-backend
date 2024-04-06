@@ -2030,10 +2030,15 @@ def get_all_sales_orders(request):
                         project = Project.objects.get(
                             id=order_project_mapping.project.id
                         )
+                        if project:
+                            sales_order["projectType"] = "CAAS"
                     elif order_project_mapping.schedular_project:
                         project = SchedularProject.objects.get(
                             id=order_project_mapping.schedular_project.id
                         )
+                        if project:
+                            sales_order["projectType"] = "SEEQ"
+
                     if project:
 
                         data = project.project_structure
