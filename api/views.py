@@ -218,6 +218,7 @@ def get_current_date_timestamps():
     return start_timestamp, end_timestamp
 
 
+
 def calculate_nps(ratings):
     promoters = sum(rating >= 9 for rating in ratings)
     detractors = sum(rating <= 6 for rating in ratings)
@@ -230,6 +231,33 @@ def calculate_nps_from_answers(answers):
     if ratings:
         return calculate_nps(ratings)
     return None
+
+
+
+def add_contact_in_wati(user_type, name, phone):
+    try:
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = f"{wati_api_endpoint}/api/v1/addContact/{phone}"
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        payload = {
+            "customParams": [
+                {
+                    "name": "user_type",
+                    "value": user_type,
+                },
+            ],
+            "name": name,
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()  # Raise an HTTPError for bad responses
+        print(response.json())
+        return response.json()
+    except Exception as e:
+        pass
 
 
 def create_send_email(user_email, file_name):
@@ -790,31 +818,6 @@ SESSIONS_WITH_STAKEHOLDERS = [
 ]
 
 
-def add_contact_in_wati(user_type, name, phone):
-    try:
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = f"{wati_api_endpoint}/api/v1/addContact/{phone}"
-        headers = {
-            "content-type": "text/json",
-            "Authorization": wati_authorization,
-        }
-        payload = {
-            "customParams": [
-                {
-                    "name": "user_type",
-                    "value": user_type,
-                },
-            ],
-            "name": name,
-        }
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()  # Raise an HTTPError for bad responses
-        print(response.json())
-        return response.json()
-    except Exception as e:
-        pass
-
 
 def get_booked_session_of_user_confirmed_avalibility(user_type, user_id, date):
     date_obj = datetime.strptime(date, "%Y-%m-%d")
@@ -1078,38 +1081,53 @@ def update_coach_profile(request, id):
     user = coach.user.user
     new_email = request.data.get("email", "").strip().lower()
     #  other user exists with the new email
-    if (
-        new_email
-        and User.objects.filter(username=new_email).exclude(id=user.id).exists()
-    ):
-        return Response(
-            {"error": "Email already exists. Please choose a different email."},
-            status=400,
-        )
+    if new_email and new_email != user.email:
+        if (
+            new_email
+            and User.objects.filter(username=new_email).exclude(id=user.id).exists()
+        ):
+            existing_user_with_same_email = User.objects.filter(username=new_email).exclude(id=user.id).first()
+            current_user_profile = user.profile
+            existing_profile_with_same_email = existing_user_with_same_email.profile
+            # coach exists with the new email
+            if existing_profile_with_same_email.roles.filter(name="coach").exists():
+                return Response(
+                {"error": "Coach with the same email already exists."},
+                status=400,
+                )
+            # another user exists with the new email
+            else:
+                coach_role, created = Role.objects.get_or_create(name="coach")
+                existing_profile_with_same_email.roles.add(coach_role)
+                coach.email = new_email
+                current_user_profile.roles.remove(coach_role)
+                coach.save()
+                current_user_profile.save()
+                existing_profile_with_same_email.save()
 
-    # no other user exists with the new email
-    elif new_email and new_email != user.email:
-        user.email = new_email
-        user.username = new_email
-        user.save()
-        # updating emails in all user's
-        for role in user.profile.roles.all():
-            if role.name == "pmo":
-                pmo = Pmo.objects.get(user=user.profile)
-                pmo.email = new_email
-                pmo.save()
-            if role.name == "hr":
-                hr = HR.objects.get(user=user.profile)
-                hr.email = new_email
-                hr.save()
-            if role.name == "learner":
-                learner = Learner.objects.get(user=user.profile)
-                learner.email = new_email
-                learner.save()
-            if role.name == "vendor":
-                vendor = Vendor.objects.get(user=user.profile)
-                vendor.email = new_email
-                vendor.save()
+        # no other user exists with the new email
+        else :
+            user.email = new_email
+            user.username = new_email
+            user.save()
+            # updating emails in all user's
+            for role in user.profile.roles.all():
+                if role.name == "pmo":
+                    pmo = Pmo.objects.get(user=user.profile)
+                    pmo.email = new_email
+                    pmo.save()
+                if role.name == "hr":
+                    hr = HR.objects.get(user=user.profile)
+                    hr.email = new_email
+                    hr.save()
+                if role.name == "learner":
+                    learner = Learner.objects.get(user=user.profile)
+                    learner.email = new_email
+                    learner.save()
+                if role.name == "vendor":
+                    vendor = Vendor.objects.get(user=user.profile)
+                    vendor.email = new_email
+                    vendor.save()
 
     if internal_coach and not organization_of_coach:
         return Response(

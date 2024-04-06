@@ -115,7 +115,6 @@ purchase_orders_allowed = [
     "Meeraq/PO/22-23/0045",
 ]
 
-
 def get_all_so_of_po(purchase_order_id):
     try:
         mapping_instance = None
@@ -128,6 +127,7 @@ def get_all_so_of_po(purchase_order_id):
 
     except Exception as e:
         print(str(e))
+
 
 
 def get_vendor(vendor_id):
@@ -147,6 +147,7 @@ def get_vendor(vendor_id):
         return Response({}, status=400)
     else:
         return Response({}, status=400)
+
 
 
 def filter_purchase_order_data(purchase_orders):
@@ -258,7 +259,6 @@ def fetch_client_invoices(organization_id):
 
         if response.status_code == 200:
             client_invoices = response.json().get("invoices", [])
-            # client_invoices = filter_sales_order_data(client_invoices)
             all_client_invoices.extend(client_invoices)
 
             page_context = response.json().get("page_context", {})
