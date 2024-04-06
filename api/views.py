@@ -213,6 +213,31 @@ def get_current_date_timestamps():
     return start_timestamp, end_timestamp
 
 
+def add_contact_in_wati(user_type, name, phone):
+    try:
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = f"{wati_api_endpoint}/api/v1/addContact/{phone}"
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        payload = {
+            "customParams": [
+                {
+                    "name": "user_type",
+                    "value": user_type,
+                },
+            ],
+            "name": name,
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()  # Raise an HTTPError for bad responses
+        print(response.json())
+        return response.json()
+    except Exception as e:
+        pass
+
 def create_send_email(user_email, file_name):
     try:
         user = User.objects.get(username=user_email)
@@ -770,31 +795,6 @@ SESSIONS_WITH_STAKEHOLDERS = [
     "stakeholder_interview",
 ]
 
-
-def add_contact_in_wati(user_type, name, phone):
-    try:
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = f"{wati_api_endpoint}/api/v1/addContact/{phone}"
-        headers = {
-            "content-type": "text/json",
-            "Authorization": wati_authorization,
-        }
-        payload = {
-            "customParams": [
-                {
-                    "name": "user_type",
-                    "value": user_type,
-                },
-            ],
-            "name": name,
-        }
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()  # Raise an HTTPError for bad responses
-        print(response.json())
-        return response.json()
-    except Exception as e:
-        pass
 
 
 def get_booked_session_of_user_confirmed_avalibility(user_type, user_id, date):
