@@ -82,7 +82,7 @@ urlpatterns = [
         views.get_invoices_for_pmo,
         name="get_all_invoices",
     ),
-    path("vendors/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
+    path("edit-vendor/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
     path(
         "vendors/update-invoice-allowed/<int:vendor_id>/",
         views.update_invoice_allowed,
@@ -251,5 +251,15 @@ urlpatterns = [
         "update-sales-order-status/<str:sales_order_id>/<str:status>/",
         views.update_sales_order_status,
         name="update_sales_order_status",
+    ),
+    path(
+        "create-vendor/",
+        views.create_vendor,
+        name="create_vendor",
+    ),
+    path(
+        "vendor-feilds-data/",
+        views.get_vendor_feilds_data,
+        name="get_vendor_feilds_data",
     ),
 ]
