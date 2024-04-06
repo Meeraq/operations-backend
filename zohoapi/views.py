@@ -1786,10 +1786,21 @@ def expense_purchase_order_create(request, facilitator_id, batch_or_project_id):
 def get_coach_wise_finances(request):
     try:
         # Fetch all invoices and purchase orders
+        coach_id = request.query_params.get("coach_id")
+        facilitator_id = request.query_params.get("facilitator_id")
         all_invoices = fetch_invoices(organization_id)
         all_purchase_orders = fetch_purchase_orders(organization_id)
         # Filter vendors who are coaches
-        vendors = Vendor.objects.filter(user__roles__name="coach")
+        vendors = []
+        if coach_id or facilitator_id:
+            vendor_user = None
+            if coach_id:
+                vendor_user = Coach.objects.get(id=int(coach_id))
+            else:
+                vendor_user = Facilitator.objects.get(id=int(facilitator_id))
+            vendors = Vendor.objects.filter(email=vendor_user.email.strip().lower())
+        else:
+            vendors = Vendor.objects.filter(user__roles__name="coach")
         # Calculate purchase order amounts
         vendor_po_amounts = {}
         for po in all_purchase_orders:
@@ -1811,6 +1822,7 @@ def get_coach_wise_finances(request):
                 if invoice["bill"] and invoice["bill"]["status"] == "paid"
                 else Decimal(0)
             )
+
             if vendor_id in vendor_invoice_amounts:
                 vendor_invoice_amounts[vendor_id]["invoiced_amount"] += invoiced_amount
                 vendor_invoice_amounts[vendor_id]["paid_amount"] += paid_amount
@@ -1821,9 +1833,10 @@ def get_coach_wise_finances(request):
                 )
             else:
                 vendor_invoice_amounts[vendor_id] = {
-                    "invoiced_amount": invoiced_amount,
+                    "invoiced_amount": 00,
                     "paid_amount": paid_amount,
                     "currency_symbol": invoice["currency_symbol"],
+                    "currency_code": invoice.get("currency_code", ""),
                 }
 
         # Prepare response
@@ -1847,6 +1860,17 @@ def get_coach_wise_finances(request):
                         if vendor_id in vendor_invoice_amounts
                         else None
                     ),
+                    "currency_code": (
+                        vendor_invoice_amounts[vendor_id]["currency_code"]
+                        if vendor_id in vendor_invoice_amounts
+                        else None
+                    ),
+                    "pending_amount": vendor_invoice_amounts.get(
+                        vendor_id, {"invoiced_amount": Decimal(0)}
+                    )["invoiced_amount"]
+                    - vendor_invoice_amounts.get(
+                        vendor_id, {"paid_amount": Decimal(0)}
+                    )["paid_amount"],
                 }
             )
         return Response(res)
@@ -2006,10 +2030,15 @@ def get_all_sales_orders(request):
                         project = Project.objects.get(
                             id=order_project_mapping.project.id
                         )
+                        if project:
+                            sales_order["projectType"] = "CAAS"
                     elif order_project_mapping.schedular_project:
                         project = SchedularProject.objects.get(
                             id=order_project_mapping.schedular_project.id
                         )
+                        if project:
+                            sales_order["projectType"] = "SEEQ"
+
                     if project:
 
                         data = project.project_structure
@@ -2610,7 +2639,363 @@ def get_so_data_of_project(request, project_id, project_type):
                 "currency_code": currency_code,
             }
         )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_vendor(request):
+    try:
+        data = request.data
+        with transaction.atomic():
+
+            if Vendor.objects.filter(email=data["email"]).exists():
+                return Response(
+                    {"error": "Vendor with the same email already exists."},
+                    status=500,
+                )
+            if (
+                data["name"]
+                and data["first_name"]
+                and data["email"]
+                and data["gst_treatment"]
+            ):
+                payload_data = {
+                    "contact_name": data.get("name", ""),
+                    "company_name": data.get("company_name", ""),
+                    "contact_type": "vendor",
+                    "currency_id": data.get("currency", ""),
+                    "payment_terms": 0,
+                    "payment_terms_label": "Due on Receipt",
+                    "credit_limit": 0,
+                    "billing_address": {
+                        "attention": data.get("attention", ""),
+                        "address": data.get("address", ""),
+                        "street2": "",
+                        "city": data.get("city", ""),
+                        "state": data.get("state", ""),
+                        "zip": data.get("zip_code", ""),
+                        "country": data.get("country", ""),
+                        "fax": "",
+                        "phone": "",
+                    },
+                    "shipping_address": {
+                        "attention": data.get("shipping_attention", ""),
+                        "address": data.get("shipping_address", ""),
+                        "street2": "",
+                        "city": data.get("shipping_city", ""),
+                        "state": data.get("shipping_state", ""),
+                        "zip": data.get("shipping_zip_code", ""),
+                        "country": data.get("shipping_country", ""),
+                        "fax": "",
+                        "phone": "",
+                    },
+                    "contact_persons": [
+                        {
+                            "first_name": data.get("first_name", ""),
+                            "last_name": data.get("last_name", ""),
+                            "mobile": data.get("phone", ""),
+                            "email": data.get("email", ""),
+                            "salutation": "",
+                            "is_primary_contact": True,
+                        }
+                    ],
+                    "default_templates": {},
+                    "custom_fields": [
+                        {"customfield_id": data.get("customfield_id", ""), "value": ""}
+                    ],
+                    "language_code": "en",
+                    "tags": [{"tag_id": data.get("tag_id", ""), "tag_option_id": ""}],
+                    "gst_no": data.get("gstn_uni", ""),
+                    "gst_treatment": data.get("gst_treatment", ""),
+                    "place_of_contact": data.get("place_of_contact", ""),
+                    "pan_no": data.get("pan", ""),
+                    "tds_tax_id": data.get("tds", ""),
+                    "bank_accounts": [],
+                    "documents": [],
+                }
+
+                access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+                api_url = f"{base_url}/contacts?organization_id={organization_id}"
+
+                auth_header = {"Authorization": f"Bearer {access_token}"}
+                payload = json.dumps(payload_data, indent=None)
+                response = requests.post(api_url, headers=auth_header, data=payload)
+
+                if response.status_code == 201:
+                    response_data = response.json()
+                    vendor_id = response_data["contact"]["contact_id"]
+
+                    user_profile = Profile.objects.filter(
+                        user__username=data["email"]
+                    ).first()
+
+                    if user_profile:
+                        user = user_profile.user
+                    else:
+                        temp_password = "".join(
+                            random.choices(
+                                string.ascii_uppercase
+                                + string.ascii_lowercase
+                                + string.digits,
+                                k=8,
+                            )
+                        )
+                        user = User.objects.create_user(
+                            username=data["email"],
+                            password=temp_password,
+                            email=data["email"],
+                        )
+
+                        user_profile = Profile.objects.create(user=user)
+
+                    vendor_role, created = Role.objects.get_or_create(name="vendor")
+                    user_profile.roles.add(vendor_role)
+
+                    vendor = Vendor.objects.create(
+                        user=user_profile,
+                        name=data["name"],
+                        email=data["email"],
+                        vendor_id=vendor_id,
+                        phone=data.get("phone", ""),
+                    )
+                    vendor.save()
+
+                    return Response(
+                        {"message": "Vendor created successfully!"}, status=200
+                    )
+                else:
+                    print("Failed to create vendor:", response.text)
+                    return Response({"error": "Failed to create vendor"}, status=500)
+            else:
+                return Response(
+                    {"error": "Fill in all the required details."},
+                    status=500,
+                )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to create vendor"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_vendor_feilds_data(request):
+    try:
+
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if access_token:
+            headers = {"Authorization": f"Bearer {access_token}"}
+            url = f"{base_url}/contacts/editpage?organization_id={env('ZOHO_ORGANIZATION_ID')}"
+            vendor_response = requests.get(
+                url,
+                headers=headers,
+            )
+            url = f"{base_url}/meta/states?country_code=India&include_other_territory=false&organization_id={env('ZOHO_ORGANIZATION_ID')}"
+            state_response = requests.get(
+                url,
+                headers=headers,
+            )
+
+            json_data = vendor_response.json()
+            if vendor_response.status_code == 200:
+                gst_treatment_options = [
+                    {"value": item["value"], "label": item["value_formatted"]}
+                    for item in json_data["gst_treatments"]
+                ]
+                currency_options = [
+                    {
+                        "value": item["currency_id"],
+                        "label": item["currency_name_formatted"],
+                    }
+                    for item in json_data["currencies"]
+                ]
+                tds_options = [
+                    {
+                        "value": item["tax_id"],
+                        "label": f"{item['tax_name']} ({item['tax_percentage']}%)",
+                    }
+                    for item in json_data["tds_taxes"]
+                ]
+                state_options = [
+                    {
+                        "value": item["id"],
+                        "label": item["text"],
+                    }
+                    for item in state_response.json()["states"]
+                ]
+
+                return Response(
+                    {
+                        "gst_treatment_options": gst_treatment_options,
+                        "currency_options": currency_options,
+                        "tds_options": tds_options,
+                        "state_options": state_options,
+                        "customfield_id": json_data["custom_fields"][0][
+                            "customfield_id"
+                        ],
+                        "tag_id": json_data["reporting_tags"][0]["tag_id"],
+                    }
+                )
+            else:
+
+                return Response(
+                    {"error": "Failed to fetch vendor fields"},
+                    status=vendor_response.status_code,
+                )
 
     except Exception as e:
         print(str(e))
+        return Response({"error": "Failed to create vendor"}, status=500)
+
+
+@api_view(["PUT"])
+def edit_vendor(request, vendor_id):
+    try:
+        with transaction.atomic():
+            vendor = Vendor.objects.get(vendor_id=vendor_id)
+            data = request.data
+            phone = data.get("phone", "")
+            vendor_details = get_vendor(vendor_id)
+            name = vendor_details["contact_name"]
+            vendor.user.user.save()
+            vendor.name = name
+            vendor.phone = phone
+            vendor.save()
+
+            if (
+                data["name"]
+                and data["first_name"]
+                and data["email"]
+                and data["gst_treatment"]
+            ):
+                payload_data = {
+                    "contact_name": data.get("name", ""),
+                    "company_name": data.get("company_name", ""),
+                    "contact_type": "vendor",
+                    "currency_id": data.get("currency", ""),
+                    "payment_terms": 0,
+                    "payment_terms_label": "Due on Receipt",
+                    "credit_limit": 0,
+                    "billing_address": {
+                        "attention": data.get("attention", ""),
+                        "address": data.get("address", ""),
+                        "street2": "",
+                        "city": data.get("city", ""),
+                        "state": data.get("state", ""),
+                        "zip": data.get("zip_code", ""),
+                        "country": data.get("country", ""),
+                        "fax": "",
+                        "phone": "",
+                    },
+                    "shipping_address": {
+                        "attention": data.get("shipping_attention", ""),
+                        "address": data.get("shipping_address", ""),
+                        "street2": "",
+                        "city": data.get("shipping_city", ""),
+                        "state": data.get("shipping_state", ""),
+                        "zip": data.get("shipping_zip_code", ""),
+                        "country": data.get("shipping_country", ""),
+                        "fax": "",
+                        "phone": "",
+                    },
+                    "contact_persons": [
+                        {
+                            "first_name": data.get("first_name", ""),
+                            "last_name": data.get("last_name", ""),
+                            "mobile": data.get("phone", ""),
+                            "email": data.get("email", ""),
+                            "salutation": "",
+                            "is_primary_contact": True,
+                        }
+                    ],
+                    "default_templates": {},
+                    "custom_fields": [
+                        {"customfield_id": data.get("customfield_id", ""), "value": ""}
+                    ],
+                    "language_code": "en",
+                    "tags": [{"tag_id": data.get("tag_id", ""), "tag_option_id": ""}],
+                    "gst_no": data.get("gstn_uni", ""),
+                    "gst_treatment": data.get("gst_treatment", ""),
+                    "place_of_contact": data.get("place_of_contact", ""),
+                    "pan_no": data.get("pan", ""),
+                    "tds_tax_id": data.get("tds", ""),
+                    "bank_accounts": [],
+                    "documents": [],
+                }
+
+                access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+                api_url = (
+                    f"{base_url}/contacts/{vendor_id}?organization_id={organization_id}"
+                )
+
+                auth_header = {"Authorization": f"Bearer {access_token}"}
+                payload = json.dumps(payload_data, indent=None)
+                response = requests.put(api_url, headers=auth_header, data=payload)
+
+                if response.status_code == status.HTTP_200_OK:
+                    return Response(
+                        {"message": "Vendor updated successfully!"},
+                        status=status.HTTP_200_OK,
+                    )
+                else:
+                    return Response(
+                        {"error": "Failed to update vendor."},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to update vendor"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+
+def fetch_client_invoices_page_wise(organization_id, page):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if not access_token:
+        raise Exception(
+            "Access token not found. Please generate an access token first."
+        )
+    api_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&perpage=200"
+    auth_header = {"Authorization": f"Bearer {access_token}"}
+    response = requests.get(api_url, headers=auth_header)
+    if response.status_code == 200:
+        invoices = response.json().get("invoices", [])
+        page_context_extra_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&response_option=2"
+        page_context_extra_response = requests.get(
+            page_context_extra_url, headers=auth_header
+        )
+        if page_context_extra_response.status_code == 200:
+            extra_page_context = page_context_extra_response.json().get(
+                "page_context", {}
+            )
+            page_context = response.json().get("page_context", {})
+            has_more_page = page_context.get("has_more_page", False)
+            return {
+                "count": extra_page_context.get("total", 0),
+                "next": has_more_page,
+                "prev": False if page == 1 else True,
+                "results": invoices,
+            }
+        else:
+            print(page_context_extra_response.json())
+            raise Exception("Failed to fetch client invoices.")
+    else:
+        print(response.json())
+        raise Exception("Failed to fetch client invoices.")
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_client_invoices(request):
+    try:
+        page = request.query_params.get("page")
+        res = fetch_client_invoices_page_wise(organization_id, page)
+        return Response(res, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(str(e))
+
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

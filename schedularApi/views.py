@@ -128,8 +128,8 @@ from courses.serializers import (
     CourseEnrollmentDepthOneSerializer,
 )
 from django.core.serializers import serialize
+
 from courses.views import (
-    create_or_get_learner,
     add_question_to_feedback_lesson,
     nps_default_feed_questions,
     create_lessons_for_batch,
@@ -157,6 +157,8 @@ from schedularApi.tasks import (
     get_current_date_timestamps,
     get_coaching_session_according_to_time,
     get_live_session_according_to_time,
+    add_batch_to_project,
+    create_or_get_learner,
 )
 from django.db.models import BooleanField, F, Exists, OuterRef
 
@@ -1473,80 +1475,20 @@ def edit_slot_request(request, request_id):
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_batch(request, project_id):
     try:
-        with transaction.atomic():
-            participants_data = request.data.get("participants", [])
-            project = SchedularProject.objects.get(id=project_id)
-            learners_in_excel_sheet = len(participants_data)
-            learners_in_excel_which_already_exists = 0
-            for participant_data in participants_data:
-                email = participant_data.get("email", "").strip().lower()
-                if Learner.objects.filter(email=email).exists():
-                    learners_in_excel_which_already_exists += 1
-            for participant_data in participants_data:
-                name = participant_data.get("name")
-                email = participant_data.get("email", "").strip().lower()
-                phone = participant_data.get("phone", None)
-                batch_name = participant_data.get("batch").strip().upper()
-                # Assuming 'project_id' is in your request data
+        data = {
+            "participants": request.data.get("participants", []),
+            "project_id": project_id,
+            "user_email":request.user
+        }
 
-                # Check if batch with the same name exists
-                batch = SchedularBatch.objects.filter(
-                    name=batch_name, project=project
-                ).first()
+        add_batch_to_project.delay(data)
 
-                if not batch:
-                    # If batch does not exist, create a new batch
-                    batch = SchedularBatch.objects.create(
-                        name=batch_name, project=project
-                    )
-                    create_batch_calendar(batch)
-
-                    # Create Live Sessions and Coaching Sessions based on project structure
-
-                # Check if participant with the same email exists
-
-                learner = create_or_get_learner(
-                    {"name": name, "email": email, "phone": phone}
-                )
-                if learner:
-                    name = learner.name
-                    if learner.phone:
-                        add_contact_in_wati("learner", name, learner.phone)
-
-                # Add participant to the batch if not already added
-                if learner and learner not in batch.learners.all():
-                    batch.learners.add(learner)
-                    try:
-                        course = Course.objects.get(batch=batch)
-                        course_enrollments = CourseEnrollment.objects.filter(
-                            learner=learner, course=course
-                        )
-                        if not course_enrollments.exists():
-                            datetime = timezone.now()
-                            CourseEnrollment.objects.create(
-                                learner=learner,
-                                course=course,
-                                enrollment_date=datetime,
-                            )
-                    except Exception:
-                        pass
-            learner_message = (
-                f"{learners_in_excel_sheet-learners_in_excel_which_already_exists} learner"
-                if (learners_in_excel_sheet - learners_in_excel_which_already_exists)
-                == 1
-                else f"{learners_in_excel_sheet-learners_in_excel_which_already_exists} learners"
-            )
-            learner_msg = (
-                f"{learners_in_excel_which_already_exists} learner"
-                if (learners_in_excel_which_already_exists) == 1
-                else f"{learners_in_excel_which_already_exists} learners"
-            )
-            return Response(
-                {
-                    "message": f"{learner_message} uploaded successfully {learner_msg} already existing."
-                },
-                status=status.HTTP_201_CREATED,
-            )
+        return Response(
+            {
+                "message": "Hooray! Your participant data is now in the upload queue. It's like ordering pizza; just sit back, relax, and soon you'll receive a notification by email with fresh, insightful data at your fingertips!"
+            },
+            status=status.HTTP_201_CREATED,
+        )
     except Exception as e:
         print(str(e))
 

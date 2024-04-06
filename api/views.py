@@ -173,6 +173,8 @@ from schedularApi.models import (
     SchedularBatch,
     SchedularSessions,
     CalendarInvites,
+    CoachingSession,
+    LiveSession,
     HandoverDetails,
 )
 from schedularApi.serializers import (
@@ -182,7 +184,7 @@ from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
 from zohoapi.models import Vendor, InvoiceData,OrdersAndProjectMapping
-from courses.models import CourseEnrollment
+from courses.models import CourseEnrollment, CoachingSessionsFeedbackResponse, Answer
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
 import pdfkit
@@ -214,6 +216,48 @@ def get_current_date_timestamps():
         int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
     )
     return start_timestamp, end_timestamp
+
+
+
+def calculate_nps(ratings):
+    promoters = sum(rating >= 9 for rating in ratings)
+    detractors = sum(rating <= 6 for rating in ratings)
+    nps = ((promoters - detractors) / len(ratings)) * 100
+    return nps
+
+
+def calculate_nps_from_answers(answers):
+    ratings = [answer.rating for answer in answers]
+    if ratings:
+        return calculate_nps(ratings)
+    return None
+
+
+
+def add_contact_in_wati(user_type, name, phone):
+    try:
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = f"{wati_api_endpoint}/api/v1/addContact/{phone}"
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        payload = {
+            "customParams": [
+                {
+                    "name": "user_type",
+                    "value": user_type,
+                },
+            ],
+            "name": name,
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()  # Raise an HTTPError for bad responses
+        print(response.json())
+        return response.json()
+    except Exception as e:
+        pass
 
 
 def create_send_email(user_email, file_name):
@@ -836,31 +880,6 @@ SESSIONS_WITH_STAKEHOLDERS = [
 ]
 
 
-def add_contact_in_wati(user_type, name, phone):
-    try:
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = f"{wati_api_endpoint}/api/v1/addContact/{phone}"
-        headers = {
-            "content-type": "text/json",
-            "Authorization": wati_authorization,
-        }
-        payload = {
-            "customParams": [
-                {
-                    "name": "user_type",
-                    "value": user_type,
-                },
-            ],
-            "name": name,
-        }
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()  # Raise an HTTPError for bad responses
-        print(response.json())
-        return response.json()
-    except Exception as e:
-        pass
-
 
 def get_booked_session_of_user_confirmed_avalibility(user_type, user_id, date):
     date_obj = datetime.strptime(date, "%Y-%m-%d")
@@ -1116,44 +1135,61 @@ def update_coach_profile(request, id):
     except Coach.DoesNotExist:
         return Response(status=404)
 
-    remove_education_upload_file = request.data.get("remove_education_upload_file", False)
+    remove_education_upload_file = request.data.get(
+        "remove_education_upload_file", False
+    )
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
     new_email = request.data.get("email", "").strip().lower()
     #  other user exists with the new email
-    if (
-        new_email
-        and User.objects.filter(username=new_email).exclude(id=user.id).exists()
-    ):
-        return Response(
-            {"error": "Email already exists. Please choose a different email."},
-            status=400,
-        )
+    if new_email and new_email != user.email:
+        if (
+            new_email
+            and User.objects.filter(username=new_email).exclude(id=user.id).exists()
+        ):
+            existing_user_with_same_email = User.objects.filter(username=new_email).exclude(id=user.id).first()
+            current_user_profile = user.profile
+            existing_profile_with_same_email = existing_user_with_same_email.profile
+            # coach exists with the new email
+            if existing_profile_with_same_email.roles.filter(name="coach").exists():
+                return Response(
+                {"error": "Coach with the same email already exists."},
+                status=400,
+                )
+            # another user exists with the new email
+            else:
+                coach_role, created = Role.objects.get_or_create(name="coach")
+                existing_profile_with_same_email.roles.add(coach_role)
+                coach.email = new_email
+                current_user_profile.roles.remove(coach_role)
+                coach.save()
+                current_user_profile.save()
+                existing_profile_with_same_email.save()
 
-    # no other user exists with the new email
-    elif new_email and new_email != user.email:
-        user.email = new_email
-        user.username = new_email
-        user.save()
-        # updating emails in all user's
-        for role in user.profile.roles.all():
-            if role.name == "pmo":
-                pmo = Pmo.objects.get(user=user.profile)
-                pmo.email = new_email
-                pmo.save()
-            if role.name == "hr":
-                hr = HR.objects.get(user=user.profile)
-                hr.email = new_email
-                hr.save()
-            if role.name == "learner":
-                learner = Learner.objects.get(user=user.profile)
-                learner.email = new_email
-                learner.save()
-            if role.name == "vendor":
-                vendor = Vendor.objects.get(user=user.profile)
-                vendor.email = new_email
-                vendor.save()
+        # no other user exists with the new email
+        else :
+            user.email = new_email
+            user.username = new_email
+            user.save()
+            # updating emails in all user's
+            for role in user.profile.roles.all():
+                if role.name == "pmo":
+                    pmo = Pmo.objects.get(user=user.profile)
+                    pmo.email = new_email
+                    pmo.save()
+                if role.name == "hr":
+                    hr = HR.objects.get(user=user.profile)
+                    hr.email = new_email
+                    hr.save()
+                if role.name == "learner":
+                    learner = Learner.objects.get(user=user.profile)
+                    learner.email = new_email
+                    learner.save()
+                if role.name == "vendor":
+                    vendor = Vendor.objects.get(user=user.profile)
+                    vendor.email = new_email
+                    vendor.save()
 
     if internal_coach and not organization_of_coach:
         return Response(
@@ -1172,7 +1208,7 @@ def update_coach_profile(request, id):
     add_contact_in_wati("coach", name, coach.phone)
 
     if serializer.is_valid():
-        coach_instance =  serializer.save()
+        coach_instance = serializer.save()
         if remove_education_upload_file:
             coach_instance.education_upload_file = None
             coach_instance.save()
@@ -1546,7 +1582,7 @@ def create_learners(learners_data):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo","sales")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
 def get_ongoing_projects(request):
     try:
         pmo_id = request.query_params.get("pmo")
@@ -2538,7 +2574,9 @@ def send_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach","sales", "finance")])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach", "sales", "finance")]
+)
 def get_project_details(request, project_type, project_id):
     try:
         if project_type == "caas":
@@ -5242,6 +5280,18 @@ def get_learner_of_user_optimized(request, user_type, user_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
+    
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "hr")])
+def get_coachee_of_coach(request):
+    try:
+        engagements = Engagement.objects.filter(coach__user__user__id=request.user.id).distinct()
+        serializer = EngagementDepthOneSerializer(engagements, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
 
 
 @api_view(["GET"])
@@ -5918,6 +5968,64 @@ def get_current_session(request, user_type, room_id, user_id):
             "type": "SEEQ",
             "start_time": upcoming_session.availibility.start_time,
             "end_time": upcoming_session.availibility.end_time,
+        }
+
+    # You can customize the response data based on your requirements
+    response_data = {
+        "message": "success",
+        "upcoming_session": session_details if upcoming_session else None,
+    }
+
+    return Response(response_data, status=200)
+
+@api_view(["GET"])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("coach", "learner", "pmo", "hr", "facilitator")]
+)
+def get_current_session_for_coach(request, user_type, user_id):
+    current_time = int(timezone.now().timestamp() * 1000)
+    sessions = None
+    session_modal = "CAAS"
+    if user_type == "coach":
+        sessions = SessionRequestCaas.objects.filter(   
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__gt=current_time),
+            Q(coach__id=user_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        ).order_by("confirmed_availability__start_time")
+
+        if sessions.count() == 0:
+            coach = Coach.objects.get(id=user_id)
+            sessions = SchedularSessions.objects.filter(
+                availibility__end_time__gt=current_time,
+                availibility__coach__email=coach.email
+            ).order_by("availibility__start_time")
+
+    if not sessions:
+        return Response({"error": "You don't have any upcoming sessions."}, status=404)
+
+    # Get the upcoming next session and current session
+    upcoming_session = sessions.first()
+    if session_modal == "CAAS" and upcoming_session:
+        session_details = {
+            "session_id": upcoming_session.id,
+            "type": "CAAS",
+            "start_time": upcoming_session.confirmed_availability.start_time,
+            "end_time": upcoming_session.confirmed_availability.end_time,
+            "project_name": upcoming_session.project.name,
+            "room_id":upcoming_session.coach.room_id,
+            "session_name":f"{upcoming_session.session_type}",
+        }
+    elif session_modal == "SEEQ" and upcoming_session:
+        session_details = {
+            "session_id": upcoming_session.id,
+            "type": "SEEQ",
+            "start_time": upcoming_session.availibility.start_time,
+            "end_time": upcoming_session.availibility.end_time,
+            "project_name": upcoming_session.project.name,
+            "room_id":upcoming_session.coach.room_id,
+            "session_name":f"{upcoming_session.session_type}",
         }
 
     # You can customize the response data based on your requirements
@@ -8504,7 +8612,7 @@ def change_user_role(request, user_id):
     elif user_profile_role == "finance":
         if not user.profile.finance.active_inactive:
             return None
-        serializer = FinanceDepthOneSerializer(user.profile.finance)        
+        serializer = FinanceDepthOneSerializer(user.profile.finance)
     elif user_profile_role == "facilitator":
         if not user.profile.facilitator.active_inactive:
             return None
@@ -9503,6 +9611,94 @@ def add_remark_to_task(request):
     )
 
 
+def get_formatted_tasks(tasks):
+    try:
+        task_details = []
+        for task in tasks:
+            # Extract the latest remark message or set it to None if remarks are empty
+            latest_remark = task.remarks[-1]["message"] if task.remarks else None
+
+            # Determine the coach name associated with the task
+            coach_name = (
+                task.coach.__str__()
+                if task.coach
+                else (
+                    task.engagement.coach.__str__()
+                    if task.engagement and task.engagement.coach
+                    else (
+                        task.goal.engagement.coach.__str__()
+                        if task.goal and task.goal.engagement.coach
+                        else (
+                            task.session_caas.coach.__str__()
+                            if task.session_caas and task.session_caas.coach
+                            else ""
+                        )
+                    )
+                )
+            )
+            learner_name = (
+                task.engagement.learner.name
+                if task.engagement
+                else (
+                    task.goal.engagement.learner.name
+                    if task.goal
+                    else (
+                        task.session_caas.learner.name
+                        if task.session_caas and task.session_caas.learner
+                        else ""
+                    )
+                )
+            )
+            session_name = (
+                SESSION_TYPE_VALUE[task.session_caas.session_type]
+                if task.session_caas
+                else ""
+            )
+            # Retrieve vendor name associated with the task, handling exceptions gracefully
+            vendor_name = None
+            if task.vendor_user:
+                try:
+                    vendor = Vendor.objects.get(user__user=task.vendor_user)
+                    vendor_name = vendor.name
+                except Vendor.DoesNotExist:
+                    pass
+
+            # Determine the project name associated with the task
+            project_name = (
+                task.caas_project.name
+                if task.caas_project
+                else (
+                    task.session_caas.project.name
+                    if task.session_caas
+                    else (
+                        task.engagement.project.name
+                        if task.engagement
+                        else task.goal.engagement.project.name if task.goal else ""
+                    )
+                )
+            )
+
+            # Serialize task data
+            serialized_data = TaskSerializer(task).data
+
+            # Append task details to the list
+            task_details.append(
+                {
+                    **serialized_data,
+                    "learner_name": learner_name,
+                    "project_name": project_name,
+                    "latest_remark": latest_remark,
+                    "coach_name": coach_name,
+                    "vendor_name": vendor_name,
+                    "session_name": session_name,
+                }
+            )
+        return task_details
+    except Exception as e:
+        print(str(e))
+        return None
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_tasks(request):
@@ -9519,86 +9715,49 @@ def get_tasks(request):
             | Q(goal__engagement__project__junior_pmo=junior_pmo_id)
         )
 
-    # Iterate through each task
-    for task in tasks:
-        # Extract the latest remark message or set it to None if remarks are empty
-        latest_remark = task.remarks[-1]["message"] if task.remarks else None
+    task_details = get_formatted_tasks(tasks)
 
-        # Determine the coach name associated with the task
-        coach_name = (
-            task.coach.__str__()
-            if task.coach
-            else (
-                task.engagement.coach.__str__()
-                if task.engagement and task.engagement.coach
-                else (
-                    task.goal.engagement.coach.__str__()
-                    if task.goal and task.goal.engagement.coach
-                    else (
-                        task.session_caas.coach.__str__()
-                        if task.session_caas and task.session_caas.coach
-                        else ""
-                    )
-                )
-            )
-        )
-        learner_name = (
-            task.engagement.learner.name
-            if task.engagement
-            else (
-                task.goal.engagement.learner.name
-                if task.goal
-                else (
-                    task.session_caas.learner.name
-                    if task.session_caas and task.session_caas.learner
-                    else ""
-                )
-            )
-        )
-        session_name = (
-            SESSION_TYPE_VALUE[task.session_caas.session_type]
-            if task.session_caas
-            else ""
-        )
-        # Retrieve vendor name associated with the task, handling exceptions gracefully
-        vendor_name = None
-        if task.vendor_user:
-            try:
-                vendor = Vendor.objects.get(user__user=task.vendor_user)
-                vendor_name = vendor.name
-            except Vendor.DoesNotExist:
-                pass
+    return Response(task_details)
 
-        # Determine the project name associated with the task
-        project_name = (
-            task.caas_project.name
-            if task.caas_project
-            else (
-                task.session_caas.project.name
-                if task.session_caas
-                else (
-                    task.engagement.project.name
-                    if task.engagement
-                    else task.goal.engagement.project.name if task.goal else ""
-                )
-            )
-        )
 
-        # Serialize task data
-        serialized_data = TaskSerializer(task).data
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("coach")])
+def get_coach_tasks(request):
 
-        # Append task details to the list
-        task_details.append(
-            {
-                **serialized_data,
-                "learner_name": learner_name,
-                "project_name": project_name,
-                "latest_remark": latest_remark,
-                "coach_name": coach_name,
-                "vendor_name": vendor_name,
-                "session_name": session_name,
-            }
-        )
+    coach_id = request.query_params.get("coach_id")
+
+    coach = Coach.objects.get(id=int(coach_id))
+
+    tasks = Task.objects.filter(
+        Q(coach=coach)
+        | Q(engagement__coach=coach)
+        | Q(goal__engagement__coach=coach)
+        | Q(session_caas__coach=coach),
+        Q(trigger_date__lte=timezone.now()),
+    )
+
+    task_details = get_formatted_tasks(tasks)
+
+    return Response(task_details)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
+def get_learner_tasks(request):
+
+    learenr_id = request.query_params.get("learenr_id")
+
+    learner = Learner.objects.get(id=int(learenr_id))
+
+    tasks = Task.objects.filter(
+        Q(engagement__learner=learner)
+        | Q(goal__engagement__learner=learner)
+        | Q(session_caas__learner=learner),
+        Q(trigger_date__lte=timezone.now()),
+    )
+
+    task_details = get_formatted_tasks(tasks)
+
     return Response(task_details)
 
 
@@ -9734,7 +9893,8 @@ def change_user_password(request):
                 return Response({"error": "Failed to reset password!"}, status=500)
     except Exception as e:
         print(str(e))
-    
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_sales_user(request):
@@ -9755,17 +9915,13 @@ def add_sales_user(request):
 
             if not user:
                 # If the user does not exist, create a new user
-                user = User.objects.create_user(
-                    username=username, email=email
-                )
+                user = User.objects.create_user(username=username, email=email)
                 temp_password = "".join(
-                        random.choices(
-                            string.ascii_uppercase
-                            + string.ascii_lowercase
-                            + string.digits,
-                            k=8,
-                        )
+                    random.choices(
+                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
+                        k=8,
                     )
+                )
                 user.set_password(temp_password)
                 user.save()
                 profile = Profile.objects.create(user=user)
@@ -9798,9 +9954,9 @@ def add_sales_user(request):
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
-    
-    
-@api_view(['GET'])
+
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_sales_user(request):
     try:
@@ -9812,5 +9968,110 @@ def get_sales_user(request):
         print(str(e))
         return Response(
             {"detail": f"Error fetching Sales user: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+def get_coach_overall_rating(coach_id):
+    try:
+        coach_feedback_responses = CoachingSessionsFeedbackResponse.objects.filter(
+            Q(caas_session__coach_id=coach_id)
+            | Q(schedular_session__availibility__coach_id=coach_id)
+        )
+
+        overall_rating = coach_feedback_responses.aggregate(
+            avg_rating=Avg(
+                "answers__rating", filter=Q(answers__question__type="rating_1_to_5")
+            )
+        )["avg_rating"]
+
+        return overall_rating if overall_rating is not None else 0
+    except Exception as e:
+        print(str(e))
+        return 0
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_summary_data(request, coach_id):
+    try:
+        coach = Coach.objects.get(id=coach_id)
+
+        coach_status_count = CoachStatus.objects.filter(coach=coach).count()
+
+        coach_batches = SchedularBatch.objects.filter(coaches=coach)
+        distinct_project_count = coach_batches.values("project").distinct().count()
+
+        total_coaching_session = SchedularSessions.objects.filter(
+            availibility__coach=coach,
+        ).count()
+
+        laser_coaching_sessions = SchedularSessions.objects.filter(
+            availibility__coach=coach,
+            coaching_session__session_type="laser_coaching_session",
+        ).count()
+        
+        total_mentoring_sessions = SchedularSessions.objects.filter(
+            availibility__coach=coach,
+            coaching_session__session_type="mentoring_session",
+        ).count()
+        
+
+        pending_schedular_session = SchedularSessions.objects.filter(
+            availibility__coach=coach, status="pending"
+        ).count()
+
+        return Response(
+            {
+                "last_login": coach.user.user.last_login,
+                "coaching_projects": coach_status_count,
+                "training_projects": distinct_project_count,
+                "coach_rating": get_coach_overall_rating(coach.id),
+                "total_coaching_session":total_coaching_session,
+                "laser_coaching_sessions": laser_coaching_sessions,
+                "pending_session": pending_schedular_session,
+                "total_mentoring_sessions":total_mentoring_sessions,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_facilitator_summary_data(request, facilitator_id):
+    try:
+        facilitator = Facilitator.objects.get(id=facilitator_id)
+
+        live_sessions = LiveSession.objects.filter(facilitator=facilitator)
+        distinct_project_count = (
+            live_sessions.values("batch__project").distinct().count()
+        )
+
+        overall_answer = Answer.objects.filter(
+            question__type="rating_0_to_10",
+            question__feedbacklesson__live_session__facilitator__id=facilitator_id,
+        )
+
+        overall_nps = calculate_nps_from_answers(overall_answer)
+
+        return Response(
+            {
+                "last_login": facilitator.user.user.last_login,
+                "training_projects": distinct_project_count,
+                "overall_nps": overall_nps,
+                "live_sessions": live_sessions.count(),
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
