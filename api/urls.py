@@ -227,6 +227,10 @@ urlpatterns = [
         views.get_current_session,
     ),
     path(
+        "current-session-for-coach/<str:user_type>/<int:user_id>/",
+        views.get_current_session_for_coach,
+    ),
+    path(
         "current-session/stakeholder/<str:room_id>/",
         views.get_current_session_of_stakeholder,
     ),
@@ -350,6 +354,10 @@ urlpatterns = [
     path(
         "get-learner-of-user-optimized/<str:user_type>/<int:user_id>/",
         views.get_learner_of_user_optimized,
+    ),
+    path(
+        "get-coachee-of-coach/",
+        views.get_coachee_of_coach,
     ),
     path(
         "get-learner-course-enrolled-of-user-optimized/<str:user_type>/<int:user_id>/",
