@@ -286,6 +286,7 @@ class Expense(models.Model):
 
 
 class HandoverDetails(models.Model):
+    PROJECT_TYPE_CHOICES = [("caas", "CAAS"), ("skill_training", "Skill Training")]
     DELIVERY_MODE_CHOICES = [
         ("online", "Online"),
         ("hybrid", "Hybrid"),
@@ -302,6 +303,9 @@ class HandoverDetails(models.Model):
     caas_project = models.OneToOneField(
         Project, on_delete=models.SET_NULL, blank=True, null=True
     )
+    project_type = models.CharField(
+        max_length=255, choices=PROJECT_TYPE_CHOICES, blank=True, null=True
+    )  # caas or skill_training
     course_name = models.CharField(max_length=255, blank=True, null=True)
     delivery_mode = models.CharField(
         max_length=255, choices=DELIVERY_MODE_CHOICES, blank=True, null=True
@@ -312,22 +316,27 @@ class HandoverDetails(models.Model):
     poc_contact_details = models.CharField(max_length=255, blank=True, null=True)
     audience_level = models.CharField(max_length=255, blank=True, null=True)
     project_structure = models.JSONField(default=list, blank=True, null=True)
+    sales_order_ids = models.JSONField(default=list, blank=True, null=True)
+    # sales_order_nos = models.JSONField(default=list, blank=True, null=True)
     total_training_hours = models.IntegerField(default=0, blank=True, null=True)
+    total_coaching_hours = models.IntegerField(default=0, blank=True, null=True)
     tentative_start_date = models.DateField(blank=True, null=True)
     training_duration_frequency = models.CharField(
         max_length=255, blank=True, null=True
     )
+    pre_post_assessment = models.BooleanField(blank=True, default=True)
+    nudges = models.BooleanField(blank=True, default=True)
     special_commitments = models.TextField(blank=True, null=True)
-    end_of_program_certification = models.BooleanField(
-        default=False, blank=True, null=True
-    )
+    end_of_program_certification = models.BooleanField(default=False, blank=True)
     billing_process_details = models.TextField(blank=True, null=True)
     out_of_pocket_expenses = models.TextField(blank=True, null=True)
     other_feedback = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Handover Detail"
         verbose_name_plural = "Handover Details"
 
-    def __str__(self):
-        return f"Handover Details for {self.schedular_project.name}"
+    # def __str__(self):
+    #     return f"Handover Details for"

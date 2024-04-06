@@ -173,15 +173,15 @@ from schedularApi.models import (
     SchedularBatch,
     SchedularSessions,
     CalendarInvites,
+    HandoverDetails,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
 )
-
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-from zohoapi.models import Vendor, InvoiceData
+from zohoapi.models import Vendor, InvoiceData,OrdersAndProjectMapping
 from courses.models import CourseEnrollment
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
@@ -735,6 +735,68 @@ def get_trimmed_emails(emails):
         res.append(email.strip().lower())
     return res
 
+def add_so_to_project(project_type, project_id, sales_order_ids):
+    if project_type == "CAAS":
+        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+            project=project_id
+        )
+        project = Project.objects.get(id=project_id)
+        schedular_project = None
+    elif project_type == "SEEQ":
+        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+            schedular_project=project_id
+        )
+        schedular_project = SchedularProject.objects.get(id=project_id)
+        project = None
+
+    if not orders_and_project_mapping.exists():
+        for id in sales_order_ids:
+            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                sales_order_ids__contains=id
+            )
+            if orders_and_project_mapping.exists():
+                mapping = orders_and_project_mapping.first()
+                if project_type == "CAAS":
+                    if mapping.schedular_project:
+                        raise Exception(
+                            f"SO already exist in Schedular Project: {mapping.schedular_project.name}"
+                        )
+                    if mapping.project and mapping.project.id != project.id:
+                        raise Exception(
+                            f"SO already exist in project: {mapping.project.name}"
+                        )
+
+                if project_type == "SEEQ":
+                    if mapping.project:
+                        raise Exception(
+                            f"SO already exist in Coaching Project: {mapping.project.name}"
+                        )
+                    if (
+                        mapping.schedular_project
+                        and mapping.schedular_project.id != schedular_project.id
+                    ):
+                        raise Exception(
+                            f"SO already exist in project: {mapping.schedular_project.name}"
+                        )
+                break
+    if orders_and_project_mapping.exists():
+        mapping = orders_and_project_mapping.first()
+        existing_sales_order_ids = mapping.sales_order_ids
+        set_of_sales_order_ids = set(existing_sales_order_ids)
+        for id in sales_order_ids:
+            set_of_sales_order_ids.add(id)
+        final_list_of_sales_order_ids = list(set_of_sales_order_ids)
+        mapping.sales_order_ids = final_list_of_sales_order_ids
+        mapping.project = project
+        mapping.schedular_project = schedular_project
+        mapping.save()
+    else:
+        OrdersAndProjectMapping.objects.create(
+            project=project,
+            sales_order_ids=sales_order_ids,
+            schedular_project=schedular_project,
+        )
+
 
 SESSION_TYPE_VALUE = {
     "chemistry": "Chemistry",
@@ -1254,6 +1316,7 @@ def get_management_token(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@transaction.atomic
 def create_project_cass(request):
     organisation = Organisation.objects.filter(
         id=request.data["organisation_name"]
@@ -1320,16 +1383,22 @@ def create_project_cass(request):
         try:
             userId = request.data.get("user_id")
             user_who_created = User.objects.get(id=userId)
-            project = project
             timestamp = timezone.now()
-
             createProject = CreateProjectActivity.objects.create(
                 user_who_created=user_who_created, project=project, timestamp=timestamp
             )
-
             createProject.save()
         except Exception as e:
             pass
+
+        handover_id = request.data.get("handover")
+        if handover_id:
+            handover = HandoverDetails.objects.get(id=handover_id)
+            handover.caas_project = project
+            handover.save()
+            add_so_to_project("CAAS", project.id, handover.sales_order_ids)
+        else:
+            raise Exception("No handover found")
 
     except IntegrityError as e:
         print(str(e))

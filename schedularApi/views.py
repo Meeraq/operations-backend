@@ -36,7 +36,7 @@ from django.db.models import (
 from time import sleep
 import json
 from django.core.exceptions import ObjectDoesNotExist
-from api.views import get_date, get_time, add_contact_in_wati
+from api.views import get_date, get_time, add_contact_in_wati, add_so_to_project
 from django.shortcuts import render
 from django.http import JsonResponse
 from api.models import (
@@ -107,6 +107,7 @@ from api.serializers import (
     FacilitatorBasicDetailsSerializer,
     CoachSerializer,
     FacilitatorDepthOneSerializer,
+    ProjectSerializer,
 )
 
 from courses.models import (
@@ -269,74 +270,11 @@ def get_upcoming_availabilities_of_coaching_session(coaching_session_id):
     return serializer.data
 
 
-def add_so_to_project(project_type, project_id, sales_order_ids):
-    if project_type == "CAAS":
-        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
-            project=project_id
-        )
-        project = Project.objects.get(id=project_id)
-        schedular_project = None
-    elif project_type == "SEEQ":
-        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
-            schedular_project=project_id
-        )
-        schedular_project = SchedularProject.objects.get(id=project_id)
-        project = None
-
-    if not orders_and_project_mapping.exists():
-        for id in sales_order_ids:
-            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
-                sales_order_ids__contains=id
-            )
-            if orders_and_project_mapping.exists():
-                mapping = orders_and_project_mapping.first()
-                if project_type == "CAAS":
-                    if mapping.schedular_project:
-                        raise Exception(
-                            f"SO already exist in Schedular Project: {mapping.schedular_project.name}"
-                        )
-                    if mapping.project and mapping.project.id != project.id:
-                        raise Exception(
-                            f"SO already exist in project: {mapping.project.name}"
-                        )
-
-                if project_type == "SEEQ":
-                    if mapping.project:
-                        raise Exception(
-                            f"SO already exist in Coaching Project: {mapping.project.name}"
-                        )
-                    if (
-                        mapping.schedular_project
-                        and mapping.schedular_project.id != schedular_project.id
-                    ):
-                        raise Exception(
-                            f"SO already exist in project: {mapping.schedular_project.name}"
-                        )
-                break
-    if orders_and_project_mapping.exists():
-        mapping = orders_and_project_mapping.first()
-        existing_sales_order_ids = mapping.sales_order_ids
-        set_of_sales_order_ids = set(existing_sales_order_ids)
-        for id in sales_order_ids:
-            set_of_sales_order_ids.add(id)
-        final_list_of_sales_order_ids = list(set_of_sales_order_ids)
-        mapping.sales_order_ids = final_list_of_sales_order_ids
-        mapping.project = project
-        mapping.schedular_project = schedular_project
-        mapping.save()
-    else:
-        OrdersAndProjectMapping.objects.create(
-            project=project,
-            sales_order_ids=sales_order_ids,
-            schedular_project=schedular_project,
-        )
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 @transaction.atomic
 def create_project_schedular(request):
-    project_details = request.data.get("project_details")
+    project_details = request.data
     organisation = Organisation.objects.filter(
         id=project_details["organisation_name"]
     ).first()
@@ -375,18 +313,15 @@ def create_project_schedular(request):
     for hr in project_details["hr"]:
         single_hr = HR.objects.get(id=hr)
         schedularProject.hr.add(single_hr)
-
-    handover_details = request.data.get("handover_details")
-    handover_details["schedular_project"] = schedularProject.id
-    serializer = HandoverDetailsSerializer(data=handover_details)
-    if serializer.is_valid():
-        serializer.save()
-        add_so_to_project(
-            "SEEQ", schedularProject.id, handover_details.get("sales_order_ids", [])
-        )
+    handover_id = project_details.get("handover")
+    if handover_id:
+        handover = HandoverDetails.objects.get(id=handover_id)
+        handover.schedular_project = schedularProject
+        handover.save()
+        add_so_to_project("SEEQ", schedularProject.id, handover.sales_order_ids)
     else:
-        print(serializer.errors)
-
+        raise Exception("No handover found")
+   
     try:
         path = ""
         message = f"A new project - {schedularProject.name} has been created for the organisation - {schedularProject.organisation.name}"
@@ -400,12 +335,55 @@ def create_project_schedular(request):
     )
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@transaction.atomic
+def create_handover(request):
+    serializer = HandoverDetailsSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            {"message": "Handover created successfully.", "handover": serializer.data},
+            status=200,
+        )
+    else:
+        print(serializer.errors)
+        return Response({"error": "Failed to add handover. "}, status=400)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
+@transaction.atomic
+def edit_handover(request, handover_id):
+    try:
+        handover_instance = HandoverDetails.objects.get(id=handover_id)
+    except HandoverDetails.DoesNotExist:
+        handover_instance = None
+    serializer = HandoverDetailsSerializer(
+        handover_instance, data=request.data, partial=True
+    )
+    if serializer.is_valid():
+        serializer.save()
+        if handover_instance.schedular_project:
+            schedular_project = handover_instance.schedular_project
+            schedular_project.nudges = handover_instance.nudges
+            schedular_project.pre_post_assessment = (
+                handover_instance.pre_post_assessment
+            )
+            schedular_project.save()
+
+        return Response({"message": "Handover updated successfully."}, status=200)
+    else:
+        print(serializer.errors)
+        return Response({"error": "Failed to update handover."}, status=400)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_project_handover(request, project_type, project_id):
-    if project_type == "SEEQ":
+    if project_type == "skill_training":
         handover = HandoverDetails.objects.get(schedular_project=project_id)
-    elif project_type == "CAAS":
+    elif project_type == "caas":
         handover = HandoverDetails.objects.get(caas_project=project_id)
     serializer = HandoverDetailsSerializer(handover)
     return Response(serializer.data)
@@ -3878,7 +3856,7 @@ def edit_schedular_project(request, project_id):
         return Response(
             {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
         )
-    project_details = request.data.get("project_details")
+    project_details = request.data
     junior_pmo = None
     if "junior_pmo" in project_details:
         junior_pmo = Pmo.objects.filter(id=project_details["junior_pmo"]).first()
@@ -3916,22 +3894,6 @@ def edit_schedular_project(request, project_id):
     project.is_finance_enabled = project_details.get("finance")
     project.junior_pmo = junior_pmo
     project.save()
-    handover_details = request.data.get("handover_details")
-    handover_details["schedular_project"] = project.id
-    try:
-        handover_instance = HandoverDetails.objects.get(schedular_project=project.id)
-    except HandoverDetails.DoesNotExist:
-        handover_instance = None
-    serializer = HandoverDetailsSerializer(
-        handover_instance, data=handover_details, partial=True
-    )
-    if serializer.is_valid():
-        add_so_to_project(
-            "SEEQ", project.id, handover_details.get("sales_order_ids", [])
-        )
-        serializer.save()
-    else:
-        print(serializer.errors)
 
     if not project.pre_post_assessment:
         batches = SchedularBatch.objects.filter(project=project)
@@ -6306,3 +6268,70 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_project_and_handover(request):
+    project_id = request.GET.get("project_id")
+    handover_id = request.GET.get("handover_id")
+    project_type = request.GET.get("project_type")
+    if project_id:
+        try:
+            if project_type == "skill_training":
+                project = SchedularProject.objects.get(id=project_id)
+                project_serializer = SchedularProjectSerializer(project)
+                handover_details = HandoverDetails.objects.filter(
+                    schedular_project=project
+                )
+            elif project_type == "caas":
+                project = Project.objects.get(id=project_id)
+                project_serializer = ProjectSerializer(project)
+                handover_details = HandoverDetails.objects.filter(caas_project=project)
+            else:
+                return Response({"error": "Invalid project type"}, status=400)
+        except (SchedularProject.DoesNotExist, Project.DoesNotExist):
+            return Response({"error": "Project not found"}, status=404)
+
+        if not handover_details.exists():
+            return Response({"error": "Handover details not found"}, status=404)
+        handover_serializer = HandoverDetailsSerializer(handover_details.first())
+
+        return Response(
+            {
+                "project": project_serializer.data,
+                "handover": handover_serializer.data,
+            }
+        )
+    elif handover_id:
+        try:
+            handover = HandoverDetails.objects.get(id=handover_id)
+        except HandoverDetails.DoesNotExist:
+            return Response({"error": "Handover details not found"}, status=404)
+
+        if handover.schedular_project:
+            project_serializer = SchedularProjectSerializer(handover.schedular_project)
+        elif handover.caas_project:
+            project_serializer = ProjectSerializer(handover.caas_project)
+        else:
+            project_serializer = None
+        handover_serializer = HandoverDetailsSerializer(handover)
+        return Response(
+            {
+                "project": project_serializer.data if project_serializer else None,
+                "handover": handover_serializer.data,
+            }
+        )
+    else:
+        return Response({"error": "Invalid query parameters"}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_handovers(request):
+    handovers = HandoverDetails.objects.filter(
+        schedular_project__isnull=True, caas_project__isnull=True
+    )
+    serializer = HandoverDetailsSerializer(handovers, many=True)
+    return Response(serializer.data)
+
