@@ -35,6 +35,7 @@ from .models import (
     CoachingSessionsFeedbackResponse,
 )
 from rest_framework.response import Response
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializers import (
@@ -4014,3 +4015,14 @@ def update_nudge_status(request, nudge_id):
     nudge.save()
     nudge_serializer = NudgeSerializer(nudge)
     return Response(nudge_serializer.data)
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_nudge(request, nudge_id):
+    try:
+        nudge = Nudge.objects.get(id=nudge_id)
+        nudge.delete()
+        return Response({"message": "Nudge deleted successfully"})
+    except Exception as e:
+        print(str(e))
+        return JsonResponse({"error": str(e)}, status=500)
