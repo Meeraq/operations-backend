@@ -2308,6 +2308,8 @@ def get_consolidated_feedback_report(request):
                             lesson__course=course, live_session=live_session
                         ).first()
                         facilitator_id = request.query_params.get("facilitator_id")
+                        hr_id = request.query_params.get("hr", None)
+
                         if facilitator_id:
                             if (
                                 feedback_lesson
@@ -2317,6 +2319,18 @@ def get_consolidated_feedback_report(request):
                                 == int(facilitator_id)
                             ):
                                 continue
+                        if hr_id:
+                            if(
+                                feedback_lesson
+                                and feedback_lesson.lesson
+                                and feedback_lesson.lesson.course
+                                and feedback_lesson.lesson.course.batch
+                                and feedback_lesson.lesson.course.batch.project
+                                and feedback_lesson.lesson.course.batch.project.hr.id
+                                ==int(hr_id)
+                            ):
+                                continue
+
                         if feedback_lesson:
                             total_responses = FeedbackLessonResponse.objects.filter(
                                 feedback_lesson=feedback_lesson
@@ -2411,7 +2425,7 @@ def get_feedback_report(request, feedback_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo","hr")])
 def get_consolidated_feedback_report_response(request, lesson_id):
     try:
         live_session = LiveSession.objects.get(id=lesson_id)
@@ -2426,7 +2440,7 @@ def get_consolidated_feedback_report_response(request, lesson_id):
         if facilitator_id:
             feedback_lesson_responses = feedback_lesson_responses.filter(
                 feedback_lesson__live_session__facilitator__id=facilitator_id
-            )
+            )   
         for response in feedback_lesson_responses:
             for answer in response.answers.all():
                 question_text = answer.question.text
@@ -3476,10 +3490,16 @@ def feedback_reports_project_wise_consolidated(request):
             feedback_lesson__lesson__course__batch__project=project
         )
         facilitator_id = request.query_params.get("facilitator_id")
+        hr_id = request.query_params.get("hr",None)
         if facilitator_id:
             feedback_lesson_responses = feedback_lesson_responses.filter(
                 feedback_lesson__live_session__facilitator__id=facilitator_id
             )
+
+        if hr_id:
+            feedback_lesson_responses = feedback_lesson_responses.filter(
+                feedback_lesson__lesson__course__batch__project__hr__id=hr_id)
+
         if feedback_lesson_responses.exists():
             total_participants_count = (
                 Learner.objects.filter(schedularbatch__project=project)
