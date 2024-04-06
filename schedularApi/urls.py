@@ -14,6 +14,9 @@ urlpatterns = [
         name="create_project_structure",
     ),
     path("create-project-schedular/", views.create_project_schedular),
+    path("handover/<str:project_type>/<int:project_id>/", views.get_project_handover),
+    path("handover/create/", views.create_handover),
+    path("handover/edit/<int:handover_id>/", views.edit_handover),
     path(
         "schedular-batches/",
         views.get_schedular_batches,
@@ -329,7 +332,7 @@ urlpatterns = [
     path("create-expense/", views.create_expense),
     path("edit-expense/", views.edit_expense),
     path(
-        "expenses/<int:batch_id>/<str:usertype>/<int:user_id>/",
+        "expenses/<int:batch_or_project_id>/<str:usertype>/<int:user_id>/",
         views.get_expense_for_facilitator,
     ),
     path(
@@ -349,9 +352,14 @@ urlpatterns = [
         "projects/<int:project_id>/check-project-structure-edit-allowed/",
         views.check_if_project_structure_edit_allowed,
     ),
- 
     path(
         "get-all-project-purchase-orders-for-finance/<int:project_id>/<str:project_type>/",
         views.get_all_project_purchase_orders_for_finance,
     ),
+    path(
+        "get-project-and-handover/",
+        views.get_project_and_handover,
+        name="get_project_and_handover",
+    ),
+    path("handovers/", views.get_handovers, name="get_handovers"),
 ]

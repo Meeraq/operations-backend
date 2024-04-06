@@ -35,6 +35,7 @@ from .models import (
     CoachingSessionsFeedbackResponse,
 )
 from rest_framework.response import Response
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializers import (
@@ -209,85 +210,7 @@ def add_question_to_feedback_lesson(feedback_lesson, questions):
     feedback_lesson.save()
 
 
-def create_learner(learner_name, learner_email, learner_phone=None):
-    try:
-        with transaction.atomic():
-            learner_email = learner_email.strip().lower()
-            temp_password = "".join(
-                random.choices(
-                    string.ascii_uppercase + string.ascii_lowercase + string.digits,
-                    k=8,
-                )
-            )
-            user = User.objects.create_user(
-                username=learner_email,
-                password=temp_password,
-                email=learner_email,
-            )
-            user.save()
-            learner_role, created = Role.objects.get_or_create(name="learner")
-            profile = Profile.objects.create(user=user)
-            profile.roles.add(learner_role)
-            profile.save()
 
-            phone = learner_phone if learner_phone else None
-            learner = None
-            if phone:
-                learner = Learner.objects.create(
-                    user=profile,
-                    name=learner_name,
-                    email=learner_email,
-                    phone=phone,
-                )
-            else:
-                learner = Learner.objects.create(
-                    user=profile,
-                    name=learner_name,
-                    email=learner_email,
-                )
-
-            return learner
-
-    except Exception as e:
-        return None
-
-
-def create_or_get_learner(learner_data):
-    try:
-        # check if the same email user exists or not
-        phone = learner_data.get("phone", None)
-        user = User.objects.filter(username=learner_data["email"]).first()
-        if user:
-            if user.profile.roles.all().filter(name="learner").exists():
-                learner = Learner.objects.get(user=user.profile)
-                learner.name = learner_data["name"].strip()
-
-                if learner_data["phone"]:
-                    learner.phone = learner_data["phone"]
-
-                learner.save()
-                return learner
-            else:
-                learner_role, created = Role.objects.get_or_create(name="learner")
-                learner_profile = user.profile
-                learner_profile.roles.add(learner_role)
-                learner_role.save()
-
-                learner, created = Learner.objects.get_or_create(
-                    user=learner_profile,
-                    defaults={
-                        "name": learner_data["name"],
-                        "email": learner_data["email"],
-                        "phone": phone,
-                    },
-                )
-                return learner
-        else:
-            learner = create_learner(learner_data["name"], learner_data["email"], phone)
-            return learner
-    except Exception as e:
-        # Handle specific exceptions or log the error
-        print(f"Error processing participant: {str(e)}")
 
 
 def get_feedback_lesson_name(lesson_name):
@@ -4092,3 +4015,14 @@ def update_nudge_status(request, nudge_id):
     nudge.save()
     nudge_serializer = NudgeSerializer(nudge)
     return Response(nudge_serializer.data)
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_nudge(request, nudge_id):
+    try:
+        nudge = Nudge.objects.get(id=nudge_id)
+        nudge.delete()
+        return Response({"message": "Nudge deleted successfully"})
+    except Exception as e:
+        print(str(e))
+        return JsonResponse({"error": str(e)}, status=500)
