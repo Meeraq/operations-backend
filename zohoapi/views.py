@@ -1822,6 +1822,7 @@ def get_coach_wise_finances(request):
                 if invoice["bill"] and invoice["bill"]["status"] == "paid"
                 else Decimal(0)
             )
+
             if vendor_id in vendor_invoice_amounts:
                 vendor_invoice_amounts[vendor_id]["invoiced_amount"] += invoiced_amount
                 vendor_invoice_amounts[vendor_id]["paid_amount"] += paid_amount
@@ -1864,6 +1865,12 @@ def get_coach_wise_finances(request):
                         if vendor_id in vendor_invoice_amounts
                         else None
                     ),
+                    "pending_amount": vendor_invoice_amounts.get(
+                        vendor_id, {"invoiced_amount": Decimal(0)}
+                    )["invoiced_amount"]
+                    - vendor_invoice_amounts.get(
+                        vendor_id, {"paid_amount": Decimal(0)}
+                    )["paid_amount"],
                 }
             )
         return Response(res)
@@ -2630,14 +2637,15 @@ def get_so_data_of_project(request, project_id, project_type):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_vendor(request):
     try:
         data = request.data
         with transaction.atomic():
-            
+
             if Vendor.objects.filter(email=data["email"]).exists():
                 return Response(
                     {"error": "Vendor with the same email already exists."},
@@ -2646,7 +2654,6 @@ def create_vendor(request):
             if (
                 data["name"]
                 and data["first_name"]
-               
                 and data["email"]
                 and data["gst_treatment"]
             ):
@@ -2838,7 +2845,6 @@ def get_vendor_feilds_data(request):
         return Response({"error": "Failed to create vendor"}, status=500)
 
 
-
 @api_view(["PUT"])
 def edit_vendor(request, vendor_id):
     try:
@@ -2856,7 +2862,6 @@ def edit_vendor(request, vendor_id):
             if (
                 data["name"]
                 and data["first_name"]
-            
                 and data["email"]
                 and data["gst_treatment"]
             ):
@@ -2954,16 +2959,20 @@ def fetch_client_invoices_page_wise(organization_id, page):
     if response.status_code == 200:
         invoices = response.json().get("invoices", [])
         page_context_extra_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&response_option=2"
-        page_context_extra_response = requests.get(page_context_extra_url, headers=auth_header)
+        page_context_extra_response = requests.get(
+            page_context_extra_url, headers=auth_header
+        )
         if page_context_extra_response.status_code == 200:
-            extra_page_context = page_context_extra_response.json().get("page_context", {})
+            extra_page_context = page_context_extra_response.json().get(
+                "page_context", {}
+            )
             page_context = response.json().get("page_context", {})
             has_more_page = page_context.get("has_more_page", False)
             return {
                 "count": extra_page_context.get("total", 0),
-                "next" :  has_more_page,
-                "prev" : False if page == 1 else True,
-                "results" : invoices
+                "next": has_more_page,
+                "prev": False if page == 1 else True,
+                "results": invoices,
             }
         else:
             print(page_context_extra_response.json())
@@ -2973,7 +2982,6 @@ def fetch_client_invoices_page_wise(organization_id, page):
         raise Exception("Failed to fetch client invoices.")
 
 
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_client_invoices(request):
@@ -2981,12 +2989,8 @@ def get_client_invoices(request):
         page = request.query_params.get("page")
         res = fetch_client_invoices_page_wise(organization_id, page)
         return Response(res, status=status.HTTP_200_OK)
-    
+
     except Exception as e:
         print(str(e))
 
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-
-
-

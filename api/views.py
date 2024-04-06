@@ -9863,10 +9863,20 @@ def get_coach_summary_data(request, coach_id):
         coach_batches = SchedularBatch.objects.filter(coaches=coach)
         distinct_project_count = coach_batches.values("project").distinct().count()
 
+        total_coaching_session = SchedularSessions.objects.filter(
+            availibility__coach=coach,
+        ).count()
+
         laser_coaching_sessions = SchedularSessions.objects.filter(
             availibility__coach=coach,
             coaching_session__session_type="laser_coaching_session",
         ).count()
+        
+        total_mentoring_sessions = SchedularSessions.objects.filter(
+            availibility__coach=coach,
+            coaching_session__session_type="mentoring_session",
+        ).count()
+        
 
         pending_schedular_session = SchedularSessions.objects.filter(
             availibility__coach=coach, status="pending"
@@ -9878,8 +9888,10 @@ def get_coach_summary_data(request, coach_id):
                 "coaching_projects": coach_status_count,
                 "training_projects": distinct_project_count,
                 "coach_rating": get_coach_overall_rating(coach.id),
+                "total_coaching_session":total_coaching_session,
                 "laser_coaching_sessions": laser_coaching_sessions,
                 "pending_session": pending_schedular_session,
+                "total_mentoring_sessions":total_mentoring_sessions,
             }
         )
 
