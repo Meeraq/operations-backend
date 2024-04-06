@@ -2694,7 +2694,7 @@ def create_pdf_lesson(request):
         return Response({"message": "Course Template does not exist."})
     except Exception as e:
         print(str(e))
-        return Response({"message": "Failed to create pdf lesson."})
+        return Response({"message": "Failed to create pdf lesson."}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["PUT"])
@@ -3575,7 +3575,7 @@ def get_nps_project_wise(request):
 
 
 class GetAllNudgesOfSchedularProjects(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request, project_id):
         try:
