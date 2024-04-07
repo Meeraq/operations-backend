@@ -475,6 +475,12 @@ class FacilitatorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilitator
         fields = "__all__"
+        
+class FacilitatorSerializerWithNps(serializers.ModelSerializer):
+    overall_nps = serializers.FloatField()
+    class Meta:
+        model = Facilitator
+        fields = "__all__"
 
 
 class FacilitatorSerializerIsVendor(serializers.ModelSerializer):

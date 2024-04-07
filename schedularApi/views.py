@@ -32,6 +32,10 @@ from django.db.models import (
     IntegerField,
     BooleanField,
     CharField,
+    Count,
+    ExpressionWrapper,
+    FloatField,
+    Sum,
 )
 from time import sleep
 import json
@@ -104,6 +108,7 @@ from api.serializers import (
     FacilitatorBasicDetailsSerializer,
     CoachSerializer,
     FacilitatorDepthOneSerializer,
+    FacilitatorSerializerWithNps,
 )
 
 from courses.models import (
@@ -3411,13 +3416,23 @@ def add_facilitator(request):
 def get_facilitators(request):
     try:
         # Get all the Coach objects
+        all_fac =  []
         facilitators = Facilitator.objects.filter(is_approved=True)
-
-        # Serialize the Coach objects
-        serializer = FacilitatorSerializer(facilitators, many=True)
-
+        for facilitator in facilitators:
+            overall_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedbacklesson__live_session__facilitator__id=facilitator.id,
+            )
+            overall_nps = calculate_nps_from_answers(overall_answer)
+            serializer = FacilitatorSerializer(facilitator)
+            all_fac.append({
+                **serializer.data,
+                "overall_nps": overall_nps,
+            })
+        # Serialize the Coach objects   
+        
         # Return the serialized Coach objects as the response
-        return Response(serializer.data, status=200)
+        return Response(all_fac, status=200)
 
     except Exception as e:
         # Return error response if any exception occurs
@@ -6167,3 +6182,6 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
+
+# get_facilitator
