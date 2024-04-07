@@ -1181,7 +1181,7 @@ def get_all_vendors(request):
 
 @api_view(["GET"])
 @permission_classes(
-    [IsAuthenticated, IsInRoles("pmo", "vendor", "superadmin", "finance")]
+    [IsAuthenticated, IsInRoles("pmo", "vendor", "superadmin", "finance","sales")]
 )
 def get_all_purchase_orders(request):
     try:
@@ -1193,7 +1193,7 @@ def get_all_purchase_orders(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_all_purchase_orders_for_pmo(request):
     try:
         all_purchase_orders = fetch_purchase_orders(organization_id)
@@ -1236,7 +1236,7 @@ def fetch_invoices(organization_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance","sales")])
 def get_all_invoices(request):
     try:
         all_invoices = fetch_invoices(organization_id)
@@ -1247,7 +1247,7 @@ def get_all_invoices(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance","sales")])
 def get_invoices_for_pmo(request):
     try:
         all_invoices = fetch_invoices(organization_id)
@@ -1262,6 +1262,20 @@ def get_invoices_for_pmo(request):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance","sales")])
+def get_invoices_for_sales(request):
+    try:
+        all_invoices = fetch_invoices(organization_id)
+        return Response(all_invoices, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 @api_view(["GET"])
@@ -1318,7 +1332,7 @@ def get_purchase_order_ids_for_project(project_id, project_type):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance","sales")])
 def get_invoices_by_status_for_founders(request, status):
     try:
         all_invoices = fetch_invoices(organization_id)

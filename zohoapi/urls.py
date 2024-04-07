@@ -82,6 +82,11 @@ urlpatterns = [
         views.get_invoices_for_pmo,
         name="get_all_invoices",
     ),
+    path(
+        "sales/invoices/",
+        views.get_invoices_for_sales,
+        name="get_all_invoices",
+    ),
     path("vendors/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
     path(
         "invoices/<str:status>/",

@@ -75,6 +75,8 @@ from .serializers import (
     TaskSerializer,
     ProjectDepthTwoSerializerArchiveCheck,
     CustomUserSerializer,
+    SalesSerializer,
+    SalesDepthOneSerializer,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
@@ -140,6 +142,7 @@ from .models import (
     SuperAdmin,
     Task,
     Finance,
+    Sales,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -1468,7 +1471,7 @@ def create_learners(learners_data):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo","sales")])
 def get_ongoing_projects(request):
     try:
         pmo_id = request.query_params.get("pmo")
@@ -2011,6 +2014,10 @@ def get_user_data(user):
             "is_seeq_allowed": is_seeq_allowed,
             "user": {**serializer.data["user"], "type": user_profile_role},
         }
+    elif user_profile_role == "sales":
+        if not user.profile.sales.active_inactive:
+            return None
+        serializer = SalesDepthOneSerializer(user.profile.sales)
     else:
         return None
     return {
@@ -2452,7 +2459,7 @@ def send_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach")])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach", "sales")])
 def get_project_details(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
@@ -8487,6 +8494,10 @@ def change_user_role(request, user_id):
         if not user.profile.hr.active_inactive:
             return None
         serializer = HrDepthOneSerializer(user.profile.hr)
+    elif user_profile_role == "sales":
+        if not user.profile.sales.active_inactive:
+            return None
+        serializer = SalesDepthOneSerializer(user.profile.sales)
     else:
         return Response({"error": "Unknown user role."}, status=400)
     return Response(
@@ -9656,3 +9667,83 @@ def change_user_password(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to reset password!"}, status=500)
+    
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_sales_user(request):
+    name = request.data.get("name")
+    email = request.data.get("email", "").strip().lower()
+    phone = request.data.get("phone")
+    username = email  # username and email are the same
+    # password = request.data.get("password")
+
+    # Check if required data is provided
+    if not all([name, email, phone, username]):
+        return Response({"error": "All required fields must be provided."}, status=400)
+
+    try:
+        with transaction.atomic():
+            # Check if the user already exists
+            user = User.objects.filter(email=email).first()
+
+            if not user:
+                # If the user does not exist, create a new user
+                user = User.objects.create_user(
+                    username=username, email=email
+                )
+                temp_password = "".join(
+                        random.choices(
+                            string.ascii_uppercase
+                            + string.ascii_lowercase
+                            + string.digits,
+                            k=8,
+                        )
+                    )
+                user.set_password(temp_password)
+                user.save()
+                profile = Profile.objects.create(user=user)
+
+            else:
+                profile = Profile.objects.get(user=user)
+
+            # Create or get the "pmo" role
+            sales_role, created = Role.objects.get_or_create(name="sales")
+            profile.roles.add(sales_role)
+            profile.save()
+
+            # Create the PMO User using the Profile
+            sales_user = Sales.objects.create(
+                user=profile,
+                name=name,
+                email=email,
+                phone=phone,
+            )
+
+            name = sales_user.name
+            add_contact_in_wati("sales", name, sales_user.phone)
+
+            # Return success response without room_id
+            return Response({"message": "Sales User added successfully."}, status=201)
+
+    except IntegrityError as e:
+        return Response({"error": "User with this email already exists."}, status=400)
+
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({"error": str(e)}, status=500)
+    
+    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_sales_user(request):
+    try:
+        sales_user = Sales.objects.all()
+        serializer = SalesSerializer(sales_user, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Error fetching Sales user: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
