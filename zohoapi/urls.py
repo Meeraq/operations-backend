@@ -128,6 +128,11 @@ urlpatterns = [
         name="get_po_number_to_create",
     ),
     path(
+        "so-number/<str:brand>/",
+        views.get_so_number_to_create,
+        name="get_so_number_to_create",
+    ),
+    path(
         "purchase-order/status/<str:purchase_order_id>/<str:status>/",
         views.update_purchase_order_status,
         name="update_purchase_order_status",

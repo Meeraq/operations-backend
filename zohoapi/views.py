@@ -1642,6 +1642,23 @@ def generate_new_po_number(po_list, regex_to_match):
     return new_po_number
 
 
+def generate_new_so_number(so_list, regex_to_match):
+    # pattern to match the sales order number
+    pattern = rf"^{regex_to_match}\d+$"
+    # Filter out sales orders with the desired format
+    filtered_sos = [so for so in so_list if re.match(pattern, so["salesorder_number"])]
+    latest_number = 0
+    # Finding the latest number for each year
+    for so in filtered_sos:
+        print(so["salesorder_number"].split("/"))
+        _, _, _, _, so_number = so["salesorder_number"].split("/")
+        latest_number = max(latest_number, int(so_number))
+    # Generating the new sales order number
+    new_number = latest_number + 1
+    new_so_number = f"{regex_to_match}{str(new_number).zfill(4)}"
+    return new_so_number
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_po_number_to_create(request):
@@ -1653,7 +1670,36 @@ def get_po_number_to_create(request):
         return Response({"new_po_number": new_po_number})
     except Exception as e:
         print(str(e))
-        return Response(status=403)
+        return Response(status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
+def get_so_number_to_create(request, brand):
+    try:
+        sales_orders = fetch_sales_orders(organization_id)
+        current_financial_year = get_current_financial_year()
+        regex_to_match = None
+        if brand == "ctt":
+            regex_to_match = f"CTT/{current_financial_year}/SO/"
+        elif brand == "meeraq":
+            project_type = request.query_params.get("project_type")
+            if project_type == "caas":
+                regex_to_match = f"Meeraq/{current_financial_year}/CH/"
+            elif project_type == "skill_training":
+                regex_to_match = f"Meeraq/{current_financial_year}/SST/"
+            else:
+                return Response(
+                    {"error": "Select project type to generate the SO number"},
+                    status=400,
+                )
+        else:
+            return Response({"error": "Invalid brand"}, status=400)
+        new_po_number = generate_new_so_number(sales_orders, regex_to_match)
+        return Response({"new_so_number": new_po_number})
+    except Exception as e:
+        print(str(e))
+        return Response(status=400)
 
 
 @api_view(["POST"])
