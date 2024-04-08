@@ -2243,7 +2243,7 @@ def create_invoice(request):
         return Response(status=404)
 
 
-@api_view(["POST"])
+@api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def edit_so_invoice(request, invoice_id):
     try:
@@ -2254,17 +2254,14 @@ def edit_so_invoice(request, invoice_id):
             )
         api_url = f"{base_url}/invoices/{invoice_id}?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
-        response = requests.post(api_url, headers=auth_header, data=request.data)
-        print(response.json())
-        if response.status_code == 201:
-            return Response({"message": "Invoice created successfully."})
+        response = requests.put(api_url, headers=auth_header, data=request.data)
+        
+        if response.status_code == 200:
+            return Response({"message": "Invoice updated successfully."})
         else:
-            print(response.json())
-            return Response(status=401)
+            return Response({"error": response.json()}, status=response.status_code)
     except Exception as e:
-        print(str(e))
-        return Response(status=404)
-
+        return Response({"error": str(e)}, status=500)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -3005,4 +3002,41 @@ def get_client_invoices(request):
     except Exception as e:
         print(str(e))
 
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_invoices_of_sales_order(request, sales_order_id):
+    try:
+        sales_order = None
+        access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if access_token_sales_order:
+            api_url = (
+                f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
+            )
+            auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
+            response = requests.get(api_url, headers=auth_header)
+            if response.status_code == 200:
+                sales_order = response.json().get("salesorder")
+        
+        filtered_client_invoice = []
+        for client_invoice in sales_order["invoices"]:
+            access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+            if access_token:
+                api_url = f"{base_url}/invoices/{client_invoice['invoice_id']}?organization_id={organization_id}"
+                auth_header = {"Authorization": f"Bearer {access_token}"}
+                response = requests.get(api_url, headers=auth_header)
+                if response.status_code == 200:
+                    temp_client_invoice = response.json().get("invoice")
+                    if (
+                        "salesorder_id" in temp_client_invoice
+                        and temp_client_invoice["salesorder_id"] == sales_order_id
+                    ):
+                        filtered_client_invoice.append(temp_client_invoice)
+
+        return Response(filtered_client_invoice, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
