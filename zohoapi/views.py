@@ -2013,87 +2013,97 @@ def delete_expense_purchase_order(request, purchase_order_id):
         return Response(status=404)
 
 
+def get_sales_orders_with_project_details(sales_orders):
+    res =   []
+    for sales_order in sales_orders:
+        project = None
+        sales_order["matching_project_structure"] = "Project Not Assigned"
+        for order_project_mapping in OrdersAndProjectMapping.objects.all():
+            if (
+                str(sales_order["salesorder_id"])
+                in order_project_mapping.sales_order_ids
+            ):
+                if order_project_mapping.project:
+                    project = Project.objects.get(
+                        id=order_project_mapping.project.id
+                    )
+                    if project:
+                        sales_order["project_id"] = project.id
+                        sales_order["projectType"] = "CAAS"
+                    else:
+                        sales_order["project_id"] = None
+                        sales_order["projectType"] = ""
+                elif order_project_mapping.schedular_project:
+                    project = SchedularProject.objects.get(
+                        id=order_project_mapping.schedular_project.id
+                    )
+                    if project:
+                        sales_order["project_id"] = project.id
+                        sales_order["projectType"] = "SEEQ"
+                    else:
+                        sales_order["project_id"] = None
+                        sales_order["projectType"] = ""
+                if project:
+                    data = project.project_structure
+                    for item in data:
+                        if (
+                            "session_type" in item
+                            and item["session_type"] in SESSION_TYPE_VALUE
+                            and item.get("price")
+                            and item.get("session_duration")
+                            and item.get("no_of_sessions")
+                        ):
+                            result = (
+                                float(item["price"])
+                                * float(item["session_duration"])
+                                * float(item["no_of_sessions"])
+                            ) / 60
+                            item["price"] = float(result)
+                            item["session_type"] = SESSION_TYPE_VALUE[
+                                item["session_type"]
+                            ]
+                    total_price = sum(
+                        float(session.get("price", 0))
+                        for session in data
+                        if session.get("price")
+                    )
+                    total_learner = 0
+                    if isinstance(project, SchedularProject):
+                        batches = SchedularBatch.objects.filter(project=project)
+                        for batch in batches:
+                            total_learner += batch.learners.count()
+                    else:
+                        total_learner = Engagement.objects.filter(
+                            project=project
+                        ).count()
+                    total_price *= total_learner
+                    if total_price == sales_order["total"]:
+                        sales_order["matching_project_structure"] = "Matching"
+                    else:
+                        sales_order["matching_project_structure"] = "Not Matching"
+        res.append(sales_order)
+    return res
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_sales_orders(request):
     try:
+        sales_person_id = request.query_params.get("sales_person_id")
         all_sales_orders = fetch_sales_orders(organization_id)
-        for sales_order in all_sales_orders:
-            project = None
-            sales_order["matching_project_structure"] = "Project Not Assigned"
-            for order_project_mapping in OrdersAndProjectMapping.objects.all():
-                if (
-                    str(sales_order["salesorder_id"])
-                    in order_project_mapping.sales_order_ids
-                ):
-                    if order_project_mapping.project:
-                        project = Project.objects.get(
-                            id=order_project_mapping.project.id
-                        )
-                        if project:
-                            sales_order["project_id"] = project.id
-                            sales_order["projectType"] = "CAAS"
-                        else:
-                            sales_order["project_id"] = None
-                            sales_order["projectType"] = ""
-                    elif order_project_mapping.schedular_project:
-                        project = SchedularProject.objects.get(
-                            id=order_project_mapping.schedular_project.id
-                        )
-                        if project:
-                            sales_order["project_id"] = project.id
-                            sales_order["projectType"] = "SEEQ"
-                        else:
-                            sales_order["project_id"] = None
-                            sales_order["projectType"] = ""
-                    if project:
-
-                        data = project.project_structure
-
-                        for item in data:
-
-                            if (
-                                "session_type" in item
-                                and item["session_type"] in SESSION_TYPE_VALUE
-                                and item.get("price")
-                                and item.get("session_duration")
-                                and item.get("no_of_sessions")
-                            ):
-
-                                result = (
-                                    float(item["price"])
-                                    * float(item["session_duration"])
-                                    * float(item["no_of_sessions"])
-                                ) / 60
-
-                                item["price"] = float(result)
-                                item["session_type"] = SESSION_TYPE_VALUE[
-                                    item["session_type"]
-                                ]
-                        total_price = sum(
-                            float(session.get("price", 0))
-                            for session in data
-                            if session.get("price")
-                        )
-                        total_learner = 0
-                        if isinstance(project, SchedularProject):
-
-                            batches = SchedularBatch.objects.filter(project=project)
-                            for batch in batches:
-                                total_learner += batch.learners.count()
-
-                        else:
-                            total_learner = Engagement.objects.filter(
-                                project=project
-                            ).count()
-                        total_price *= total_learner
-
-                        if total_price == sales_order["total"]:
-                            sales_order["matching_project_structure"] = "Matching"
-                        else:
-                            sales_order["matching_project_structure"] = "Not Matching"
-
-        return Response(all_sales_orders, status=status.HTTP_200_OK)
+        res = get_sales_orders_with_project_details(all_sales_orders)
+        return Response(res, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sales_persons_sales_orders(request, sales_person_id):
+    try:
+        all_sales_orders = fetch_sales_orders(organization_id,f"&salesperson_id={sales_person_id}")
+        res = get_sales_orders_with_project_details(all_sales_orders)
+        return Response(res, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -3006,3 +3016,31 @@ def get_client_invoices(request):
         print(str(e))
 
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sales_person_from_zoho(request):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if access_token:
+            headers = {"Authorization": f"Bearer {access_token}"}
+            url = (
+                f"{base_url}/salespersons?organization_id={env('ZOHO_ORGANIZATION_ID')}"
+            )
+            response = requests.get(url, headers=headers)
+            print(response.json())
+            if response.status_code == 200:
+                sales_persons = response.json().get("data")
+                return Response(sales_persons, status=200)
+            else:
+                return Response(
+                    {"error": "Failed to get sales persons"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get sales persons"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
