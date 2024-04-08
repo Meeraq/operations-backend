@@ -3038,7 +3038,7 @@ class DownloadWordReport(APIView):
 
 
 class GetLearnersUniqueId(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr", "facilitator")]
 
     def get(self, request, assessment_id):
         try:
@@ -4350,7 +4350,7 @@ class DownloadParticipantResponseStatusData(APIView):
             )
 
 class GetParticipantReleasedResults(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr")]
 
     def get(self, request, assessment_id):
         try:
@@ -4377,9 +4377,9 @@ class GetAllAssessments(APIView):
 
     def get(self, request):
         pmo = Pmo.objects.filter(email=request.user.username).first()
-        if pmo.sub_role == "junior_pmo":
+        if pmo and pmo.sub_role == "junior_pmo":
             assessments = Assessment.objects.filter(
-                assessment_modal__lesson__course__batch__project__pmo=pmo
+                assessment_modal__lesson__course__batch__project__junior_pmo=pmo
             )
         else:
             assessments = Assessment.objects.all()
@@ -4429,7 +4429,7 @@ class GetAllAssessments(APIView):
 
 
 class GetOneAssessment(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr", "learner", "facilitator")]
 
     def get(self, request, assessment_id):
         assessment = get_object_or_404(Assessment, id=assessment_id)

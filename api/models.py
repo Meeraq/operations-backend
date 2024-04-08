@@ -125,6 +125,7 @@ class Profile(models.Model):
         ("superadmin", "superadmin"),
         ("facilitator", "facilitator"),
         ("finance", "finance"),
+        ("sales", "sales"),
     ]
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     roles = models.ManyToManyField(Role)
@@ -154,7 +155,18 @@ class Finance(models.Model):
 
     def __str__(self):
         return self.name
-
+    
+class Sales(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+    phone = models.CharField(max_length=25)
+    active_inactive = models.BooleanField(default=True)
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+  
+    def __str__(self):
+        return self.name
 
 class Pmo(models.Model):
 
@@ -225,12 +237,9 @@ class Coach(models.Model):
     reason_for_inactive = models.JSONField(default=list, blank=True)
     client_companies = models.JSONField(default=list, blank=True)
     education_pic = models.ImageField(upload_to="post_images", blank=True)
-
     educational_qualification = models.JSONField(default=list, blank=True)
-
-    # education_upload_file = models.ImageField(upload_to="post_images", blank=True)
     education_upload_file = models.FileField(
-        upload_to="pdf_files", blank=True, validators=[validate_pdf_extension]
+        upload_to="pdf_files", blank=True, null=True, validators=[validate_pdf_extension]
     )
 
     def __str__(self):
