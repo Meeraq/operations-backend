@@ -82,7 +82,17 @@ urlpatterns = [
         views.get_invoices_for_pmo,
         name="get_all_invoices",
     ),
-    path("vendors/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
+    path(
+        "sales/invoices/",
+        views.get_invoices_for_sales,
+        name="get_all_invoices",
+    ),
+    path("edit-vendor/<int:vendor_id>/", views.edit_vendor, name="edit_vendor"),
+    path(
+        "vendors/update-invoice-allowed/<int:vendor_id>/",
+        views.update_invoice_allowed,
+        name="update_invoice_allowed",
+    ),
     path(
         "invoices/<str:status>/",
         views.get_invoices_by_status,
@@ -122,6 +132,15 @@ urlpatterns = [
         views.update_purchase_order_status,
         name="update_purchase_order_status",
     ),
+    path(
+        "coching-purchase-order/create/<int:coach_id>/<int:project_id>/",
+        views.coching_purchase_order_create,
+    ),
+    path(
+        "purchase-order/coaching/delete/<int:purchase_order_id>/",
+        views.delete_coaching_purchase_order,
+        name="delete_coaching_purchase_order",
+    ),
     path("coach/finances/", views.get_coach_wise_finances),
     path("project/finances/", views.get_project_wise_finances),
     path(
@@ -143,5 +162,124 @@ urlpatterns = [
         "purchase-order/delete/<str:user_type>/<str:purchase_order_id>/",
         views.delete_purchase_order,
         name="delete_purchase_order",
+    ),
+    path(
+        "expense-purchase-order/create/<int:facilitator_id>/<int:batch_or_project_id>/",
+        views.expense_purchase_order_create,
+    ),
+    path(
+        "purchase-order/expense/delete/<str:purchase_order_id>/",
+        views.delete_expense_purchase_order,
+        name="delete_expense_purchase_order",
+    ),
+    path(
+        "get-all-sales-orders/",
+        views.get_all_sales_orders,
+        name="get_all_sales_orders",
+    ),
+    path(
+        "get-all-sales-orders-for-project/<int:project_id>/<str:project_type>/",
+        views.get_all_sales_orders_of_project,
+        name="get_all_sales_orders_of_project",
+    ),
+    path(
+        "get-so-data-of-project/<int:project_id>/<str:project_type>/",
+        views.get_so_data_of_project,
+        name="get_so_data_of_project",
+    ),
+    path(
+        "get-sales-order-data-pdf/<int:salesorder_id>/",
+        views.get_sales_order_data_pdf,
+        name="get_sales_order_data",
+    ),
+    path(
+        "get-sales-order-data/<int:salesorder_id>/",
+        views.get_sales_order_data,
+        name="get_sales_order_data",
+    ),
+    path(
+        "customers-from-zoho/",
+        views.get_customers_from_zoho,
+        name="get_customers_from_zoho",
+    ),
+    path(
+        "customer-details-from-zoho/<str:customer_id>/",
+        views.get_customer_details_from_zoho,
+        name="get_customer_details_from_zoho",
+    ),
+    path(
+        "create-invoice/",
+        views.create_invoice,
+        name="create_invoice",
+    ),
+    path(
+        "edit-so-invoice/<str:invoice_id>/",
+        views.edit_so_invoice,
+        name="edit_so_invoice",
+    ),
+    path(
+        "sales-order/create/",
+        views.create_sales_order,
+        name="create_sales_order",
+    ),
+    path(
+        "get-all-client-invoices/",
+        views.get_all_client_invoices,
+        name="get_all_client_invoices",
+    ),
+    path(
+        "get-client-invoices/",
+        views.get_client_invoices,
+        name="get_client_invoices",
+    ),
+    path(
+        "get-client-invoice-data-pdf/<int:invoice_id>/",
+        views.get_client_invoice_data_pdf,
+        name="get_client_invoice_data",
+    ),
+    path(
+        "get-client-invoice-data/<int:invoice_id>/",
+        views.get_client_invoice_data,
+        name="get_client_invoice_data",
+    ),
+    path(
+        "project/sales-orders/<str:project_type>/<int:project_id>/",
+        views.get_project_sales_orders,
+        name="get_project_sales_orders",
+    ),
+    path(
+        "add-so-to-project/<str:project_type>/<int:project_id>/",
+        views.add_so_to_project,
+        name="add_so_to_project",
+    ),
+    path(
+        "assign_so_to_po/",
+        views.assign_so_to_po,
+        name="assign_so_to_po",
+    ),
+    path(
+        "get-all-sales-orders-for-purchase-order/<int:purchase_order_id>/",
+        views.get_all_sales_order_for_po,
+        name="get_all_sales_order_for_po",
+    ),
+    path(
+        "get-salesorders-fields-data/",
+        views.get_salesorders_fields_data,
+        name="get_salesorders_fields_data",
+    ),
+    path(
+        "update-sales-order-status/<str:sales_order_id>/<str:status>/",
+        views.update_sales_order_status,
+        name="update_sales_order_status",
+    ),
+    path(
+        "create-vendor/",
+        views.create_vendor,
+        name="create_vendor",
+    ),
+    path(
+        "vendor-feilds-data/",
+        views.get_vendor_feilds_data,
+        name="get_vendor_feilds_data",
     ),
 ]

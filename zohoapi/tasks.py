@@ -1,5 +1,5 @@
 from celery import shared_task
-from .models import Vendor, AccessToken, InvoiceData
+from .models import Vendor, AccessToken, InvoiceData, OrdersAndProjectMapping
 from .serializers import InvoiceDataSerializer
 import requests
 from django.utils import timezone
@@ -115,6 +115,19 @@ purchase_orders_allowed = [
     "Meeraq/PO/22-23/0045",
 ]
 
+def get_all_so_of_po(purchase_order_id):
+    try:
+        mapping_instance = None
+        for order_project_mapping in OrdersAndProjectMapping.objects.all():
+            if str(purchase_order_id) in order_project_mapping.purchase_order_ids:
+
+                mapping_instance = order_project_mapping
+                break
+        return mapping_instance
+
+    except Exception as e:
+        print(str(e))
+
 
 
 def get_vendor(vendor_id):
@@ -135,11 +148,20 @@ def get_vendor(vendor_id):
     else:
         return Response({}, status=400)
 
+
+
 def filter_purchase_order_data(purchase_orders):
     try:
         filtered_purchase_orders = []
         for order in purchase_orders:
             purchaseorder_number = order.get("purchaseorder_number", "").strip()
+            mapping_instance = get_all_so_of_po(
+                order.get("purchaseorder_id", "").strip()
+            )
+            if mapping_instance:
+                order["assigned_sales_order_ids"] = mapping_instance.sales_order_ids
+            else:
+                order["assigned_sales_order_ids"] = []
             created_time_str = order.get("created_time", "").strip()
             if created_time_str:
                 created_time = datetime.strptime(
@@ -150,6 +172,7 @@ def filter_purchase_order_data(purchase_orders):
                     or created_time.year >= 2024
                 ):
                     filtered_purchase_orders.append(order)
+            
         return filtered_purchase_orders
     except Exception as e:
         print(str(e))
@@ -186,6 +209,65 @@ def fetch_purchase_orders(organization_id):
             raise Exception("Failed to fetch purchase orders")
 
     return all_purchase_orders
+
+
+def fetch_sales_orders(organization_id, queryParams=""):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if not access_token:
+        raise Exception(
+            "Access token not found. Please generate an access token first."
+        )
+
+    all_sales_orders = []
+    has_more_page = True
+    page = 1
+
+    while has_more_page:
+        api_url = f"{base_url}/salesorders/?organization_id={organization_id}&page={page}{queryParams}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.get(api_url, headers=auth_header)
+
+        if response.status_code == 200:
+            sales_orders = response.json().get("salesorders", [])
+            # sales_orders = filter_sales_order_data(sales_orders)
+            all_sales_orders.extend(sales_orders)
+
+            page_context = response.json().get("page_context", {})
+            has_more_page = page_context.get("has_more_page", False)
+            page += 1
+        else:
+            raise Exception("Failed to fetch sales orders")
+
+    return all_sales_orders
+
+
+def fetch_client_invoices(organization_id):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if not access_token:
+        raise Exception(
+            "Access token not found. Please generate an access token first."
+        )
+
+    all_client_invoices = []
+    has_more_page = True
+    page = 1
+
+    while has_more_page:
+        api_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.get(api_url, headers=auth_header)
+
+        if response.status_code == 200:
+            client_invoices = response.json().get("invoices", [])
+            all_client_invoices.extend(client_invoices)
+
+            page_context = response.json().get("page_context", {})
+            has_more_page = page_context.get("has_more_page", False)
+            page += 1
+        else:
+            raise Exception("Failed to fetch client invoices.")
+
+    return all_client_invoices
 
 
 def generate_access_token_from_refresh_token(refresh_token):
@@ -278,6 +360,34 @@ def fetch_bills(organization_id):
     return all_bills
 
 
+def fetch_customers_from_zoho(organization_id):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if not access_token:
+        raise Exception(
+            "Access token not found. Please generate an access token first."
+        )
+
+    all_customers = []
+    has_more_page = True
+    page = 1
+
+    while has_more_page:
+        api_url = f"{base_url}/customers/?organization_id={organization_id}&page={page}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.get(api_url, headers=auth_header)
+
+        if response.status_code == 200:
+            customers = response.json().get("contacts", [])
+            all_customers.extend(customers)
+            page_context = response.json().get("page_context", {})
+            has_more_page = page_context.get("has_more_page", False)
+            page += 1
+        else:
+            raise Exception("Failed to fetch customers")
+
+    return all_customers
+
+
 def filter_invoice_data(invoices):
     try:
         filtered_invoices = []
@@ -335,7 +445,7 @@ def import_invoices_for_vendor_from_zoho(vendor, headers, res, bill_details_res)
                             )
                         else:
                             vendor_details = get_vendor(vendor.vendor_id)
-                            name = vendor_details["contact_name"] 
+                            name = vendor_details["contact_name"]
                             invoice = InvoiceData.objects.create(
                                 invoice_number=bill[env("INVOICE_FIELD_NAME")],
                                 vendor_id=vendor.vendor_id,
