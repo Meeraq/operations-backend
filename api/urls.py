@@ -427,4 +427,32 @@ urlpatterns = [
         "get-facilitator-summary-data/<int:facilitator_id>/",
         views.get_facilitator_summary_data,
     ),
+    path(
+        "get-all-goals/",
+        views.get_all_goals,
+    ),
+    path(
+        "create-goal/",
+        views.create_goal,
+    ),
+    path(
+        "get-competency-of-goal/<int:goal_id>/",
+        views.get_competency_of_goal,
+    ),
+    path(
+        "create-competency-for-goal/<int:goal_id>/",
+        views.create_competency_for_goal,
+    ),
+    path(
+        "get-goal-detail/<int:goal_id>/",
+        views.get_goal_detail,
+    ),
+    path(
+        "get-competency-action-items/<int:comp_id>/",
+        views.get_competency_action_items,
+    ),
+    path(
+        "edit-pmo-goal/",
+        views.edit_pmo_goal,
+    ),
 ]

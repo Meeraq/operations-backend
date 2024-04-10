@@ -6283,3 +6283,5 @@ def get_handovers(request):
     serializer = HandoverDetailsSerializer(handovers, many=True)
     return Response(serializer.data)
 
+
+
