@@ -10195,3 +10195,18 @@ def edit_pmo_goal(request):
             {"error": f"Failed to update goal"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_competency(request):
+    try:
+        competency = Competency.objects.all()
+        serializer = CompetencySerializer(competency, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
