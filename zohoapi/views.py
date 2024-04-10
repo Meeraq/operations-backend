@@ -61,6 +61,7 @@ from .tasks import (
     fetch_customers_from_zoho,
     fetch_client_invoices,
     get_all_so_of_po,
+    fetch_sales_persons
 )
 from .models import (
     InvoiceData,
@@ -3022,22 +3023,8 @@ def get_client_invoices(request):
 @permission_classes([IsAuthenticated])
 def get_sales_person_from_zoho(request):
     try:
-        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-        if access_token:
-            headers = {"Authorization": f"Bearer {access_token}"}
-            url = (
-                f"{base_url}/salespersons?organization_id={env('ZOHO_ORGANIZATION_ID')}"
-            )
-            response = requests.get(url, headers=headers)
-            print(response.json())
-            if response.status_code == 200:
-                sales_persons = response.json().get("data")
-                return Response(sales_persons, status=200)
-            else:
-                return Response(
-                    {"error": "Failed to get sales persons"},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+        sales_persons = fetch_sales_persons(organization_id)
+        return Response(sales_persons, status=200)
     except Exception as e:
         print(str(e))
         return Response(

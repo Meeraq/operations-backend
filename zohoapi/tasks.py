@@ -115,6 +115,7 @@ purchase_orders_allowed = [
     "Meeraq/PO/22-23/0045",
 ]
 
+
 def get_all_so_of_po(purchase_order_id):
     try:
         mapping_instance = None
@@ -127,7 +128,6 @@ def get_all_so_of_po(purchase_order_id):
 
     except Exception as e:
         print(str(e))
-
 
 
 def get_vendor(vendor_id):
@@ -147,7 +147,6 @@ def get_vendor(vendor_id):
         return Response({}, status=400)
     else:
         return Response({}, status=400)
-
 
 
 def filter_purchase_order_data(purchase_orders):
@@ -172,7 +171,7 @@ def filter_purchase_order_data(purchase_orders):
                     or created_time.year >= 2024
                 ):
                     filtered_purchase_orders.append(order)
-            
+
         return filtered_purchase_orders
     except Exception as e:
         print(str(e))
@@ -239,6 +238,22 @@ def fetch_sales_orders(organization_id, queryParams=""):
             raise Exception("Failed to fetch sales orders")
 
     return all_sales_orders
+
+
+def fetch_sales_persons(organization_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if access_token:
+            headers = {"Authorization": f"Bearer {access_token}"}
+            url = f"{base_url}/salespersons?organization_id={organization_id}"
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                return response.json().get("data")
+            else:
+                return None
+    except Exception as e:
+        print(str(e))
+        return None
 
 
 def fetch_client_invoices(organization_id):
