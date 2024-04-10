@@ -320,10 +320,12 @@ def create_project_schedular(request):
         handover = HandoverDetails.objects.get(id=handover_id)
         handover.schedular_project = schedularProject
         handover.save()
+        schedularProject.project_structure = handover.project_structure
+        schedularProject.save()
         add_so_to_project("SEEQ", schedularProject.id, handover.sales_order_ids)
     else:
         raise Exception("No handover found")
-   
+
     try:
         path = ""
         message = f"A new project - {schedularProject.name} has been created for the organisation - {schedularProject.organisation.name}"
@@ -1478,7 +1480,7 @@ def add_batch(request, project_id):
         data = {
             "participants": request.data.get("participants", []),
             "project_id": project_id,
-            "user_email":request.user.username
+            "user_email": request.user.username,
         }
 
         add_batch_to_project.delay(data)
@@ -1492,9 +1494,7 @@ def add_batch(request, project_id):
     except Exception as e:
         print(str(e))
         return Response(
-            {
-                "error": "Failed to add participants."
-            },
+            {"error": "Failed to add participants."},
             status=500,
         )
 
@@ -6282,4 +6282,3 @@ def get_handovers(request):
     )
     serializer = HandoverDetailsSerializer(handovers, many=True)
     return Response(serializer.data)
-
