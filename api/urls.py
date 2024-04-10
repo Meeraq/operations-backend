@@ -455,4 +455,8 @@ urlpatterns = [
         "edit-pmo-goal/",
         views.edit_pmo_goal,
     ),
+     path(
+        "get-all-competency/",
+        views.get_all_competency,
+    ),
 ]
