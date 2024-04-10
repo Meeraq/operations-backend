@@ -17,6 +17,7 @@ urlpatterns = [
     path("handover/<str:project_type>/<int:project_id>/", views.get_project_handover),
     path("handover/create/", views.create_handover),
     path("handover/edit/<int:handover_id>/", views.edit_handover),
+    path("handover/<int:handover_id>/salesorders/", views.get_handover_salesorders),
     path(
         "schedular-batches/",
         views.get_schedular_batches,

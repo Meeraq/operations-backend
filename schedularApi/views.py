@@ -170,7 +170,7 @@ from rest_framework.views import APIView
 from api.views import get_user_data
 from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping
 from zohoapi.views import fetch_purchase_orders
-from zohoapi.tasks import organization_id
+from zohoapi.tasks import organization_id, fetch_sales_orders
 from courses.views import calculate_nps
 from api.permissions import IsInRoles
 
@@ -323,7 +323,7 @@ def create_project_schedular(request):
         add_so_to_project("SEEQ", schedularProject.id, handover.sales_order_ids)
     else:
         raise Exception("No handover found")
-   
+
     try:
         path = ""
         message = f"A new project - {schedularProject.name} has been created for the organisation - {schedularProject.organisation.name}"
@@ -378,6 +378,24 @@ def edit_handover(request, handover_id):
     else:
         print(serializer.errors)
         return Response({"error": "Failed to update handover."}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
+def get_handover_salesorders(request, handover_id):
+    try:
+        handover = HandoverDetails.objects.get(id=handover_id)
+        sales_orders_ids_str = ",".join(handover.sales_order_ids)
+        print(sales_orders_ids_str, handover.sales_order_ids)
+        all_sales_orders = []
+        if sales_orders_ids_str:
+            all_sales_orders = fetch_sales_orders(
+                organization_id, f"&salesorder_ids={sales_orders_ids_str}"
+            )
+        return Response(all_sales_orders)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])
@@ -1478,7 +1496,7 @@ def add_batch(request, project_id):
         data = {
             "participants": request.data.get("participants", []),
             "project_id": project_id,
-            "user_email":request.user.username
+            "user_email": request.user.username,
         }
 
         add_batch_to_project.delay(data)
@@ -1492,9 +1510,7 @@ def add_batch(request, project_id):
     except Exception as e:
         print(str(e))
         return Response(
-            {
-                "error": "Failed to add participants."
-            },
+            {"error": "Failed to add participants."},
             status=500,
         )
 
@@ -6282,4 +6298,3 @@ def get_handovers(request):
     )
     serializer = HandoverDetailsSerializer(handovers, many=True)
     return Response(serializer.data)
-
