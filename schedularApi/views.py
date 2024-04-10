@@ -323,7 +323,7 @@ def create_project_schedular(request):
         add_so_to_project("SEEQ", schedularProject.id, handover.sales_order_ids)
     else:
         raise Exception("No handover found")
-   
+
     try:
         path = ""
         message = f"A new project - {schedularProject.name} has been created for the organisation - {schedularProject.organisation.name}"
@@ -352,32 +352,26 @@ def create_handover(request):
         print(serializer.errors)
         return Response({"error": "Failed to add handover. "}, status=400)
 
-
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
-@transaction.atomic
-def edit_handover(request, handover_id):
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def update_handover(request):
     try:
-        handover_instance = HandoverDetails.objects.get(id=handover_id)
+        handover_instance = HandoverDetails.objects.get(id=request.data.get('id'))
     except HandoverDetails.DoesNotExist:
-        handover_instance = None
+        return Response({"error": "Handover not found."}, status=404)
+    
     serializer = HandoverDetailsSerializer(
         handover_instance, data=request.data, partial=True
     )
     if serializer.is_valid():
         serializer.save()
-        if handover_instance.schedular_project:
-            schedular_project = handover_instance.schedular_project
-            schedular_project.nudges = handover_instance.nudges
-            schedular_project.pre_post_assessment = (
-                handover_instance.pre_post_assessment
-            )
-            schedular_project.save()
-
-        return Response({"message": "Handover updated successfully."}, status=200)
+        return Response(
+            {"message": "Handover updated successfully.", "handover": serializer.data},
+            status=200,
+        )
     else:
-        print(serializer.errors)
-        return Response({"error": "Failed to update handover."}, status=400)
+        return Response(serializer.errors, status=400)
+
 
 
 @api_view(["GET"])
@@ -1478,7 +1472,7 @@ def add_batch(request, project_id):
         data = {
             "participants": request.data.get("participants", []),
             "project_id": project_id,
-            "user_email":request.user.username
+            "user_email": request.user.username,
         }
 
         add_batch_to_project.delay(data)
@@ -1492,9 +1486,7 @@ def add_batch(request, project_id):
     except Exception as e:
         print(str(e))
         return Response(
-            {
-                "error": "Failed to add participants."
-            },
+            {"error": "Failed to add participants."},
             status=500,
         )
 
@@ -6282,4 +6274,3 @@ def get_handovers(request):
     )
     serializer = HandoverDetailsSerializer(handovers, many=True)
     return Response(serializer.data)
-
