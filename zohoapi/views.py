@@ -2665,7 +2665,6 @@ def update_sales_order_status(request, sales_order_id, status):
 def get_so_data_of_project(request, project_id, project_type):
     try:
         all_sales_orders = get_so_for_project(project_id, project_type)
-
         total = 0
         invoiced_amount = 0
         not_invoiced_amount = 0
@@ -2690,6 +2689,7 @@ def get_so_data_of_project(request, project_id, project_type):
                 "not_invoiced_amount": not_invoiced_amount,
                 "paid_amount": paid_amount,
                 "currency_code": currency_code,
+                "no_of_sales_orders" :  len(all_sales_orders)
             }
         )
     except Exception as e:
