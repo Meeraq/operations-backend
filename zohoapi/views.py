@@ -43,6 +43,7 @@ from .serializers import (
     VendorSerializer,
     InvoiceStatusUpdateGetSerializer,
     VendorEditSerializer,
+    OrdersAndProjectMappingSerializer
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -82,6 +83,7 @@ import io
 import pdfkit
 from django.middleware.csrf import get_token
 from django.db import transaction
+from django.core.exceptions import ObjectDoesNotExist
 from collections import defaultdict
 import re
 from schedularApi.models import (
@@ -3111,3 +3113,59 @@ def get_sales_person_from_zoho(request):
             {"error": "Failed to get sales persons"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_so_for_the_project(request):
+    try:
+        all_sales_order = fetch_sales_orders(organization_id) 
+        caas_project_mapping = OrdersAndProjectMapping.objects.filter(project__isnull=False)
+        schedular_project_mapping = OrdersAndProjectMapping.objects.filter(schedular_project__isnull=False)
+        final_data = {}
+        sales_order_dict = {order["salesorder_id"]: order for order in all_sales_order}
+        if caas_project_mapping:
+            final_data["caas"] = {}
+            for project in caas_project_mapping:
+                project_id = project.id
+                res = []
+                sales_order_ids = project.sales_order_ids
+                for sales_order_id in sales_order_ids:
+                    order_details = sales_order_dict.get(sales_order_id)
+                    if order_details:
+                        res.append(order_details['salesorder_number'])
+                final_data["caas"][project_id] = res
+        
+        if schedular_project_mapping:
+            final_data["seeq"] = {}
+            for project in schedular_project_mapping:
+                project_id = project.id
+                res = []
+                sales_order_ids = project.sales_order_ids
+                for sales_order_id in sales_order_ids:
+                    order_details = sales_order_dict.get(sales_order_id)
+                    if order_details:
+                        res.append(order_details['salesorder_number'])
+                final_data["seeq"][project_id] = res
+        return Response(final_data)  
+        
+    except ObjectDoesNotExist as e:
+        print(str(e))
+        return Response({"error": "Project does not exist"}, status=404)
+    
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+    
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_total_so_created_count(request,sales_person_id):
+    try:
+        all_sales_orders = fetch_sales_orders(organization_id,f"&salesperson_id={sales_person_id}")
+        res = get_sales_orders_with_project_details(all_sales_orders)
+        count = len(res)
+        return Response(count, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    

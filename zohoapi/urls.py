@@ -287,4 +287,14 @@ urlpatterns = [
         views.get_sales_person_from_zoho,
         name="get_sales_person_from_zoho",
     ),
+    path(
+        "get-so-for-the-project/",
+        views.get_so_for_the_project,
+        name="get_so_for_the_project",
+    ),
+    path(
+        "get-total-so-created-count/<str:sales_person_id>/",
+        views.get_total_so_created_count,
+        name="get_total_so_created_count",
+    ),
 ]
