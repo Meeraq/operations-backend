@@ -2077,18 +2077,25 @@ def get_all_sales_orders(request):
                             id=order_project_mapping.project.id
                         )
                         if project:
+                            sales_order["project_id"] = project.id
                             sales_order["projectType"] = "CAAS"
+                        else:
+                            sales_order["project_id"] = None
+                            sales_order["projectType"] = ""
                     elif order_project_mapping.schedular_project:
                         project = SchedularProject.objects.get(
                             id=order_project_mapping.schedular_project.id
                         )
                         if project:
+                            sales_order["project_id"] = project.id
                             sales_order["projectType"] = "SEEQ"
-
+                        else:
+                            sales_order["project_id"] = None
+                            sales_order["projectType"] = ""
                     if project:
 
                         data = project.project_structure
-                        print(data)
+
                         for item in data:
 
                             if (

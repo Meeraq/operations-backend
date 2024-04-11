@@ -1478,7 +1478,7 @@ def add_batch(request, project_id):
         data = {
             "participants": request.data.get("participants", []),
             "project_id": project_id,
-            "user_email":request.user
+            "user_email":request.user.username
         }
 
         add_batch_to_project.delay(data)
@@ -1491,6 +1491,12 @@ def add_batch(request, project_id):
         )
     except Exception as e:
         print(str(e))
+        return Response(
+            {
+                "error": "Failed to add participants."
+            },
+            status=500,
+        )
 
 
 @api_view(["GET"])
