@@ -39,7 +39,6 @@ from .models import (
     SuperAdmin,
     Facilitator,
     APILog,
-    Task,
     Sales,
 )
 from django.contrib.auth.models import User
@@ -506,10 +505,7 @@ class APILogSerializer(serializers.ModelSerializer):
         fields = ["path", "username", "created_at", "method"]
 
 
-class TaskSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        fields = "__all__"
+
         
 class SalesSerializer(serializers.ModelSerializer):
     class Meta:

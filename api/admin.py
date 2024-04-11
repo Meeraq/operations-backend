@@ -41,7 +41,6 @@ from .models import (
     SuperAdmin,
     Facilitator,
     Finance,
-    Task,
     Sales,
 )
 
@@ -88,5 +87,4 @@ admin.site.register(Role)
 admin.site.register(APILog)
 admin.site.register(SuperAdmin)
 admin.site.register(Finance)
-admin.site.register(Task)
 admin.site.register(Sales)

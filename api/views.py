@@ -72,7 +72,6 @@ from .serializers import (
     FacilitatorSerializer,
     APILogSerializer,
     PmoSerializerAll,
-    TaskSerializer,
     ProjectDepthTwoSerializerArchiveCheck,
     CustomUserSerializer,
     SalesSerializer,
@@ -140,7 +139,6 @@ from .models import (
     APILog,
     Facilitator,
     SuperAdmin,
-    Task,
     Finance,
     Sales,
 )
@@ -176,9 +174,11 @@ from schedularApi.models import (
     CoachingSession,
     LiveSession,
     HandoverDetails,
+    Task
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
+    TaskSerializer
 )
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer

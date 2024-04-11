@@ -16,6 +16,7 @@ from schedularApi.models import (
     CoachSchedularAvailibilty,
     SchedularProject,
     SchedularBatch,
+    Task
 )
 from django.db import transaction
 from django.utils import timezone
@@ -2699,6 +2700,7 @@ def create_batch_calendar(batch):
                 duration=duration,
                 session_type=session_type,
             )
+            
         elif session_type == "laser_coaching_session":
             coaching_session_number = (
                 CoachingSession.objects.filter(
@@ -2764,6 +2766,13 @@ def add_batch_to_project(data):
                     batch = SchedularBatch.objects.create(
                         name=batch_name, project=project
                     )
+                    try:
+                        tasks = Task.objects.filter(task="add_batches", status="pending", schedular_project=project)
+                        tasks.update(status="completed")
+                    except Exception as e:
+                        print(str(e))
+                        pass
+
                     create_batch_calendar(batch)
 
                     # Create Live Sessions and Coaching Sessions based on project structure

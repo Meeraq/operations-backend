@@ -36,7 +36,7 @@ from django.db.models import (
 from time import sleep
 import json
 from django.core.exceptions import ObjectDoesNotExist
-from api.views import get_date, get_time, add_contact_in_wati, add_so_to_project
+from api.views import get_date, get_time, add_contact_in_wati, add_so_to_project,create_task
 from django.shortcuts import render
 from django.http import JsonResponse
 from api.models import (
@@ -82,6 +82,7 @@ from .serializers import (
     ExpenseSerializer,
     SchedularProjectSerializerArchiveCheck,
     HandoverDetailsSerializer,
+    TaskSerializer
 )
 from .models import (
     SchedularBatch,
@@ -100,6 +101,7 @@ from .models import (
     FacilitatorPricing,
     Expense,
     HandoverDetails,
+    Task
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -175,6 +177,8 @@ from courses.views import calculate_nps
 from api.permissions import IsInRoles
 
 env = environ.Env()
+
+
 
 
 def get_feedback_lesson_name(lesson_name):
@@ -315,6 +319,33 @@ def create_project_schedular(request):
     for hr in project_details["hr"]:
         single_hr = HR.objects.get(id=hr)
         schedularProject.hr.add(single_hr)
+    
+    try:
+        create_task(
+            {
+                "task": "add_project_structure",
+                "schedular_project": schedularProject.id,
+                "priority": "high",
+                "status": "pending",
+                "remarks": [],
+            },
+            1,
+        )
+        create_task(
+            {
+                "task": "add_batches",
+                "schedular_project": schedularProject.id,
+                "priority": "high",
+                "status": "pending",
+                "remarks": [],
+            },
+            1,
+        )
+        
+    except Exception as e:
+        print("Error", str(e))
+
+
     handover_id = project_details.get("handover")
     if handover_id:
         handover = HandoverDetails.objects.get(id=handover_id)
@@ -323,6 +354,7 @@ def create_project_schedular(request):
         add_so_to_project("SEEQ", schedularProject.id, handover.sales_order_ids)
     else:
         raise Exception("No handover found")
+    
    
     try:
         path = ""
@@ -630,6 +662,13 @@ def create_project_structure(request, project_id):
             is_editing = len(project.project_structure) > 0
             project.project_structure = serializer.data
             project.save()
+            # updating task status
+            try:
+                tasks = Task.objects.filter(task="add_project_structure", status="pending", schedular_project=project)
+                tasks.update(status="completed")
+            except Exception as e:
+                print(str(e))
+                pass
 
             batches = SchedularBatch.objects.filter(project=project)
             if batches.exists():
