@@ -9901,12 +9901,15 @@ def add_sales_user(request):
     name = request.data.get("name")
     email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
+    sales_person_id = request.data.get("sales_person_id","").strip()
     username = email  # username and email are the same
-    # password = request.data.get("password")
-
     # Check if required data is provided
-    if not all([name, email, phone, username]):
-        return Response({"error": "All required fields must be provided."}, status=400)
+    if not all([name, email, phone, username, sales_person_id]):
+        return Response({"error": "All required fields must be provided."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    existing_sales_user = Sales.objects.filter(sales_person_id=sales_person_id)
+    if existing_sales_user.exists():
+        return Response({"error" : "Selected zoho sales person already exists."}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         with transaction.atomic():
@@ -9940,6 +9943,7 @@ def add_sales_user(request):
                 name=name,
                 email=email,
                 phone=phone,
+                sales_person_id=sales_person_id
             )
 
             name = sales_user.name

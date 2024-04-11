@@ -168,6 +168,11 @@ urlpatterns = [
         name="get_all_sales_orders",
     ),
     path(
+        "sales-orders/<str:sales_person_id>/",
+        views.get_sales_persons_sales_orders,
+        name="get_sales_persons_sales_orders",
+    ),
+    path(
         "get-all-sales-orders-for-project/<int:project_id>/<str:project_type>/",
         views.get_all_sales_orders_of_project,
         name="get_all_sales_orders_of_project",
@@ -271,5 +276,10 @@ urlpatterns = [
         "vendor-feilds-data/",
         views.get_vendor_feilds_data,
         name="get_vendor_feilds_data",
+    ),
+    path(
+        "sales-persons-from-zoho/",
+        views.get_sales_person_from_zoho,
+        name="get_sales_person_from_zoho",
     ),
 ]

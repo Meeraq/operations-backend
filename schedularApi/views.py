@@ -169,7 +169,7 @@ import re
 from rest_framework.views import APIView
 from api.views import get_user_data
 from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping
-from zohoapi.views import fetch_purchase_orders
+from zohoapi.views import fetch_purchase_orders, fetch_sales_orders,organization_id, fetch_sales_persons
 from zohoapi.tasks import organization_id
 from courses.views import calculate_nps
 from api.permissions import IsInRoles
@@ -6277,9 +6277,43 @@ def get_project_and_handover(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_handovers(request):
-    handovers = HandoverDetails.objects.filter(
-        schedular_project__isnull=True, caas_project__isnull=True
-    )
-    serializer = HandoverDetailsSerializer(handovers, many=True)
-    return Response(serializer.data)
-
+    try:
+        handovers = HandoverDetails.objects.filter(
+            schedular_project__isnull=True, caas_project__isnull=True
+        ) 
+        sales_order_ids_list = []
+        for handover in handovers:
+            for sales_order_id in handover.sales_order_ids:
+                sales_order_ids_list.append(sales_order_id)
+        sales_order_ids_str = ','.join(map(str, sales_order_ids_list))
+        serializer = HandoverDetailsSerializer(handovers, many=True)
+        # Fetch sales orders for the given sales order IDs
+        if sales_order_ids_str:
+            sales_orders = fetch_sales_orders(organization_id, f"&salesorder_ids={sales_order_ids_str}")
+            if not sales_orders:
+                return Response({"error": "Failed to get sales orders."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Create a dictionary to map sales order ID to sales person ID
+            sales_order_to_sales_person = {sales_order['salesorder_id']: sales_order['salesperson_name'] for sales_order in sales_orders}
+            # Fetch sales persons based on sales person IDs from sales orders
+            sales_persons = fetch_sales_persons(organization_id)
+            if not sales_persons:
+                return Response({"error": "Failed to get sales persons."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Map sales persons to handovers
+            for handover in serializer.data:
+                sales_order_ids = handover['sales_order_ids']
+                salespersons = []
+                added_salespersons = set()  # Keep track of added salespersons for each handover
+                for sales_order_id in sales_order_ids:
+                    sales_person_name = sales_order_to_sales_person.get(sales_order_id)
+                    if sales_person_name:
+                        # Check if sales person has already been added for this handover
+                        if sales_person_name not in added_salespersons:
+                            for person in sales_persons:
+                                if person['salesperson_name'] == sales_person_name:
+                                    salespersons.append(person)
+                                    added_salespersons.add(sales_person_name)  # Add the sales person to the set of added salespersons
+                handover['salespersons'] = salespersons
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get handovers."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
