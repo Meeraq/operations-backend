@@ -1432,6 +1432,8 @@ def create_project_cass(request):
             handover = HandoverDetails.objects.get(id=handover_id)
             handover.caas_project = project
             handover.save()
+            project.project_structure = handover.project_structure
+            project.save()
             add_so_to_project("CAAS", project.id, handover.sales_order_ids)
         else:
             raise Exception("No handover found")

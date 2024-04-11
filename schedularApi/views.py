@@ -320,6 +320,8 @@ def create_project_schedular(request):
         handover = HandoverDetails.objects.get(id=handover_id)
         handover.schedular_project = schedularProject
         handover.save()
+        schedularProject.project_structure = handover.project_structure
+        schedularProject.save()
         add_so_to_project("SEEQ", schedularProject.id, handover.sales_order_ids)
     else:
         raise Exception("No handover found")
