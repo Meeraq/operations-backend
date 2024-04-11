@@ -1544,6 +1544,7 @@ def coachee_booking_reminder_whatsapp_at_8am():
                             project_name = coaching_session.batch.project.name
                             path_parts = coaching_session.booking_link.split("/")
                             booking_id = path_parts[-1]
+                            expiry_date = coaching_session.expiry_date.strftime("%d-%m-%Y")
                             send_whatsapp_message_template(
                                 phone,
                                 {
@@ -1565,8 +1566,12 @@ def coachee_booking_reminder_whatsapp_at_8am():
                                             "name": "1",
                                             "value": booking_id,
                                         },
+                                        {
+                                            "name": "expiry_date",
+                                            "value": expiry_date,
+                                        },
                                     ],
-                                    "template_name": "reminder_coachee_book_slot_daily",
+                                    "template_name": "participant_slot_booking_reminder_for_skill_training_sessions",
                                 },
                             )
                     except Exception as e:
