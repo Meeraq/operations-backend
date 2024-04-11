@@ -277,6 +277,11 @@ urlpatterns = [
         views.get_vendor_feilds_data,
         name="get_vendor_feilds_data",
     ),
+      path(
+        "get-all-invoices-of-sales-order/<str:sales_order_id>/",
+        views.get_all_invoices_of_sales_order,
+        name="get_all_invoices_of_sales_order",
+    ),
     path(
         "sales-persons-from-zoho/",
         views.get_sales_person_from_zoho,
