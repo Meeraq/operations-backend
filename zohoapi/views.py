@@ -1652,7 +1652,7 @@ def generate_new_so_number(so_list, regex_to_match):
     # Finding the latest number for each year
     for so in filtered_sos:
         print(so["salesorder_number"].split("/"))
-        _, _, _, _, so_number = so["salesorder_number"].split("/")
+        _, _, _, so_number = so["salesorder_number"].split("/")
         latest_number = max(latest_number, int(so_number))
     # Generating the new sales order number
     new_number = latest_number + 1
