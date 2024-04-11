@@ -169,8 +169,8 @@ import re
 from rest_framework.views import APIView
 from api.views import get_user_data
 from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping
-from zohoapi.views import fetch_purchase_orders, fetch_sales_orders,organization_id, fetch_sales_persons
-from zohoapi.tasks import organization_id
+from zohoapi.views import fetch_purchase_orders,organization_id, fetch_sales_persons
+from zohoapi.tasks import organization_id, fetch_sales_orders
 from courses.views import calculate_nps
 from api.permissions import IsInRoles
 
@@ -370,8 +370,26 @@ def update_handover(request):
             status=200,
         )
     else:
-        return Response(serializer.errors, status=400)
+        print(serializer.errors)
+        return Response({"error": "Failed to update handover."}, status=400)
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
+def get_handover_salesorders(request, handover_id):
+    try:
+        handover = HandoverDetails.objects.get(id=handover_id)
+        sales_orders_ids_str = ",".join(handover.sales_order_ids)
+        print(sales_orders_ids_str, handover.sales_order_ids)
+        all_sales_orders = []
+        if sales_orders_ids_str:
+            all_sales_orders = fetch_sales_orders(
+                organization_id, f"&salesorder_ids={sales_orders_ids_str}"
+            )
+        return Response(all_sales_orders)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])
