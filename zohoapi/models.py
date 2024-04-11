@@ -69,6 +69,8 @@ class InvoiceData(models.Model):
         max_length=50, choices=INVOICE_STATUS_CHOICES, default="in_review"
     )
     approver_email = models.EmailField(default="", blank=True)
+    tax_names = models.JSONField(default=list, blank=True)
+
 
     def __str__(self):
         return f"{self.invoice_number}"
