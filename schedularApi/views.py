@@ -6348,3 +6348,5 @@ def update_reminder_in_batch(request, batch_id):
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
 
+
+
