@@ -62,6 +62,10 @@ class SchedularBatch(models.Model):
     nudge_periodic_task = models.ForeignKey(
         PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
     )
+    email_reminder = models.BooleanField(blank=True, default=True)
+    whatsapp_reminder = models.BooleanField(blank=True, default=True)
+    calendar_invites = models.BooleanField(blank=True, default=True)
+
 
 
 class RequestAvailibilty(models.Model):

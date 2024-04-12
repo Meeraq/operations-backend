@@ -363,4 +363,9 @@ urlpatterns = [
         name="get_project_and_handover",
     ),
     path("handovers/", views.get_handovers, name="get_handovers"),
+    path(
+        "update-reminder-in-batch/<int:batch_id>/",
+        views.update_reminder_in_batch,
+        name="update_reminder_in_batch",
+    ),
 ]

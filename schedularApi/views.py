@@ -1023,7 +1023,7 @@ def update_live_session(request, live_session_id):
                 if (
                     not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
                     and update_live_session.batch.project.status == "ongoing"
-                    and update_live_session.batch.project.calendar_invites
+                    and update_live_session.batch.calendar_invites
                 ):
                     try:
                         learners = live_session.batch.learners.all()
@@ -2032,7 +2032,7 @@ def schedule_session_fixed(request):
                 # Only send email if project status is ongoing
                 if coaching_session.batch.project.status == "ongoing":
                     attendees = None
-                    if coaching_session.batch.project.calendar_invites:
+                    if coaching_session.batch.calendar_invites:
                         attendees = [
                             {
                                 "emailAddress": {
@@ -2308,7 +2308,7 @@ def reschedule_session(request, session_id):
                 # Only send email if project status is ongoing
                 if coaching_session.batch.project.status == "ongoing":
                     attendees = None
-                    if coaching_session.batch.project.calendar_invites:
+                    if coaching_session.batch.calendar_invites:
                         attendees = [
                             {
                                 "emailAddress": {
@@ -6329,3 +6329,22 @@ def get_handovers(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get handovers."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_reminder_in_batch(request, batch_id):
+    try:
+        email_reminder = request.data.get("email_reminder")
+        whatsapp_reminder = request.data.get("whatsapp_reminder")
+        calendar_invites = request.data.get("calendar_invites")
+        batch = SchedularBatch.objects.get(id = batch_id)
+        batch.email_reminder = email_reminder
+        batch.whatsapp_reminder =whatsapp_reminder
+        batch.calendar_invites =calendar_invites
+        batch.save()
+        return Response({"message": "Reminder Updated successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)
+
