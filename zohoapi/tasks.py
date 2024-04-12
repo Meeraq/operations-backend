@@ -116,9 +116,9 @@ purchase_orders_allowed = [
     "Meeraq/PO/CaaS/23-24/0101",
     "Meeraq/PO/CaaS/23-24/0060",
     "Meeraq/PO/CaaS/23-24/0004",
-    "Meeraq/PO/CaaS/23-24/0102"
+    "Meeraq/PO/CaaS/23-24/0102",
+    "Meeraq/PO/22-23/0045",
 ]
-
 
 
 def get_vendor(vendor_id):
@@ -138,6 +138,7 @@ def get_vendor(vendor_id):
         return Response({}, status=400)
     else:
         return Response({}, status=400)
+
 
 def filter_purchase_order_data(purchase_orders):
     try:
@@ -339,7 +340,7 @@ def import_invoices_for_vendor_from_zoho(vendor, headers, res, bill_details_res)
                             )
                         else:
                             vendor_details = get_vendor(vendor.vendor_id)
-                            name = vendor_details["contact_name"] 
+                            name = vendor_details["contact_name"]
                             invoice = InvoiceData.objects.create(
                                 invoice_number=bill[env("INVOICE_FIELD_NAME")],
                                 vendor_id=vendor.vendor_id,
