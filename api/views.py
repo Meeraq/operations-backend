@@ -81,7 +81,7 @@ from .serializers import (
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
-from zohoapi.tasks import organization_id
+from zohoapi.tasks import organization_id , get_access_token, base_url
 from .permissions import IsInRoles
 from rest_framework import generics
 from django.utils.crypto import get_random_string
@@ -10210,6 +10210,38 @@ def get_all_competency(request):
         competency = Competency.objects.all()
         serializer = CompetencySerializer(competency, many=True)
         return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_po_of_project(request,project_id):
+    try:
+        po_ids =  set()
+        project = Project.objects.get(id=project_id)
+        for coach_status in project.coaches_status:
+            if coach_status.purchase_order_id:
+                po_ids.add(coach_status.purchase_order_id)
+        purchase_orders = []
+        for po_id in po_ids:
+            access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+            if not access_token:
+                raise Exception(
+                    "Access token not found. Please generate an access token first."
+                )
+            api_url = f"{base_url}/purchaseorders/{po_id}?organization_id={organization_id}"
+            auth_header = {"Authorization": f"Bearer {access_token}"}
+            response = requests.put(api_url, headers=auth_header, data=request.data)
+            if response.status_code == 200:
+                purchase_orders.append(response.json())
+
+        return Response(purchase_orders)
     except Exception as e:
         print(str(e))
         return Response(

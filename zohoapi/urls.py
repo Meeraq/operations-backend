@@ -122,6 +122,11 @@ urlpatterns = [
         views.create_purchase_order,
         name="create_purchase_order",
     ),
+      path(
+        "purchase-order/update/<str:user_type>/<int:facilitator_pricing_id>/",
+        views.update_purchase_order,
+        name="update_purchase_order",
+    ),
     path(
         "po-number/meeraq/",
         views.get_po_number_to_create,
@@ -140,6 +145,10 @@ urlpatterns = [
     path(
         "coching-purchase-order/create/<int:coach_id>/<int:project_id>/",
         views.coching_purchase_order_create,
+    ),
+    path(
+        "coching-purchase-order/update/<int:coach_id>/<int:project_id>/",
+        views.coching_purchase_order_update,
     ),
     path(
         "purchase-order/coaching/delete/<int:purchase_order_id>/",
