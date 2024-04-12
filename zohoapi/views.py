@@ -1830,6 +1830,51 @@ def expense_purchase_order_create(request, facilitator_id, batch_or_project_id):
         return Response(status=500)
 
 
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def expense_purchase_order_update(request, facilitator_id, batch_or_project_id):
+    try:
+        is_all_batch = request.query_params.get("is_all_batch")
+        expenses = []
+
+        facilitator = Facilitator.objects.get(id=facilitator_id)
+
+        if is_all_batch:
+            expenses = Expense.objects.filter(
+                facilitator=facilitator, batch__project__id=batch_or_project_id
+            )
+        else:
+            expenses = Expense.objects.filter(
+                facilitator=facilitator, batch__id=batch_or_project_id
+            )
+
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders/{expenses[0].purchase_order_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.put(api_url, headers=auth_header, data=request.data)
+        if response.status_code == 200:
+            purchaseorder_created = response.json().get("purchaseorder")
+            for expense in expenses:
+                expense.purchase_order_id = purchaseorder_created["purchaseorder_id"]
+                expense.purchase_order_no = purchaseorder_created[
+                    "purchaseorder_number"
+                ]
+                expense.save()
+
+            return Response({"message": "Purchase Order updated successfully."},status=200)
+        else:
+            print(response.json())
+            return Response(status=500)
+    except Exception as e:
+        print(str(e))
+        return Response(status=500)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_coach_wise_finances(request):
