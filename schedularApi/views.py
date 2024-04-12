@@ -490,7 +490,7 @@ def create_facilitator_pricing(batch, facilitator):
                 duration=live_session.duration,
             )
             if created:
-                facilitator_pricing.price = session["price"]
+                facilitator_pricing.price = session.get("price",0)
                 facilitator_pricing.save()
 
 
@@ -542,7 +542,7 @@ def create_coach_pricing(batch, coach):
                 order=coaching_session.order,
             )
             if created:
-                coach_pricing.price = session["price"]
+                coach_pricing.price = session.get("price",0)
                 coach_pricing.save()
 
 
@@ -1459,6 +1459,18 @@ def create_coach_schedular_availibilty(request):
                     "/slot-request",
                     "Admin has asked your availability!",
                 )
+                create_task(
+                {
+                    "task": "remind_coach_availability",
+                    "priority": "medium",
+                    "status": "pending",
+                    "coach": coach.id, 
+                    "request":serializer.data["id"],
+                    "remarks": [],
+                },
+                1,
+                 )
+
                 from_email = settings.DEFAULT_FROM_EMAIL
                 recipient_list = [coach.email]
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -2056,6 +2068,20 @@ def schedule_session_fixed(request):
                 )
                 booking_id = coach_availability.coach.room_id
                 meeting_location = f"{env('CAAS_APP_URL')}/call/{booking_id}"
+                tasks = Task.objects.filter(
+                task="coachee_book_session", status="pending",
+                )
+                tasks.update(status="completed")
+                create_task(
+                {
+                        "task": "schedular_update_session_status",
+                        "priority": "medium",
+                        "status": "pending",
+                        "coach_id": coach_id,
+                        "remarks": [],
+                },
+                 1,
+            )
                 # Only send email if project status is ongoing
                 if coaching_session.batch.project.status == "ongoing":
                     attendees = None
@@ -2504,7 +2530,20 @@ def create_coach_availabilities(request):
             serializer.save()
             request.provided_by.append(int(coach_id))
             request.save()
-
+            tasks = Task.objects.filter(
+            task="remind_coach_availability", status="pending"
+            )
+            tasks.update(status="completed")
+            create_task(
+                {
+                        "task": "coachee_book_session",
+                        "priority": "medium",
+                        "status": "pending",
+                        "engagement": engagement.id,
+                        "coach_id": coach_id
+                },
+                 3,
+            )
             # Convert dates from 'YYYY-MM-DD' to 'DD-MM-YYYY' format
             formatted_dates = []
             for date in unique_dates:
@@ -2648,6 +2687,10 @@ def edit_session_status(request, session_id):
         return Response({"error": "Status is required."}, status=400)
     session.status = new_status
     session.save()
+    tasks = Task.objects.filter(
+        task="schedular_update_session_status", status="pending", caas_project=project
+    )
+    tasks.update(status="completed")
     return Response({"message": "Session status updated successfully."}, status=200)
 
 

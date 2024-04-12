@@ -370,6 +370,13 @@ class Task(models.Model):
         null=True,
         default=None,
     )
+    request = models.ForeignKey(
+        RequestAvailibilty,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        default=None,
+    )
     schedular_project = models.ForeignKey(
         SchedularProject,
         on_delete=models.CASCADE,
