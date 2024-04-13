@@ -36,7 +36,13 @@ from django.db.models import (
 from time import sleep
 import json
 from django.core.exceptions import ObjectDoesNotExist
-from api.views import get_date, get_time, add_contact_in_wati, add_so_to_project,create_task
+from api.views import (
+    get_date,
+    get_time,
+    add_contact_in_wati,
+    add_so_to_project,
+    create_task,
+)
 from django.shortcuts import render
 from django.http import JsonResponse
 from api.models import (
@@ -82,7 +88,7 @@ from .serializers import (
     ExpenseSerializer,
     SchedularProjectSerializerArchiveCheck,
     HandoverDetailsSerializer,
-    TaskSerializer
+    TaskSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -101,7 +107,7 @@ from .models import (
     FacilitatorPricing,
     Expense,
     HandoverDetails,
-    Task
+    Task,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -177,8 +183,6 @@ from courses.views import calculate_nps
 from api.permissions import IsInRoles
 
 env = environ.Env()
-
-
 
 
 def get_feedback_lesson_name(lesson_name):
@@ -319,12 +323,13 @@ def create_project_schedular(request):
     for hr in project_details["hr"]:
         single_hr = HR.objects.get(id=hr)
         schedularProject.hr.add(single_hr)
-    
+
     try:
         create_task(
             {
                 "task": "add_project_structure",
                 "schedular_project": schedularProject.id,
+                "project_type": "skill_training",
                 "priority": "high",
                 "status": "pending",
                 "remarks": [],
@@ -335,16 +340,16 @@ def create_project_schedular(request):
             {
                 "task": "add_batches",
                 "schedular_project": schedularProject.id,
+                "project_type": "skill_training",
                 "priority": "high",
                 "status": "pending",
                 "remarks": [],
             },
             1,
         )
-        
+
     except Exception as e:
         print("Error", str(e))
-
 
     handover_id = project_details.get("handover")
     if handover_id:
@@ -354,8 +359,7 @@ def create_project_schedular(request):
         add_so_to_project("SEEQ", schedularProject.id, handover.sales_order_ids)
     else:
         raise Exception("No handover found")
-    
-   
+
     try:
         path = ""
         message = f"A new project - {schedularProject.name} has been created for the organisation - {schedularProject.organisation.name}"
@@ -544,6 +548,18 @@ def create_coach_pricing(batch, coach):
             if created:
                 coach_pricing.price = session["price"]
                 coach_pricing.save()
+                create_task(
+                    {
+                        "task": "create_purchase_order",
+                        "schedular_project": batch.project.id,
+                        "coach": coach_pricing.coach.id,
+                        "project_type": "skill_training",
+                        "priority": "low",
+                        "status": "pending",
+                        "remarks": [],
+                    },
+                    7,
+                )
 
 
 def create_batch_calendar(batch):
@@ -572,6 +588,18 @@ def create_batch_calendar(batch):
                 duration=duration,
                 session_type=session_type,
             )
+            create_task(
+                {
+                    "task": "add_session_details",
+                    "schedular_project": batch.project.id,
+                    "project_type": "skill_training",
+                    "live_session": live_session.id,
+                    "priority": "medium",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                3,
+            )
         elif session_type == "laser_coaching_session":
             coaching_session_number = (
                 CoachingSession.objects.filter(
@@ -587,6 +615,18 @@ def create_batch_calendar(batch):
                 duration=duration,
                 booking_link=booking_link,
                 session_type=session_type,
+            )
+            create_task(
+                {
+                    "task": "add_dates",
+                    "schedular_project": batch.project.id,
+                    "project_type": "skill_training",
+                    "coaching_session": coaching_session.id,
+                    "priority": "medium",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                7,
             )
         elif session_type == "mentoring_session":
             coaching_session_number = (
@@ -604,6 +644,18 @@ def create_batch_calendar(batch):
                 duration=duration,
                 booking_link=booking_link,
                 session_type=session_type,
+            )
+            create_task(
+                {
+                    "task": "add_dates",
+                    "schedular_project": batch.project.id,
+                    "project_type": "skill_training",
+                    "coaching_session": coaching_session.id,
+                    "priority": "medium",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                7,
             )
 
 
@@ -664,7 +716,11 @@ def create_project_structure(request, project_id):
             project.save()
             # updating task status
             try:
-                tasks = Task.objects.filter(task="add_project_structure", status="pending", schedular_project=project)
+                tasks = Task.objects.filter(
+                    task="add_project_structure",
+                    status="pending",
+                    schedular_project=project,
+                )
                 tasks.update(status="completed")
             except Exception as e:
                 print(str(e))
@@ -985,15 +1041,46 @@ def update_live_session(request, live_session_id):
     try:
         with transaction.atomic():
             live_session = LiveSession.objects.get(id=live_session_id)
-
             existing_date_time = live_session.date_time
             serializer = LiveSessionSerializer(
                 live_session, data=request.data, partial=True
             )
             if serializer.is_valid():
                 update_live_session = serializer.save()
+                try:
+                    tasks = Task.objects.filter(
+                        task="add_session_details",
+                        status="pending",
+                        live_session=live_session,
+                    )
+                    tasks.update(status="completed")
+                except Exception as e:
+                    print(str(e))
+                    pass
+
                 current_time = timezone.now()
+                days_difference = (update_live_session.date_time - current_time).days
+                
                 if update_live_session.date_time > current_time:
+                    # delete existing task and create new task based on date
+                    update_status_tasks = Task.objects.filter(
+                        task="update_status_of_virtual_session",
+                        live_session=update_live_session,
+                    )
+                    update_status_tasks.delete()
+                    create_task(
+                        {
+                            "task": "update_status_of_virtual_session",
+                            "schedular_project": update_live_session.batch.project.id,
+                            "project_type": "skill_training",
+                            "live_session": update_live_session.id,
+                            "priority": "low",
+                            "status": "pending",
+                            "remarks": [],
+                        },
+                        days_difference + 3,
+                    )
+
                     try:
                         scheduled_for = update_live_session.date_time - timedelta(
                             minutes=30
@@ -1043,6 +1130,37 @@ def update_live_session(request, live_session_id):
                     )
 
                     lesson.save()
+
+                if update_live_session.status == "completed":
+                    tasks = Task.objects.filter(
+                        task="update_status_of_virtual_session",
+                        live_session=update_live_session,
+                    )
+                    tasks.update(status="completed")
+                    if len(update_live_session.attendees) == 0:
+                        create_task(
+                            {
+                                "task": "add_attendance",
+                                "schedular_project": update_live_session.batch.project.id,
+                                "project_type": "skill_training",
+                                "live_session": update_live_session.id,
+                                "priority": "low",
+                                "status": "pending",
+                                "remarks": [],
+                            },
+                            3,
+                        )
+                    elif len(update_live_session.attendees) > 0:
+                        try:
+                            tasks = Task.objects.filter(
+                                task="add_attendance",
+                                status="pending",
+                                live_session=update_live_session,
+                            )
+                            tasks.update(status="completed")
+                        except Exception as e:
+                            print(str(e))
+                            pass
 
                 AIR_INDIA_PROJECT_ID = 3
                 if (
@@ -1162,6 +1280,17 @@ def update_coaching_session(request, coaching_session_id):
 
             if serializer.is_valid():
                 serializer.save()
+                try:
+                    tasks = Task.objects.filter(
+                        task="add_dates",
+                        status="pending",
+                        coaching_session=coaching_session,
+                    )
+                    tasks.update(status="completed")
+                except Exception as e:
+                    print(str(e))
+                    pass
+
                 coaching_session_lesson = LaserCoachingSession.objects.filter(
                     coaching_session=coaching_session
                 ).first()
@@ -1517,7 +1646,7 @@ def add_batch(request, project_id):
         data = {
             "participants": request.data.get("participants", []),
             "project_id": project_id,
-            "user_email":request.user.username
+            "user_email": request.user.username,
         }
 
         add_batch_to_project.delay(data)
@@ -1531,9 +1660,7 @@ def add_batch(request, project_id):
     except Exception as e:
         print(str(e))
         return Response(
-            {
-                "error": "Failed to add participants."
-            },
+            {"error": "Failed to add participants."},
             status=500,
         )
 
@@ -1548,6 +1675,7 @@ def get_coaches(request):
     return Response(serializer.data)
 
 
+# use to add coaches to a batch
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def update_batch(request, batch_id):
@@ -1569,6 +1697,13 @@ def update_batch(request, batch_id):
 
             if serializer.is_valid():
                 serializer.save()
+                try:
+                    tasks = Task.objects.filter(
+                        task="add_coach", status="pending", schedular_batch=batch
+                    )
+                    tasks.update(status="complete")
+                except Exception as e:
+                    print(str(e))
 
                 return Response(serializer.data)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -4149,6 +4284,18 @@ def add_new_session_in_project_structure(request):
                         duration=new_session["duration"],
                         session_type=session_type,
                     )
+                    create_task(
+                        {
+                            "task": "add_session_details",
+                            "schedular_project": batch.project.id,
+                            "project_type": "skill_training",
+                            "live_session": live_session.id,
+                            "priority": "medium",
+                            "status": "pending",
+                            "remarks": [],
+                        },
+                        3,
+                    )
                     if course:
                         max_order = (
                             Lesson.objects.filter(course=course).aggregate(
@@ -4220,6 +4367,18 @@ def add_new_session_in_project_structure(request):
                         duration=new_session["duration"],
                         booking_link=booking_link,
                         session_type=session_type,
+                    )
+                    create_task(
+                        {
+                            "task": "add_dates",
+                            "schedular_project": batch.project.id,
+                            "project_type": "skill_training",
+                            "coaching_session": coaching_session.id,
+                            "priority": "medium",
+                            "status": "pending",
+                            "remarks": [],
+                        },
+                        7,
                     )
                     if course:
                         max_order = (
@@ -5272,6 +5431,14 @@ def add_facilitator_to_batch(request, batch_id):
             live_session.facilitator = facilitator
             live_session.save()
 
+        try:
+            tasks = Task.objects.filter(
+                task="add_facilitator", status="pending", schedular_batch=batch
+            )
+            tasks.update(status="complete")
+        except Exception as e:
+            print(str(e))
+
         # create_facilitator_pricing(batch, facilitator)
 
         return Response({"message": "Facilitator added successfully."}, status=201)
@@ -5961,7 +6128,19 @@ def get_coaches_and_pricing_for_project(request, project_id):
 def add_facilitator_pricing(request):
     serializer = FacilitatorPricingSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        facilitator_pricing = serializer.save()
+        create_task(
+            {
+                "task": "create_purchase_order_facilitator",
+                "schedular_project": facilitator_pricing.project.id,
+                "facilitator": facilitator_pricing.facilitator.id,
+                "project_type": "skill_training",
+                "priority": "low",
+                "status": "pending",
+                "remarks": [],
+            },
+            7,
+        )
         return Response(serializer.data, status=201)
     return Response(serializer.errors, status=400)
 
@@ -6321,4 +6500,3 @@ def get_handovers(request):
     )
     serializer = HandoverDetailsSerializer(handovers, many=True)
     return Response(serializer.data)
-

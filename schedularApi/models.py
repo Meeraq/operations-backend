@@ -377,6 +377,13 @@ class Task(models.Model):
         null=True,
         default=None,
     )
+    schedular_batch = models.ForeignKey(
+        SchedularBatch,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
     session_caas = models.ForeignKey(
         SessionRequestCaas,
         on_delete=models.CASCADE,

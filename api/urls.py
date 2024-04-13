@@ -413,6 +413,7 @@ urlpatterns = [
     ),
     path("update-user-roles/", UpdateUserRoles.as_view()),
     path("tasks/", views.get_tasks),
+    path("tasks/skill-training/", views.get_skill_training_tasks),
     path("coach/tasks/", views.get_coach_tasks),
     path("learner/tasks/", views.get_learner_tasks),
     path("tasks/add-remark/", views.add_remark_to_task),
