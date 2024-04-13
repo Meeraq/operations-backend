@@ -299,7 +299,7 @@ class Learner(models.Model):
     name = models.CharField(max_length=100)
     email = models.EmailField()
     phone = models.CharField(max_length=25, blank=True)
-    area_of_expertise = models.CharField(max_length=100, blank=True)
+    area_of_expertise = models.JSONField(default=list, blank=True)
     years_of_experience = models.IntegerField(default=0, blank=True)
     job_roles = models.JSONField(default=list, blank=True)
     active_inactive = models.BooleanField(default=True)
