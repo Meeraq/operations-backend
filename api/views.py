@@ -183,7 +183,7 @@ from schedularApi.serializers import (
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-from zohoapi.models import Vendor, InvoiceData,OrdersAndProjectMapping
+from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping
 from courses.models import CourseEnrollment, CoachingSessionsFeedbackResponse, Answer
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
@@ -218,7 +218,6 @@ def get_current_date_timestamps():
     return start_timestamp, end_timestamp
 
 
-
 def calculate_nps(ratings):
     promoters = sum(rating >= 9 for rating in ratings)
     detractors = sum(rating <= 6 for rating in ratings)
@@ -231,7 +230,6 @@ def calculate_nps_from_answers(answers):
     if ratings:
         return calculate_nps(ratings)
     return None
-
 
 
 def add_contact_in_wati(user_type, name, phone):
@@ -779,6 +777,7 @@ def get_trimmed_emails(emails):
         res.append(email.strip().lower())
     return res
 
+
 def add_so_to_project(project_type, project_id, sales_order_ids):
     if project_type == "CAAS":
         orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
@@ -878,7 +877,6 @@ SESSIONS_WITH_STAKEHOLDERS = [
     "stakeholder_without_coach",
     "stakeholder_interview",
 ]
-
 
 
 def get_booked_session_of_user_confirmed_avalibility(user_type, user_id, date):
@@ -1148,14 +1146,16 @@ def update_coach_profile(request, id):
             new_email
             and User.objects.filter(username=new_email).exclude(id=user.id).exists()
         ):
-            existing_user_with_same_email = User.objects.filter(username=new_email).exclude(id=user.id).first()
+            existing_user_with_same_email = (
+                User.objects.filter(username=new_email).exclude(id=user.id).first()
+            )
             current_user_profile = user.profile
             existing_profile_with_same_email = existing_user_with_same_email.profile
             # coach exists with the new email
             if existing_profile_with_same_email.roles.filter(name="coach").exists():
                 return Response(
-                {"error": "Coach with the same email already exists."},
-                status=400,
+                    {"error": "Coach with the same email already exists."},
+                    status=400,
                 )
             # another user exists with the new email
             else:
@@ -1168,7 +1168,7 @@ def update_coach_profile(request, id):
                 existing_profile_with_same_email.save()
 
         # no other user exists with the new email
-        else :
+        else:
             user.email = new_email
             user.username = new_email
             user.save()
@@ -5280,18 +5280,20 @@ def get_learner_of_user_optimized(request, user_type, user_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
-    
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "hr")])
 def get_coachee_of_coach(request):
     try:
-        engagements = Engagement.objects.filter(coach__user__user__id=request.user.id).distinct()
+        engagements = Engagement.objects.filter(
+            coach__user__user__id=request.user.id
+        ).distinct()
         serializer = EngagementDepthOneSerializer(engagements, many=True)
         return Response(serializer.data)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
-
 
 
 @api_view(["GET"])
@@ -5978,16 +5980,33 @@ def get_current_session(request, user_type, room_id, user_id):
 
     return Response(response_data, status=200)
 
+
 @api_view(["GET"])
 @permission_classes(
     [IsAuthenticated, IsInRoles("coach", "learner", "pmo", "hr", "facilitator")]
 )
 def get_current_session_for_coach(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
-    sessions = None
-    session_modal = "CAAS"
+    caas_sessions = None
+    seeq_sessions = None
     if user_type == "coach":
-        sessions = SessionRequestCaas.objects.filter(   
+        caas_sessions = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__gt=current_time),
+            Q(coach__id=user_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        ).order_by("confirmed_availability__start_time")
+        coach = Coach.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            availibility__coach__email=coach.email,
+        ).order_by("availibility__start_time")
+    current_time = int(timezone.now().timestamp() * 1000)
+    caas_sessions = None
+    seeq_sessions = None
+    if user_type == "coach":
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
@@ -5995,46 +6014,54 @@ def get_current_session_for_coach(request, user_type, user_id):
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-        if sessions.count() == 0:
-            coach = Coach.objects.get(id=user_id)
-            sessions = SchedularSessions.objects.filter(
-                availibility__end_time__gt=current_time,
-                availibility__coach__email=coach.email
-            ).order_by("availibility__start_time")
-
-    if not sessions:
+        coach = Coach.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            availibility__coach__email=coach.email,
+        ).order_by("availibility__start_time")
+    if not seeq_sessions and not caas_sessions:
         return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
-    # Get the upcoming next session and current session
-    upcoming_session = sessions.first()
-    if session_modal == "CAAS" and upcoming_session:
-        session_details = {
-            "session_id": upcoming_session.id,
-            "type": "CAAS",
-            "start_time": upcoming_session.confirmed_availability.start_time,
-            "end_time": upcoming_session.confirmed_availability.end_time,
-            "project_name": upcoming_session.project.name,
-            "room_id":upcoming_session.coach.room_id,
-            "session_name":f"{upcoming_session.session_type}",
-        }
-    elif session_modal == "SEEQ" and upcoming_session:
-        session_details = {
-            "session_id": upcoming_session.id,
-            "type": "SEEQ",
-            "start_time": upcoming_session.availibility.start_time,
-            "end_time": upcoming_session.availibility.end_time,
-            "project_name": upcoming_session.project.name,
-            "room_id":upcoming_session.coach.room_id,
-            "session_name":f"{upcoming_session.session_type}",
-        }
+    nearest_session = None
+    if caas_sessions:
+        nearest_session = caas_sessions.first()
+    if seeq_sessions:
+        if nearest_session:
+            if (
+                seeq_sessions.first().availibility.start_time
+                < nearest_session.confirmed_availability.start_time
+            ):
+                nearest_session = seeq_sessions.first()
+        else:
+            nearest_session = seeq_sessions.first()
 
-    # You can customize the response data based on your requirements
-    response_data = {
-        "message": "success",
-        "upcoming_session": session_details if upcoming_session else None,
-    }
-
-    return Response(response_data, status=200)
+    if nearest_session:
+        session_details = {
+            "session_id": nearest_session.id,
+            "type": (
+                "CAAS" if isinstance(nearest_session, SessionRequestCaas) else "SEEQ"
+            ),
+            "start_time": (
+                nearest_session.confirmed_availability.start_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.start_time
+            ),
+            "end_time": (
+                nearest_session.confirmed_availability.end_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.end_time
+            ),
+            "project_name": nearest_session.project.name if isinstance(nearest_session, SessionRequestCaas) else nearest_session.coaching_session.batch.project.name,
+            "session_name":f"{nearest_session.session_type}" if isinstance(nearest_session, SessionRequestCaas) else nearest_session.coaching_session.session_type,
+            "room_id": nearest_session.coach.room_id if isinstance(nearest_session, SessionRequestCaas) else nearest_session.availibility.coach.room_id,
+        }
+        response_data = {
+            "message": "success",
+            "upcoming_session": session_details,
+        }
+        return Response(response_data, status=200)
+    else:
+        return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
 
 @api_view(["POST"])
@@ -10010,12 +10037,11 @@ def get_coach_summary_data(request, coach_id):
             availibility__coach=coach,
             coaching_session__session_type="laser_coaching_session",
         ).count()
-        
+
         total_mentoring_sessions = SchedularSessions.objects.filter(
             availibility__coach=coach,
             coaching_session__session_type="mentoring_session",
         ).count()
-        
 
         pending_schedular_session = SchedularSessions.objects.filter(
             availibility__coach=coach, status="pending"
@@ -10027,10 +10053,10 @@ def get_coach_summary_data(request, coach_id):
                 "coaching_projects": coach_status_count,
                 "training_projects": distinct_project_count,
                 "coach_rating": get_coach_overall_rating(coach.id),
-                "total_coaching_session":total_coaching_session,
+                "total_coaching_session": total_coaching_session,
                 "laser_coaching_sessions": laser_coaching_sessions,
                 "pending_session": pending_schedular_session,
-                "total_mentoring_sessions":total_mentoring_sessions,
+                "total_mentoring_sessions": total_mentoring_sessions,
             }
         )
 

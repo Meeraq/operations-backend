@@ -151,11 +151,11 @@ class Finance(models.Model):
     active_inactive = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-  
 
     def __str__(self):
         return self.name
-    
+
+
 class Sales(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -164,9 +164,10 @@ class Sales(models.Model):
     active_inactive = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-  
+
     def __str__(self):
         return self.name
+
 
 class Pmo(models.Model):
 
@@ -239,7 +240,10 @@ class Coach(models.Model):
     education_pic = models.ImageField(upload_to="post_images", blank=True)
     educational_qualification = models.JSONField(default=list, blank=True)
     education_upload_file = models.FileField(
-        upload_to="pdf_files", blank=True, null=True, validators=[validate_pdf_extension]
+        upload_to="pdf_files",
+        blank=True,
+        null=True,
+        validators=[validate_pdf_extension],
     )
 
     def __str__(self):
@@ -625,10 +629,22 @@ class AddGoalActivity(models.Model):
         return f"{self.user} added a goal."
 
 
+class CoachProfileShare(models.Model):
+    emails = models.JSONField(default=list, blank=True)
+    masked_coach_profile = models.BooleanField(default=False)
+    unique_id = models.CharField(max_length=225, unique=True, blank=True)
+    coaches = models.ManyToManyField(Coach, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class CoachProfileTemplate(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     templates = models.JSONField(default=dict, blank=True)
+    coach_profile_share = models.ForeignKey(
+        CoachProfileShare, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
 
     def __str__(self):
         return f"{self.coach} template."
