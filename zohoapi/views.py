@@ -2389,9 +2389,15 @@ def get_sales_order_data(request, salesorder_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_customers_from_zoho(request):
+def get_customers_from_zoho(request, brand):
     try:
-        customers = fetch_customers_from_zoho(organization_id)
+        cf_meeraq_ctt = ""
+        if brand == "meeraq":
+            cf_meeraq_ctt = "Meeraq"
+        elif brand == "ctt":
+            cf_meeraq_ctt = "CTT"
+        customers = fetch_customers_from_zoho(organization_id,f"&cf_meeraq_ctt={cf_meeraq_ctt}")
+        res = [{"contact_id": customer['contact_id'], 'contact_name': customer['contact_name'],'company_name' : customer['company_name']} for customer in customers]
         return Response(customers, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -2453,6 +2459,51 @@ def edit_so_invoice(request, invoice_id):
         return Response({"error": str(e)}, status=500)
 
 
+def update_sales_order_status_to_open(sales_order_id, status):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/salesorders/{sales_order_id}/status/{status}?organization_id={organization_id}"
+
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header)
+        print(response.json())
+        # If response status is not 200, raise custom exception
+        if response.status_code == 200:
+            return True
+        else:
+            raise Exception(
+                f"Failed to update sales order status. Status code: {response.status_code}"
+            )
+    except Exception as e:
+        raise Exception(f"Failed to update sales order status: {str(e)}")
+
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_sales_order(request, sales_order_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.put(api_url, headers=auth_header, data=request.data)
+
+        if response.status_code == 200:
+            return Response({"message": "Sales order updated successfully."})
+        else:
+            return Response({"error": response.json()}, status=response.status_code)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_sales_order(request):
@@ -2465,11 +2516,11 @@ def create_sales_order(request):
         api_url = f"{base_url}/salesorders?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.post(api_url, headers=auth_header, data=request.data)
-        print(response.json())
         if response.status_code == 201:
             salesorder_created = response.json().get("salesorder")
             project_id = request.data.get("project_id", "")
             project_type = request.data.get("project_type", "")
+            status = request.data.get("status", "")
             project = None
             schedular_project = None
             orders_and_project_mapping = None
@@ -2504,8 +2555,22 @@ def create_sales_order(request):
                     salesorder_created["salesorder_id"],
                 ]
                 mapping.save()
+
+            if status == "open":
+                # mark sales order as open and return message  "SO has been created successfully and  Saved as Open"
+                if update_sales_order_status_to_open(
+                    salesorder_created["salesorder_id"], "open"
+                ):
+                    return Response(
+                        {
+                            "message": "SO has been created successfully and marked as Open"
+                        }
+                    )
+
             # add the mapping for sales order here
-            return Response({"message": "Sales Order created successfully."})
+            return Response(
+                {"message": "SO has been created successfully and Saved as Draft"}
+            )
         else:
             print(response.json())
             return Response(status=401)
@@ -2784,18 +2849,8 @@ def get_salesorders_fields_data(request):
 @permission_classes([IsAuthenticated])
 def update_sales_order_status(request, sales_order_id, status):
     try:
-        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-        if not access_token:
-            raise Exception(
-                "Access token not found. Please generate an access token first."
-            )
-        api_url = f"{base_url}/salesorders/{sales_order_id}/status/{status}?organization_id={organization_id}"
-        auth_header = {"Authorization": f"Bearer {access_token}"}
-        response = requests.post(api_url, headers=auth_header)
-        if response.status_code == 200:
-            return Response({"message": f"Sales Order changed to {status}."})
-        else:
-            return Response(status=401)
+        update_sales_order_status_to_open(sales_order_id, status)
+        return Response({"message": f"Sales Order changed to {status}."})
     except Exception as e:
         print(str(e))
         return Response(status=404)
