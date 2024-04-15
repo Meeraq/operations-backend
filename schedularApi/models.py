@@ -329,7 +329,7 @@ class HandoverDetails(models.Model):
     out_of_pocket_expenses = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    project_name = models.CharField(max_length=255, blank=True, null=True)
+
     class Meta:
         verbose_name = "Handover Detail"
         verbose_name_plural = "Handover Details"
