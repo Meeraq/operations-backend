@@ -345,10 +345,21 @@ def create_project_schedular(request):
 def create_handover(request):
     serializer = HandoverDetailsSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        organisation_name = request.data.get("organisation_name")
+        # create or get organisation
+        organisation, created = Organisation.objects.get_or_create(
+            name=organisation_name
+        )
+        handover_instance = serializer.save()
+        handover_instance.organisation = organisation
+        handover_instance.save()
+        res_serializer = HandoverDetailsSerializer(handover_instance)
         return Response(
-            {"message": "Handover created successfully.", "handover": serializer.data},
-            status=200,
+            {
+                "message": "Handover created successfully.",
+                "handover": res_serializer.data,
+            },
+            status=status.HTTP_200_OK,
         )
     else:
         print(serializer.errors)
@@ -6296,13 +6307,8 @@ def get_project_and_handover(request):
         return Response({"error": "Invalid query parameters"}, status=400)
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def get_handovers(request):
+def get_formatted_handovers(handovers):
     try:
-        handovers = HandoverDetails.objects.filter(
-            schedular_project__isnull=True, caas_project__isnull=True
-        )
         sales_order_ids_list = []
         for handover in handovers:
             for sales_order_id in handover.sales_order_ids:
@@ -6315,10 +6321,7 @@ def get_handovers(request):
                 organization_id, f"&salesorder_ids={sales_order_ids_str}"
             )
             if not sales_orders:
-                return Response(
-                    {"error": "Failed to get sales orders."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+                raise Exception("Failed to get sales orders.")
             # Create a dictionary to map sales order ID to sales person ID
             sales_order_to_sales_person = {
                 sales_order["salesorder_id"]: sales_order["salesperson_name"]
@@ -6327,11 +6330,9 @@ def get_handovers(request):
             # Fetch sales persons based on sales person IDs from sales orders
             sales_persons = fetch_sales_persons(organization_id)
             if not sales_persons:
-                return Response(
-                    {"error": "Failed to get sales persons."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-            # Map sales persons to handovers
+                raise Exception(
+                    "Failed to get sales persons."
+                )  # Map sales persons to handovers
             for handover in serializer.data:
                 sales_order_ids = handover["sales_order_ids"]
                 salespersons = []
@@ -6350,7 +6351,36 @@ def get_handovers(request):
                                         sales_person_name
                                     )  # Add the sales person to the set of added salespersons
                 handover["salespersons"] = salespersons
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return serializer.data
+    except Exception as e:
+        print(str(e))
+        raise Exception("Failed to get formatted handovers")
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_handovers(request):
+    try:
+        handovers = HandoverDetails.objects.all().order_by("-created_at")
+        formatted_handovers = get_formatted_handovers(handovers)
+        return Response(formatted_handovers, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get handovers."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_pmo_handovers(request):
+    try:
+        handovers = HandoverDetails.objects.filter(
+            schedular_project__isnull=True, caas_project__isnull=True
+        ).order_by("-created_at")
+        formatted_handovers = get_formatted_handovers(handovers)
+        return Response(formatted_handovers, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response(

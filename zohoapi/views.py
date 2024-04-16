@@ -3257,17 +3257,14 @@ def get_so_for_the_project(request):
         all_sales_order_project_mapping = OrdersAndProjectMapping.objects.all()
         all_sales_order_ids = []
         for mapping in all_sales_order_project_mapping:
-            print(mapping.schedular_project, mapping.sales_order_ids)
             all_sales_order_ids.extend(mapping.sales_order_ids)
             
-        print(all_sales_order_ids)
         sales_orders_ids_str = ",".join(all_sales_order_ids)
         all_sales_orders = []
         if sales_orders_ids_str:
             all_sales_orders = fetch_sales_orders(
                 organization_id, f"&salesorder_ids={sales_orders_ids_str}"
             )
-        print(all_sales_orders)
         final_data = {}
         sales_order_dict = {order["salesorder_id"]: order for order in all_sales_orders}
         if caas_project_mapping:
