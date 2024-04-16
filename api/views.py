@@ -9907,6 +9907,7 @@ def add_sales_user(request):
     name = request.data.get("name")
     email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
+    business = request.data.get("business","")
     sales_person_id = request.data.get("sales_person_id","").strip()
     username = email  # username and email are the same
     # Check if required data is provided
@@ -9949,7 +9950,8 @@ def add_sales_user(request):
                 name=name,
                 email=email,
                 phone=phone,
-                sales_person_id=sales_person_id
+                sales_person_id=sales_person_id,
+                business = business
             )
 
             name = sales_user.name
