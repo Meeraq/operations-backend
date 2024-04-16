@@ -330,6 +330,7 @@ class HandoverDetails(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     project_name = models.CharField(max_length=255, blank=True, null=True)
+    is_accepted = models.BooleanField(default=False, blank=True)
     class Meta:
         verbose_name = "Handover Detail"
         verbose_name_plural = "Handover Details"

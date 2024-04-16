@@ -3248,21 +3248,34 @@ def get_sales_person_from_zoho(request):
 @permission_classes([IsAuthenticated])
 def get_so_for_the_project(request):
     try:
-        all_sales_order = fetch_sales_orders(organization_id)
         caas_project_mapping = OrdersAndProjectMapping.objects.filter(
             project__isnull=False
         )
         schedular_project_mapping = OrdersAndProjectMapping.objects.filter(
             schedular_project__isnull=False
         )
+        all_sales_order_project_mapping = OrdersAndProjectMapping.objects.all()
+        all_sales_order_ids = []
+        for mapping in all_sales_order_project_mapping:
+            print(mapping.schedular_project, mapping.sales_order_ids)
+            all_sales_order_ids.extend(mapping.sales_order_ids)
+            
+        print(all_sales_order_ids)
+        sales_orders_ids_str = ",".join(all_sales_order_ids)
+        all_sales_orders = []
+        if sales_orders_ids_str:
+            all_sales_orders = fetch_sales_orders(
+                organization_id, f"&salesorder_ids={sales_orders_ids_str}"
+            )
+        print(all_sales_orders)
         final_data = {}
-        sales_order_dict = {order["salesorder_id"]: order for order in all_sales_order}
+        sales_order_dict = {order["salesorder_id"]: order for order in all_sales_orders}
         if caas_project_mapping:
             final_data["caas"] = {}
-            for project in caas_project_mapping:
-                project_id = project.id
+            for mapping in caas_project_mapping:
+                project_id = mapping.project.id
                 res = []
-                sales_order_ids = project.sales_order_ids
+                sales_order_ids = mapping.sales_order_ids
                 for sales_order_id in sales_order_ids:
                     order_details = sales_order_dict.get(sales_order_id)
                     if order_details:
@@ -3271,10 +3284,10 @@ def get_so_for_the_project(request):
 
         if schedular_project_mapping:
             final_data["seeq"] = {}
-            for project in schedular_project_mapping:
-                project_id = project.id
+            for mapping in schedular_project_mapping:
+                project_id = mapping.schedular_project.id
                 res = []
-                sales_order_ids = project.sales_order_ids
+                sales_order_ids = mapping.sales_order_ids
                 for sales_order_id in sales_order_ids:
                     order_details = sales_order_dict.get(sales_order_id)
                     if order_details:
