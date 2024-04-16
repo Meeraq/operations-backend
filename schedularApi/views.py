@@ -82,6 +82,7 @@ from .serializers import (
     ExpenseSerializer,
     SchedularProjectSerializerArchiveCheck,
     HandoverDetailsSerializer,
+    HandoverDetailsSerializerWithOrganisationName
 )
 from .models import (
     SchedularBatch,
@@ -6314,7 +6315,7 @@ def get_formatted_handovers(handovers):
             for sales_order_id in handover.sales_order_ids:
                 sales_order_ids_list.append(sales_order_id)
         sales_order_ids_str = ",".join(map(str, sales_order_ids_list))
-        serializer = HandoverDetailsSerializer(handovers, many=True)
+        serializer = HandoverDetailsSerializerWithOrganisationName(handovers, many=True)
         # Fetch sales orders for the given sales order IDs
         if sales_order_ids_str:
             sales_orders = fetch_sales_orders(
