@@ -25,6 +25,7 @@ from .views import (
     SessionData,
     DownloadCoachContract,
     AddRegisteredFacilitator,
+    UpdateUserRoles,
 )
 
 urlpatterns = [
@@ -63,7 +64,7 @@ urlpatterns = [
     path("create-project-cass/", views.create_project_cass),
     path("add_project_structure/", views.add_project_struture),
     path("send_consent/", views.send_consent),
-    path("project/caas/<int:project_id>/", views.get_project_details),
+    path("project/<str:project_type>/<int:project_id>/", views.get_project_details),
     path("receive_coach_consent/", views.receive_coach_consent),
     path(
         "coach/update_project_structure_consent/",
@@ -162,7 +163,6 @@ urlpatterns = [
         "new/sessions/past/<str:user_type>/<int:user_id>/",
         views.new_get_past_sessions_of_user,
     ),
-    path("sessions/edit/<int:session_id>/", views.edit_session_availability),
     path("learners/<str:user_type>/<int:user_id>/", views.get_coachee_of_user),
     path("learner/<int:learner_id>/", views.get_learner_data),
     path(
@@ -225,6 +225,10 @@ urlpatterns = [
     path(
         "current-session/<str:user_type>/<str:room_id>/<int:user_id>/",
         views.get_current_session,
+    ),
+    path(
+        "current-session-for-coach/<str:user_type>/<int:user_id>/",
+        views.get_current_session_for_coach,
     ),
     path(
         "current-session/stakeholder/<str:room_id>/",
@@ -352,6 +356,10 @@ urlpatterns = [
         views.get_learner_of_user_optimized,
     ),
     path(
+        "get-coachee-of-coach/",
+        views.get_coachee_of_coach,
+    ),
+    path(
         "get-learner-course-enrolled-of-user-optimized/<str:user_type>/<int:user_id>/",
         views.get_learner_course_enrolled_of_user_optimized,
     ),
@@ -399,7 +407,24 @@ urlpatterns = [
     #     views.delete_pmo,
     # ),
     path("edit-pmo/", views.edit_pmo),
+    path(
+        "get-coaches-in-project-is-vendor/<int:project_id>/",
+        views.get_coaches_in_project_is_vendor,
+    ),
+    path("update-user-roles/", UpdateUserRoles.as_view()),
     path("tasks/", views.get_tasks),
+    path("coach/tasks/", views.get_coach_tasks),
+    path("learner/tasks/", views.get_learner_tasks),
     path("tasks/add-remark/", views.add_remark_to_task),
     path("tasks/complete/", views.complete_task),
+    path("archive-project/", views.archive_project),
+    path("change-user-password/", views.change_user_password),
+    path("all-users/", views.get_all_users),
+    path("add/sales-user/", views.add_sales_user),
+    path("get-sales-user/", views.get_sales_user),
+    path("get-coach-summary-data/<int:coach_id>/", views.get_coach_summary_data),
+    path(
+        "get-facilitator-summary-data/<int:facilitator_id>/",
+        views.get_facilitator_summary_data,
+    ),
 ]
