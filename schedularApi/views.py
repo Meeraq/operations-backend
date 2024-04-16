@@ -6359,9 +6359,9 @@ def get_formatted_handovers(handovers):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_handovers(request):
+def get_handovers(request,sales_id):
     try:
-        handovers = HandoverDetails.objects.all().order_by("-created_at")
+        handovers = HandoverDetails.objects.filter(sales__id=sales_id).order_by("-created_at")
         formatted_handovers = get_formatted_handovers(handovers)
         return Response(formatted_handovers, status=status.HTTP_200_OK)
     except Exception as e:
