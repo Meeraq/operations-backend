@@ -323,7 +323,7 @@ def create_project_schedular(request):
         add_so_to_project("SEEQ", schedularProject.id, handover.sales_order_ids)
     else:
         raise Exception("No handover found")
-   
+
     try:
         path = ""
         message = f"A new project - {schedularProject.name} has been created for the organisation - {schedularProject.organisation.name}"
@@ -1478,7 +1478,7 @@ def add_batch(request, project_id):
         data = {
             "participants": request.data.get("participants", []),
             "project_id": project_id,
-            "user_email":request.user.username
+            "user_email": request.user.username,
         }
 
         add_batch_to_project.delay(data)
@@ -1492,9 +1492,7 @@ def add_batch(request, project_id):
     except Exception as e:
         print(str(e))
         return Response(
-            {
-                "error": "Failed to add participants."
-            },
+            {"error": "Failed to add participants."},
             status=500,
         )
 
@@ -4803,10 +4801,15 @@ def get_skill_dashboard_card_data(request, project_id):
             ongoing_assessment = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="ongoing"
             )
+            if hr_id:
+                ongoing_assessment = ongoing_assessment.filter(hr__id=hr_id)
 
             completed_assessments = Assessment.objects.filter(
                 assessment_modal__isnull=False, status="completed"
             )
+            if hr_id:
+                completed_assessments = completed_assessments.filter(hr__id=hr_id)
+
             if not hr_id:
                 virtual_session_answer = Answer.objects.filter(
                     question__type="rating_0_to_10",
@@ -5034,7 +5037,7 @@ def get_upcoming_coaching_session_dashboard_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def get_past_coaching_session_dashboard_data(request, project_id):
     try:
         hr_id = request.query_params.get("hr", "")
@@ -5133,7 +5136,7 @@ def get_upcoming_live_session_dashboard_data(request, project_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "hr")])
 def get_past_live_session_dashboard_data(request, project_id):
     try:
         hr_id = request.query_params.get("hr", None)
@@ -6282,4 +6285,3 @@ def get_handovers(request):
     )
     serializer = HandoverDetailsSerializer(handovers, many=True)
     return Response(serializer.data)
-
