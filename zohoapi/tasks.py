@@ -113,7 +113,13 @@ purchase_orders_allowed = [
     "Meeraq/PO/CaaS/23-24/0066",
     "Meeraq/PO/CaaS/23-24/0094",
     "Meeraq/PO/22-23/0045",
+    "Meeraq/PO/CaaS/23-24/0101",
+    "Meeraq/PO/CaaS/23-24/0060",
+    "Meeraq/PO/CaaS/23-24/0004",
+    "Meeraq/PO/CaaS/23-24/0102",
+    "Meeraq/PO/22-23/0045",
 ]
+
 
 def get_all_so_of_po(purchase_order_id):
     try:
@@ -127,7 +133,6 @@ def get_all_so_of_po(purchase_order_id):
 
     except Exception as e:
         print(str(e))
-
 
 
 def get_vendor(vendor_id):
@@ -147,7 +152,6 @@ def get_vendor(vendor_id):
         return Response({}, status=400)
     else:
         return Response({}, status=400)
-
 
 
 def filter_purchase_order_data(purchase_orders):
@@ -172,7 +176,7 @@ def filter_purchase_order_data(purchase_orders):
                     or created_time.year >= 2024
                 ):
                     filtered_purchase_orders.append(order)
-            
+
         return filtered_purchase_orders
     except Exception as e:
         print(str(e))
