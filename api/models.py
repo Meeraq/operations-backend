@@ -163,6 +163,7 @@ class Sales(models.Model):
     phone = models.CharField(max_length=25)
     active_inactive = models.BooleanField(default=True)
     sales_person_id = models.CharField(max_length=255, blank=True, default="")
+    business = models.CharField(max_length=255, blank=True, default="meeraq")
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
