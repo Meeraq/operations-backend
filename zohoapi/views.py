@@ -3246,6 +3246,35 @@ def fetch_client_invoices_page_wise(organization_id, page, queryParams=""):
     else:
         print(response.json())
         raise Exception("Failed to fetch client invoices.")
+def fetch_client_invoices_for_sales_orders(sales_order_ids):
+    filtered_client_invoices = []
+
+    for sales_order_id in sales_order_ids:
+        sales_order = None
+        access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))  # Update this function
+        if access_token_sales_order:
+            api_url = f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
+            auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
+            response = requests.get(api_url, headers=auth_header)
+            if response.status_code == 200:
+                sales_order = response.json().get("salesorder")
+
+        if sales_order:
+            for client_invoice in sales_order["invoices"]:
+                access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))  # Update this function
+                if access_token:
+                    api_url = f"{base_url}/invoices/{client_invoice['invoice_id']}?organization_id={organization_id}"
+                    auth_header = {"Authorization": f"Bearer {access_token}"}
+                    response = requests.get(api_url, headers=auth_header)
+                    if response.status_code == 200:
+                        temp_client_invoice = response.json().get("invoice")
+                        if (
+                            "salesorder_id" in temp_client_invoice
+                            and temp_client_invoice["salesorder_id"] == sales_order_id
+                        ):
+                            filtered_client_invoices.append(temp_client_invoice)
+    print(filtered_client_invoices)
+    return filtered_client_invoices
 
 
 @api_view(["GET"])
@@ -3254,13 +3283,34 @@ def get_client_invoices(request):
     try:
         page = request.query_params.get("page")
         salesperson_id = request.query_params.get("salesperson_id", "")
-        res = fetch_client_invoices_page_wise(
-            organization_id,
-            page,
-            f"&salesperson_id={salesperson_id}" if salesperson_id else "",
-        )
-        return Response(res, status=status.HTTP_200_OK)
+        project_id = request.query_params.get("project_id")
+        project_type = request.query_params.get("project_type")
+        if project_id:
+            sales_order_ids_set = set()
+            if project_type == "CAAS":
+                orders_project_mapping = OrdersAndProjectMapping.objects.filter(
+                    project__id=project_id
+                )
+                for mapping in orders_project_mapping:
+                    sales_order_ids_set.update(mapping.sales_order_ids)
+            elif project_type == "SEEQ":
+                orders_project_mapping = OrdersAndProjectMapping.objects.filter(
+                    schedular_project__id=project_id
+                )
+                for mapping in orders_project_mapping:
+                    sales_order_ids_set.update(mapping.sales_order_ids)
 
+            sales_order_ids = list(sales_order_ids_set) # [1,2,3]
+            invoices = []
+            if len(sales_order_ids) > 0:
+                invoices = fetch_client_invoices_for_sales_orders(sales_order_ids)
+        else:
+            invoices = fetch_client_invoices_page_wise(
+                organization_id,
+                page,
+                f"&salesperson_id={salesperson_id}" if salesperson_id else "",
+            )
+        return Response(invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
 
@@ -3320,21 +3370,31 @@ def get_sales_person_from_zoho(request):
 @permission_classes([IsAuthenticated])
 def get_so_for_the_project(request):
     try:
-        all_sales_order = fetch_sales_orders(organization_id)
         caas_project_mapping = OrdersAndProjectMapping.objects.filter(
             project__isnull=False
         )
         schedular_project_mapping = OrdersAndProjectMapping.objects.filter(
             schedular_project__isnull=False
         )
+        all_sales_order_project_mapping = OrdersAndProjectMapping.objects.all()
+        all_sales_order_ids = []
+        for mapping in all_sales_order_project_mapping:
+            all_sales_order_ids.extend(mapping.sales_order_ids)
+            
+        sales_orders_ids_str = ",".join(all_sales_order_ids)
+        all_sales_orders = []
+        if sales_orders_ids_str:
+            all_sales_orders = fetch_sales_orders(
+                organization_id, f"&salesorder_ids={sales_orders_ids_str}"
+            )
         final_data = {}
-        sales_order_dict = {order["salesorder_id"]: order for order in all_sales_order}
+        sales_order_dict = {order["salesorder_id"]: order for order in all_sales_orders}
         if caas_project_mapping:
             final_data["caas"] = {}
-            for project in caas_project_mapping:
-                project_id = project.id
+            for mapping in caas_project_mapping:
+                project_id = mapping.project.id
                 res = []
-                sales_order_ids = project.sales_order_ids
+                sales_order_ids = mapping.sales_order_ids
                 for sales_order_id in sales_order_ids:
                     order_details = sales_order_dict.get(sales_order_id)
                     if order_details:
@@ -3343,10 +3403,10 @@ def get_so_for_the_project(request):
 
         if schedular_project_mapping:
             final_data["seeq"] = {}
-            for project in schedular_project_mapping:
-                project_id = project.id
+            for mapping in schedular_project_mapping:
+                project_id = mapping.schedular_project.id
                 res = []
-                sales_order_ids = project.sales_order_ids
+                sales_order_ids = mapping.sales_order_ids
                 for sales_order_id in sales_order_ids:
                     order_details = sales_order_dict.get(sales_order_id)
                     if order_details:
