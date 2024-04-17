@@ -256,7 +256,7 @@ def fetch_sales_persons(organization_id):
         return None
 
 
-def fetch_client_invoices(organization_id):
+def fetch_client_invoices(organization_id, query_params=""):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if not access_token:
         raise Exception(
@@ -268,7 +268,7 @@ def fetch_client_invoices(organization_id):
     page = 1
 
     while has_more_page:
-        api_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}"
+        api_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}{query_params}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.get(api_url, headers=auth_header)
 

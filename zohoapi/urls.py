@@ -132,6 +132,13 @@ urlpatterns = [
         views.get_po_number_to_create,
         name="get_po_number_to_create",
     ),
+    
+    path(
+        "invoice-number/new/",
+        views.get_client_invoice_number_to_create,
+        name="get_client_invoice_number_to_create",
+    ),
+    
     path(
         "so-number/<str:brand>/",
         views.get_so_number_to_create,

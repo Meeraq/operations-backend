@@ -1711,6 +1711,45 @@ def generate_new_so_number(so_list, regex_to_match):
     return new_so_number
 
 
+def generate_new_invoice_number(invoice_list):
+    # Get the current year and month in YYMM format
+    current_year_month = datetime.now().strftime("%y%m")
+    # Filter the invoice list to only include those from the current month
+    current_month_invoices = [
+        inv for inv in invoice_list if inv["invoice_number"][:4] == current_year_month
+    ]
+    # If there are no invoices for the current month, start with 1
+    if not current_month_invoices:
+        return f"{current_year_month}0001"
+    # Otherwise, find the maximum number and increment it by 1
+    max_number = max(int(inv["invoice_number"][4:]) for inv in current_month_invoices)
+    new_number = max_number + 1
+    # Format the new number with leading zeroes
+    formatted_new_number = str(new_number).zfill(4)
+    return f"{current_year_month}{formatted_new_number}"
+
+def get_current_month_start_and_end_date():
+    # Get the current year and month
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    
+    # Calculate the first day of the current month
+    first_day_of_month = datetime(current_year, current_month, 1)
+    
+    # Calculate the last day of the current month
+    if current_month == 12:
+        last_day_of_month = datetime(current_year + 1, 1, 1) - timedelta(days=1)
+    else:
+        last_day_of_month = datetime(current_year, current_month + 1, 1) - timedelta(days=1)
+    
+    # Format dates as strings in 'YYYY-MM-DD' format
+    created_date_start = first_day_of_month.strftime('%Y-%m-%d')
+    created_date_end = last_day_of_month.strftime('%Y-%m-%d')
+    
+    return created_date_start, created_date_end
+
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_po_number_to_create(request):
@@ -1720,6 +1759,21 @@ def get_po_number_to_create(request):
         regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
         new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
         return Response({"new_po_number": new_po_number})
+    except Exception as e:
+        print(str(e))
+        return Response(status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
+def get_client_invoice_number_to_create(request):
+    try:
+        start_date, end_date = get_current_month_start_and_end_date()
+        query_params = f"&created_date_start={start_date}&created_date_end={end_date}"
+        invoices = fetch_client_invoices(organization_id,query_params)
+        print(len(invoices))
+        new_invoice_number = generate_new_invoice_number(invoices)
+        return Response({"new_invoice_number": new_invoice_number})
     except Exception as e:
         print(str(e))
         return Response(status=400)
@@ -2396,8 +2450,17 @@ def get_customers_from_zoho(request, brand):
             cf_meeraq_ctt = "Meeraq"
         elif brand == "ctt":
             cf_meeraq_ctt = "CTT"
-        customers = fetch_customers_from_zoho(organization_id,f"&cf_meeraq_ctt={cf_meeraq_ctt}")
-        res = [{"contact_id": customer['contact_id'], 'contact_name': customer['contact_name'],'company_name' : customer['company_name']} for customer in customers]
+        customers = fetch_customers_from_zoho(
+            organization_id, f"&cf_meeraq_ctt={cf_meeraq_ctt}"
+        )
+        res = [
+            {
+                "contact_id": customer["contact_id"],
+                "contact_name": customer["contact_name"],
+                "company_name": customer["company_name"],
+            }
+            for customer in customers
+        ]
         return Response(customers, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -2482,7 +2545,6 @@ def update_sales_order_status_to_open(sales_order_id, status):
         raise Exception(f"Failed to update sales order status: {str(e)}")
 
 
-
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def edit_sales_order(request, sales_order_id):
@@ -2492,7 +2554,9 @@ def edit_sales_order(request, sales_order_id):
             raise Exception(
                 "Access token not found. Please generate an access token first."
             )
-        api_url = f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
+        api_url = (
+            f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
+        )
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.put(api_url, headers=auth_header, data=request.data)
 
@@ -3313,7 +3377,7 @@ def get_so_for_the_project(request):
         all_sales_order_ids = []
         for mapping in all_sales_order_project_mapping:
             all_sales_order_ids.extend(mapping.sales_order_ids)
-            
+
         sales_orders_ids_str = ",".join(all_sales_order_ids)
         all_sales_orders = []
         if sales_orders_ids_str:
