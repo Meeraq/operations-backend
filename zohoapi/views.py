@@ -2396,8 +2396,17 @@ def get_customers_from_zoho(request, brand):
             cf_meeraq_ctt = "Meeraq"
         elif brand == "ctt":
             cf_meeraq_ctt = "CTT"
-        customers = fetch_customers_from_zoho(organization_id,f"&cf_meeraq_ctt={cf_meeraq_ctt}")
-        res = [{"contact_id": customer['contact_id'], 'contact_name': customer['contact_name'],'company_name' : customer['company_name']} for customer in customers]
+        customers = fetch_customers_from_zoho(
+            organization_id, f"&cf_meeraq_ctt={cf_meeraq_ctt}"
+        )
+        res = [
+            {
+                "contact_id": customer["contact_id"],
+                "contact_name": customer["contact_name"],
+                "company_name": customer["company_name"],
+            }
+            for customer in customers
+        ]
         return Response(customers, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -2429,7 +2438,9 @@ def create_invoice(request):
         response = requests.post(api_url, headers=auth_header, data=request.data)
         print(response.json())
         if response.status_code == 201:
-            return Response({"message": "Invoice created successfully."})
+            return Response(
+                {"message": "The Invoice Generated is saved as Draft Successfully."}
+            )
         else:
             print(response.json())
             return Response(status=401)
@@ -2482,7 +2493,6 @@ def update_sales_order_status_to_open(sales_order_id, status):
         raise Exception(f"Failed to update sales order status: {str(e)}")
 
 
-
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def edit_sales_order(request, sales_order_id):
@@ -2492,7 +2502,9 @@ def edit_sales_order(request, sales_order_id):
             raise Exception(
                 "Access token not found. Please generate an access token first."
             )
-        api_url = f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
+        api_url = (
+            f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
+        )
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.put(api_url, headers=auth_header, data=request.data)
 
@@ -3201,20 +3213,21 @@ def edit_vendor(request, vendor_id):
         )
 
 
-
 def fetch_client_invoices_page_wise(organization_id, page, queryParams=""):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if not access_token:
         raise Exception(
             "Access token not found. Please generate an access token first."
         )
-    api_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&perpage=200"
+    api_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&perpage=200{queryParams}"
     auth_header = {"Authorization": f"Bearer {access_token}"}
     response = requests.get(api_url, headers=auth_header)
     if response.status_code == 200:
+        invoices = response.json().get("invoices", [])
         page_context_extra_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&response_option=2{queryParams}"
-        page_context_extra_response = requests.get(page_context_extra_url, headers=auth_header)
-
+        page_context_extra_response = requests.get(
+            page_context_extra_url, headers=auth_header
+        )
         if page_context_extra_response.status_code == 200:
             extra_page_context = page_context_extra_response.json().get(
                 "page_context", {}
@@ -3269,6 +3282,7 @@ def fetch_client_invoices_for_sales_orders(sales_order_ids):
 def get_client_invoices(request):
     try:
         page = request.query_params.get("page")
+        salesperson_id = request.query_params.get("salesperson_id", "")
         project_id = request.query_params.get("project_id")
         project_type = request.query_params.get("project_type")
         if project_id:
@@ -3291,7 +3305,11 @@ def get_client_invoices(request):
             if len(sales_order_ids) > 0:
                 invoices = fetch_client_invoices_for_sales_orders(sales_order_ids)
         else:
-            invoices = fetch_client_invoices_page_wise(organization_id, page)
+            invoices = fetch_client_invoices_page_wise(
+                organization_id,
+                page,
+                f"&salesperson_id={salesperson_id}" if salesperson_id else "",
+            )
         return Response(invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))

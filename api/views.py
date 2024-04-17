@@ -3663,7 +3663,7 @@ def send_project_strure_to_hr(request):
             create_notification(hr_user.user.user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-    return Response({"message": "Sent to HR."}, status=200)
+    return Response({"message": "Project Strcuture is Shared with HR and added to the Project successfully."}, status=200)
 
 
 @api_view(["POST"])
