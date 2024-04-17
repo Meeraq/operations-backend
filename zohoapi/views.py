@@ -494,7 +494,19 @@ def get_purchase_orders(request, vendor_id):
             {"error": "Access token not found. Please generate an access token first."},
             status=status.HTTP_401_UNAUTHORIZED,
         )
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_total_revenue(request, vendor_id):
+    try:
+        invoices = InvoiceData.objects.filter(vendor_id=vendor_id)
+        total_revenue = 0.0
+        
+        for invoice in invoices:
+            total_revenue += invoice.total
 
+        return Response({"total_revenue": total_revenue})
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo", "finance")])

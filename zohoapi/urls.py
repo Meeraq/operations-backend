@@ -23,6 +23,10 @@ urlpatterns = [
         "get_invoices_with_status/<str:vendor_id>/<str:purchase_order_id>/",
         views.get_invoices_with_status,
     ),
+   
+    path('api/total-revenue/<vendor_id>/', views.get_total_revenue, name='get_total_revenue'),
+    # Other URL patterns for your app
+
     path(
         "get-purchase-order-data/<int:purchaseorder_id>/",
         views.get_purchase_order_data,
