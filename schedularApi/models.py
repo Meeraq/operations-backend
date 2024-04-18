@@ -296,6 +296,18 @@ class HandoverDetails(models.Model):
         ("hybrid", "Hybrid"),
         ("offline", "Offline"),
     ]
+    PROGRAM_TYPE_CHOICES = [
+        ("soft_skill_training", "Soft skill training"),
+        ("coaching", "Coaching"),
+        ("coach_training", "Coach Training"),
+        ("coaching_and_coach_training", "Coaching + Coach Training"),
+    ]
+
+    LOGISTICE_MANAGER_CHOICES = [
+            ("client", "Client"),
+            ("pmo", "PMO"),
+            ("faculty", "Faculty"),
+        ]
 
     schedular_project = models.OneToOneField(
         SchedularProject,
@@ -317,6 +329,19 @@ class HandoverDetails(models.Model):
         max_length=255, choices=DELIVERY_MODE_CHOICES, blank=True, null=True
     )
     # program_type = models.CharField(max_length=255, blank=True, null=True)
+    program_type = models.CharField(
+        max_length=255, choices=PROGRAM_TYPE_CHOICES, blank=True, null=True
+    )
+    logistics_manager = models.CharField(
+        max_length=255, choices=LOGISTICE_MANAGER_CHOICES, blank=True, null=True
+    )
+    project_duration = models.CharField(max_length=255, blank=True, null=True)
+    po_number = models.CharField(max_length=255, blank=True, null=True)
+    participant_count = models.IntegerField(default=0, blank=True, null=True)
+    coach_fee = models.CharField(max_length=255, blank=True, null=True)
+    invoice_status = models.BooleanField(default=False, blank=True)
+    reporting_requirements = models.TextField(blank=True, null=True)
+    coach_names = models.TextField(blank=True, null=True)
     poc_contact_details = models.CharField(max_length=255, blank=True, null=True)
     audience_level = models.JSONField(max_length=255, blank=True, null=True)
     project_structure = models.JSONField(default=list, blank=True, null=True)
