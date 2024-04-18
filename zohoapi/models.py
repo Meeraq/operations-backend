@@ -1,9 +1,8 @@
 from django.db import models
 from django.utils import timezone
-from api.models import Profile, validate_pdf_extension
-from api.models import Profile
+from api.models import Profile, validate_pdf_extension, Project
 from django.contrib.auth.models import User
-
+from schedularApi.models import SchedularProject
 
 # Create your models here.
 
@@ -17,6 +16,7 @@ class Vendor(models.Model):
     hsn_or_sac = models.IntegerField(blank=True, default=0, null=True)
     is_upload_invoice_allowed = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
+    active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
@@ -69,6 +69,8 @@ class InvoiceData(models.Model):
         max_length=50, choices=INVOICE_STATUS_CHOICES, default="in_review"
     )
     approver_email = models.EmailField(default="", blank=True)
+    tax_names = models.JSONField(default=list, blank=True)
+
 
     def __str__(self):
         return f"{self.invoice_number}"
@@ -115,3 +117,15 @@ class InvoiceStatusUpdate(models.Model):
 
     def __str__(self):
         return f"{self.invoice.invoice_number} - {self.status} by {self.user.username}"
+
+
+class OrdersAndProjectMapping(models.Model):
+    project = models.ForeignKey(
+        Project, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
+    schedular_project = models.ForeignKey(
+        SchedularProject, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    )
+
+    purchase_order_ids = models.JSONField(default=list, blank=True)
+    sales_order_ids = models.JSONField(default=list, blank=True)

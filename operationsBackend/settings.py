@@ -257,6 +257,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_whatsapp_reminder_1_day_before_live_session",
         "schedule": crontab(hour=12, minute=30),  # 6 PM
     },
+    "send_live_session_link_whatsapp_to_facilitators_one_day_before": {
+        "task": "schedularApi.tasks.send_live_session_link_whatsapp_to_facilitators_one_day_before",
+        "schedule": crontab(hour=12, minute=30),  # 6 PM
+    },
     "send_whatsapp_reminder_same_day_morning": {
         "task": "schedularApi.tasks.send_whatsapp_reminder_same_day_morning",
         "schedule": crontab(hour=2, minute=30),  # 8 AM
@@ -324,6 +328,14 @@ CELERY_BEAT_SCHEDULE = {
     "send_nudges": {
         "task": "schedularApi.tasks.send_nudges",
         "schedule": crontab(hour=3, minute=0, day_of_week="*"),  # 8:30 AM IST
+    },
+    "send_live_session_reminder_to_facilitator_one_day_before": {
+        "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_one_day_before",
+        "schedule": crontab(hour=10, minute=30),  # 4 PM
+    },
+    "send_live_session_reminder_to_facilitator_on_same_day_morning": {
+        "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_on_same_day_morning",
+        "schedule": crontab(hour=2, minute=30),  # 8 AM
     },
 }
 

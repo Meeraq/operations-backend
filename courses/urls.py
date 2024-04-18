@@ -255,6 +255,10 @@ urlpatterns = [
         views.create_resource,
     ),
     path(
+        "edit-pdf-resource/<int:resource_id>/",
+        views.edit_pdf_resource,
+    ),
+    path(
         "create_pdf_lesson/",
         views.create_pdf_lesson,
     ),
@@ -398,8 +402,16 @@ urlpatterns = [
         views.get_coach_session_feedback_response_data,
     ),
     path(
+        "delete-pdf/",
+        views.delete_pdf,
+    ),
+    path(
         "nudges/switch/<int:nudge_id>/",
         views.update_nudge_status,
+    ),
+    path(
+        "delete-nudge/<int:nudge_id>/",
+        views.delete_nudge,
     ),
     path(
         "certificates/released/<int:learner_id>/",

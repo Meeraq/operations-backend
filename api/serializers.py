@@ -40,6 +40,7 @@ from .models import (
     Facilitator,
     APILog,
     Task,
+    Sales,
 )
 from django.contrib.auth.models import User
 
@@ -60,6 +61,13 @@ class PmoDepthOneSerializer(serializers.ModelSerializer):
 class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = SuperAdmin
+        fields = "__all__"
+        depth = 1
+
+
+class SalesDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sales
         fields = "__all__"
         depth = 1
 
@@ -111,6 +119,15 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 
 class ProjectDepthTwoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = "__all__"
+        depth = 2
+
+
+class ProjectDepthTwoSerializerArchiveCheck(serializers.ModelSerializer):
+    is_archive_enabled = serializers.BooleanField()
+
     class Meta:
         model = Project
         fields = "__all__"
@@ -253,6 +270,12 @@ class GoalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Goal
         fields = ["id", "name", "status", "engagement"]
+
+
+class GoalDescriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Goal
+        fields = ["id", "name", "description", "status", "engagement"]
 
 
 class GetGoalSerializer(serializers.ModelSerializer):
@@ -463,6 +486,16 @@ class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
 
 
 class FacilitatorSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Facilitator
+        fields = "__all__"
+
+
+class FacilitatorSerializerIsVendor(serializers.ModelSerializer):
+    is_vendor = serializers.BooleanField()
+    vendor_id = serializers.CharField()
+
     class Meta:
         model = Facilitator
         fields = "__all__"
@@ -486,3 +519,48 @@ class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = "__all__"
+
+
+class SalesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sales
+        fields = "__all__"
+
+
+class CustomUserSerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ["id", "name", "email"]
+
+    def get_name(self, obj):
+        try:
+            profile = Profile.objects.get(user=obj)
+            if hasattr(profile, "superadmin"):
+                return profile.superadmin.name
+            elif hasattr(profile, "finance"):
+                return profile.finance.name
+            elif hasattr(profile, "pmo"):
+                return profile.pmo.name
+            elif hasattr(profile, "coach"):
+                return profile.coach.first_name + " " + profile.coach.last_name
+            elif hasattr(profile, "facilitator"):
+                return (
+                    profile.facilitator.first_name + " " + profile.facilitator.last_name
+                )
+            elif hasattr(profile, "vendor"):
+                return profile.vendor.name
+            elif hasattr(profile, "learner"):
+                return profile.learner.name
+            # Add more conditions for other profile models if needed
+            else:
+                return ""
+        except Profile.DoesNotExist:
+            return ""
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["id"] = instance.id
+        data["email"] = instance.email
+        return data
