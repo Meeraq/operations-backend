@@ -8675,6 +8675,15 @@ def change_user_role(request, user_id):
         if not user.profile.hr.active_inactive:
             return None
         serializer = HrDepthOneSerializer(user.profile.hr)
+        is_caas_allowed = Project.objects.filter(hr=user.profile.hr).exists()
+        is_seeq_allowed = SchedularProject.objects.filter(hr=user.profile.hr).exists()
+        return Response({
+            **serializer.data,
+            "roles": roles,
+            "is_caas_allowed": is_caas_allowed,
+            "is_seeq_allowed": is_seeq_allowed,
+            "user": {**serializer.data["user"], "type": user_profile_role},
+        })
     elif user_profile_role == "sales":
         if not user.profile.sales.active_inactive:
             return None
