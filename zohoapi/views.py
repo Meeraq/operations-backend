@@ -2261,14 +2261,60 @@ def get_sales_orders_with_project_details(sales_orders):
     return res
 
 
+def fetch_sales_orders_page_wise(organization_id, page, perpage, queryParams=""):
+    access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if not access_token:
+        raise Exception(
+            "Access token not found. Please generate an access token first."
+        )
+    api_url = f"{base_url}/salesorders/?organization_id={organization_id}&page={page}&per_page={perpage}{queryParams}"
+    auth_header = {"Authorization": f"Bearer {access_token}"}
+    response = requests.get(api_url, headers=auth_header)
+    if response.status_code == 200:
+        salesorders = response.json().get("salesorders", [])
+        page_context_extra_url = f"{base_url}/salesorders/?organization_id={organization_id}&page={page}&per_page={perpage}&response_option=2{queryParams}"
+        page_context_extra_response = requests.get(
+            page_context_extra_url, headers=auth_header
+        )
+        if page_context_extra_response.status_code == 200:
+            extra_page_context = page_context_extra_response.json().get(
+                "page_context", {}
+            )
+            page_context = response.json().get("page_context", {})
+            has_more_page = page_context.get("has_more_page", False)
+            return {
+                "count": extra_page_context.get("total", 0),
+                "next": has_more_page,
+                "prev": False if page == 1 else True,
+                "results": salesorders,
+            }
+        else:
+            print(page_context_extra_response.json())
+            raise Exception("Failed to fetch sales orders.")
+    else:
+        print(response.json())
+        raise Exception("Failed to fetch sales orders.")
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_sales_orders(request):
     try:
-        sales_person_id = request.query_params.get("sales_person_id")
-        all_sales_orders = fetch_sales_orders(organization_id)
-        res = get_sales_orders_with_project_details(all_sales_orders)
-        return Response(res, status=status.HTTP_200_OK)
+        page = request.query_params.get("page", 1)
+        perpage = request.query_params.get("perpage", 100)
+        search_text = request.query_params.get("search_text", "")
+        query_params = ""
+        query_params += f"&search_text={search_text}" if search_text else ""
+        all_sales_orders = fetch_sales_orders_page_wise(
+            organization_id, page, perpage, query_params
+        )
+        sales_orders_with_project_details = get_sales_orders_with_project_details(
+            all_sales_orders["results"]
+        )
+        return Response(
+            {**all_sales_orders, "results": sales_orders_with_project_details},
+            status=status.HTTP_200_OK,
+        )
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -3246,12 +3292,16 @@ def fetch_client_invoices_page_wise(organization_id, page, queryParams=""):
     else:
         print(response.json())
         raise Exception("Failed to fetch client invoices.")
+
+
 def fetch_client_invoices_for_sales_orders(sales_order_ids):
     filtered_client_invoices = []
 
     for sales_order_id in sales_order_ids:
         sales_order = None
-        access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))  # Update this function
+        access_token_sales_order = get_access_token(
+            env("ZOHO_REFRESH_TOKEN")
+        )  # Update this function
         if access_token_sales_order:
             api_url = f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
             auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
@@ -3261,7 +3311,9 @@ def fetch_client_invoices_for_sales_orders(sales_order_ids):
 
         if sales_order:
             for client_invoice in sales_order["invoices"]:
-                access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))  # Update this function
+                access_token = get_access_token(
+                    env("ZOHO_REFRESH_TOKEN")
+                )  # Update this function
                 if access_token:
                     api_url = f"{base_url}/invoices/{client_invoice['invoice_id']}?organization_id={organization_id}"
                     auth_header = {"Authorization": f"Bearer {access_token}"}
@@ -3300,7 +3352,7 @@ def get_client_invoices(request):
                 for mapping in orders_project_mapping:
                     sales_order_ids_set.update(mapping.sales_order_ids)
 
-            sales_order_ids = list(sales_order_ids_set) # [1,2,3]
+            sales_order_ids = list(sales_order_ids_set)  # [1,2,3]
             invoices = []
             if len(sales_order_ids) > 0:
                 invoices = fetch_client_invoices_for_sales_orders(sales_order_ids)
@@ -3380,7 +3432,7 @@ def get_so_for_the_project(request):
         all_sales_order_ids = []
         for mapping in all_sales_order_project_mapping:
             all_sales_order_ids.extend(mapping.sales_order_ids)
-            
+
         sales_orders_ids_str = ",".join(all_sales_order_ids)
         all_sales_orders = []
         if sales_orders_ids_str:
