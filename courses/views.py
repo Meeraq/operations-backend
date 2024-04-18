@@ -38,6 +38,7 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializers import (
+    CourseEnrollmentWithNamesSerializer,
     CourseSerializer,
     CourseTemplateSerializer,
     TextLessonCreateSerializer,
@@ -4032,3 +4033,12 @@ def update_nudge_status(request, nudge_id):
     nudge.save()
     nudge_serializer = NudgeSerializer(nudge)
     return Response(nudge_serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_released_certificates_for_learner(request, learner_id):
+    course_enrollments = CourseEnrollment.objects.filter(is_certificate_allowed=True, learner__id=learner_id)
+    serializer = CourseEnrollmentWithNamesSerializer(course_enrollments, many=True)
+    return Response(serializer.data)
+

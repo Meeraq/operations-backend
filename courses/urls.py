@@ -401,4 +401,8 @@ urlpatterns = [
         "nudges/switch/<int:nudge_id>/",
         views.update_nudge_status,
     ),
+    path(
+        "certificates/released/<int:learner_id>/",
+        views.get_released_certificates_for_learner,
+    ),
 ]
