@@ -82,7 +82,7 @@ from .serializers import (
     ExpenseSerializer,
     SchedularProjectSerializerArchiveCheck,
     HandoverDetailsSerializer,
-    HandoverDetailsSerializerWithOrganisationName
+    HandoverDetailsSerializerWithOrganisationName,
 )
 from .models import (
     SchedularBatch,
@@ -148,6 +148,8 @@ from api.views import (
     send_mail_templates,
     create_outlook_calendar_invite,
     delete_outlook_calendar_invite,
+    create_teams_meeting,
+    delete_teams_meeting,
 )
 from django.db.models import Max
 import io
@@ -305,6 +307,7 @@ def create_project_schedular(request):
             nudges=project_details["nudges"],
             pre_post_assessment=project_details["pre_post_assessment"],
             is_finance_enabled=project_details["finance"],
+            teams_enabled=project_details["teams_enabled"],
             junior_pmo=junior_pmo,
         )
         schedularProject.save()
@@ -1031,6 +1034,46 @@ def update_live_session(request, live_session_id):
                     )
 
                     lesson.save()
+
+                if update_live_session.batch.project.teams_enabled:
+                    if (
+                        existing_date_time
+                        and existing_date_time.strftime("%d-%m-%Y %H:%M")
+                        != update_live_session.date_time.strftime("%d-%m-%Y %H:%M")
+                        and update_live_session.teams_meeting_id
+                        and update_live_session.batch.project.teams_enabled
+                    ):
+                        delete_teams_meeting(
+                            env("CALENDAR_INVITATION_ORGANIZER"),
+                            update_live_session,
+                        )
+                if (
+                    update_live_session.batch.project.teams_enabled
+                    and update_live_session.session_type != "in_person_session"
+                    and (
+                        not existing_date_time
+                        or existing_date_time.strftime("%d-%m-%Y %H:%M")
+                        != update_live_session.date_time.strftime("%d-%m-%Y %H:%M")
+                    )
+                ):
+
+                    start_time = update_live_session.date_time
+                    end_date = start_time + timedelta(
+                        minutes=int(update_live_session.duration)
+                    )
+                    start_time_str_for_teams = start_time.strftime(
+                        "%Y-%m-%dT%H:%M:%S.%f-07:00"
+                    )
+                    end_time_str_for_teams = end_date.strftime(
+                        "%Y-%m-%dT%H:%M:%S.%f-07:00"
+                    )
+                    create_teams_meeting(
+                        env("CALENDAR_INVITATION_ORGANIZER"),
+                        update_live_session.id,
+                        f"{update_live_session.session_type} {update_live_session.live_session_number}",
+                        start_time_str_for_teams,
+                        end_time_str_for_teams,
+                    )
 
                 AIR_INDIA_PROJECT_ID = 3
                 if (
@@ -3866,6 +3909,7 @@ def edit_schedular_project(request, project_id):
     project.pre_post_assessment = project_details.get("pre_post_assessment")
     project.is_finance_enabled = project_details.get("finance")
     project.junior_pmo = junior_pmo
+    project.teams_enabled = request.data.get("teams_enabled")
     project.save()
 
     if not project.pre_post_assessment:
@@ -6360,9 +6404,11 @@ def get_formatted_handovers(handovers):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_handovers(request,sales_id):
+def get_handovers(request, sales_id):
     try:
-        handovers = HandoverDetails.objects.filter(sales__id=sales_id).order_by("-created_at")
+        handovers = HandoverDetails.objects.filter(sales__id=sales_id).order_by(
+            "-created_at"
+        )
         formatted_handovers = get_formatted_handovers(handovers)
         return Response(formatted_handovers, status=status.HTTP_200_OK)
     except Exception as e:
