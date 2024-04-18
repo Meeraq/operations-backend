@@ -2764,18 +2764,16 @@ def add_batch_to_project(data):
                     name=batch_name, project=project
                 ).first()
 
-                batch.email_reminder = project.email_reminder
-                batch.whatsapp_reminder = project.whatsapp_reminder
-                batch.calendar_invites = project.calendar_invites
-                batch.save()
-                
                 if not batch:
                     # If batch does not exist, create a new batch
                     batch = SchedularBatch.objects.create(
                         name=batch_name, project=project
                     )
+                    batch.email_reminder = project.email_reminder
+                    batch.whatsapp_reminder = project.whatsapp_reminder
+                    batch.calendar_invites = project.calendar_invites
+                    batch.save()
                     create_batch_calendar(batch)
-
                     # Create Live Sessions and Coaching Sessions based on project structure
 
                 # Check if participant with the same email exists

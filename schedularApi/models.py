@@ -10,6 +10,7 @@ from api.models import (
     Profile,
     Facilitator,
     Project,
+    Sales,
 )
 
 
@@ -65,7 +66,6 @@ class SchedularBatch(models.Model):
     email_reminder = models.BooleanField(blank=True, default=True)
     whatsapp_reminder = models.BooleanField(blank=True, default=True)
     calendar_invites = models.BooleanField(blank=True, default=True)
-
 
 
 class RequestAvailibilty(models.Model):
@@ -307,6 +307,7 @@ class HandoverDetails(models.Model):
     caas_project = models.OneToOneField(
         Project, on_delete=models.SET_NULL, blank=True, null=True
     )
+    sales = models.ForeignKey(Sales, on_delete=models.SET_NULL, blank=True, null=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     hr = models.ManyToManyField(HR, blank=True)
     project_type = models.CharField(
@@ -329,6 +330,8 @@ class HandoverDetails(models.Model):
     out_of_pocket_expenses = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    project_name = models.CharField(max_length=255, blank=True, null=True)
+    is_accepted = models.BooleanField(default=False, blank=True)
 
     class Meta:
         verbose_name = "Handover Detail"
