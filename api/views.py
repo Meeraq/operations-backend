@@ -6389,9 +6389,10 @@ def get_competency_averages(request, hr_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "pmo", "hr")])
 def get_learner_competency_averages(request, learner_id):
-    competencies = Competency.objects.filter(goal__engagement__learner__id=learner_id)
+    competencies = Competency.objects.filter(goal__engagement__learner__id=learner_id).order_by('-created_at')
     serializer = CompetencyDepthOneSerializer(competencies, many=True)
     return Response(serializer.data, status=200)
+
 
 
 @api_view(["GET"])
