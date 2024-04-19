@@ -110,6 +110,7 @@ purchase_orders_allowed = [
     "CTT/PO/22-23/065",
     "CTT/PO/22-23/066",
     "CTT/PO/22-23/067",
+    "CTT/PO/23-24/003",
     "Meeraq/PO/CaaS/23-24/0066",
     "Meeraq/PO/CaaS/23-24/0094",
     "Meeraq/PO/22-23/0045",
@@ -118,6 +119,16 @@ purchase_orders_allowed = [
     "Meeraq/PO/CaaS/23-24/0004",
     "Meeraq/PO/CaaS/23-24/0102",
     "Meeraq/PO/22-23/0045",
+    "Meeraq/PO/22-23/0002",
+    "Meeraq/PO/22-23/0014",
+    "Meeraq/PO/22-23/0017",
+    "Meeraq/PO/22-23/0021",
+    "Meeraq/PO/22-23/0034",
+    "Meeraq/PO/22-23/0036",
+    "Meeraq/PO/Caas/23-24/0021",
+    "Meeraq/PO/23-24/T/0014",
+    "Meeraq/PO/23-24/T/0018",
+    "Meeraq/PO/Caas/23-24/0079",
 ]
 
 
