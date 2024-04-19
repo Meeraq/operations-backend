@@ -5021,3 +5021,43 @@ class DownloadQuestionWiseExcelForProject(APIView):
                 {"error": "Failed to get data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_learner_assessment_result_image(request, learner_id):
+    participant = Learner.objects.get(id=learner_id)
+    assessments = Assessment.objects.filter(participants_observers__participant__id=learner_id).order_by("-created_at")
+    print(assessments)
+    if assessments.exists():
+        first_assessment = assessments.first()
+        if first_assessment.assessment_timing == "pre":
+            print("pre")
+            pre_assessment = first_assessment
+            post_assessment = Assessment.objects.get(pre_assessment = pre_assessment)
+        elif first_assessment.assessment_timing == "post":
+            print("post")
+            pre_assessment = first_assessment.pre_assessment
+            post_assessment = first_assessment
+        
+        if pre_assessment and post_assessment:
+            pre_assessment_image, pre_assessment_compentency_with_description = generate_graph_for_participant(
+                    participant, pre_assessment.id, pre_assessment
+                )
+            post_assessment_image, post_assessment_compentency_with_description = generate_graph_for_participant_for_post_assessment(participant, post_assessment.id, post_assessment) 
+            print(pre_assessment_image, post_assessment_image)
+            if post_assessment_image:
+                return Response({
+                    "assessment_exists":  True, 
+                    "graph" : post_assessment_image
+                })
+            if pre_assessment_image: 
+                return Response({
+                    "assessment_exists":  True, 
+                    "graph" : pre_assessment_image
+                })
+
+    return Response({
+                    "assessment_exists":  False, 
+                    "graph" : None
+                })
