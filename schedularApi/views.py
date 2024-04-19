@@ -308,9 +308,8 @@ def create_project_schedular(request):
             junior_pmo=junior_pmo,
         )
         schedularProject.save()
-    except IntegrityError:
-        return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
+        print(str(e))
         return Response({"error": "Failed to create project."}, status=400)
 
     for hr in project_details["hr"]:
