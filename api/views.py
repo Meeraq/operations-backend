@@ -81,7 +81,7 @@ from .serializers import (
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
-from zohoapi.tasks import organization_id , get_access_token, base_url
+from zohoapi.tasks import organization_id, get_access_token, base_url
 from .permissions import IsInRoles
 from rest_framework import generics
 from django.utils.crypto import get_random_string
@@ -3663,7 +3663,12 @@ def send_project_strure_to_hr(request):
             create_notification(hr_user.user.user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-    return Response({"message": "Project Strcuture is Shared with HR and added to the Project successfully."}, status=200)
+    return Response(
+        {
+            "message": "Project Strcuture is Shared with HR and added to the Project successfully."
+        },
+        status=200,
+    )
 
 
 @api_view(["POST"])
@@ -5640,7 +5645,13 @@ def create_competency(request):
                 tasks.update(status="completed")
             except Exception as e:
                 print(str(e))
-            return Response({"message": "Competency added successfully"}, status=201)
+            return Response(
+                {
+                    "message": "Competency added successfully",
+                    "competency": serializer.data,
+                },
+                status=201,
+            )
         return Response(serializer.errors, status=400)
     else:
         return Response(
@@ -9907,16 +9918,22 @@ def add_sales_user(request):
     name = request.data.get("name")
     email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
-    business = request.data.get("business","")
-    sales_person_id = request.data.get("sales_person_id","").strip()
+    business = request.data.get("business", "")
+    sales_person_id = request.data.get("sales_person_id", "").strip()
     username = email  # username and email are the same
     # Check if required data is provided
     if not all([name, email, phone, username, sales_person_id]):
-        return Response({"error": "All required fields must be provided."}, status=status.HTTP_400_BAD_REQUEST)
-    
+        return Response(
+            {"error": "All required fields must be provided."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     existing_sales_user = Sales.objects.filter(sales_person_id=sales_person_id)
     if existing_sales_user.exists():
-        return Response({"error" : "Selected zoho sales person already exists."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"error": "Selected zoho sales person already exists."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     try:
         with transaction.atomic():
@@ -9951,7 +9968,7 @@ def add_sales_user(request):
                 email=email,
                 phone=phone,
                 sales_person_id=sales_person_id,
-                business = business
+                business=business,
             )
 
             name = sales_user.name
@@ -10105,7 +10122,7 @@ def get_all_goals(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def create_goal(request):
+def create_goal_without_enagagement(request):
     try:
         goal_name = request.data.get("name")
         description = request.data.get("description")
@@ -10220,12 +10237,11 @@ def get_all_competency(request):
         )
 
 
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_all_po_of_project(request,project_id):
+def get_all_po_of_project(request, project_id):
     try:
-        po_ids =  set()
+        po_ids = set()
         project = Project.objects.get(id=project_id)
         for coach_status in project.coaches_status:
             if coach_status.purchase_order_id:
@@ -10237,7 +10253,9 @@ def get_all_po_of_project(request,project_id):
                 raise Exception(
                     "Access token not found. Please generate an access token first."
                 )
-            api_url = f"{base_url}/purchaseorders/{po_id}?organization_id={organization_id}"
+            api_url = (
+                f"{base_url}/purchaseorders/{po_id}?organization_id={organization_id}"
+            )
             auth_header = {"Authorization": f"Bearer {access_token}"}
             response = requests.put(api_url, headers=auth_header, data=request.data)
             if response.status_code == 200:

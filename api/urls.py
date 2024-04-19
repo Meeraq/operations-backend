@@ -433,7 +433,7 @@ urlpatterns = [
     ),
     path(
         "create-goal/",
-        views.create_goal,
+        views.create_goal_without_enagagement,
     ),
     path(
         "get-competency-of-goal/<int:goal_id>/",
