@@ -64,11 +64,13 @@ class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+
 class SalesDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sales
         fields = "__all__"
         depth = 1
+
 
 class FinanceDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
@@ -122,13 +124,14 @@ class ProjectDepthTwoSerializer(serializers.ModelSerializer):
         fields = "__all__"
         depth = 2
 
+
 class ProjectDepthTwoSerializerArchiveCheck(serializers.ModelSerializer):
     is_archive_enabled = serializers.BooleanField()
+
     class Meta:
         model = Project
         fields = "__all__"
         depth = 2
-
 
 
 class UpdateSerializer(serializers.ModelSerializer):
@@ -267,6 +270,12 @@ class GoalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Goal
         fields = ["id", "name", "status", "engagement"]
+
+
+class GoalDescriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Goal
+        fields = ["id", "name", "description", "status", "engagement"]
 
 
 class GetGoalSerializer(serializers.ModelSerializer):
@@ -510,7 +519,8 @@ class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = "__all__"
-        
+
+
 class SalesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sales

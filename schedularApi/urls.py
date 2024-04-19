@@ -16,7 +16,8 @@ urlpatterns = [
     path("create-project-schedular/", views.create_project_schedular),
     path("handover/<str:project_type>/<int:project_id>/", views.get_project_handover),
     path("handover/create/", views.create_handover),
-    path("handover/edit/<int:handover_id>/", views.edit_handover),
+    path("handover/update/", views.update_handover),
+    path("handover/<int:handover_id>/salesorders/", views.get_handover_salesorders),
     path(
         "schedular-batches/",
         views.get_schedular_batches,
@@ -361,5 +362,11 @@ urlpatterns = [
         views.get_project_and_handover,
         name="get_project_and_handover",
     ),
-    path("handovers/", views.get_handovers, name="get_handovers"),
+    path("handovers/<int:sales_id>/", views.get_handovers, name="get_handovers"),
+    path("handovers/pmo/", views.get_pmo_handovers, name="get_handovers"),
+    path(
+        "update-reminder-in-batch/<int:batch_id>/",
+        views.update_reminder_in_batch,
+        name="update_reminder_in_batch",
+    ),
 ]

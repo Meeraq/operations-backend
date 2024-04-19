@@ -3577,31 +3577,28 @@ def get_nps_project_wise(request):
 
 class GetAllNudgesOfSchedularProjects(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
-
     def get(self, request, project_id):
         try:
             hr_id = request.query_params.get("hr", None)
             data = []
-            courses = None
             if project_id == "all":
-                courses = Course.objects.all()
-            else:
-                courses = Course.objects.filter(batch__project__id=int(project_id))
-            if hr_id:
-                courses = courses.filter(batch__project__hr__id=hr_id)
-            for course in courses:
-                today_date = date.today()
                 nudges = Nudge.objects.filter(
-                    batch__id=course.batch.id,
                     is_sent=False,
                     batch__project__nudges=True,
                     batch__project__status="ongoing",
                     trigger_date__isnull=False,
                 )
-                if hr_id:
-                    nudges = nudges.filter(is_switched_on=True)
-                nudges = NudgeSerializer(nudges, many=True).data
-                data = list(data) + list(nudges)
+            else:
+                nudges = Nudge.objects.filter(
+                    batch__project__id=project_id,
+                    is_sent=False,
+                    batch__project__nudges=True,
+                    batch__project__status="ongoing",
+                    trigger_date__isnull=False,
+                )
+            if hr_id:
+                nudges = nudges.filter(batch__project__hr__id=hr_id,is_switched_on=True)
+            data = NudgeSerializer(nudges, many=True).data
             return Response(data)
         except Exception as e:
             print(str(e))

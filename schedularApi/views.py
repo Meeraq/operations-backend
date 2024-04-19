@@ -82,6 +82,7 @@ from .serializers import (
     ExpenseSerializer,
     SchedularProjectSerializerArchiveCheck,
     HandoverDetailsSerializer,
+    HandoverDetailsSerializerWithOrganisationName
 )
 from .models import (
     SchedularBatch,
@@ -169,8 +170,8 @@ import re
 from rest_framework.views import APIView
 from api.views import get_user_data
 from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping
-from zohoapi.views import fetch_purchase_orders
-from zohoapi.tasks import organization_id
+from zohoapi.views import fetch_purchase_orders, organization_id, fetch_sales_persons
+from zohoapi.tasks import organization_id, fetch_sales_orders
 from courses.views import calculate_nps
 from api.permissions import IsInRoles
 
@@ -320,10 +321,12 @@ def create_project_schedular(request):
         handover = HandoverDetails.objects.get(id=handover_id)
         handover.schedular_project = schedularProject
         handover.save()
+        schedularProject.project_structure = handover.project_structure
+        schedularProject.save()
         add_so_to_project("SEEQ", schedularProject.id, handover.sales_order_ids)
     else:
         raise Exception("No handover found")
-   
+
     try:
         path = ""
         message = f"A new project - {schedularProject.name} has been created for the organisation - {schedularProject.organisation.name}"
@@ -343,41 +346,65 @@ def create_project_schedular(request):
 def create_handover(request):
     serializer = HandoverDetailsSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        organisation_name = request.data.get("organisation_name")
+        # create or get organisation
+        organisation, created = Organisation.objects.get_or_create(
+            name=organisation_name
+        )
+        handover_instance = serializer.save()
+        handover_instance.organisation = organisation
+        handover_instance.save()
+        res_serializer = HandoverDetailsSerializer(handover_instance)
         return Response(
-            {"message": "Handover created successfully.", "handover": serializer.data},
-            status=200,
+            {
+                "message": "Handover created successfully.",
+                "handover": res_serializer.data,
+            },
+            status=status.HTTP_200_OK,
         )
     else:
         print(serializer.errors)
         return Response({"error": "Failed to add handover. "}, status=400)
 
 
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
-@transaction.atomic
-def edit_handover(request, handover_id):
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def update_handover(request):
     try:
-        handover_instance = HandoverDetails.objects.get(id=handover_id)
+        handover_instance = HandoverDetails.objects.get(id=request.data.get("id"))
     except HandoverDetails.DoesNotExist:
-        handover_instance = None
+        return Response({"error": "Handover not found."}, status=404)
+
     serializer = HandoverDetailsSerializer(
         handover_instance, data=request.data, partial=True
     )
     if serializer.is_valid():
         serializer.save()
-        if handover_instance.schedular_project:
-            schedular_project = handover_instance.schedular_project
-            schedular_project.nudges = handover_instance.nudges
-            schedular_project.pre_post_assessment = (
-                handover_instance.pre_post_assessment
-            )
-            schedular_project.save()
-
-        return Response({"message": "Handover updated successfully."}, status=200)
+        return Response(
+            {"message": "Handover updated successfully.", "handover": serializer.data},
+            status=200,
+        )
     else:
         print(serializer.errors)
         return Response({"error": "Failed to update handover."}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
+def get_handover_salesorders(request, handover_id):
+    try:
+        handover = HandoverDetails.objects.get(id=handover_id)
+        sales_orders_ids_str = ",".join(handover.sales_order_ids)
+        print(sales_orders_ids_str, handover.sales_order_ids)
+        all_sales_orders = []
+        if sales_orders_ids_str:
+            all_sales_orders = fetch_sales_orders(
+                organization_id, f"&salesorder_ids={sales_orders_ids_str}"
+            )
+        return Response(all_sales_orders)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])
@@ -1009,7 +1036,7 @@ def update_live_session(request, live_session_id):
                 if (
                     not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
                     and update_live_session.batch.project.status == "ongoing"
-                    and update_live_session.batch.project.calendar_invites
+                    and update_live_session.batch.calendar_invites
                 ):
                     try:
                         learners = live_session.batch.learners.all()
@@ -1478,7 +1505,7 @@ def add_batch(request, project_id):
         data = {
             "participants": request.data.get("participants", []),
             "project_id": project_id,
-            "user_email":request.user.username
+            "user_email": request.user.username,
         }
 
         add_batch_to_project.delay(data)
@@ -1492,9 +1519,7 @@ def add_batch(request, project_id):
     except Exception as e:
         print(str(e))
         return Response(
-            {
-                "error": "Failed to add participants."
-            },
+            {"error": "Failed to add participants."},
             status=500,
         )
 
@@ -2020,7 +2045,7 @@ def schedule_session_fixed(request):
                 # Only send email if project status is ongoing
                 if coaching_session.batch.project.status == "ongoing":
                     attendees = None
-                    if coaching_session.batch.project.calendar_invites:
+                    if coaching_session.batch.calendar_invites:
                         attendees = [
                             {
                                 "emailAddress": {
@@ -2296,7 +2321,7 @@ def reschedule_session(request, session_id):
                 # Only send email if project status is ongoing
                 if coaching_session.batch.project.status == "ongoing":
                     attendees = None
-                    if coaching_session.batch.project.calendar_invites:
+                    if coaching_session.batch.calendar_invites:
                         attendees = [
                             {
                                 "emailAddress": {
@@ -5930,12 +5955,21 @@ def add_facilitator_pricing(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def edit_facilitator_pricing(request, facilitator_pricing_id):
-    pricing_instance = get_object_or_404(FacilitatorPricing, id=facilitator_pricing_id)
-    serializer = FacilitatorPricingSerializer(pricing_instance, data=request.data)
-    if serializer.is_valid():
-        serializer.save()
+    try:
+        pricing_instance = get_object_or_404(
+            FacilitatorPricing, id=facilitator_pricing_id
+        )
+        pricing_instance.price = request.data.get("price")
+        pricing_instance.save()
+        serializer = FacilitatorPricingSerializer(pricing_instance)
+
         return Response(serializer.data, status=200)
-    return Response(serializer.errors, status=400)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to create expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["POST"])
@@ -6274,12 +6308,101 @@ def get_project_and_handover(request):
         return Response({"error": "Invalid query parameters"}, status=400)
 
 
+def get_formatted_handovers(handovers):
+    try:
+        sales_order_ids_list = []
+        for handover in handovers:
+            for sales_order_id in handover.sales_order_ids:
+                sales_order_ids_list.append(sales_order_id)
+        sales_order_ids_str = ",".join(map(str, sales_order_ids_list))
+        serializer = HandoverDetailsSerializerWithOrganisationName(handovers, many=True)
+        # Fetch sales orders for the given sales order IDs
+        if sales_order_ids_str:
+            sales_orders = fetch_sales_orders(
+                organization_id, f"&salesorder_ids={sales_order_ids_str}"
+            )
+            if not sales_orders:
+                raise Exception("Failed to get sales orders.")
+            # Create a dictionary to map sales order ID to sales person ID
+            sales_order_to_sales_person = {
+                sales_order["salesorder_id"]: sales_order["salesperson_name"]
+                for sales_order in sales_orders
+            }
+            # Fetch sales persons based on sales person IDs from sales orders
+            sales_persons = fetch_sales_persons(organization_id)
+            if not sales_persons:
+                raise Exception(
+                    "Failed to get sales persons."
+                )  # Map sales persons to handovers
+            for handover in serializer.data:
+                sales_order_ids = handover["sales_order_ids"]
+                salespersons = []
+                added_salespersons = (
+                    set()
+                )  # Keep track of added salespersons for each handover
+                for sales_order_id in sales_order_ids:
+                    sales_person_name = sales_order_to_sales_person.get(sales_order_id)
+                    if sales_person_name:
+                        # Check if sales person has already been added for this handover
+                        if sales_person_name not in added_salespersons:
+                            for person in sales_persons:
+                                if person["salesperson_name"] == sales_person_name:
+                                    salespersons.append(person)
+                                    added_salespersons.add(
+                                        sales_person_name
+                                    )  # Add the sales person to the set of added salespersons
+                handover["salespersons"] = salespersons
+        return serializer.data
+    except Exception as e:
+        print(str(e))
+        raise Exception("Failed to get formatted handovers")
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_handovers(request):
-    handovers = HandoverDetails.objects.filter(
-        schedular_project__isnull=True, caas_project__isnull=True
-    )
-    serializer = HandoverDetailsSerializer(handovers, many=True)
-    return Response(serializer.data)
+def get_handovers(request,sales_id):
+    try:
+        handovers = HandoverDetails.objects.filter(sales__id=sales_id).order_by("-created_at")
+        formatted_handovers = get_formatted_handovers(handovers)
+        return Response(formatted_handovers, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get handovers."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_pmo_handovers(request):
+    try:
+        handovers = HandoverDetails.objects.filter(
+            schedular_project__isnull=True, caas_project__isnull=True
+        ).order_by("-created_at")
+        formatted_handovers = get_formatted_handovers(handovers)
+        return Response(formatted_handovers, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get handovers."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_reminder_in_batch(request, batch_id):
+    try:
+        email_reminder = request.data.get("email_reminder")
+        whatsapp_reminder = request.data.get("whatsapp_reminder")
+        calendar_invites = request.data.get("calendar_invites")
+        batch = SchedularBatch.objects.get(id=batch_id)
+        batch.email_reminder = email_reminder
+        batch.whatsapp_reminder = whatsapp_reminder
+        batch.calendar_invites = calendar_invites
+        batch.save()
+        return Response({"message": "Reminder Updated successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)

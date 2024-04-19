@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
-from .models import InvoiceData, Vendor, InvoiceStatusUpdate
+from .models import InvoiceData, Vendor, InvoiceStatusUpdate, OrdersAndProjectMapping
 
 # UserModel=get_user_model()
 
@@ -54,3 +54,9 @@ class VendorEditSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vendor
         fields = ["name", "phone", "is_upload_invoice_allowed"]
+
+
+class OrdersAndProjectMappingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrdersAndProjectMapping
+        fields = fields = "__all__"

@@ -43,6 +43,7 @@ from .serializers import (
     VendorSerializer,
     InvoiceStatusUpdateGetSerializer,
     VendorEditSerializer,
+    OrdersAndProjectMappingSerializer,
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -61,6 +62,7 @@ from .tasks import (
     fetch_customers_from_zoho,
     fetch_client_invoices,
     get_all_so_of_po,
+    fetch_sales_persons,
 )
 from .models import (
     InvoiceData,
@@ -81,6 +83,7 @@ import io
 import pdfkit
 from django.middleware.csrf import get_token
 from django.db import transaction
+from django.core.exceptions import ObjectDoesNotExist
 from collections import defaultdict
 import re
 from schedularApi.models import (
@@ -491,7 +494,19 @@ def get_purchase_orders(request, vendor_id):
             {"error": "Access token not found. Please generate an access token first."},
             status=status.HTTP_401_UNAUTHORIZED,
         )
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_total_revenue(request, vendor_id):
+    try:
+        invoices = InvoiceData.objects.filter(vendor_id=vendor_id)
+        total_revenue = 0.0
+        
+        for invoice in invoices:
+            total_revenue += invoice.total
 
+        return Response({"total_revenue": total_revenue})
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo", "finance")])
@@ -1580,6 +1595,55 @@ def create_purchase_order(request, user_type, facilitator_pricing_id):
         return Response(status=404)
 
 
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
+def update_purchase_order(request, user_type, facilitator_pricing_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if user_type == "facilitator":
+            facilitator_pricing = FacilitatorPricing.objects.get(
+                id=facilitator_pricing_id
+            )
+        elif user_type == "coach":
+            coach_pricing = CoachPricing.objects.get(id=facilitator_pricing_id)
+            coach_pricings = CoachPricing.objects.filter(
+                project=coach_pricing.project, coach=coach_pricing.coach
+            )
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders/{facilitator_pricing.purchase_order_id if user_type == 'facilitator' else coach_pricing.purchase_order_id }?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.put(api_url, headers=auth_header, data=request.data)
+        if response.status_code == 200:
+            purchaseorder_created = response.json().get("purchaseorder")
+            if user_type == "facilitator":
+                facilitator_pricing.purchase_order_id = purchaseorder_created[
+                    "purchaseorder_id"
+                ]
+                facilitator_pricing.purchase_order_no = purchaseorder_created[
+                    "purchaseorder_number"
+                ]
+                facilitator_pricing.save()
+            elif user_type == "coach":
+                for coach_pricing in coach_pricings:
+                    coach_pricing.purchase_order_id = purchaseorder_created[
+                        "purchaseorder_id"
+                    ]
+                    coach_pricing.purchase_order_no = purchaseorder_created[
+                        "purchaseorder_number"
+                    ]
+                    coach_pricing.save()
+            return Response({"message": "Purchase Order created successfully."})
+        else:
+            print(response.json())
+            return Response(status=401)
+    except Exception as e:
+        print(str(e))
+        return Response(status=404)
+
+
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def delete_purchase_order(request, user_type, purchase_order_id):
@@ -1642,6 +1706,62 @@ def generate_new_po_number(po_list, regex_to_match):
     return new_po_number
 
 
+def generate_new_so_number(so_list, regex_to_match):
+    # pattern to match the sales order number
+    pattern = rf"^{regex_to_match}\d+$"
+    # Filter out sales orders with the desired format
+    filtered_sos = [so for so in so_list if re.match(pattern, so["salesorder_number"])]
+    latest_number = 0
+    # Finding the latest number for each year
+    for so in filtered_sos:
+        print(so["salesorder_number"].split("/"))
+        _, _, _, so_number = so["salesorder_number"].split("/")
+        latest_number = max(latest_number, int(so_number))
+    # Generating the new sales order number
+    new_number = latest_number + 1
+    new_so_number = f"{regex_to_match}{str(new_number).zfill(4)}"
+    return new_so_number
+
+
+def generate_new_invoice_number(invoice_list):
+    # Get the current year and month in YYMM format
+    current_year_month = datetime.now().strftime("%y%m")
+    # Filter the invoice list to only include those from the current month
+    current_month_invoices = [
+        inv for inv in invoice_list if inv["invoice_number"][:4] == current_year_month
+    ]
+    # If there are no invoices for the current month, start with 1
+    if not current_month_invoices:
+        return f"{current_year_month}0001"
+    # Otherwise, find the maximum number and increment it by 1
+    max_number = max(int(inv["invoice_number"][4:]) for inv in current_month_invoices)
+    new_number = max_number + 1
+    # Format the new number with leading zeroes
+    formatted_new_number = str(new_number).zfill(4)
+    return f"{current_year_month}{formatted_new_number}"
+
+def get_current_month_start_and_end_date():
+    # Get the current year and month
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    
+    # Calculate the first day of the current month
+    first_day_of_month = datetime(current_year, current_month, 1)
+    
+    # Calculate the last day of the current month
+    if current_month == 12:
+        last_day_of_month = datetime(current_year + 1, 1, 1) - timedelta(days=1)
+    else:
+        last_day_of_month = datetime(current_year, current_month + 1, 1) - timedelta(days=1)
+    
+    # Format dates as strings in 'YYYY-MM-DD' format
+    created_date_start = first_day_of_month.strftime('%Y-%m-%d')
+    created_date_end = last_day_of_month.strftime('%Y-%m-%d')
+    
+    return created_date_start, created_date_end
+
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_po_number_to_create(request):
@@ -1653,7 +1773,51 @@ def get_po_number_to_create(request):
         return Response({"new_po_number": new_po_number})
     except Exception as e:
         print(str(e))
-        return Response(status=403)
+        return Response(status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
+def get_client_invoice_number_to_create(request):
+    try:
+        start_date, end_date = get_current_month_start_and_end_date()
+        query_params = f"&created_date_start={start_date}&created_date_end={end_date}"
+        invoices = fetch_client_invoices(organization_id,query_params)
+        print(len(invoices))
+        new_invoice_number = generate_new_invoice_number(invoices)
+        return Response({"new_invoice_number": new_invoice_number})
+    except Exception as e:
+        print(str(e))
+        return Response(status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
+def get_so_number_to_create(request, brand):
+    try:
+        sales_orders = fetch_sales_orders(organization_id)
+        current_financial_year = get_current_financial_year()
+        regex_to_match = None
+        if brand == "ctt":
+            regex_to_match = f"CTT/{current_financial_year}/SO/"
+        elif brand == "meeraq":
+            project_type = request.query_params.get("project_type")
+            if project_type == "caas":
+                regex_to_match = f"Meeraq/{current_financial_year}/CH/"
+            elif project_type == "skill_training":
+                regex_to_match = f"Meeraq/{current_financial_year}/SST/"
+            else:
+                return Response(
+                    {"error": "Select project type to generate the SO number"},
+                    status=400,
+                )
+        else:
+            return Response({"error": "Invalid brand"}, status=400)
+        new_po_number = generate_new_so_number(sales_orders, regex_to_match)
+        return Response({"new_so_number": new_po_number})
+    except Exception as e:
+        print(str(e))
+        return Response(status=400)
 
 
 @api_view(["POST"])
@@ -1704,6 +1868,40 @@ def coching_purchase_order_create(request, coach_id, project_id):
             coach_status.save()
 
             return Response({"message": "Purchase Order created successfully."})
+        else:
+            print(response.json())
+            return Response(status=500)
+    except Exception as e:
+        print(str(e))
+        return Response(status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def coching_purchase_order_update(request, coach_id, project_id):
+    try:
+        coach_status = CoachStatus.objects.get(
+            coach__id=coach_id, project__id=project_id
+        )
+
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders/{coach_status.purchase_order_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.put(api_url, headers=auth_header, data=request.data)
+        if response.status_code == 200:
+            purchaseorder_created = response.json().get("purchaseorder")
+
+            coach_status.purchase_order_id = purchaseorder_created["purchaseorder_id"]
+            coach_status.purchase_order_no = purchaseorder_created[
+                "purchaseorder_number"
+            ]
+            coach_status.save()
+
+            return Response({"message": "Purchase Order updated successfully."})
         else:
             print(response.json())
             return Response(status=500)
@@ -1773,6 +1971,52 @@ def expense_purchase_order_create(request, facilitator_id, batch_or_project_id):
                 expense.save()
 
             return Response({"message": "Purchase Order created successfully."})
+        else:
+            print(response.json())
+            return Response(status=500)
+    except Exception as e:
+        print(str(e))
+        return Response(status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def expense_purchase_order_update(request, facilitator_id, batch_or_project_id):
+    try:
+        is_all_batch = request.query_params.get("is_all_batch")
+        expenses = []
+
+        facilitator = Facilitator.objects.get(id=facilitator_id)
+
+        if is_all_batch:
+            expenses = Expense.objects.filter(
+                facilitator=facilitator, batch__project__id=batch_or_project_id
+            )
+        else:
+            expenses = Expense.objects.filter(
+                facilitator=facilitator, batch__id=batch_or_project_id
+            )
+
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders/{expenses[0].purchase_order_id}?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.put(api_url, headers=auth_header, data=request.data)
+        if response.status_code == 200:
+            purchaseorder_created = response.json().get("purchaseorder")
+            for expense in expenses:
+                expense.purchase_order_id = purchaseorder_created["purchaseorder_id"]
+                expense.purchase_order_no = purchaseorder_created[
+                    "purchaseorder_number"
+                ]
+                expense.save()
+
+            return Response(
+                {"message": "Purchase Order updated successfully."}, status=200
+            )
         else:
             print(response.json())
             return Response(status=500)
@@ -2130,87 +2374,98 @@ def delete_expense_purchase_order(request, purchase_order_id):
         return Response(status=404)
 
 
+def get_sales_orders_with_project_details(sales_orders):
+    res = []
+    for sales_order in sales_orders:
+        project = None
+        sales_order["matching_project_structure"] = "Project Not Assigned"
+        for order_project_mapping in OrdersAndProjectMapping.objects.all():
+            if (
+                str(sales_order["salesorder_id"])
+                in order_project_mapping.sales_order_ids
+            ):
+                if order_project_mapping.project:
+                    project = Project.objects.get(id=order_project_mapping.project.id)
+                    if project:
+                        sales_order["project_id"] = project.id
+                        sales_order["projectType"] = "CAAS"
+                    else:
+                        sales_order["project_id"] = None
+                        sales_order["projectType"] = ""
+                elif order_project_mapping.schedular_project:
+                    project = SchedularProject.objects.get(
+                        id=order_project_mapping.schedular_project.id
+                    )
+                    if project:
+                        sales_order["project_id"] = project.id
+                        sales_order["projectType"] = "SEEQ"
+                    else:
+                        sales_order["project_id"] = None
+                        sales_order["projectType"] = ""
+                if project:
+                    data = project.project_structure
+                    for item in data:
+                        if (
+                            "session_type" in item
+                            and item["session_type"] in SESSION_TYPE_VALUE
+                            and item.get("price")
+                            and item.get("session_duration")
+                            and item.get("no_of_sessions")
+                        ):
+                            result = (
+                                float(item["price"])
+                                * float(item["session_duration"])
+                                * float(item["no_of_sessions"])
+                            ) / 60
+                            item["price"] = float(result)
+                            item["session_type"] = SESSION_TYPE_VALUE[
+                                item["session_type"]
+                            ]
+                    total_price = sum(
+                        float(session.get("price", 0))
+                        for session in data
+                        if session.get("price")
+                    )
+                    total_learner = 0
+                    if isinstance(project, SchedularProject):
+                        batches = SchedularBatch.objects.filter(project=project)
+                        for batch in batches:
+                            total_learner += batch.learners.count()
+                    else:
+                        total_learner = Engagement.objects.filter(
+                            project=project
+                        ).count()
+                    total_price *= total_learner
+                    if total_price == sales_order["total"]:
+                        sales_order["matching_project_structure"] = "Matching"
+                    else:
+                        sales_order["matching_project_structure"] = "Not Matching"
+        res.append(sales_order)
+    return res
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_sales_orders(request):
     try:
+        sales_person_id = request.query_params.get("sales_person_id")
         all_sales_orders = fetch_sales_orders(organization_id)
-        for sales_order in all_sales_orders:
-            project = None
-            sales_order["matching_project_structure"] = "Project Not Assigned"
-            for order_project_mapping in OrdersAndProjectMapping.objects.all():
-                if (
-                    str(sales_order["salesorder_id"])
-                    in order_project_mapping.sales_order_ids
-                ):
-                    if order_project_mapping.project:
-                        project = Project.objects.get(
-                            id=order_project_mapping.project.id
-                        )
-                        if project:
-                            sales_order["project_id"] = project.id
-                            sales_order["projectType"] = "CAAS"
-                        else:
-                            sales_order["project_id"] = None
-                            sales_order["projectType"] = ""
-                    elif order_project_mapping.schedular_project:
-                        project = SchedularProject.objects.get(
-                            id=order_project_mapping.schedular_project.id
-                        )
-                        if project:
-                            sales_order["project_id"] = project.id
-                            sales_order["projectType"] = "SEEQ"
-                        else:
-                            sales_order["project_id"] = None
-                            sales_order["projectType"] = ""
-                    if project:
+        res = get_sales_orders_with_project_details(all_sales_orders)
+        return Response(res, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-                        data = project.project_structure
 
-                        for item in data:
-
-                            if (
-                                "session_type" in item
-                                and item["session_type"] in SESSION_TYPE_VALUE
-                                and item.get("price")
-                                and item.get("session_duration")
-                                and item.get("no_of_sessions")
-                            ):
-
-                                result = (
-                                    float(item["price"])
-                                    * float(item["session_duration"])
-                                    * float(item["no_of_sessions"])
-                                ) / 60
-
-                                item["price"] = float(result)
-                                item["session_type"] = SESSION_TYPE_VALUE[
-                                    item["session_type"]
-                                ]
-                        total_price = sum(
-                            float(session.get("price", 0))
-                            for session in data
-                            if session.get("price")
-                        )
-                        total_learner = 0
-                        if isinstance(project, SchedularProject):
-
-                            batches = SchedularBatch.objects.filter(project=project)
-                            for batch in batches:
-                                total_learner += batch.learners.count()
-
-                        else:
-                            total_learner = Engagement.objects.filter(
-                                project=project
-                            ).count()
-                        total_price *= total_learner
-
-                        if total_price == sales_order["total"]:
-                            sales_order["matching_project_structure"] = "Matching"
-                        else:
-                            sales_order["matching_project_structure"] = "Not Matching"
-
-        return Response(all_sales_orders, status=status.HTTP_200_OK)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sales_persons_sales_orders(request, sales_person_id):
+    try:
+        all_sales_orders = fetch_sales_orders(
+            organization_id, f"&salesperson_id={sales_person_id}"
+        )
+        res = get_sales_orders_with_project_details(all_sales_orders)
+        return Response(res, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -2317,9 +2572,24 @@ def get_sales_order_data(request, salesorder_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_customers_from_zoho(request):
+def get_customers_from_zoho(request, brand):
     try:
-        customers = fetch_customers_from_zoho(organization_id)
+        cf_meeraq_ctt = ""
+        if brand == "meeraq":
+            cf_meeraq_ctt = "Meeraq"
+        elif brand == "ctt":
+            cf_meeraq_ctt = "CTT"
+        customers = fetch_customers_from_zoho(
+            organization_id, f"&cf_meeraq_ctt={cf_meeraq_ctt}"
+        )
+        res = [
+            {
+                "contact_id": customer["contact_id"],
+                "contact_name": customer["contact_name"],
+                "company_name": customer["company_name"],
+            }
+            for customer in customers
+        ]
         return Response(customers, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -2351,7 +2621,9 @@ def create_invoice(request):
         response = requests.post(api_url, headers=auth_header, data=request.data)
         print(response.json())
         if response.status_code == 201:
-            return Response({"message": "Invoice created successfully."})
+            return Response(
+                {"message": "The Invoice Generated is saved as Draft Successfully."}
+            )
         else:
             print(response.json())
             return Response(status=401)
@@ -2360,7 +2632,7 @@ def create_invoice(request):
         return Response(status=404)
 
 
-@api_view(["POST"])
+@api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def edit_so_invoice(request, invoice_id):
     try:
@@ -2371,16 +2643,60 @@ def edit_so_invoice(request, invoice_id):
             )
         api_url = f"{base_url}/invoices/{invoice_id}?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
-        response = requests.post(api_url, headers=auth_header, data=request.data)
-        print(response.json())
-        if response.status_code == 201:
-            return Response({"message": "Invoice created successfully."})
+        response = requests.put(api_url, headers=auth_header, data=request.data)
+
+        if response.status_code == 200:
+            return Response({"message": "Invoice updated successfully."})
         else:
-            print(response.json())
-            return Response(status=401)
+            return Response({"error": response.json()}, status=response.status_code)
     except Exception as e:
-        print(str(e))
-        return Response(status=404)
+        return Response({"error": str(e)}, status=500)
+
+
+def update_sales_order_status_to_open(sales_order_id, status):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/salesorders/{sales_order_id}/status/{status}?organization_id={organization_id}"
+
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header)
+        print(response.json())
+        # If response status is not 200, raise custom exception
+        if response.status_code == 200:
+            return True
+        else:
+            raise Exception(
+                f"Failed to update sales order status. Status code: {response.status_code}"
+            )
+    except Exception as e:
+        raise Exception(f"Failed to update sales order status: {str(e)}")
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_sales_order(request, sales_order_id):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = (
+            f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
+        )
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.put(api_url, headers=auth_header, data=request.data)
+
+        if response.status_code == 200:
+            return Response({"message": "Sales order updated successfully."})
+        else:
+            return Response({"error": response.json()}, status=response.status_code)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 
 
 @api_view(["POST"])
@@ -2395,11 +2711,11 @@ def create_sales_order(request):
         api_url = f"{base_url}/salesorders?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.post(api_url, headers=auth_header, data=request.data)
-        print(response.json())
         if response.status_code == 201:
             salesorder_created = response.json().get("salesorder")
             project_id = request.data.get("project_id", "")
             project_type = request.data.get("project_type", "")
+            status = request.data.get("status", "")
             project = None
             schedular_project = None
             orders_and_project_mapping = None
@@ -2434,8 +2750,22 @@ def create_sales_order(request):
                     salesorder_created["salesorder_id"],
                 ]
                 mapping.save()
+
+            if status == "open":
+                # mark sales order as open and return message  "SO has been created successfully and  Saved as Open"
+                if update_sales_order_status_to_open(
+                    salesorder_created["salesorder_id"], "open"
+                ):
+                    return Response(
+                        {
+                            "message": "SO has been created successfully and marked as Open"
+                        }
+                    )
+
             # add the mapping for sales order here
-            return Response({"message": "Sales Order created successfully."})
+            return Response(
+                {"message": "SO has been created successfully and Saved as Draft"}
+            )
         else:
             print(response.json())
             return Response(status=401)
@@ -2714,18 +3044,8 @@ def get_salesorders_fields_data(request):
 @permission_classes([IsAuthenticated])
 def update_sales_order_status(request, sales_order_id, status):
     try:
-        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-        if not access_token:
-            raise Exception(
-                "Access token not found. Please generate an access token first."
-            )
-        api_url = f"{base_url}/salesorders/{sales_order_id}/status/{status}?organization_id={organization_id}"
-        auth_header = {"Authorization": f"Bearer {access_token}"}
-        response = requests.post(api_url, headers=auth_header)
-        if response.status_code == 200:
-            return Response({"message": f"Sales Order changed to {status}."})
-        else:
-            return Response(status=401)
+        update_sales_order_status_to_open(sales_order_id, status)
+        return Response({"message": f"Sales Order changed to {status}."})
     except Exception as e:
         print(str(e))
         return Response(status=404)
@@ -2736,7 +3056,6 @@ def update_sales_order_status(request, sales_order_id, status):
 def get_so_data_of_project(request, project_id, project_type):
     try:
         all_sales_orders = get_so_for_project(project_id, project_type)
-
         total = 0
         invoiced_amount = 0
         not_invoiced_amount = 0
@@ -2761,6 +3080,7 @@ def get_so_data_of_project(request, project_id, project_type):
                 "not_invoiced_amount": not_invoiced_amount,
                 "paid_amount": paid_amount,
                 "currency_code": currency_code,
+                "no_of_sales_orders": len(all_sales_orders),
             }
         )
     except Exception as e:
@@ -3076,18 +3396,18 @@ def edit_vendor(request, vendor_id):
         )
 
 
-def fetch_client_invoices_page_wise(organization_id, page):
+def fetch_client_invoices_page_wise(organization_id, page, queryParams=""):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if not access_token:
         raise Exception(
             "Access token not found. Please generate an access token first."
         )
-    api_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&perpage=200"
+    api_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&perpage=200{queryParams}"
     auth_header = {"Authorization": f"Bearer {access_token}"}
     response = requests.get(api_url, headers=auth_header)
     if response.status_code == 200:
         invoices = response.json().get("invoices", [])
-        page_context_extra_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&response_option=2"
+        page_context_extra_url = f"{base_url}/invoices/?organization_id={organization_id}&page={page}&response_option=2{queryParams}"
         page_context_extra_response = requests.get(
             page_context_extra_url, headers=auth_header
         )
@@ -3109,6 +3429,35 @@ def fetch_client_invoices_page_wise(organization_id, page):
     else:
         print(response.json())
         raise Exception("Failed to fetch client invoices.")
+def fetch_client_invoices_for_sales_orders(sales_order_ids):
+    filtered_client_invoices = []
+
+    for sales_order_id in sales_order_ids:
+        sales_order = None
+        access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))  # Update this function
+        if access_token_sales_order:
+            api_url = f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
+            auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
+            response = requests.get(api_url, headers=auth_header)
+            if response.status_code == 200:
+                sales_order = response.json().get("salesorder")
+
+        if sales_order:
+            for client_invoice in sales_order["invoices"]:
+                access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))  # Update this function
+                if access_token:
+                    api_url = f"{base_url}/invoices/{client_invoice['invoice_id']}?organization_id={organization_id}"
+                    auth_header = {"Authorization": f"Bearer {access_token}"}
+                    response = requests.get(api_url, headers=auth_header)
+                    if response.status_code == 200:
+                        temp_client_invoice = response.json().get("invoice")
+                        if (
+                            "salesorder_id" in temp_client_invoice
+                            and temp_client_invoice["salesorder_id"] == sales_order_id
+                        ):
+                            filtered_client_invoices.append(temp_client_invoice)
+    print(filtered_client_invoices)
+    return filtered_client_invoices
 
 
 @api_view(["GET"])
@@ -3116,10 +3465,157 @@ def fetch_client_invoices_page_wise(organization_id, page):
 def get_client_invoices(request):
     try:
         page = request.query_params.get("page")
-        res = fetch_client_invoices_page_wise(organization_id, page)
-        return Response(res, status=status.HTTP_200_OK)
+        salesperson_id = request.query_params.get("salesperson_id", "")
+        project_id = request.query_params.get("project_id")
+        project_type = request.query_params.get("project_type")
+        if project_id:
+            sales_order_ids_set = set()
+            if project_type == "CAAS":
+                orders_project_mapping = OrdersAndProjectMapping.objects.filter(
+                    project__id=project_id
+                )
+                for mapping in orders_project_mapping:
+                    sales_order_ids_set.update(mapping.sales_order_ids)
+            elif project_type == "SEEQ":
+                orders_project_mapping = OrdersAndProjectMapping.objects.filter(
+                    schedular_project__id=project_id
+                )
+                for mapping in orders_project_mapping:
+                    sales_order_ids_set.update(mapping.sales_order_ids)
 
+            sales_order_ids = list(sales_order_ids_set) # [1,2,3]
+            invoices = []
+            if len(sales_order_ids) > 0:
+                invoices = fetch_client_invoices_for_sales_orders(sales_order_ids)
+        else:
+            invoices = fetch_client_invoices_page_wise(
+                organization_id,
+                page,
+                f"&salesperson_id={salesperson_id}" if salesperson_id else "",
+            )
+        return Response(invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
 
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_invoices_of_sales_order(request, sales_order_id):
+    try:
+        sales_order = None
+        access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if access_token_sales_order:
+            api_url = f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
+            auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
+            response = requests.get(api_url, headers=auth_header)
+            if response.status_code == 200:
+                sales_order = response.json().get("salesorder")
+
+        filtered_client_invoice = []
+        for client_invoice in sales_order["invoices"]:
+            access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+            if access_token:
+                api_url = f"{base_url}/invoices/{client_invoice['invoice_id']}?organization_id={organization_id}"
+                auth_header = {"Authorization": f"Bearer {access_token}"}
+                response = requests.get(api_url, headers=auth_header)
+                if response.status_code == 200:
+                    temp_client_invoice = response.json().get("invoice")
+                    if (
+                        "salesorder_id" in temp_client_invoice
+                        and temp_client_invoice["salesorder_id"] == sales_order_id
+                    ):
+                        filtered_client_invoice.append(temp_client_invoice)
+
+        return Response(filtered_client_invoice, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sales_person_from_zoho(request):
+    try:
+        sales_persons = fetch_sales_persons(organization_id)
+        return Response(sales_persons, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get sales persons"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_so_for_the_project(request):
+    try:
+        caas_project_mapping = OrdersAndProjectMapping.objects.filter(
+            project__isnull=False
+        )
+        schedular_project_mapping = OrdersAndProjectMapping.objects.filter(
+            schedular_project__isnull=False
+        )
+        all_sales_order_project_mapping = OrdersAndProjectMapping.objects.all()
+        all_sales_order_ids = []
+        for mapping in all_sales_order_project_mapping:
+            all_sales_order_ids.extend(mapping.sales_order_ids)
+
+        sales_orders_ids_str = ",".join(all_sales_order_ids)
+        all_sales_orders = []
+        if sales_orders_ids_str:
+            all_sales_orders = fetch_sales_orders(
+                organization_id, f"&salesorder_ids={sales_orders_ids_str}"
+            )
+        final_data = {}
+        sales_order_dict = {order["salesorder_id"]: order for order in all_sales_orders}
+        if caas_project_mapping:
+            final_data["caas"] = {}
+            for mapping in caas_project_mapping:
+                project_id = mapping.project.id
+                res = []
+                sales_order_ids = mapping.sales_order_ids
+                for sales_order_id in sales_order_ids:
+                    order_details = sales_order_dict.get(sales_order_id)
+                    if order_details:
+                        res.append(order_details["salesorder_number"])
+                final_data["caas"][project_id] = res
+
+        if schedular_project_mapping:
+            final_data["seeq"] = {}
+            for mapping in schedular_project_mapping:
+                project_id = mapping.schedular_project.id
+                res = []
+                sales_order_ids = mapping.sales_order_ids
+                for sales_order_id in sales_order_ids:
+                    order_details = sales_order_dict.get(sales_order_id)
+                    if order_details:
+                        res.append(order_details["salesorder_number"])
+                final_data["seeq"][project_id] = res
+        return Response(final_data)
+
+    except ObjectDoesNotExist as e:
+        print(str(e))
+        return Response({"error": "Project does not exist"}, status=404)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_total_so_created_count(request, sales_person_id):
+    try:
+        all_sales_orders = fetch_sales_orders(
+            organization_id, f"&salesperson_id={sales_person_id}"
+        )
+        res = get_sales_orders_with_project_details(all_sales_orders)
+        count = len(res)
+        return Response(count, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

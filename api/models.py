@@ -151,22 +151,25 @@ class Finance(models.Model):
     active_inactive = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-  
 
     def __str__(self):
         return self.name
-    
+
+
 class Sales(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
     active_inactive = models.BooleanField(default=True)
+    sales_person_id = models.CharField(max_length=255, blank=True, default="")
+    business = models.CharField(max_length=255, blank=True, default="meeraq")
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-  
+
     def __str__(self):
         return self.name
+
 
 class Pmo(models.Model):
 
@@ -239,7 +242,10 @@ class Coach(models.Model):
     education_pic = models.ImageField(upload_to="post_images", blank=True)
     educational_qualification = models.JSONField(default=list, blank=True)
     education_upload_file = models.FileField(
-        upload_to="pdf_files", blank=True, null=True, validators=[validate_pdf_extension]
+        upload_to="pdf_files",
+        blank=True,
+        null=True,
+        validators=[validate_pdf_extension],
     )
 
     def __str__(self):
@@ -554,8 +560,12 @@ class Goal(models.Model):
     )
     name = models.TextField()
     description = models.TextField()
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
-    engagement = models.ForeignKey(Engagement, on_delete=models.CASCADE)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, blank=True, null=True
+    )
+    engagement = models.ForeignKey(
+        Engagement, on_delete=models.CASCADE, blank=True, null=True
+    )
 
 
 class Competency(models.Model):
