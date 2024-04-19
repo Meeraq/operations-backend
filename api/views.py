@@ -5583,7 +5583,7 @@ def create_goal(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_engagement_goals(request, engagement_id):
-    goals = Goal.objects.filter(engagement__id=engagement_id)
+    goals = Goal.objects.filter(engagement__id=engagement_id).order_by("-created_at")
     serializer = GetGoalSerializer(goals, many=True)
     return Response(serializer.data, status=200)
 
@@ -5702,7 +5702,7 @@ def delete_competency(request, competency_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_engagement_competency(request, engagement_id):
-    competentcy = Competency.objects.filter(goal__engagement__id=engagement_id)
+    competentcy = Competency.objects.filter(goal__engagement__id=engagement_id).order_by("created_at")
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
     return Response(serializer.data, status=200)
 
@@ -5738,7 +5738,7 @@ def add_score_to_competency(request, competency_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_competency_by_goal(request, goal_id):
-    competentcy = Competency.objects.filter(goal__id=goal_id)
+    competentcy = Competency.objects.filter(goal__id=goal_id).order_by("-created_at")
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
     return Response(serializer.data, status=200)
 
@@ -5766,7 +5766,7 @@ def create_action_item(request):
 def get_engagement_action_items(request, engagement_id):
     action_items = ActionItem.objects.filter(
         competency__goal__engagement__id=engagement_id
-    )
+    ).order_by("-created_at")
     serializer = GetActionItemDepthOneSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
 
@@ -5774,7 +5774,7 @@ def get_engagement_action_items(request, engagement_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_action_items_by_competency(request, competency_id):
-    action_items = ActionItem.objects.filter(competency__id=competency_id)
+    action_items = ActionItem.objects.filter(competency__id=competency_id).order_by("-created_at")
     serializer = GetActionItemDepthOneSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
 

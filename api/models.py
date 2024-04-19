@@ -566,6 +566,8 @@ class Goal(models.Model):
     engagement = models.ForeignKey(
         Engagement, on_delete=models.CASCADE, blank=True, null=True
     )
+    created_at = models.DateField(auto_now_add=True)
+
 
 
 class Competency(models.Model):
@@ -584,6 +586,8 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+    created_at = models.DateField(auto_now_add=True)
+
 
 
 class ProfileEditActivity(models.Model):
