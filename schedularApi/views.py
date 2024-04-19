@@ -3953,7 +3953,11 @@ def get_live_sessions_by_status(request):
             livesession__facilitator__id=facilitator_id
         )
         queryset = queryset.filter(batch__in=batches)
-
+    
+    learner_id = request.query_params.get("learner_id", None)
+    if learner_id:
+        queryset = queryset.filter(batch__learners__id=learner_id)
+    
     res = []
     for live_session in queryset:
         session_name = get_live_session_name(live_session.session_type)

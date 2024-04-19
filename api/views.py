@@ -4465,10 +4465,7 @@ def create_session_request_by_learner(request, session_id):
     session.save()
     return Response({"message": "Session requested successfully"})
 
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
-def get_session_requests_of_user(request, user_type, user_id):
+def session_requests_of_user(user_type,user_id):
     session_requests = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
@@ -4491,6 +4488,12 @@ def get_session_requests_of_user(request, user_type, user_id):
             & Q(project__hr__id=user_id)
             & ~Q(status="pending")
         )
+    return session_requests    
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
+def get_session_requests_of_user(request, user_type, user_id):
+    session_requests = session_requests_of_user(user_type,user_id)
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
             Engagement.objects.filter(
@@ -4785,25 +4788,22 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     return Response(serializer.data, status=200)
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
-def new_get_upcoming_sessions_of_user(request, user_type, user_id):
+def get_upcoming_session_of_user(user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
-    session_requests = []
     current_time_seeq = timezone.now()
     timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
-    avaliable_sessions = []
+    session_requests = []
+    available_sessions = []
     if user_type == "pmo":
         pmo = Pmo.objects.get(id=user_id)
         if pmo.sub_role == "manager":
-
             session_requests = SessionRequestCaas.objects.filter(
                 Q(is_booked=True),
                 Q(confirmed_availability__end_time__gt=current_time),
                 ~Q(status="completed"),
             )
             schedular_sessions = SchedularSessions.objects.all()
-            avaliable_sessions = schedular_sessions.filter(
+            available_sessions = schedular_sessions.filter(
                 availibility__end_time__gt=timestamp_milliseconds
             )
         else:
@@ -4816,7 +4816,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             schedular_sessions = SchedularSessions.objects.filter(
                 coaching_session__batch__project__junior_pmo=pmo
             )
-            avaliable_sessions = schedular_sessions.filter(
+            available_sessions = schedular_sessions.filter(
                 availibility__end_time__gt=timestamp_milliseconds
             )
 
@@ -4831,7 +4831,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
         )
         learner = Learner.objects.get(id=user_id)
         schedular_sessions = SchedularSessions.objects.filter(learner=learner)
-        avaliable_sessions = schedular_sessions.filter(
+        available_sessions = schedular_sessions.filter(
             availibility__end_time__gt=timestamp_milliseconds
         )
     if user_type == "coach":
@@ -4845,7 +4845,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
         schedular_sessions = SchedularSessions.objects.filter(
             availibility__coach__id=user_id
         )
-        avaliable_sessions = schedular_sessions.filter(
+        available_sessions = schedular_sessions.filter(
             availibility__end_time__gt=timestamp_milliseconds
         )
     if user_type == "hr":
@@ -4859,9 +4859,24 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
         schedular_sessions = SchedularSessions.objects.filter(
             coaching_session__batch__project__hr__id=user_id
         )
-        avaliable_sessions = schedular_sessions.filter(
+        available_sessions = schedular_sessions.filter(
             availibility__end_time__gt=timestamp_milliseconds
         )
+    
+    return session_requests, available_sessions
+
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
+def new_get_upcoming_sessions_of_user(request, user_type, user_id):
+    # current_time = int(timezone.now().timestamp() * 1000)
+    # current_time_seeq = timezone.now()
+    # timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+    # session_requests = []
+    # avaliable_sessions = []
+    session_requests, available_sessions = get_upcoming_session_of_user(user_type, user_id)
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -4876,7 +4891,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     coach_id = None
     if user_type == "coach":
         coach_id = user_id
-    for session in avaliable_sessions:
+    for session in available_sessions:
         session_detail = {
             "id": session.id,
             "batch_name": (
@@ -4987,15 +5002,12 @@ def get_past_sessions_of_user(request, user_type, user_id):
     )
     return Response(serializer.data, status=200)
 
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
-def new_get_past_sessions_of_user(request, user_type, user_id):
+def past_sessions_of_user(user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
-    session_requests = []
     current_time_seeq = timezone.now()
     timestamp_milliseconds = int(current_time_seeq.timestamp() * 1000)
     avaliable_sessions = []
+    session_requests = []
     if user_type == "pmo":
         pmo = Pmo.objects.get(id=user_id)
         if pmo.sub_role == "manager":
@@ -5063,6 +5075,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
         avaliable_sessions = schedular_sessions.filter(
             availibility__end_time__lt=timestamp_milliseconds
         )
+    return session_requests, avaliable_sessions
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
+def new_get_past_sessions_of_user(request, user_type, user_id):
+    session_requests, available_sessions = past_sessions_of_user(user_type, user_id)
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -5073,11 +5091,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
         ),
         is_seeq_project=Value(False, output_field=BooleanField()),
     )
+
     session_details = []
     coach_id = None
     if user_type == "coach":
         coach_id = user_id
-    for session in avaliable_sessions:
+    for session in available_sessions:
         session_detail = {
             "id": session.id,
             "batch_name": (
@@ -5127,6 +5146,21 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
         status=200,
     )
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
+def get_count_sessions(request,user_type, user_id):
+    upcoming_session_requests, upcoming_available_sessions = get_upcoming_session_of_user(user_type, user_id)
+    past_session_requests, past_avilable_sessions = past_sessions_of_user(user_type, user_id)
+    request_session_requests = session_requests_of_user(user_type,user_id)
+    upcoming_count = upcoming_session_requests.count() + upcoming_available_sessions.count()
+    past_count = past_session_requests.count() + past_avilable_sessions.count()
+    request_count = request_session_requests.count()
+    return Response({
+        "upcoming_count" : upcoming_count,
+        "past_count":past_count,
+        "request_count":request_count
+    })
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "hr", "learner")])

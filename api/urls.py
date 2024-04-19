@@ -163,6 +163,10 @@ urlpatterns = [
         "new/sessions/past/<str:user_type>/<int:user_id>/",
         views.new_get_past_sessions_of_user,
     ),
+     path(
+        "get-session-count/<str:user_type>/<int:user_id>/",
+        views.get_count_sessions,
+    ),
     path("learners/<str:user_type>/<int:user_id>/", views.get_coachee_of_user),
     path("learner/<int:learner_id>/", views.get_learner_data),
     path(
