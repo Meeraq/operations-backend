@@ -87,6 +87,11 @@ urlpatterns = [
         name="get_all_invoices",
     ),
     path(
+        "pmo/pending-invoices/",
+        views.get_pending_invoices_for_pmo,
+        name="get_pending_invoices_for_pmo",
+    ),
+    path(
         "sales/invoices/",
         views.get_invoices_for_sales,
         name="get_all_invoices",
@@ -167,6 +172,7 @@ urlpatterns = [
         name="delete_coaching_purchase_order",
     ),
     path("coach/finances/", views.get_coach_wise_finances),
+    path("facilitator/finances/", views.get_facilitator_wise_finances),
     path("project/finances/", views.get_project_wise_finances),
     path(
         "purchase-order/delete/<str:user_type>/<str:purchase_order_id>/",
