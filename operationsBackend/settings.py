@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "schedularApi",
     "assessmentApi",
     "courses",
+    "ctt",
     "rest_framework.authtoken",
     "django_rest_passwordreset",
     "corsheaders",
@@ -111,7 +112,15 @@ DATABASES = {
         "HOST": env("DATABASE_HOST"),
         "PORT": env("DATABASE_PORT"),
         "OPTIONS": {"init_command": "SET sql_mode='STRICT_TRANS_TABLES'"},
-    }
+    },
+    "ctt": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": env("CTT_DATABASE_NAME"),
+        "USER": env("CTT_DATABASE_USER"),
+        "PASSWORD": env("CTT_DATABASE_PASS"),
+        "HOST": env("CTT_DATABASE_HOST"),
+        "PORT": env("CTT_DATABASE_PORT"),
+    },
 }
 
 

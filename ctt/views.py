@@ -11,6 +11,6 @@ from .models import Batches
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_batches(request):
-    batches = Batches.objects.using("lms_coach_to_transformation").all()
+    batches = Batches.objects.using("ctt").all()
     serializer = BatchSerializer(batches, many=True)
     return Response(serializer.data)
