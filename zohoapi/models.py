@@ -129,3 +129,15 @@ class OrdersAndProjectMapping(models.Model):
 
     purchase_order_ids = models.JSONField(default=list, blank=True)
     sales_order_ids = models.JSONField(default=list, blank=True)
+
+
+class LineItems(models.Model):
+    sales_order_id = models.CharField(max_length=200, default=None)
+    sales_order_number = models.CharField(max_length=200, default=None)
+    line_item_id = models.CharField(max_length=200, default=None)
+    client_name = models.CharField(max_length=200, default=None, blank=True)
+    line_item_description = models.TextField(default=None, blank=True)
+    due_date = models.DateField(blank=True, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
