@@ -82,7 +82,7 @@ from .serializers import (
     ExpenseSerializer,
     SchedularProjectSerializerArchiveCheck,
     HandoverDetailsSerializer,
-    HandoverDetailsSerializerWithOrganisationName
+    HandoverDetailsSerializerWithOrganisationName,
 )
 from .models import (
     SchedularBatch,
@@ -308,9 +308,8 @@ def create_project_schedular(request):
             junior_pmo=junior_pmo,
         )
         schedularProject.save()
-    except IntegrityError:
-        return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
+        print(str(e))
         return Response({"error": "Failed to create project."}, status=400)
 
     for hr in project_details["hr"]:
@@ -795,6 +794,7 @@ def generate_slots(start, end, duration):
 )
 def get_batch_calendar(request, batch_id):
     try:
+        fetch_po = request.query_params.get("fetch_po")
         live_sessions = LiveSession.objects.filter(batch__id=batch_id)
         coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
         live_sessions_serializer = LiveSessionSerializerDepthOne(
@@ -871,40 +871,41 @@ def get_batch_calendar(request, batch_id):
 
         coaches_serializer = CoachSerializer(coaches, many=True)
         facilitator_serializer = FacilitatorSerializerIsVendor(facilitator, many=True)
-
-        try:
-            purchase_orders = fetch_purchase_orders(organization_id)
-            for facilitator_item in facilitator_serializer.data:
-                expense = Expense.objects.filter(
-                    batch__id=batch_id, facilitator__id=facilitator_item["id"]
-                ).first()
-                facilitator_item["purchase_order_id"] = expense.purchase_order_id
-                facilitator_item["purchase_order_no"] = expense.purchase_order_no
-                is_delete_purchase_order_allowed = True
-                if facilitator_item["purchase_order_id"]:
-                    purchase_order = get_purchase_order(
-                        purchase_orders, facilitator_item["purchase_order_id"]
-                    )
-                    if not purchase_order:
-                        Expense.objects.filter(
-                            batch__id=batch_id, facilitator__id=facilitator_item["id"]
-                        ).update(purchase_order_id="", purchase_order_no="")
-                        facilitator_item["purchase_order_id"] = None
-                        facilitator_item["purchase_order_no"] = None
-                    else:
-                        invoices = InvoiceData.objects.filter(
-                            purchase_order_id=facilitator_item["purchase_order_id"]
+        if fetch_po == "True":
+            try:
+                purchase_orders = fetch_purchase_orders(organization_id)
+                for facilitator_item in facilitator_serializer.data:
+                    expense = Expense.objects.filter(
+                        batch__id=batch_id, facilitator__id=facilitator_item["id"]
+                    ).first()
+                    facilitator_item["purchase_order_id"] = expense.purchase_order_id
+                    facilitator_item["purchase_order_no"] = expense.purchase_order_no
+                    is_delete_purchase_order_allowed = True
+                    if facilitator_item["purchase_order_id"]:
+                        purchase_order = get_purchase_order(
+                            purchase_orders, facilitator_item["purchase_order_id"]
                         )
-                        if invoices.exists():
-                            is_delete_purchase_order_allowed = False
-                    facilitator_item["is_delete_purchase_order_allowed"] = (
-                        is_delete_purchase_order_allowed
-                    )
-                    facilitator_item["purchase_order"] = purchase_order
-                else:
-                    facilitator_item["purchase_order"] = None
-        except Exception as e:
-            print(str(e))
+                        if not purchase_order:
+                            Expense.objects.filter(
+                                batch__id=batch_id,
+                                facilitator__id=facilitator_item["id"],
+                            ).update(purchase_order_id="", purchase_order_no="")
+                            facilitator_item["purchase_order_id"] = None
+                            facilitator_item["purchase_order_no"] = None
+                        else:
+                            invoices = InvoiceData.objects.filter(
+                                purchase_order_id=facilitator_item["purchase_order_id"]
+                            )
+                            if invoices.exists():
+                                is_delete_purchase_order_allowed = False
+                        facilitator_item["is_delete_purchase_order_allowed"] = (
+                            is_delete_purchase_order_allowed
+                        )
+                        facilitator_item["purchase_order"] = purchase_order
+                    else:
+                        facilitator_item["purchase_order"] = None
+            except Exception as e:
+                print(str(e))
 
         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
@@ -6360,9 +6361,11 @@ def get_formatted_handovers(handovers):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_handovers(request,sales_id):
+def get_handovers(request, sales_id):
     try:
-        handovers = HandoverDetails.objects.filter(sales__id=sales_id).order_by("-created_at")
+        handovers = HandoverDetails.objects.filter(sales__id=sales_id).order_by(
+            "-created_at"
+        )
         formatted_handovers = get_formatted_handovers(handovers)
         return Response(formatted_handovers, status=status.HTTP_200_OK)
     except Exception as e:
