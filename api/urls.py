@@ -131,6 +131,10 @@ urlpatterns = [
         views.get_learner_engagement_of_project,
     ),
     path("engagement/learner/<int:learner_id>/", views.get_learners_engagement),
+    path(
+        "coaches-of-learner/<int:learner_id>/",
+        views.get_coaches_of_learner,
+    ),
     path("sessions/create/<int:learner_id>/", views.create_session_request_by_learner),
     path(
         "sessions/requested/<str:user_type>/<int:user_id>/",
@@ -455,11 +459,11 @@ urlpatterns = [
         "edit-pmo-goal/",
         views.edit_pmo_goal,
     ),
-     path(
+    path(
         "get-all-competency/",
         views.get_all_competency,
     ),
-     path(
+    path(
         "get-all-po-of-project/<int:project_id>/",
         views.get_all_po_of_project,
     ),

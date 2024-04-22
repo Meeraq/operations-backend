@@ -4456,6 +4456,28 @@ def get_learners_engagement(request, learner_id):
     serializer = EngagementDepthOneSerializer(engagements, many=True)
     return Response(serializer.data, status=200)
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coaches_of_learner(request, learner_id):
+    engagements = Engagement.objects.filter(learner__id=learner_id)
+    data = []
+
+    for engagement in engagements:
+        if engagement.coach:
+            coach_name = f"{engagement.coach.first_name} {engagement.coach.last_name}"
+            project_name = engagement.project.name
+            profile_pic_url = None  # Default to None
+            if engagement.coach.profile_pic:
+                coach_serializer =  CoachSerializer(engagement.coach)
+            data.append({
+                'coach': engagement.coach.id,
+                'project': engagement.project.id,
+                'coach_name': coach_name,
+                'project_name': project_name,
+                'profile_pic': coach_serializer.data['profile_pic']
+            })
+
+    return Response(data, status=200)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("learner")])
