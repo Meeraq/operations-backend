@@ -378,7 +378,31 @@ def update_handover(request):
         handover_instance, data=request.data, partial=True
     )
     if serializer.is_valid():
-        serializer.save()
+        handover_instance = serializer.save()
+        # when handover is being edited and the project is already created, sending the mails
+        if handover_instance.caas_project or handover_instance.schedular_project:
+            # junior pmo and pmo training and coaching if a handover is edited by the sales person
+            if handover_instance.caas_project:
+                junior_pmo = handover_instance.caas_project.junior_pmo
+                project_name = handover_instance.caas_project.name
+            elif handover_instance.schedular_project:
+                junior_pmo = handover_instance.schedular_project.junior_pmo
+                project_name = handover_instance.schedular_project.name
+            else:
+                junior_pmo = None
+                project_name = ""
+            emails = ["pmocoaching@meeraq.com", "pmotraining@meeraq.com"] 
+            if junior_pmo:
+                emails.append(junior_pmo.email)
+
+            send_mail_templates(
+            "pmo_emails/edit_handover.html",
+            emails if  env('ENVIRONMENT')  == "PRODUCTION" else ['tech@meeraq.com'],
+            "Meeraq Platform | Handover Details Updated",
+            {"project_name": project_name},
+            [],  # no bcc
+        )
+
         return Response(
             {"message": "Handover updated successfully.", "handover": serializer.data},
             status=200,

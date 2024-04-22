@@ -2448,8 +2448,9 @@ def get_sales_orders_with_project_details(sales_orders):
 @permission_classes([IsAuthenticated])
 def get_all_sales_orders(request):
     try:
-        sales_person_id = request.query_params.get("sales_person_id")
-        all_sales_orders = fetch_sales_orders(organization_id)
+        search_text = request.query_params.get("search_text", "")
+        query_params = f"&salesorder_number_contains={search_text}" if search_text else ""
+        all_sales_orders = fetch_sales_orders(organization_id, query_params)
         res = get_sales_orders_with_project_details(all_sales_orders)
         return Response(res, status=status.HTTP_200_OK)
     except Exception as e:
