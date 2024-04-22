@@ -341,4 +341,9 @@ urlpatterns = [
         views.get_total_so_created_count,
         name="get_total_so_created_count",
     ),
+    path(
+        "get-handovers-count/<str:sales_person_id>/",
+        views.get_handovers_count,
+        name="get_handovers_count"
+    )
 ]

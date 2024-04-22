@@ -21,7 +21,7 @@ from api.models import (
     Project,
     Engagement,
 )
-
+from schedularApi.models import (HandoverDetails)
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 import json
@@ -3619,3 +3619,16 @@ def get_total_so_created_count(request, sales_person_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_handovers_count(request, sales_person_id):
+    try:
+        handovers_count = HandoverDetails.objects.filter(sales__id=sales_person_id).count()
+        return Response({"handovers_count": handovers_count}, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get handover count."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
