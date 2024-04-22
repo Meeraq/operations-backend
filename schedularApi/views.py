@@ -6128,7 +6128,18 @@ def get_expense_for_facilitator(request, batch_or_project_id, usertype, user_id)
 
             all_expenses.extend(expenses)
 
+        po_ids = [] # po ids
+        for expense in all_expenses:
+            if expense.purchase_order_id:
+                po_ids.append(expense.purchase_order_id)
+        po_ids_str = ",".join(po_ids) 
+        purchase_orders =  fetch_purchase_orders(organization_id, f"&purchaseorder_ids={po_ids_str}")
         serializer = ExpenseSerializerDepthOne(all_expenses, many=True)
+        for expense in serializer.data:
+            if expense['purchase_order_id']:
+                expense['purchase_order'] = get_purchase_order(purchase_orders, expense['purchase_order_id'])
+            else:
+                expense['purchase_order'] = None
         return Response(serializer.data)
     except Exception as e:
         print(str(e))

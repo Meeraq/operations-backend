@@ -263,6 +263,9 @@ class Expense(models.Model):
         ("pending", "Pending"),
         ("accepted", "Accepted"),
         ("rejected", "Rejected"),
+        ("created", "Created"),
+        ("invoiced", "Invoiced"),
+
     ]
 
     name = models.CharField(max_length=255)

@@ -178,7 +178,7 @@ def filter_purchase_order_data(purchase_orders):
         return None
 
 
-def fetch_purchase_orders(organization_id):
+def fetch_purchase_orders(organization_id, query_params=""):
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if not access_token_purchase_data:
         raise Exception(
@@ -191,7 +191,7 @@ def fetch_purchase_orders(organization_id):
 
     while has_more_page:
         api_url = (
-            f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}"
+            f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}{query_params}"
         )
         auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
         response = requests.get(api_url, headers=auth_header)
