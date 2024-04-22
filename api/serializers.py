@@ -41,6 +41,7 @@ from .models import (
     APILog,
     Task,
     Sales,
+    CTTPmo,
 )
 from django.contrib.auth.models import User
 
@@ -57,6 +58,11 @@ class PmoDepthOneSerializer(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+class CTTPmoDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTPmo
+        fields = "__all__"
+        depth = 1
 
 class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
@@ -475,6 +481,12 @@ class PmoSerializer(serializers.ModelSerializer):
 class PmoSerializerAll(serializers.ModelSerializer):
     class Meta:
         model = Pmo
+        fields = "__all__"
+
+
+class CTTPmoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTPmo
         fields = "__all__"
 
 

@@ -351,6 +351,8 @@ urlpatterns = [
     path("add/pmo/", views.add_pmo),
     path("get/all/pmo/", views.get_pmo, name="get_pmo"),
     path("get/junior/pmo/<int:user_id>/", views.get_junior_pmo),
+    path("ctt-pmos/", views.get_ctt_pmos),
+    path("ctt-pmos/create/", views.add_ctt_pmo),
     path(
         "get-learner-of-user-optimized/<str:user_type>/<int:user_id>/",
         views.get_learner_of_user_optimized,
@@ -407,6 +409,8 @@ urlpatterns = [
     #     views.delete_pmo,
     # ),
     path("edit-pmo/", views.edit_pmo),
+        path("ctt-pmo/edit/<int:ctt_pmo_id>/", views.edit_pmo),
+
     path(
         "get-coaches-in-project-is-vendor/<int:project_id>/",
         views.get_coaches_in_project_is_vendor,

@@ -72,6 +72,8 @@ from .serializers import (
     FacilitatorSerializer,
     APILogSerializer,
     PmoSerializerAll,
+    CTTPmoSerializer,
+    CTTPmoDepthOneSerializer,
     TaskSerializer,
     ProjectDepthTwoSerializerArchiveCheck,
     CustomUserSerializer,
@@ -102,6 +104,7 @@ from django.forms.models import model_to_dict
 from .models import (
     Profile,
     Pmo,
+    CTTPmo,
     Coach,
     OTP,
     Project,
@@ -1014,7 +1017,6 @@ def edit_pmo(request):
     name = request.data.get("name")
     email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
-
     sub_role = request.data.get("sub_role")
     pmo_email = request.data.get("pmo_email", "").strip().lower()
     try:
@@ -1043,6 +1045,42 @@ def edit_pmo(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update pmo."}, status=500)
+
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny, IsInRoles("superadmin")])
+def edit_ctt_pmo(request, ctt_pmo_id):
+    name = request.data.get("name")
+    email = request.data.get("email", "").strip().lower()
+    phone = request.data.get("phone")
+    ctt_pmo = CTTPmo.objects.get(id=ctt_pmo_id)
+
+    try:
+        with transaction.atomic():
+            existing_user = (
+                User.objects.filter(username=email).exclude(username=ctt_pmo.user.user.username).first()
+            )
+            if existing_user:
+                return Response(
+                    {"error": "User with this email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            ctt_pmo.user.user.username = email
+            ctt_pmo.user.user.email = email
+            ctt_pmo.user.user.save()
+            ctt_pmo.email = email
+            ctt_pmo.name = name
+            ctt_pmo.phone = phone
+            ctt_pmo.save()
+            if ctt_pmo.phone:
+                add_contact_in_wati("pmo", ctt_pmo.name, ctt_pmo.phone)
+
+            return Response({"message": "CTT PMO updated successfully."}, status=201)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update CTT PMO."}, status=500)
+
 
 
 @api_view(["PUT"])
@@ -1258,6 +1296,8 @@ def get_user_for_active_inactive(role, email):
             user = Finance.objects.get(email=email)
         if role == "sales":
             user = Sales.objects.get(email=email)
+        if role == "ctt_pmo":
+            user = CTTPmo.objects.get(email=email)
         return user
     except Exception as e:
         print(str(e))
@@ -2136,6 +2176,10 @@ def get_user_data(user):
         if not user.profile.sales.active_inactive:
             return None
         serializer = SalesDepthOneSerializer(user.profile.sales)
+    elif user_profile_role == "ctt_pmo":
+        if not user.profile.cttpmo.active_inactive:
+            return None
+        serializer = CTTPmoSerializer(user.profile.cttpmo)
     else:
         return None
     return {
@@ -8690,6 +8734,10 @@ def change_user_role(request, user_id):
         if not user.profile.sales.active_inactive:
             return None
         serializer = SalesDepthOneSerializer(user.profile.sales)
+    elif user_profile_role == "ctt_pmo":
+        if not user.profile.cttpmo.active_inactive:
+            return None
+        serializer = CTTPmoDepthOneSerializer(user.profile.cttpmo)
     else:
         return Response({"error": "Unknown user role."}, status=400)
     return Response(
@@ -9175,6 +9223,60 @@ def get_junior_pmo(request, user_id):
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin", "pmo")])
+def add_ctt_pmo(request):
+    try:
+        with transaction.atomic():
+            data = request.data
+            ctt_pmo_serializer = CTTPmoSerializer(data=data)
+            if ctt_pmo_serializer.is_valid():
+                name = data.get("name")
+                email = data.get("email","").strip().lower()
+                phone = data.get("phone")
+
+                if not (name and phone and email):
+                    return Response(
+                        {"error": "Name and phone are mandatory fields."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    user = User.objects.create_user(
+                        username=email,
+                        email=email,
+                        password=User.objects.make_random_password(),
+                    )
+
+                    profile = Profile.objects.create(user=user)
+                else:
+                    profile = Profile.objects.get(user=user)
+                ctt_pmo_role, created = Role.objects.get_or_create(name="ctt_pmo")
+                profile.roles.add(ctt_pmo_role)
+                profile.save()
+                ctt_pmo_serializer.save(user=profile)
+                return Response(ctt_pmo_serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(
+                    ctt_pmo_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin", "pmo")])
+def get_ctt_pmos(request):
+    try:
+        ctt_pmos = CTTPmo.objects.all()
+        serializer = CTTPmoSerializer(ctt_pmos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 PATH_ACTIVITY_MAPPING = {
