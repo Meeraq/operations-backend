@@ -303,7 +303,8 @@ def create_project_schedular(request):
             whatsapp_reminder=project_details["whatsapp_reminder"],
             calendar_invites=project_details["calendar_invites"],
             nudges=project_details["nudges"],
-            pre_post_assessment=project_details["pre_post_assessment"],
+            pre_assessment=project_details["pre_assessment"],
+            post_assessment=project_details["post_assessment"],
             is_finance_enabled=project_details["finance"],
             junior_pmo=junior_pmo,
         )
@@ -391,17 +392,17 @@ def update_handover(request):
             else:
                 junior_pmo = None
                 project_name = ""
-            emails = ["pmocoaching@meeraq.com", "pmotraining@meeraq.com"] 
+            emails = ["pmocoaching@meeraq.com", "pmotraining@meeraq.com"]
             if junior_pmo:
                 emails.append(junior_pmo.email)
 
             send_mail_templates(
-            "pmo_emails/edit_handover.html",
-            emails if  env('ENVIRONMENT')  == "PRODUCTION" else ['tech@meeraq.com'],
-            "Meeraq Platform | Handover Details Updated",
-            {"project_name": project_name},
-            [],  # no bcc
-        )
+                "pmo_emails/edit_handover.html",
+                emails if env("ENVIRONMENT") == "PRODUCTION" else ["tech@meeraq.com"],
+                "Meeraq Platform | Handover Details Updated",
+                {"project_name": project_name},
+                [],  # no bcc
+            )
 
         return Response(
             {"message": "Handover updated successfully.", "handover": serializer.data},
@@ -3888,12 +3889,13 @@ def edit_schedular_project(request, project_id):
     project.whatsapp_reminder = project_details.get("whatsapp_reminder")
     project.calendar_invites = project_details.get("calendar_invites")
     project.nudges = project_details.get("nudges")
-    project.pre_post_assessment = project_details.get("pre_post_assessment")
+    project.pre_assessment = project_details.get("pre_assessment")
+    project.post_assessment = project_details.get("post_assessment")
     project.is_finance_enabled = project_details.get("finance")
     project.junior_pmo = junior_pmo
     project.save()
 
-    if not project.pre_post_assessment:
+    if not project.pre_assessment and not project.post_assessment:
         batches = SchedularBatch.objects.filter(project=project)
         if batches:
             for batch in batches:

@@ -30,7 +30,8 @@ class SchedularProject(models.Model):
     updated_at = models.DateTimeField(auto_now=True, blank=True)
     is_project_structure_finalized = models.BooleanField(default=False)
     nudges = models.BooleanField(blank=True, default=True)
-    pre_post_assessment = models.BooleanField(blank=True, default=True)
+    pre_assessment = models.BooleanField(blank=True, default=True)
+    post_assessment = models.BooleanField(blank=True, default=True)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
     email_reminder = models.BooleanField(blank=True, default=True)
     whatsapp_reminder = models.BooleanField(blank=True, default=True)
@@ -43,6 +44,7 @@ class SchedularProject(models.Model):
         blank=True,
     )
     is_archive = models.BooleanField(default=False)
+    teams_enabled = models.BooleanField(blank=True, default=True)
 
     class Meta:
         ordering = ["-created_at"]
@@ -304,10 +306,10 @@ class HandoverDetails(models.Model):
     ]
 
     LOGISTICE_MANAGER_CHOICES = [
-            ("client", "Client"),
-            ("pmo", "PMO"),
-            ("faculty", "Faculty"),
-        ]
+        ("client", "Client"),
+        ("pmo", "PMO"),
+        ("faculty", "Faculty"),
+    ]
 
     schedular_project = models.OneToOneField(
         SchedularProject,
@@ -349,7 +351,8 @@ class HandoverDetails(models.Model):
     # sales_order_nos = models.JSONField(default=list, blank=True, null=True)
     total_coaching_hours = models.IntegerField(default=0, blank=True, null=True)
     tentative_start_date = models.DateField(blank=True, null=True)
-    pre_post_assessment = models.BooleanField(blank=True, default=True)
+    pre_assessment = models.BooleanField(blank=True, default=True)
+    post_assessment = models.BooleanField(blank=True, default=True)
     nudges = models.BooleanField(blank=True, default=True)
     end_of_program_certification = models.BooleanField(default=False, blank=True)
     out_of_pocket_expenses = models.TextField(blank=True, null=True)
