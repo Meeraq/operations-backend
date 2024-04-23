@@ -52,6 +52,7 @@ from api.models import (
     Facilitator,
     CoachStatus,
     Project,
+    SessionRequestCaas,
 )
 from .serializers import (
     SchedularProjectSerializer,
@@ -5942,49 +5943,71 @@ def edit_facilitator_pricing(request, facilitator_pricing_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator", "coach")])
 def create_expense(request):
     try:
-        name = request.data.get("name")
-        description = request.data.get("description")
-        date_of_expense = request.data.get("date_of_expense")
-        live_session = request.data.get("live_session")
-        batch = request.data.get("batch")
-        facilitator = request.data.get("facilitator")
-        file = request.data.get("file")
-        amount = request.data.get("amount")
-        if not file:
-            return Response(
-                {"error": "Please upload file."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-        if not batch or not facilitator:
-            return Response(
-                {"error": "Failed to create expense."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-        if name and date_of_expense and description and amount:
-            facilitator = Facilitator.objects.get(id=int(facilitator))
-            batch = SchedularBatch.objects.get(id=int(batch))
-            if live_session:
-                live_session = LiveSession.objects.filter(id=int(live_session)).first()
-            expense = Expense.objects.create(
-                name=name,
-                description=description,
-                date_of_expense=date_of_expense,
-                live_session=live_session,
-                batch=batch,
-                facilitator=facilitator,
-                file=file,
-                amount=amount,
-            )
+        with transaction.atomic():
+            name = request.data.get("name")
+            description = request.data.get("description")
+            date_of_expense = request.data.get("date_of_expense")
+            live_session = request.data.get("live_session")
+            session = request.data.get("session")
+            coach =  request.data.get("coach")
+            batch = request.data.get("batch")
+            facilitator = request.data.get("facilitator")
+            file = request.data.get("file")
+            amount = request.data.get("amount")
+            if not file:
+                return Response(
+                    {"error": "Please upload file."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
 
-            return Response({"message": "Expense created successfully!"}, status=201)
-        else:
-            return Response(
-                {"error": "Fill in all the required feild"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            if not session and (not batch or not facilitator):
+                return Response(
+                    {"error": "Failed to create expense."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            if name and date_of_expense and description and amount:
+                if session:
+                    session = SessionRequestCaas.objects.get(id=int(session))
+                    coach = Coach.objects.get(id =int(coach) )
+                    expense = Expense.objects.create(
+                        name=name,
+                        description=description,
+                        date_of_expense=date_of_expense,
+                        session=session,
+                        coach =coach,
+                        file=file,
+                        amount=amount,
+                    )
+                else:
+
+                    facilitator = Facilitator.objects.get(id=int(facilitator))
+                    batch = SchedularBatch.objects.get(id=int(batch))
+                    if live_session:
+                        live_session = LiveSession.objects.filter(
+                            id=int(live_session)
+                        ).first()
+                    expense = Expense.objects.create(
+                        name=name,
+                        description=description,
+                        date_of_expense=date_of_expense,
+                        live_session=live_session,
+                        batch=batch,
+                        facilitator=facilitator,
+                        file=file,
+                        amount=amount,
+                    )
+
+                return Response(
+                    {"message": "Expense created successfully!"}, status=201
+                )
+            else:
+                return Response(
+                    {"error": "Fill in all the required feild"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
     except Exception as e:
         print(str(e))
         return Response(
@@ -6285,3 +6308,4 @@ def get_handovers(request):
     )
     serializer = HandoverDetailsSerializer(handovers, many=True)
     return Response(serializer.data)
+
