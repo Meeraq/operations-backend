@@ -218,6 +218,7 @@ class Coach(models.Model):
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
     years_of_coaching_experience = models.CharField(max_length=20, blank=True)
     is_approved = models.BooleanField(blank=True, default=False)
+    is_rejected = models.BooleanField(blank=True, default=False)
     location = models.JSONField(default=list, blank=True)
     ctt_nctt = models.BooleanField(blank=True, default=False)
     language = models.JSONField(default=list, blank=True)

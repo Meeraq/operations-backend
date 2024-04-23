@@ -1087,6 +1087,25 @@ def approve_coach(request):
         # Return error response if any other exception occurs
         return Response({"error": str(e)}, status=500)
 
+@api_view(["PUT"])
+@permission_classes([AllowAny])
+def reject_coach(request, coach_id):
+    try:
+        # Get the coach object
+        coach = Coach.objects.get(id=coach_id)
+        # Set is_rejected to True
+        coach.is_rejected = True
+        coach.save()
+        # Serialize the updated coach
+        serializer = CoachSerializer(coach)
+        # Return the serialized coach as the response
+        return Response(serializer.data, status=200)
+    except Coach.DoesNotExist:
+        return Response({"error": "Coach not found"}, status=404)
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({"error": str(e)}, status=500)
+
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])

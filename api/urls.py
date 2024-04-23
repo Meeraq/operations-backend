@@ -32,6 +32,7 @@ urlpatterns = [
     path("pmos/", views.create_pmo),
     path("coaches/all/", views.get_coaches),
     path("coaches/approve/", views.approve_coach),
+    path('reject-coach/<int:coach_id>/', views.reject_coach, name='reject_coach'),
     path("facilitators/approve/", views.approve_facilitator),
     path(
         "password_reset/",
