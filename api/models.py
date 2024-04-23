@@ -288,6 +288,7 @@ class Facilitator(models.Model):
     fees_per_day = models.CharField(max_length=20, blank=True)
     topic = models.JSONField(default=list, blank=True)
     is_approved = models.BooleanField(blank=True, default=False)
+    is_rejected = models.BooleanField(blank=True, default=False)
     active_inactive = models.BooleanField(default=True)
 
     def __str__(self):

@@ -1105,7 +1105,25 @@ def reject_coach(request, coach_id):
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
-
+    
+@api_view(["PUT"])
+@permission_classes([AllowAny])
+def reject_facilitator(request, facilitator_id):
+    try:
+        # Get the coach object
+        facilitator = Facilitator.objects.get(id=facilitator_id)
+        # Set is_rejected to True
+        facilitator.is_rejected = True
+        facilitator.save()
+        # Serialize the updated coach
+        serializer = FacilitatorSerializer(facilitator)
+        # Return the serialized coach as the response
+        return Response(serializer.data, status=200)
+    except Facilitator.DoesNotExist:
+        return Response({"error": "facilitator not found"}, status=404)
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({"error": str(e)}, status=500)
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
