@@ -324,7 +324,10 @@ def create_project_schedular(request):
         schedularProject.save()
         add_so_to_project("SEEQ", schedularProject.id, handover.sales_order_ids)
     else:
-        raise Exception("No handover found")
+        sales_order_ids = project_details["sales_order_ids"]
+        if sales_order_ids:
+            add_so_to_project("SEEQ", schedularProject.id, sales_order_ids)
+        # raise Exception("No handover found")
 
     try:
         path = ""
@@ -391,17 +394,17 @@ def update_handover(request):
             else:
                 junior_pmo = None
                 project_name = ""
-            emails = ["pmocoaching@meeraq.com", "pmotraining@meeraq.com"] 
+            emails = ["pmocoaching@meeraq.com", "pmotraining@meeraq.com"]
             if junior_pmo:
                 emails.append(junior_pmo.email)
 
             send_mail_templates(
-            "pmo_emails/edit_handover.html",
-            emails if  env('ENVIRONMENT')  == "PRODUCTION" else ['tech@meeraq.com'],
-            "Meeraq Platform | Handover Details Updated",
-            {"project_name": project_name},
-            [],  # no bcc
-        )
+                "pmo_emails/edit_handover.html",
+                emails if env("ENVIRONMENT") == "PRODUCTION" else ["tech@meeraq.com"],
+                "Meeraq Platform | Handover Details Updated",
+                {"project_name": project_name},
+                [],  # no bcc
+            )
 
         return Response(
             {"message": "Handover updated successfully.", "handover": serializer.data},
@@ -6300,14 +6303,15 @@ def get_project_and_handover(request):
         except (SchedularProject.DoesNotExist, Project.DoesNotExist):
             return Response({"error": "Project not found"}, status=404)
 
-        if not handover_details.exists():
-            return Response({"error": "Handover details not found"}, status=404)
-        handover_serializer = HandoverDetailsSerializer(handover_details.first())
+        handover_serializer = None
+        if handover_details.exists():
+            handover_serializer = HandoverDetailsSerializer(handover_details.first())
 
         return Response(
             {
                 "project": project_serializer.data,
-                "handover": handover_serializer.data,
+                "handover": handover_serializer.data if handover_serializer else None,
+                "project_type": project_type,
             }
         )
     elif handover_id:
@@ -6318,15 +6322,19 @@ def get_project_and_handover(request):
 
         if handover.schedular_project:
             project_serializer = SchedularProjectSerializer(handover.schedular_project)
+            project_type = "skill_training"
         elif handover.caas_project:
             project_serializer = ProjectSerializer(handover.caas_project)
+            project_type = "caas"
         else:
+            project_type = None
             project_serializer = None
         handover_serializer = HandoverDetailsSerializer(handover)
         return Response(
             {
                 "project": project_serializer.data if project_serializer else None,
                 "handover": handover_serializer.data,
+                "project_type": project_type,
             }
         )
     else:

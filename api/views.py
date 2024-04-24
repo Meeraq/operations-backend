@@ -1437,7 +1437,9 @@ def create_project_cass(request):
             project.save()
             add_so_to_project("CAAS", project.id, handover.sales_order_ids)
         else:
-            raise Exception("No handover found")
+            sales_order_ids = request.data["sales_order_ids"]
+            if sales_order_ids:
+                add_so_to_project("CAAS", project.id, sales_order_ids)
 
     except IntegrityError as e:
         print(str(e))
