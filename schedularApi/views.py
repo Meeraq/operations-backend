@@ -5647,7 +5647,7 @@ def get_project_wise_progress_data(request, project_id):
                     assessment=post_assessment, participant=participant
                 ).first()
 
-                if project and project.pre_post_assessment:
+                if project and project.pre_assessment:
                     temp["pre_assessment"] = "Yes" if pre_participant_response else "No"
 
                 for session in project.project_structure:
@@ -5702,7 +5702,7 @@ def get_project_wise_progress_data(request, project_id):
                         else:
                             temp[f"{session_type} {session['order']}"] = "No"
 
-                if project and project.pre_post_assessment:
+                if project and project.post_assessment:
                     temp["post_assessment"] = (
                         "Yes" if post_participant_response else "No"
                     )

@@ -210,9 +210,6 @@ def add_question_to_feedback_lesson(feedback_lesson, questions):
     feedback_lesson.save()
 
 
-
-
-
 def get_feedback_lesson_name(lesson_name):
     # Trim leading and trailing whitespaces
     trimmed_string = lesson_name.strip()
@@ -1168,6 +1165,7 @@ def create_assessment_and_lesson(request):
         lesson_data = request.data.get("lesson")
         lesson_serializer1 = LessonSerializer(data=lesson_data)
         lesson_serializer2 = LessonSerializer(data=lesson_data)
+        course = lesson_data["course"]
         if lesson_serializer1.is_valid() and lesson_serializer2.is_valid():
             lesson1 = lesson_serializer1.save()
             lesson2 = lesson_serializer2.save()
@@ -1178,9 +1176,16 @@ def create_assessment_and_lesson(request):
             lesson1.save()
             lesson2.save()
 
-            assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+            if course:
+                course = Course.objects.get(id=course)
+                if course.batch.project.pre_assessment:
+                    assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+                if course.batch.project.post_assessment:
+                    assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
+            else:
+                assessment1 = Assessment.objects.create(lesson=lesson1, type="pre")
+                assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
 
-            assessment2 = Assessment.objects.create(lesson=lesson2, type="post")
             return Response(
                 "Assessment lesson created successfully", status=status.HTTP_201_CREATED
             )
@@ -2433,7 +2438,7 @@ class AssignCourseTemplateToBatch(APIView):
                 )
                 assessment_creation = False
                 if not original_lessons.filter(lesson_type="assessment").exists():
-                    if batch.project.pre_post_assessment:
+                    if batch.project.pre_assessment:
                         assessment_creation = True
                         lesson1 = Lesson.objects.create(
                             course=new_course,
@@ -2538,7 +2543,7 @@ class AssignCourseTemplateToBatch(APIView):
 
                 create_lessons_for_batch(batch)
 
-                if assessment_creation:
+                if assessment_creation and batch.project.post_assessment:
                     max_order = (
                         Lesson.objects.filter(course=new_course).aggregate(
                             Max("order")
@@ -2695,7 +2700,10 @@ def create_pdf_lesson(request):
         return Response({"message": "Course Template does not exist."})
     except Exception as e:
         print(str(e))
-        return Response({"message": "Failed to create pdf lesson."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"message": "Failed to create pdf lesson."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 @api_view(["PUT"])
@@ -3577,6 +3585,7 @@ def get_nps_project_wise(request):
 
 class GetAllNudgesOfSchedularProjects(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
+
     def get(self, request, project_id):
         try:
             hr_id = request.query_params.get("hr", None)
@@ -3597,7 +3606,9 @@ class GetAllNudgesOfSchedularProjects(APIView):
                     trigger_date__isnull=False,
                 )
             if hr_id:
-                nudges = nudges.filter(batch__project__hr__id=hr_id,is_switched_on=True)
+                nudges = nudges.filter(
+                    batch__project__hr__id=hr_id, is_switched_on=True
+                )
             data = NudgeSerializer(nudges, many=True).data
             return Response(data)
         except Exception as e:
@@ -4012,6 +4023,7 @@ def update_nudge_status(request, nudge_id):
     nudge.save()
     nudge_serializer = NudgeSerializer(nudge)
     return Response(nudge_serializer.data)
+
 
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
