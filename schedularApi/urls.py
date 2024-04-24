@@ -77,7 +77,12 @@ urlpatterns = [
         views.get_all_schedular_availabilities,
     ),
     path("coach-availability/", views.get_coach_availabilities_booking_link),
+    path(
+        "coach-availability-for-coaching/",
+        views.get_coach_availabilities_for_caas_project,
+    ),
     path("schedule-session/", views.schedule_session_fixed),
+    path("coaching-schedule-session/", views.coaching_schedule_session),
     path("reschedule-session/<int:session_id>/", views.reschedule_session),
     path(
         "give_availibilty/",

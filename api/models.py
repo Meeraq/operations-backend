@@ -151,11 +151,11 @@ class Finance(models.Model):
     active_inactive = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-  
 
     def __str__(self):
         return self.name
-    
+
+
 class Sales(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -164,9 +164,10 @@ class Sales(models.Model):
     active_inactive = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-  
+
     def __str__(self):
         return self.name
+
 
 class Pmo(models.Model):
 
@@ -239,7 +240,10 @@ class Coach(models.Model):
     education_pic = models.ImageField(upload_to="post_images", blank=True)
     educational_qualification = models.JSONField(default=list, blank=True)
     education_upload_file = models.FileField(
-        upload_to="pdf_files", blank=True, null=True, validators=[validate_pdf_extension]
+        upload_to="pdf_files",
+        blank=True,
+        null=True,
+        validators=[validate_pdf_extension],
     )
 
     def __str__(self):
@@ -905,7 +909,7 @@ class Task(models.Model):
     status = models.CharField(
         max_length=20, choices=TASK_STATUS_CHOICES, default="pending"
     )
-
+    extra_info = models.TextField(blank=True, null=True)
     remarks = models.JSONField(default=list, blank=True)
     trigger_date = models.DateTimeField(default=timezone.now, blank=True)
     created_at = models.DateField(auto_now_add=True)

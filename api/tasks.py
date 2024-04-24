@@ -2,9 +2,11 @@ from celery import shared_task
 from .views import create_task
 from zohoapi.models import Vendor
 from zohoapi.tasks import fetch_purchase_orders, organization_id
-from .models import Engagement, SessionRequestCaas
+from .models import Engagement, SessionRequestCaas, Coach, CoachStatus
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, F, ExpressionWrapper, DurationField
+from schedularApi.models import RequestAvailibilty, CoachSchedularAvailibilty
+from datetime import datetime, timedelta
 
 
 def get_start_and_end_of_current_month():
@@ -72,3 +74,59 @@ def creake_book_session_remind_coach_task_for_pmo_on_7th_of_month():
                     7,
                 )
     return None
+
+
+@shared_task
+def check_coach_availability_for_this_month():
+    try:
+        coaches = Coach.objects.all()
+        for coach in coaches:
+            engagements = Engagement.objects.filter(coach=coach)
+            durations = {}
+            for engagement in engagements:
+
+                session_requests = SessionRequestCaas.objects.filter(
+                    Q(is_booked=False),
+                    Q(learner=engagement.learner),
+                    Q(project=engagement.project),
+                    Q(is_archive=False),
+                    Q(status="pending"),
+                )
+                for session in session_requests:
+                    if session.session_duration not in durations:
+                        durations[session.session_duration] = 1
+                    else:
+                        durations[session.session_duration] += 1
+
+            request_for_durations = []
+            for duration, count in durations.items():
+                current_time = timezone.now()
+                start_timestamp_milliseconds = str(int(current_time.timestamp() * 1000))
+                end_timestamp_milliseconds = str(
+                    int((current_time + timedelta(days=30)).timestamp() * 1000)
+                )
+
+                coach_availability = CoachSchedularAvailibilty.objects.filter(
+                    coach=coach,
+                    is_confirmed=False,
+                    request__slot_duration=duration,
+                    start_time__gte=start_timestamp_milliseconds,
+                    end_time__lte=end_timestamp_milliseconds,
+                )
+                if len(coach_availability) < count * 3:
+                    request_for_durations.append(duration)
+            if len(request_for_durations)> 0:
+                create_task(
+                    {
+                        "task": "availability_shortage",
+                        "priority": "high",
+                        "coach": coach.id,
+                        "status": "pending",
+                        "remarks": [],
+                        "extra_info": f"durations {', '.join(str(duration) for duration in request_for_durations)} (minutes)",
+                    },
+                    0,
+                )
+
+    except Exception as e:
+        print(str(e))

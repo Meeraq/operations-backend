@@ -337,6 +337,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_on_same_day_morning",
         "schedule": crontab(hour=2, minute=30),  # 8 AM
     },
+     "check_coach_availability_for_this_month": {
+        "task": "api.tasks.check_coach_availability_for_this_month",
+       "schedule": crontab(hour=1, minute=30, day_of_month="1"),  # 7 AM
+    },
 }
 
 

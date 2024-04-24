@@ -52,6 +52,10 @@ from api.models import (
     Facilitator,
     CoachStatus,
     Project,
+    SessionRequestCaas,
+    Engagement,
+    Task,
+    Availibility,
 )
 from .serializers import (
     SchedularProjectSerializer,
@@ -167,7 +171,14 @@ from itertools import chain
 import environ
 import re
 from rest_framework.views import APIView
-from api.views import get_user_data
+from api.views import (
+    get_user_data,
+    format_timestamp,
+    get_date,
+    get_time,
+    create_task,
+    things_after_session_scheduling,
+)
 from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping
 from zohoapi.views import fetch_purchase_orders
 from zohoapi.tasks import organization_id
@@ -1616,6 +1627,53 @@ def get_coach_availabilities_booking_link(request):
         return Response({"error": "Booking link is not available"})
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_coach_availabilities_for_caas_project(request):
+
+    coaching_session_id = request.GET.get("coaching_session_id")
+
+    if coaching_session_id:
+        try:
+
+            session_request = SessionRequestCaas.objects.get(id=coaching_session_id)
+
+            session_duration = session_request.session_duration
+            session_type = session_request.session_type
+
+            engagement = Engagement.objects.get(
+                learner=session_request.learner, project=session_request.project
+            )
+
+            start_date = timezone.now()
+            start_timestamp = str(int(start_date.timestamp() * 1000))
+
+            coach_availabilities = CoachSchedularAvailibilty.objects.filter(
+                coach=engagement.coach,
+                start_time__gte=start_timestamp,
+                is_confirmed=False,
+            )
+            serializer = AvailabilitySerializer(coach_availabilities, many=True)
+            coaches_serializer = CoachBasicDetailsSerializer(
+                [engagement.coach], many=True
+            )
+
+            return Response(
+                {
+                    "project_status": "ongoing",
+                    "slots": serializer.data,
+                    "session_duration": session_duration,
+                    "session_type": session_type,
+                    "coaches": coaches_serializer.data if coaches_serializer else None,
+                }
+            )
+        except Exception as e:
+            print(str(e))
+            return Response({"error": "Unable to get slots"}, status=400)
+    else:
+        return Response({"error": "Booking link is not available"})
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def schedule_session(request):
@@ -2143,6 +2201,146 @@ def schedule_session_fixed(request):
     except Exception as e:
         return Response(
             {"error": f"Failed to book the session. {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def coaching_schedule_session(request):
+    try:
+        with transaction.atomic():
+
+            participant_email = request.data.get("participant_email", "")
+            timestamp = request.data.get("timestamp", "")
+            end_time = request.data.get("end_time", "")
+            coach_id = request.data.get("coach_id", "")
+            request_id = request.data.get("request_id", "")
+            caas_session_id = int(request.data.get("caas_session", ""))
+            request_avail = RequestAvailibilty.objects.get(id=request_id)
+            coach = Coach.objects.get(id=coach_id)
+            if not check_if_selected_slot_can_be_booked(coach_id, timestamp, end_time):
+                return Response(
+                    {
+                        "error": "Sorry! This slot has just been booked. Please refresh and try selecting a different time."
+                    },
+                    status=401,
+                )
+            coach_availability = CoachSchedularAvailibilty.objects.create(
+                request=request_avail,
+                coach=coach,
+                start_time=timestamp,
+                end_time=end_time,
+                is_confirmed=False,
+            )
+            coach_availability.save()
+            coach_availability_id = coach_availability.id
+
+            new_timestamp = int(timestamp) / 1000
+            date_obj = datetime.fromtimestamp(new_timestamp, timezone.utc)
+            formatted_date = date_obj.strftime("%d %B %Y")
+
+            p_booking_start_time_stamp = timestamp
+            p_booking_end_time_stamp = end_time
+            p_block_from = int(p_booking_start_time_stamp) - TIME_INTERVAL
+            p_block_till = int(p_booking_end_time_stamp) + TIME_INTERVAL
+
+            date_for_mail = get_date(int(timestamp))
+            start_time_for_mail = get_time(int(timestamp))
+            end_time_for_mail = get_time(int(end_time))
+            session_time = f"{start_time_for_mail} - {end_time_for_mail} IST"
+            all_coach_availability = CoachSchedularAvailibilty.objects.filter(
+                (
+                    Q(start_time__gte=p_block_from, start_time__lt=p_block_till)
+                    | Q(end_time__gt=p_block_from, end_time__lte=p_block_till)
+                ),
+                request=request_avail,
+                coach=coach,
+                is_confirmed=False,
+            ).exclude(id=coach_availability.id)
+            unblock_slots_to_delete = []
+
+            caas_session = SessionRequestCaas.objects.get(id=caas_session_id)
+
+            learner = get_object_or_404(Learner, email=participant_email)
+            coach_availability = get_object_or_404(
+                CoachSchedularAvailibilty, id=coach_availability_id
+            )
+
+            if coach_availability.is_confirmed:
+                return Response(
+                    {"error": "This slot is already booked. Please try again."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            coach_availability.is_confirmed = True
+            coach_availability.save()
+            coach_name = f"{coach_availability.coach.first_name} {coach_availability.coach.last_name}"
+            unblock_slots = []
+
+            for availability_c in all_coach_availability:
+                availability_c.is_confirmed = True
+                availability_c.save()
+                if (
+                    int(availability_c.start_time)
+                    < p_block_from
+                    < int(availability_c.end_time)
+                ) and (int(availability_c.start_time) < p_block_from):
+                    new_slot = {
+                        "start_time": int(availability_c.start_time),
+                        "end_time": p_block_from,
+                        "conflict": False,
+                    }
+                    unblock_slots.append(new_slot)
+                    unblock_slots_to_delete.append(availability_c)
+                if (
+                    int(availability_c.start_time)
+                    < p_block_till
+                    < int(availability_c.end_time)
+                ) and (int(availability_c.end_time) > p_block_till):
+                    new_slot = {
+                        "start_time": p_block_till,
+                        "end_time": int(availability_c.end_time),
+                        "conflict": False,
+                    }
+                    unblock_slots.append(new_slot)
+                    unblock_slots_to_delete.append(availability_c)
+
+            for availability_c in unblock_slots_to_delete:
+                availability_c.delete()
+
+            for unblock_slot in unblock_slots:
+                created_availability = CoachSchedularAvailibilty.objects.create(
+                    request=request_avail,
+                    coach=coach,
+                    start_time=unblock_slot["start_time"],
+                    end_time=unblock_slot["end_time"],
+                    is_confirmed=False,
+                )
+            avalibility = Availibility.objects.create(
+                start_time=coach_availability.start_time,
+                end_time=coach_availability.end_time,
+            )
+            caas_session.confirmed_availability = avalibility
+            created = things_after_session_scheduling(
+                caas_session, request, learner, coach, "learner", None, True
+            )
+
+            if created:
+
+                return Response(
+                    {"message": "Session scheduled successfully."},
+                    status=status.HTTP_201_CREATED,
+                )
+            else:
+                return Response(
+                    {"error": f"Failed to book the session."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to book the session."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 

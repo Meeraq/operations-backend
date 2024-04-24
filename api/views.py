@@ -183,7 +183,7 @@ from schedularApi.serializers import (
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-from zohoapi.models import Vendor, InvoiceData,OrdersAndProjectMapping
+from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping
 from courses.models import CourseEnrollment, CoachingSessionsFeedbackResponse, Answer
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
@@ -218,7 +218,6 @@ def get_current_date_timestamps():
     return start_timestamp, end_timestamp
 
 
-
 def calculate_nps(ratings):
     promoters = sum(rating >= 9 for rating in ratings)
     detractors = sum(rating <= 6 for rating in ratings)
@@ -231,7 +230,6 @@ def calculate_nps_from_answers(answers):
     if ratings:
         return calculate_nps(ratings)
     return None
-
 
 
 def add_contact_in_wati(user_type, name, phone):
@@ -779,6 +777,7 @@ def get_trimmed_emails(emails):
         res.append(email.strip().lower())
     return res
 
+
 def add_so_to_project(project_type, project_id, sales_order_ids):
     if project_type == "CAAS":
         orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
@@ -878,7 +877,6 @@ SESSIONS_WITH_STAKEHOLDERS = [
     "stakeholder_without_coach",
     "stakeholder_interview",
 ]
-
 
 
 def get_booked_session_of_user_confirmed_avalibility(user_type, user_id, date):
@@ -1148,14 +1146,16 @@ def update_coach_profile(request, id):
             new_email
             and User.objects.filter(username=new_email).exclude(id=user.id).exists()
         ):
-            existing_user_with_same_email = User.objects.filter(username=new_email).exclude(id=user.id).first()
+            existing_user_with_same_email = (
+                User.objects.filter(username=new_email).exclude(id=user.id).first()
+            )
             current_user_profile = user.profile
             existing_profile_with_same_email = existing_user_with_same_email.profile
             # coach exists with the new email
             if existing_profile_with_same_email.roles.filter(name="coach").exists():
                 return Response(
-                {"error": "Coach with the same email already exists."},
-                status=400,
+                    {"error": "Coach with the same email already exists."},
+                    status=400,
                 )
             # another user exists with the new email
             else:
@@ -1168,7 +1168,7 @@ def update_coach_profile(request, id):
                 existing_profile_with_same_email.save()
 
         # no other user exists with the new email
-        else :
+        else:
             user.email = new_email
             user.username = new_email
             user.save()
@@ -4604,7 +4604,9 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
             is_archive=False,
             project__hr__id=user_id,
         )
-        schedular_sessions = SchedularSessions.objects.filter(coaching_session__batch__project__hr__id=user_id)
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
     res = []
     for session_request in session_requests:
         project_name = session_request.project.name
@@ -5280,18 +5282,20 @@ def get_learner_of_user_optimized(request, user_type, user_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
-    
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "hr")])
 def get_coachee_of_coach(request):
     try:
-        engagements = Engagement.objects.filter(coach__user__user__id=request.user.id).distinct()
+        engagements = Engagement.objects.filter(
+            coach__user__user__id=request.user.id
+        ).distinct()
         serializer = EngagementDepthOneSerializer(engagements, many=True)
         return Response(serializer.data)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
-
 
 
 @api_view(["GET"])
@@ -5978,6 +5982,7 @@ def get_current_session(request, user_type, room_id, user_id):
 
     return Response(response_data, status=200)
 
+
 @api_view(["GET"])
 @permission_classes(
     [IsAuthenticated, IsInRoles("coach", "learner", "pmo", "hr", "facilitator")]
@@ -5987,7 +5992,7 @@ def get_current_session_for_coach(request, user_type, user_id):
     sessions = None
     session_modal = "CAAS"
     if user_type == "coach":
-        sessions = SessionRequestCaas.objects.filter(   
+        sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
@@ -5999,7 +6004,7 @@ def get_current_session_for_coach(request, user_type, user_id):
             coach = Coach.objects.get(id=user_id)
             sessions = SchedularSessions.objects.filter(
                 availibility__end_time__gt=current_time,
-                availibility__coach__email=coach.email
+                availibility__coach__email=coach.email,
             ).order_by("availibility__start_time")
 
     if not sessions:
@@ -6014,8 +6019,8 @@ def get_current_session_for_coach(request, user_type, user_id):
             "start_time": upcoming_session.confirmed_availability.start_time,
             "end_time": upcoming_session.confirmed_availability.end_time,
             "project_name": upcoming_session.project.name,
-            "room_id":upcoming_session.coach.room_id,
-            "session_name":f"{upcoming_session.session_type}",
+            "room_id": upcoming_session.coach.room_id,
+            "session_name": f"{upcoming_session.session_type}",
         }
     elif session_modal == "SEEQ" and upcoming_session:
         session_details = {
@@ -6024,8 +6029,8 @@ def get_current_session_for_coach(request, user_type, user_id):
             "start_time": upcoming_session.availibility.start_time,
             "end_time": upcoming_session.availibility.end_time,
             "project_name": upcoming_session.project.name,
-            "room_id":upcoming_session.coach.room_id,
-            "session_name":f"{upcoming_session.session_type}",
+            "room_id": upcoming_session.coach.room_id,
+            "session_name": f"{upcoming_session.session_type}",
         }
 
     # You can customize the response data based on your requirements
@@ -6062,58 +6067,14 @@ def get_current_session_of_stakeholder(request, room_id):
     return Response({"message": "success"}, status=200)
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "learner", "hr")])
-def schedule_session_directly(request, session_id):
-    with transaction.atomic():
-        try:
-            session = SessionRequestCaas.objects.get(id=session_id)
-        except SessionRequestCaas.DoesNotExist:
-            return Response({"error": "Session not found."}, status=404)
-
+def things_after_session_scheduling(
+    session, request, coachee, coach, userType, pmo, from_skill=False
+):
+    try:
         existing_calendar_invite = CalendarInvites.objects.filter(
             caas_session=session
         ).first()
 
-        if session.learner:
-            coachee = session.learner
-
-            sessionName = str(session.session_type).replace("_", " ")
-            if sessionName == "stakeholder without coach":
-                sessionName = "tripartite without coach"
-        time_arr = create_time_arr(request.data.get("availability", []))
-        if len(time_arr) == 0:
-            return Response({"error": "Please provide the availability."}, status=404)
-
-        availability = Availibility.objects.get(id=time_arr[0])
-        if request.data["user_type"] == "coach":
-            check_booking = check_if_the_avalibility_is_already_booked(
-                request.data["user_id"], availability
-            )
-        if check_booking:
-            return Response(
-                {
-                    "error": "Sorry, this time is already booked. Please choose a different time.."
-                },
-                status=500,
-            )
-        if request.data["user_type"] == "pmo":
-            pmo = Pmo.objects.get(id=request.data["user_id"])
-            session.pmo = pmo
-
-        if request.data["user_type"] == "coach":
-            coach = Coach.objects.get(id=request.data["user_id"])
-            session.coach = coach
-
-        if session.session_type == "stakeholder_interview":
-            engagement = Engagement.objects.get(
-                learner=session.learner, project=session.project
-            )
-            session.coach = engagement.coach
-            session.hr = session.project.hr.first()
-
-        session.availibility.add(availability)
-        session.confirmed_availability = availability
         start_time = format_timestamp(int(session.confirmed_availability.start_time))
         end_time = format_timestamp(int(session.confirmed_availability.end_time))
         slot_message = f"{start_time} - {end_time}"
@@ -6167,9 +6128,6 @@ def schedule_session_directly(request, session_id):
             )
             tasks.update(status="completed")
 
-        coach = None
-        if request.data["user_type"] == "coach":
-            coach = Coach.objects.get(id=request.data["user_id"])
         if coachee:
 
             # print(,start_time,end_time)
@@ -6184,6 +6142,7 @@ def schedule_session_directly(request, session_id):
             clocked = ClockedSchedule.objects.create(
                 clocked_time=five_minutes_prior_start_datetime
             )
+            session_id = session.id
             periodic_task = PeriodicTask.objects.create(
                 name=uuid.uuid1(),
                 task="schedularApi.tasks.send_whatsapp_reminder_to_users_before_5mins_in_caas",
@@ -6209,34 +6168,34 @@ def schedule_session_directly(request, session_id):
             )
             periodic_task.save()
             # WHATSAPP MESSAGE CHECK
-
-            if session.project.enable_emails_to_hr_and_coachee:
-                send_mail_templates(
-                    "coachee_emails/session_booked.html",
-                    [coachee.email],
-                    "Meeraq Coaching | Session Booked",
-                    {
-                        "projectName": session.project.name,
-                        "name": coachee.name,
-                        "sessionName": SESSION_TYPE_VALUE[session.session_type],
-                        "slot_date": session_date,
-                        "slot_time": session_time,
-                        "booking_id": (
-                            coach.room_id
-                            if request.data["user_type"] == "coach"
-                            else pmo.room_id
-                        ),
-                        "email": coachee.email,
-                    },
-                    [],  # no bcc
-                )
+            if not from_skill:
+                if session.project.enable_emails_to_hr_and_coachee:
+                    send_mail_templates(
+                        "coachee_emails/session_booked.html",
+                        [coachee.email],
+                        "Meeraq Coaching | Session Booked",
+                        {
+                            "projectName": session.project.name,
+                            "name": coachee.name,
+                            "sessionName": SESSION_TYPE_VALUE[session.session_type],
+                            "slot_date": session_date,
+                            "slot_time": session_time,
+                            "booking_id": (
+                                coach.room_id
+                                if userType == "coach" or from_skill
+                                else pmo.room_id
+                            ),
+                            "email": coachee.email,
+                        },
+                        [],  # no bcc
+                    )
 
                 try:
                     if existing_calendar_invite:
                         delete_outlook_calendar_invite(existing_calendar_invite)
 
                     attendees = []
-                    if request.data["user_type"] == "coach":
+                    if userType == "coach":
                         attendees.append(
                             {
                                 "emailAddress": {
@@ -6281,13 +6240,75 @@ def schedule_session_directly(request, session_id):
                         session,
                         None,
                         None,
-                        f'{env("CAAS_APP_URL")}/call/{coach.room_id if request.data["user_type"] == "coach" else pmo.room_id}',
+                        f'{env("CAAS_APP_URL")}/call/{coach.room_id if userType == "coach" or from_skill else pmo.room_id}',
                     )
-
                 except Exception as e:
                     print(f"Calendar error {str(e)}")
+        return True
+    except Exception as e:
+        print(str(e))
+        return False
 
-        return Response({"message": "Session booked successfully."})
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "learner", "hr")])
+def schedule_session_directly(request, session_id):
+    with transaction.atomic():
+        try:
+            session = SessionRequestCaas.objects.get(id=session_id)
+        except SessionRequestCaas.DoesNotExist:
+            return Response({"error": "Session not found."}, status=404)
+
+        if session.learner:
+            coachee = session.learner
+
+            sessionName = str(session.session_type).replace("_", " ")
+            if sessionName == "stakeholder without coach":
+                sessionName = "tripartite without coach"
+        time_arr = create_time_arr(request.data.get("availability", []))
+        if len(time_arr) == 0:
+            return Response({"error": "Please provide the availability."}, status=404)
+
+        availability = Availibility.objects.get(id=time_arr[0])
+        if request.data["user_type"] == "coach":
+            check_booking = check_if_the_avalibility_is_already_booked(
+                request.data["user_id"], availability
+            )
+        if check_booking:
+            return Response(
+                {
+                    "error": "Sorry, this time is already booked. Please choose a different time.."
+                },
+                status=500,
+            )
+        if request.data["user_type"] == "pmo":
+            pmo = Pmo.objects.get(id=request.data["user_id"])
+            session.pmo = pmo
+
+        if request.data["user_type"] == "coach":
+            coach = Coach.objects.get(id=request.data["user_id"])
+            session.coach = coach
+
+        if session.session_type == "stakeholder_interview":
+            engagement = Engagement.objects.get(
+                learner=session.learner, project=session.project
+            )
+            session.coach = engagement.coach
+            session.hr = session.project.hr.first()
+
+        session.availibility.add(availability)
+        session.confirmed_availability = availability
+        coach = None
+        if request.data["user_type"] == "coach":
+            coach = Coach.objects.get(id=request.data["user_id"])
+        userType = request.data["user_type"]
+        created = things_after_session_scheduling(
+            session, request, coachee, coach, userType, pmo
+        )
+        if created:
+            return Response({"message": "Session booked successfully."})
+        else:
+            return Response({"error": "Failed to book session."})
 
 
 @api_view(["POST"])
@@ -10010,12 +10031,11 @@ def get_coach_summary_data(request, coach_id):
             availibility__coach=coach,
             coaching_session__session_type="laser_coaching_session",
         ).count()
-        
+
         total_mentoring_sessions = SchedularSessions.objects.filter(
             availibility__coach=coach,
             coaching_session__session_type="mentoring_session",
         ).count()
-        
 
         pending_schedular_session = SchedularSessions.objects.filter(
             availibility__coach=coach, status="pending"
@@ -10027,10 +10047,10 @@ def get_coach_summary_data(request, coach_id):
                 "coaching_projects": coach_status_count,
                 "training_projects": distinct_project_count,
                 "coach_rating": get_coach_overall_rating(coach.id),
-                "total_coaching_session":total_coaching_session,
+                "total_coaching_session": total_coaching_session,
                 "laser_coaching_sessions": laser_coaching_sessions,
                 "pending_session": pending_schedular_session,
-                "total_mentoring_sessions":total_mentoring_sessions,
+                "total_mentoring_sessions": total_mentoring_sessions,
             }
         )
 
