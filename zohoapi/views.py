@@ -3771,7 +3771,6 @@ def create_so_with_line_items(salesorder_id):
     if serializer.is_valid():
         so_instance = serializer.save()
         for line_item in salesorder["line_items"]:
-            print(line_item)
             line_item_serializer = SalesOrderLineItemSerializer(data=line_item)
             if line_item_serializer.is_valid():
                 instance = line_item_serializer.save()
@@ -3842,6 +3841,7 @@ def create_client_invoice_with_line_items(clientinvoice_id):
     if "shipment_date" in clientinvoice and not clientinvoice["shipment_date"]:
         clientinvoice["shipment_date"] = None
     # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
+    clientinvoice["is_backorder"] = bool(clientinvoice["is_backorder"])
     serializer = ClientInvoiceSerializer(data=clientinvoice)
     if serializer.is_valid():
         clientinvoice_instance = serializer.save()
@@ -3882,6 +3882,11 @@ def create_client_invoice_with_line_items(clientinvoice_id):
         print(clientinvoice["invoice_number"], serializer.errors)
 
 
+def add_multiple_client_invoices(data):
+    for ci in data:
+        create_client_invoice_with_line_items(ci["invoice_id"])
+        sleep(1)
+
 def create_bill_with_line_items(bill_id):
     bill = get_bill(bill_id)
     if "payment_expected_date" in bill and not bill["payment_expected_date"]:
@@ -3921,3 +3926,8 @@ def create_bill_with_line_items(bill_id):
             )
     else:
         print(bill["bill_number"], serializer.errors)
+
+def add_multiple_bills(data):
+    for bill in data:
+        create_bill_with_line_items(bill["bill_id"])
+        sleep(1)
