@@ -41,6 +41,7 @@ from .models import (
     APILog,
     Task,
     Sales,
+    CoachProfileShare,
 )
 from django.contrib.auth.models import User
 
@@ -515,7 +516,11 @@ class SalesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sales
         fields = "__all__"
-
+        
+class CoachProfileShareSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachProfileShare
+        fields = "__all__"      
 
 class CustomUserSerializer(serializers.ModelSerializer):
     name = serializers.SerializerMethodField()

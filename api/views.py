@@ -77,6 +77,7 @@ from .serializers import (
     CustomUserSerializer,
     SalesSerializer,
     SalesDepthOneSerializer,
+    CoachProfileShareSerializer,
 )
 from zohoapi.serializers import VendorDepthOneSerializer
 from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
@@ -10132,6 +10133,7 @@ def coach_profile_sharable_email(request):
         coach_profile_share = CoachProfileShare.objects.create(
             masked_coach_profile=masked_coach_profile,
             unique_id=unique_id,
+            emails=emails
         )
 
         for coach_id in coaches:
@@ -10159,23 +10161,19 @@ def coach_profile_sharable_email(request):
     
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([AllowAny])
 def coach_profile_share_email_validation(request):
     try:
         unique_id = request.data.get("unique_id")
         email = request.data.get("email").strip().lower()
-
         coach_profile_share = CoachProfileShare.objects.get(unique_id=unique_id)
-        
-        # Check if the email exists in the emails field
-        if email in coach_profile_share.emails:
-            # Email is verified
+        coach_serializer=CoachProfileShareSerializer(coach_profile_share)
+        if email in coach_serializer.data['emails']:
             return Response(
                 {"message": "Email is verified."},
                 status=status.HTTP_200_OK,
             )
         else:
-            # Email is not verified
             return Response(
                 {"error": "Email is not verified."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -10194,17 +10192,50 @@ def coach_profile_share_email_validation(request):
     
     
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([AllowAny])
 def get_coach_profile_sharing_form(request,unique_id):
     try:
         coach_profile_share=CoachProfileShare.objects.get(unique_id=unique_id)
+        coach_serializer=CoachSerializer(coach_profile_share.coaches.all(), many=True)
         return Response(
             {
-                "coaches": coach_profile_share.coaches,
+                "coaches": coach_serializer.data,
                 "masked_coach_profile": coach_profile_share.masked_coach_profile,
             },
             status=status.HTTP_200_OK,
             )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get Coach Profiles."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+        
+        
+  
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_coach_profile_shared_with(request):
+    try:
+        # Retrieve all CoachProfileShare instances
+        coach_profile_shares = CoachProfileShare.objects.all()
+
+        # Dictionary to store coach emails mapping
+        coach_email_mapping = {}
+
+        # Iterate through each CoachProfileShare instance
+        for profile_share in coach_profile_shares:
+            emails = profile_share.emails
+            coaches = profile_share.coaches.all()
+            for coach in coaches:
+                # If the coach is not already in the mapping, add them
+                if coach.id not in coach_email_mapping:
+                    coach_email_mapping[coach.id] = {"emails": set()}
+                # Add the emails shared with this coach
+                coach_email_mapping[coach.id]["emails"].update(emails)
+
+        return Response(coach_email_mapping)
+
     except Exception as e:
         print(str(e))
         return Response(

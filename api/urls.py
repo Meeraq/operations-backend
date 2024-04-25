@@ -428,7 +428,14 @@ urlpatterns = [
         views.get_facilitator_summary_data,
     ),
     path("sharable-emails/", views.get_sharable_emails),
-    path("coach-profile-sharable-email/",views.coach_profile_sharable_email),
-    path("coach-profile-share-email-validation/",views.coach_profile_share_email_validation),
-    path("get-coach-profile-sharing-form/<str:unique_id>/",views.get_coach_profile_sharing_form),
+    path("coach-profile-sharable-email/", views.coach_profile_sharable_email),
+    path(
+        "coach-profile-share-email-validation/",
+        views.coach_profile_share_email_validation,
+    ),
+    path(
+        "get-coach-profile-sharing-form/<str:unique_id>/",
+        views.get_coach_profile_sharing_form,
+    ),
+    path("get-coach-profile-shared-with/", views.get_coach_profile_shared_with),
 ]
