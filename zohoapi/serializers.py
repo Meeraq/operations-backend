@@ -1,6 +1,15 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
-from .models import InvoiceData, Vendor, InvoiceStatusUpdate, OrdersAndProjectMapping
+from .models import (
+    InvoiceData,
+    Vendor,
+    InvoiceStatusUpdate,
+    OrdersAndProjectMapping,
+    ZohoCustomer,
+    ZohoVendor,
+    SalesOrder,
+    SalesOrderLineItem,
+)
 
 # UserModel=get_user_model()
 
@@ -59,4 +68,28 @@ class VendorEditSerializer(serializers.ModelSerializer):
 class OrdersAndProjectMappingSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrdersAndProjectMapping
+        fields = fields = "__all__"
+
+
+class ZohoCustomerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ZohoCustomer
+        fields = fields = "__all__"
+
+
+class ZohoVendorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ZohoVendor
+        fields = fields = "__all__"
+
+
+class SalesOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SalesOrder
+        fields = fields = "__all__"
+
+
+class SalesOrderLineItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SalesOrderLineItem
         fields = fields = "__all__"

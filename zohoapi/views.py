@@ -44,6 +44,10 @@ from .serializers import (
     InvoiceStatusUpdateGetSerializer,
     VendorEditSerializer,
     OrdersAndProjectMappingSerializer,
+    ZohoCustomerSerializer,
+    ZohoVendorSerializer,
+    SalesOrderSerializer,
+    SalesOrderLineItemSerializer,
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -97,6 +101,8 @@ from api.models import Facilitator
 from decimal import Decimal
 from collections import defaultdict
 from api.permissions import IsInRoles
+from time import sleep
+
 
 env = environ.Env()
 
@@ -494,19 +500,22 @@ def get_purchase_orders(request, vendor_id):
             {"error": "Access token not found. Please generate an access token first."},
             status=status.HTTP_401_UNAUTHORIZED,
         )
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_total_revenue(request, vendor_id):
     try:
         invoices = InvoiceData.objects.filter(vendor_id=vendor_id)
         total_revenue = 0.0
-        
+
         for invoice in invoices:
             total_revenue += invoice.total
 
         return Response({"total_revenue": total_revenue})
     except Exception as e:
         return Response({"error": str(e)}, status=400)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("vendor", "pmo", "finance")])
@@ -1740,26 +1749,28 @@ def generate_new_invoice_number(invoice_list):
     formatted_new_number = str(new_number).zfill(4)
     return f"{current_year_month}{formatted_new_number}"
 
+
 def get_current_month_start_and_end_date():
     # Get the current year and month
     current_year = datetime.now().year
     current_month = datetime.now().month
-    
+
     # Calculate the first day of the current month
     first_day_of_month = datetime(current_year, current_month, 1)
-    
+
     # Calculate the last day of the current month
     if current_month == 12:
         last_day_of_month = datetime(current_year + 1, 1, 1) - timedelta(days=1)
     else:
-        last_day_of_month = datetime(current_year, current_month + 1, 1) - timedelta(days=1)
-    
-    # Format dates as strings in 'YYYY-MM-DD' format
-    created_date_start = first_day_of_month.strftime('%Y-%m-%d')
-    created_date_end = last_day_of_month.strftime('%Y-%m-%d')
-    
-    return created_date_start, created_date_end
+        last_day_of_month = datetime(current_year, current_month + 1, 1) - timedelta(
+            days=1
+        )
 
+    # Format dates as strings in 'YYYY-MM-DD' format
+    created_date_start = first_day_of_month.strftime("%Y-%m-%d")
+    created_date_end = last_day_of_month.strftime("%Y-%m-%d")
+
+    return created_date_start, created_date_end
 
 
 @api_view(["GET"])
@@ -1782,7 +1793,7 @@ def get_client_invoice_number_to_create(request):
     try:
         start_date, end_date = get_current_month_start_and_end_date()
         query_params = f"&created_date_start={start_date}&created_date_end={end_date}"
-        invoices = fetch_client_invoices(organization_id,query_params)
+        invoices = fetch_client_invoices(organization_id, query_params)
         print(len(invoices))
         new_invoice_number = generate_new_invoice_number(invoices)
         return Response({"new_invoice_number": new_invoice_number})
@@ -2292,8 +2303,8 @@ def get_individual_vendor_data(request, vendor_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to load"}, status=400)
-    
-    
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_invoices_for_vendor(request, vendor_id, purchase_order_id):
@@ -2449,7 +2460,9 @@ def get_sales_orders_with_project_details(sales_orders):
 def get_all_sales_orders(request):
     try:
         search_text = request.query_params.get("search_text", "")
-        query_params = f"&salesorder_number_contains={search_text}" if search_text else ""
+        query_params = (
+            f"&salesorder_number_contains={search_text}" if search_text else ""
+        )
         all_sales_orders = fetch_sales_orders(organization_id, query_params)
         res = get_sales_orders_with_project_details(all_sales_orders)
         return Response(res, status=status.HTTP_200_OK)
@@ -3430,12 +3443,16 @@ def fetch_client_invoices_page_wise(organization_id, page, queryParams=""):
     else:
         print(response.json())
         raise Exception("Failed to fetch client invoices.")
+
+
 def fetch_client_invoices_for_sales_orders(sales_order_ids):
     filtered_client_invoices = []
 
     for sales_order_id in sales_order_ids:
         sales_order = None
-        access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))  # Update this function
+        access_token_sales_order = get_access_token(
+            env("ZOHO_REFRESH_TOKEN")
+        )  # Update this function
         if access_token_sales_order:
             api_url = f"{base_url}/salesorders/{sales_order_id}?organization_id={organization_id}"
             auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
@@ -3445,7 +3462,9 @@ def fetch_client_invoices_for_sales_orders(sales_order_ids):
 
         if sales_order:
             for client_invoice in sales_order["invoices"]:
-                access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))  # Update this function
+                access_token = get_access_token(
+                    env("ZOHO_REFRESH_TOKEN")
+                )  # Update this function
                 if access_token:
                     api_url = f"{base_url}/invoices/{client_invoice['invoice_id']}?organization_id={organization_id}"
                     auth_header = {"Authorization": f"Bearer {access_token}"}
@@ -3484,7 +3503,7 @@ def get_client_invoices(request):
                 for mapping in orders_project_mapping:
                     sales_order_ids_set.update(mapping.sales_order_ids)
 
-            sales_order_ids = list(sales_order_ids_set) # [1,2,3]
+            sales_order_ids = list(sales_order_ids_set)  # [1,2,3]
             invoices = []
             if len(sales_order_ids) > 0:
                 invoices = fetch_client_invoices_for_sales_orders(sales_order_ids)
@@ -3620,3 +3639,82 @@ def get_total_so_created_count(request, sales_person_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+def get_sales_order(salesorder_id):
+    access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+    if access_token_sales_order:
+        api_url = (
+            f"{base_url}/salesorders/{salesorder_id}?organization_id={organization_id}"
+        )
+        auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
+        response = requests.get(api_url, headers=auth_header)
+        if response.status_code == 200:
+            sales_order = response.json().get("salesorder")
+            return sales_order
+        else:
+            return None
+    else:
+        return None
+
+
+def create_zoho_customer(customer_id):
+    customer = get_vendor(customer_id)
+    if not customer["consent_date"]:
+        customer["consent_date"] = None
+    customer["created_date"] = datetime.strptime(
+        customer["created_date"], "%d/%m/%Y"
+    ).strftime("%Y-%m-%d")
+    serializer = ZohoCustomerSerializer(data=customer)
+    if serializer.is_valid():
+        serializer.save()
+    else:
+        print(serializer.errors)
+
+    
+def add_multiple_customers(data):
+    for customer in data:
+        create_zoho_customer(customer["contact_id"])
+        sleep(1)
+
+
+def create_zoho_vendor(vendor_id):
+    customer = get_vendor(vendor_id)
+    if not customer["consent_date"]:
+        customer["consent_date"] = None
+    customer["created_date"] = datetime.strptime(
+        customer["created_date"], "%d/%m/%Y"
+    ).strftime("%Y-%m-%d")
+    serializer = ZohoVendorSerializer(data=customer)
+    if serializer.is_valid():
+        serializer.save()
+    else:
+        print(serializer.errors)
+
+
+
+def add_multiple_vendors(data):
+    for customer in data:
+        create_zoho_vendor(customer["contact_id"])
+        sleep(1)
+
+
+def create_so_with_line_items(salesorder_id):
+    salesorder = get_sales_order(salesorder_id)
+    if not salesorder["shipment_date"]:
+        salesorder["shipment_date"] = None
+    # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
+    serializer = SalesOrderSerializer(data=salesorder)
+    if serializer.is_valid():
+        for line_item in salesorder["line_items"]:
+            print(line_item)
+            line_item_serializer = SalesOrderLineItemSerializer(data=line_item)
+            if line_item_serializer.is_valid():
+                line_item_serializer.save()
+            else:
+                print(line_item_serializer.errors)
+        serializer.save()
+    else:
+        print(serializer.errors)
