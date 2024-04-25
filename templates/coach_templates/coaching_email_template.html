@@ -1,68 +1,73 @@
-{% extends "table_parent_template.html" %} {% block title %} Meeraq
-Coaching {%endblock%} {% block content %}
+{% extends "table_parent_template.html" %} {% block title %} Meeraq Coaching
+{%endblock%} {% block content %}
 <tr style="border: 0">
-	<td style="padding: 20px; background: #f8f7f8; border: 0">
-
-		<div align="center">
-			<table border="0" cellpadding="0" cellspacing="0" style="
+  <td style="padding: 20px; background: #f8f7f8; border: 0">
+    <div align="center">
+      <table
+        border="0"
+        cellpadding="0"
+        cellspacing="0"
+        style="
           width: 100%;
           mso-cellspacing: 0cm;
           background: #f8f7f8;
           mso-yfti-tbllook: 1184;
           mso-padding-alt: 0cm 0cm 0cm 0cm;
-        " width="100%">
-				<tbody>
-					<tr style="
+        "
+        width="100%"
+      >
+        <tbody>
+          <tr
+            style="
               mso-yfti-irow: 0;
               mso-yfti-firstrow: yes;
               mso-yfti-lastrow: yes;
-            ">
-						<td style="padding: 15pt 15pt 15pt 15pt">
-							<p>
-								<strong><span style="font-size: 14px">Dear&nbsp;</span></strong><b>{{name}}</b><strong>,</strong>
-							</p>
-							<p style="color: #333; font-size: 18px; font-weight: bold">
-								Greetings from Meeraq!!
-							</p>
-							<p>{{session_type}} Session Booking Confirmation</p>
+            "
+          >
+            <td style="padding: 15pt 15pt 15pt 15pt">
+              <p>
+                <strong
+                  ><span style="font-size: 14px"
+                    >Dear&nbsp; {{name}}</span
+                  ></strong
+                ><strong>,</strong>
+              </p>
+              <p style="color: #333; font-size: 14px; font-weight: bold">
+                Greetings from Meeraq!!
+              </p>
+              <p>
+                Your {{session_type|lower}} session has been successfully booked
+                for the following details:
+              </p>
 
-							<p>
-								Your {{session_type|lower}} session has been successfully booked for the
-								following details:
-							</p>
+              <p><strong>Session Date:</strong> {{ date }}</p>
+              <br />
+              <p><strong>Time Slot:</strong> {{ time }}</p>
 
-							<p>
-								<strong>Session Date:</strong> {{ date }}<br />
-								<strong>Time Slot:</strong> {{ time }}
-							</p>
+              <p class="child-para">
+                You can join the session on our Meeraq platform. Please block your calendars for the same.
+              </p>
+        
+              <p class="child-para">
+               <a href={{meeting_link}}> Click here to join the call.</a>
+              </p>
+              <p>
+                Please make sure you join in 5 mins before the start time. If
+                you have any queries, feel free to reach out to
+                <a href="mailto:pmocoaching@meeraq.com"
+                  >pmocoaching@meeraq.com</a
+                >.
+              </p>
 
-							<p class="child-para">
-								You can join the session on our Meeraq platform.
-							</p>
-							<p class="child-para">
-								Please block your calendars for the same.
-							</p>
-							<p class="child-para">
-								Click
-								here <p class="child-para">{{meeting_link}}</p>
-								to join the call.
-							</p>
-
-							<p>
-								Please make sure you join in 5 mins before the start time. If
-								you have any queries, feel free to reach out to
-								<a href="mailto:pmocoaching@meeraq.com">pmocoaching@meeraq.com</a>.
-							</p>
-
-							<p><br /></p>
-							<p>Best regards,</p>
-							<p>Team Meeraq.</p>
-						</td>
-					</tr>
-				</tbody>
-			</table>
-		</div>
-	</td>
+              <p><br /></p>
+              <p>Best regards,</p>
+              <p>Team Meeraq.</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </td>
 </tr>
 
 {% endblock %}
