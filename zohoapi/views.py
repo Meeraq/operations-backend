@@ -70,6 +70,7 @@ from .models import (
     Vendor,
     InvoiceStatusUpdate,
     OrdersAndProjectMapping,
+    LineItems,
 )
 import base64
 from django.core.mail import EmailMessage
@@ -79,6 +80,7 @@ import environ
 import os
 import os
 from django.http import HttpResponse
+from django.http import JsonResponse
 import io
 import pdfkit
 from django.middleware.csrf import get_token
@@ -2869,8 +2871,23 @@ def create_sales_order(request):
                     salesorder_created["salesorder_id"],
                 ]
                 mapping.save()
-
             if status == "open":
+                line_items = salesorder_created["line_items"]
+                for line_item in line_items:
+                    custom_fields = line_item.get("item_custom_fields", [])
+                    due_date = None
+                    for field in custom_fields:
+                        if field.get("api_name") == "cf_due_date":
+                            due_date = field.get("value")
+                            break
+                    LineItems.objects.create(
+                        sales_order_id=salesorder_created["salesorder_id"],
+                        sales_order_number=salesorder_created["salesorder_number"],
+                        due_date=due_date,
+                        line_item_id=line_item["line_item_id"],
+                        client_name=salesorder_created["customer_name"],
+                        line_item_description=line_item["description"],
+                    )
                 # mark sales order as open and return message  "SO has been created successfully and  Saved as Open"
                 if update_sales_order_status_to_open(
                     salesorder_created["salesorder_id"], "open"
@@ -3738,3 +3755,51 @@ def get_total_so_created_count(request, sales_person_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sales_orders_with_due_invoices(request,sales_person_id):
+    try:
+        all_sales_orders = fetch_sales_orders(
+            organization_id, f"&salesperson_id={sales_person_id}"
+        )
+        res = get_sales_orders_with_project_details(all_sales_orders)
+        count = len(res)
+        return Response(count, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_line_items(request):
+    line_items = LineItems.objects.all()
+    order_mappings = OrdersAndProjectMapping.objects.all()
+    sales_order_ids = [mapping.sales_order_ids for mapping in order_mappings]
+    line_item_data = []
+
+    for item in line_items:
+        line_item = {
+            'sales_order_id': item.sales_order_id,
+            'sales_order_number': item.sales_order_number,
+            'line_item_id': item.line_item_id,
+            'client_name': item.client_name,
+            'line_item_description': item.line_item_description,
+            'due_date': item.due_date.strftime('%Y-%m-%d') if item.due_date else None,
+            'created_at': item.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+        }
+        associated_mapping = order_mappings.filter(sales_order_ids__contains=item.sales_order_id).first()
+        if associated_mapping:
+            # Determine project_type based on whether the project is taken from project or schedular_project
+            if associated_mapping.project is not None:
+                line_item['project_type'] = "Coaching"
+                line_item['project_name'] = associated_mapping.project.name if associated_mapping.project else None
+            elif associated_mapping.schedular_project is not None:
+                line_item['project_type'] = "Skill Training"
+                line_item['project_name'] = associated_mapping.schedular_project.name if associated_mapping.schedular_project else None
+            else:
+                line_item['project_type'] = None
+                line_item['project_name'] = None
+        line_item_data.append(line_item)
+    return JsonResponse(line_item_data, safe=False)

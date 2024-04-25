@@ -6,6 +6,7 @@ from .models import (
     InvoiceStatusUpdate,
     PoReminder,
     OrdersAndProjectMapping,
+    LineItems,
 )
 
 # Register your models here.
@@ -15,3 +16,4 @@ admin.site.register(AccessToken)
 admin.site.register(PoReminder)
 admin.site.register(InvoiceStatusUpdate)
 admin.site.register(OrdersAndProjectMapping)
+admin.site.register(LineItems)
