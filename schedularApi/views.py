@@ -6009,7 +6009,21 @@ def create_expense(request):
                 file=file,
                 amount=amount,
             )
-
+            facilitator_name = f"{facilitator.first_name} {facilitator.last_name}"
+            expense_name = expense.name
+            project_name = expense.batch.project.name
+            send_mail_templates(
+                "expenses/expenses_emails.html",
+                [
+                    "madhuri@coachtotransformation.com",
+                    "nisha@coachtotransformation.com",
+                    "pmotraining@meeraq.com",
+                    "pmocoaching@meeraq.com",
+                    expense.batch.project.junior_pmo.email,
+                ],
+                "Verification Required: Facilitators Expenses",
+                {"facilitator_name":facilitator_name,"expense_name":expense_name,"project_name":project_name,"description":expense.description,"amount":expense.amount}
+            )
             return Response({"message": "Expense created successfully!"}, status=201)
         else:
             return Response(
