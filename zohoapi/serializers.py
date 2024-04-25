@@ -9,6 +9,12 @@ from .models import (
     ZohoVendor,
     SalesOrder,
     SalesOrderLineItem,
+    PurchaseOrder,
+    PurchaseOrderLineItem,
+    Bill,
+    BillLineItem,
+    ClientInvoice,
+    ClientInvoiceLineItem,
 )
 
 # UserModel=get_user_model()
@@ -92,4 +98,40 @@ class SalesOrderSerializer(serializers.ModelSerializer):
 class SalesOrderLineItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesOrderLineItem
+        fields = fields = "__all__"
+
+
+class PurchaseOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PurchaseOrder
+        fields = fields = "__all__"
+
+
+class PurchaseOrderLineItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PurchaseOrderLineItem
+        fields = fields = "__all__"
+
+
+class BillSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Bill
+        fields = fields = "__all__"
+
+
+class BillLineItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BillLineItem
+        fields = fields = "__all__"
+
+
+class ClientInvoiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClientInvoice
+        fields = fields = "__all__"
+
+
+class ClientInvoiceLineItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClientInvoiceLineItem
         fields = fields = "__all__"
