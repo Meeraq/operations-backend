@@ -6037,7 +6037,32 @@ def create_expense(request):
                 file=file,
                 amount=amount,
             )
-
+            try:
+                email_array = json.loads(env("EXPENSE_NOTIFICATION_EMAILS"))
+                if batch.project.junior_pmo:
+                    email_array.append(batch.project.junior_pmo.email)
+                for email in email_array:
+                    pmo = Pmo.objects.filter(email=email.strip().lower()).first()
+                    send_mail_templates(
+                        "pmo_emails/expense_added_by_facilitator.html",
+                        [email],
+                        "Meeraq | Expense Upload Notification",
+                        {
+                            "name": pmo.name if pmo else "User",
+                            "project_name": batch.project.name,
+                            "facilitator_name": facilitator.first_name
+                            + " "
+                            + facilitator.last_name,
+                            "description": expense.description,
+                            "amount": expense.amount,
+                            "date_of_expense": expense.created_at.strftime("%d/%m/%Y"),
+                        },
+                        [],
+                    )
+                    sleep(2)
+            except Exception as e:
+                print(str(e))
+        
             return Response({"message": "Expense created successfully!"}, status=201)
         else:
             return Response(
