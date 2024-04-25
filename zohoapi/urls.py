@@ -351,7 +351,7 @@ urlpatterns = [
         "get-handovers-count/<str:sales_person_id>/",
         views.get_handovers_count,
         name="get_handovers_count"
-    )
+    ),
     path(
         "sales-orders-with-due-invoices/<str:sales_person_id>/",
         views.sales_orders_with_due_invoices,
