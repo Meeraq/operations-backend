@@ -1640,8 +1640,8 @@ class Bill(models.Model):
     zoho_vendor = models.ForeignKey(
         ZohoVendor, on_delete=models.SET_NULL, blank=True, null=True, default=None
     )
-    purchase_order = models.ForeignKey(
-        PurchaseOrder, on_delete=models.SET_NULL, blank=True, null=True, default=None
+    purchase_orders = models.ManyToManyField(
+        PurchaseOrder
     )
     bill_line_items = models.ManyToManyField(BillLineItem, blank=True)
     bill_id = models.CharField(max_length=100, blank=True, null=True)

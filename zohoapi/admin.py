@@ -10,6 +10,12 @@ from .models import (
     ZohoVendor,
     SalesOrder,
     SalesOrderLineItem,
+    PurchaseOrder,
+    PurchaseOrderLineItem,
+    ClientInvoice,
+    ClientInvoiceLineItem,
+    Bill,
+    BillLineItem,
 )
 
 # Register your models here.
@@ -23,3 +29,9 @@ admin.site.register(ZohoCustomer)
 admin.site.register(ZohoVendor)
 admin.site.register(SalesOrder)
 admin.site.register(SalesOrderLineItem)
+admin.site.register(PurchaseOrderLineItem)
+admin.site.register(PurchaseOrder)
+admin.site.register(ClientInvoice)
+admin.site.register(ClientInvoiceLineItem)
+admin.site.register(BillLineItem)
+admin.site.register(Bill)

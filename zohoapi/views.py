@@ -82,6 +82,8 @@ from .models import (
     OrdersAndProjectMapping,
     ZohoCustomer,
     ZohoVendor,
+    PurchaseOrder,
+    SalesOrder,
 )
 import base64
 from django.core.mail import EmailMessage
@@ -3664,7 +3666,8 @@ def get_sales_order(salesorder_id):
             return None
     else:
         return None
-    
+
+
 def get_purchase_order(purchaseorder_id):
     access_token_purchase_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_purchase_order:
@@ -3679,6 +3682,7 @@ def get_purchase_order(purchaseorder_id):
             return None
     else:
         return None
+
 
 def get_client_invoice(invoice_id):
     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -3708,7 +3712,6 @@ def get_bill(bill_id):
             return None
     else:
         return None
-
 
 
 def create_zoho_customer(customer_id):
@@ -3766,47 +3769,95 @@ def create_so_with_line_items(salesorder_id):
                 instance = line_item_serializer.save()
                 so_instance.so_line_items.add(instance)
             else:
-                print(salesorder['salesorder_number'],line_item_serializer.errors)
+                print(salesorder["salesorder_number"], line_item_serializer.errors)
+        try:
+            customer = ZohoCustomer.objects.get(contact_id=so_instance.customer_id)
+            so_instance.zoho_customer = customer
+            so_instance.save()
+        except Exception as e:
+            print(str(e))
+            print(
+                "error assigning zoho custoemr to client invoice",
+                so_instance,
+            )
     else:
-        print(salesorder['salesorder_number'],serializer.errors)
+        print(salesorder["salesorder_number"], serializer.errors)
+
+
+
+def add_multiple_so(data):
+    for so in data:
+        create_so_with_line_items(so["contact_id"])
+        sleep(1)
+
 
 
 def create_po_with_line_items(purchase_order_id):
     purchaseorder = get_purchase_order(purchase_order_id)
-    if not purchaseorder["shipment_date"]:
+    if "shipment_date" in purchaseorder and not purchaseorder["shipment_date"]:
         purchaseorder["shipment_date"] = None
     # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
     serializer = PurchaseOrderSerializer(data=purchaseorder)
     if serializer.is_valid():
         po_instance = serializer.save()
         for line_item in purchaseorder["line_items"]:
-            print(line_item)
             line_item_serializer = PurchaseOrderLineItemSerializer(data=line_item)
             if line_item_serializer.is_valid():
                 instance = line_item_serializer.save()
                 po_instance.po_line_items.add(instance)
             else:
-                print(purchaseorder['purchaseorder_number'],line_item_serializer.errors)
+                print(
+                    purchaseorder["purchaseorder_number"], line_item_serializer.errors
+                )
+        try:
+            vendor = ZohoVendor.objects.get(contact_id=po_instance.vendor_id)
+            po_instance.zoho_vendor = vendor
+            po_instance.save()
+        except Exception as e:
+            print(str(e))
+            print(
+                "error assigning zoho vendor to bill",
+                po_instance,
+            )
     else:
-        print(purchaseorder['purchaseorder_number'],serializer.errors)
+        print(purchaseorder["purchaseorder_number"], serializer.errors)
+
+
+def add_multiple_po(data):
+    for po in data:
+        create_po_with_line_items(po["contact_id"])
+        sleep(1)
 
 
 def create_client_invoice_with_line_items(clientinvoice_id):
     clientinvoice = get_client_invoice(clientinvoice_id)
-    if not clientinvoice["shipment_date"]:
+    if "shipment_date" in clientinvoice and not clientinvoice["shipment_date"]:
         clientinvoice["shipment_date"] = None
     # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
     serializer = ClientInvoiceSerializer(data=clientinvoice)
     if serializer.is_valid():
         clientinvoice_instance = serializer.save()
         for line_item in clientinvoice["line_items"]:
-            print(line_item)
             line_item_serializer = ClientInvoiceLineItemSerializer(data=line_item)
             if line_item_serializer.is_valid():
                 instance = line_item_serializer.save()
                 clientinvoice_instance.client_invoice_line_items.add(instance)
             else:
-                print(clientinvoice['invoice_number'],line_item_serializer.errors)
+                print(clientinvoice["invoice_number"], line_item_serializer.errors)
+
+        try:
+            so = SalesOrder.objects.get(
+                salesorder_id=clientinvoice_instance.salesorder_id
+            )
+            clientinvoice_instance.sales_order = so
+            clientinvoice_instance.save()
+        except Exception as e:
+            print(str(e))
+            print(
+                "error assigning so to CI",
+                clientinvoice_instance,
+            )
+
         try:
             customer = ZohoCustomer.objects.get(
                 contact_id=clientinvoice_instance.customer_id
@@ -3820,34 +3871,45 @@ def create_client_invoice_with_line_items(clientinvoice_id):
                 clientinvoice_instance,
             )
     else:
-        print(clientinvoice['invoice_number'] , serializer.errors)
+        print(clientinvoice["invoice_number"], serializer.errors)
 
 
 def create_bill_with_line_items(bill_id):
     bill = get_bill(bill_id)
-    if not bill["shipment_date"]:
+    if "shipment_date" in bill and not bill["shipment_date"]:
         bill["shipment_date"] = None
     # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
     serializer = BillSerializer(data=bill)
     if serializer.is_valid():
         bill_instance = serializer.save()
         for line_item in bill["line_items"]:
-            print(line_item)
             line_item_serializer = BillLineItemSerializer(data=line_item)
             if line_item_serializer.is_valid():
                 instance = line_item_serializer.save()
                 bill_instance.bill_line_items.add(instance)
             else:
-                print(bill['bill_number'],line_item_serializer.errors)
+                print(bill["bill_number"], line_item_serializer.errors)
+
+        for po_id in bill_instance.purchaseorder_ids:
+            try:
+                po = PurchaseOrder.objects.get(purchaseorder_id=po_id)
+                bill_instance.purchase_orders.add(po)
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning zoho vendor to bill",
+                    bill_instance,
+                )
+        # adding vendor to bill
         try:
             vendor = ZohoVendor.objects.get(contact_id=bill_instance.vendor_id)
-            bill.zoho_vendor = vendor
-            bill.save()
+            bill_instance.zoho_vendor = vendor
+            bill_instance.save()
         except Exception as e:
             print(str(e))
             print(
                 "error assigning zoho vendor to bill",
-                bill,
+                bill_instance,
             )
     else:
-        print(bill['bill_number'],serializer.errors)
+        print(bill["bill_number"], serializer.errors)
