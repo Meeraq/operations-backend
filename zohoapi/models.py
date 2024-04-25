@@ -1271,7 +1271,7 @@ class ClientInvoice(models.Model):
     page_width = models.CharField(max_length=20, null=True, blank=True)
     page_height = models.CharField(max_length=20, null=True, blank=True)
     orientation = models.CharField(max_length=20, null=True, blank=True)
-    is_backorder = models.BooleanField(default=False)
+    is_backorder = models.CharField(max_length=100, null=True, blank=True)
     sales_channel = models.CharField(max_length=50, null=True, blank=True)
     sales_channel_formatted = models.CharField(max_length=50, null=True, blank=True)
     is_pre_gst = models.BooleanField(default=False)
@@ -1402,7 +1402,7 @@ class PurchaseOrderLineItem(models.Model):
     purchase_request_items = models.JSONField(default=list, null=True, blank=True)
 
     def __str__(self):
-        return self.item_id  # or any other field you prefer
+        return self.line_item_id  # or any other field you prefer
 
 
 class PurchaseOrder(models.Model):
