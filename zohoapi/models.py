@@ -1464,7 +1464,7 @@ class PurchaseOrder(models.Model):
     currency_code = models.CharField(max_length=10, null=True, blank=True)
     currency_symbol = models.CharField(max_length=10, null=True, blank=True)
     exchange_rate = models.DecimalField(
-        max_digits=10, decimal_places=2, null=True, blank=True
+        max_digits=15, decimal_places=6, null=True, blank=True
     )
     delivery_date = models.CharField(max_length=100, null=True, blank=True)
     delivery_date_formatted = models.CharField(max_length=100, null=True, blank=True)
@@ -1733,7 +1733,7 @@ class Bill(models.Model):
     subject_content = models.CharField(max_length=100, blank=True, null=True)
     price_precision = models.IntegerField(blank=True, null=True)
     exchange_rate = models.DecimalField(
-        max_digits=10, decimal_places=2, blank=True, null=True
+        max_digits=15, decimal_places=6, blank=True, null=True
     )
     custom_fields = models.JSONField(default=list, blank=True, null=True)
     custom_field_hash = models.JSONField(default=dict, blank=True, null=True)
