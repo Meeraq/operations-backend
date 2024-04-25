@@ -10388,3 +10388,17 @@ def get_all_po_of_project(request, project_id):
             {"error": f"Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+        
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner")])
+def get_all_to_be_booked_sessions_for_coachee(request, learner_id):
+    sessions = SessionRequestCaas.objects.filter(learner__id=learner_id).order_by("order")
+    serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
+    return Response(serializer.data, status=200)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_engagement_of_a_coachee(request, learner_id):
+    engagement = Engagement.objects.get(learner__id=learner_id)
+    serializer = EngagementDepthOneSerializer(engagement)
+    return Response(serializer.data, status=200)
