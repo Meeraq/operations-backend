@@ -6285,3 +6285,40 @@ def get_handovers(request):
     )
     serializer = HandoverDetailsSerializer(handovers, many=True)
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_mail_to_coaches(request):
+    try:
+        template_id = request.data.get("template_id")
+        coaches = request.data.get("coaches")
+        subject = request.data.get("subject")
+        template = EmailTemplate.objects.get(id=template_id)
+
+        temp1 = template.template_data
+
+        for coach_id in coaches:
+            coach = Coach.objects.get(id = int(coach_id))
+            mail = coach.email
+            email_message_learner = render_to_string(
+                "default.html",
+                {
+                    "email_content": mark_safe(temp1),
+                    "email_title": "hello",
+                    "subject": subject,
+                },
+            )
+            email = EmailMessage(
+                subject,
+                email_message_learner,
+                settings.DEFAULT_FROM_EMAIL,
+                [mail],
+            )
+            email.content_subtype = "html"
+            email.send()
+            print("Email sent to:", mail)
+        return Response({"message": "Mails Send Successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to send mail!"}, status=500)
