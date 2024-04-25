@@ -5996,16 +5996,36 @@ def get_current_session(request, user_type, room_id, user_id):
         return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
 
+
+
+
 @api_view(["GET"])
 @permission_classes(
     [IsAuthenticated, IsInRoles("coach", "learner", "pmo", "hr", "facilitator")]
 )
 def get_current_session_for_coach(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
-    sessions = None
-    session_modal = "CAAS"
+    caas_sessions = None
+    seeq_sessions = None
     if user_type == "coach":
-        sessions = SessionRequestCaas.objects.filter(
+        sessions = SessionRequestCaas.objects.filter(   
+
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__gt=current_time),
+            Q(coach__id=user_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        ).order_by("confirmed_availability__start_time")
+        coach = Coach.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            availibility__coach__email=coach.email,
+        ).order_by("availibility__start_time")
+    current_time = int(timezone.now().timestamp() * 1000)
+    caas_sessions = None
+    seeq_sessions = None
+    if user_type == "coach":
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
@@ -6013,46 +6033,55 @@ def get_current_session_for_coach(request, user_type, user_id):
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-        if sessions.count() == 0:
-            coach = Coach.objects.get(id=user_id)
-            sessions = SchedularSessions.objects.filter(
-                availibility__end_time__gt=current_time,
-                availibility__coach__email=coach.email,
-            ).order_by("availibility__start_time")
-
-    if not sessions:
+        coach = Coach.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            availibility__coach__email=coach.email,
+        ).order_by("availibility__start_time")
+    if not seeq_sessions and not caas_sessions:
         return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
-    # Get the upcoming next session and current session
-    upcoming_session = sessions.first()
-    if session_modal == "CAAS" and upcoming_session:
-        session_details = {
-            "session_id": upcoming_session.id,
-            "type": "CAAS",
-            "start_time": upcoming_session.confirmed_availability.start_time,
-            "end_time": upcoming_session.confirmed_availability.end_time,
-            "project_name": upcoming_session.project.name,
-            "room_id": upcoming_session.coach.room_id,
-            "session_name": f"{upcoming_session.session_type}",
-        }
-    elif session_modal == "SEEQ" and upcoming_session:
-        session_details = {
-            "session_id": upcoming_session.id,
-            "type": "SEEQ",
-            "start_time": upcoming_session.availibility.start_time,
-            "end_time": upcoming_session.availibility.end_time,
-            "project_name": upcoming_session.project.name,
-            "room_id": upcoming_session.coach.room_id,
-            "session_name": f"{upcoming_session.session_type}",
-        }
+    nearest_session = None
+    if caas_sessions:
+        nearest_session = caas_sessions.first()
+    if seeq_sessions:
+        print("seeq", seeq_sessions)
+        if nearest_session:
+            if (
+                seeq_sessions.first().availibility.start_time
+                < nearest_session.confirmed_availability.start_time
+            ):
+                nearest_session = seeq_sessions.first()
+        else:
+            nearest_session = seeq_sessions.first()
 
-    # You can customize the response data based on your requirements
-    response_data = {
-        "message": "success",
-        "upcoming_session": session_details if upcoming_session else None,
-    }
-
-    return Response(response_data, status=200)
+    if nearest_session:
+        session_details = {
+            "session_id": nearest_session.id,
+            "type": (
+                "CAAS" if isinstance(nearest_session, SessionRequestCaas) else "SEEQ"
+            ),
+            "start_time": (
+                nearest_session.confirmed_availability.start_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.start_time
+            ),
+            "end_time": (
+                nearest_session.confirmed_availability.end_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.end_time
+            ),
+            "project_name": nearest_session.project.name if isinstance(nearest_session, SessionRequestCaas) else nearest_session.coaching_session.batch.project.name,
+            "session_name":f"{nearest_session.session_type}" if isinstance(nearest_session, SessionRequestCaas) else nearest_session.coaching_session.session_type,
+            "room_id": nearest_session.coach.room_id if isinstance(nearest_session, SessionRequestCaas) else nearest_session.availibility.coach.room_id,
+        }
+        response_data = {
+            "message": "success",
+            "upcoming_session": session_details,
+        }
+        return Response(response_data, status=200)
+    else:
+        return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
 
 @api_view(["POST"])
