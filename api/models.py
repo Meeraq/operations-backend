@@ -413,7 +413,10 @@ class Project(models.Model):
     )
     is_archive = models.BooleanField(default=False)
     finance = models.BooleanField(blank=True, default=False)
-
+    nudges = models.BooleanField(blank=True, default=True)
+    pre_assessment = models.BooleanField(blank=True, default=True)
+    post_assessment = models.BooleanField(blank=True, default=True)
+    
     class Meta:
         ordering = ["-created_at"]
 

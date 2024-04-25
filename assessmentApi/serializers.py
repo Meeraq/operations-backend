@@ -13,6 +13,7 @@ from .models import (
     ObserverTypes,
     ParticipantReleasedResults,
     ParticipantObserverMapping,
+    ProjectAssessmentMapping,
 )
 
 
@@ -128,5 +129,13 @@ class ParticipantReleasedResultsSerializerDepthOne(serializers.ModelSerializer):
 class ParticipantObserverMappingSerializerDepthOne(serializers.ModelSerializer):
     class Meta:
         model = ParticipantObserverMapping
+        fields = "__all__"
+        depth = 1
+
+
+
+class ProjectAssessmentMappingSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = ProjectAssessmentMapping
         fields = "__all__"
         depth = 1

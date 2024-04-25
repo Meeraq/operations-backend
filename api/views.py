@@ -1434,6 +1434,10 @@ def create_project_cass(request):
             handover.caas_project = project
             handover.save()
             project.project_structure = handover.project_structure
+            project.pre_assessment = handover.pre_assessment
+            project.post_assessment = handover.post_assessment
+            project.nudges = handover.nudges
+           
             project.save()
             add_so_to_project("CAAS", project.id, handover.sales_order_ids)
         else:
@@ -10268,3 +10272,4 @@ def get_all_po_of_project(request, project_id):
             {"error": f"Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+

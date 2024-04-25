@@ -73,7 +73,8 @@ from .serializers import (
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 from rest_framework.views import APIView
-from api.models import User, Learner, Profile, Role, Coach, SessionRequestCaas
+from api.models import User, Learner, Profile, Role, Coach, SessionRequestCaas,Project
+from api.serializers import ProjectSerializer
 from schedularApi.models import (
     LiveSession,
     SchedularBatch,
@@ -3511,6 +3512,16 @@ def get_nudges_by_project_id(request, project_id):
     nudges = Nudge.objects.filter(batch__project__id=project_id)
     serializer = NudgeSerializer(nudges, many=True)
     return Response(serializer.data)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def get_nudges_of_coaching_project(request, project_id):
+    # Retrieve nudges filtered by project_id
+    project = Project.objects.get(id=project_id)
+    project_serializer = ProjectSerializer(project)
+    nudges = Nudge.objects.filter(caas_project=project)
+    serializer = NudgeSerializer(nudges, many=True)
+    return Response({"nudges": serializer.data, "project": project_serializer.data})
 
 
 @api_view(["POST"])

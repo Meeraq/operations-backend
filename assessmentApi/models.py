@@ -1,7 +1,7 @@
 from django.db import models
 from api.models import Learner, Profile, Organisation, HR
 from django.contrib.auth.models import User
-
+from api.models import Project
 # Create your models here.
 
 
@@ -237,5 +237,12 @@ class ParticipantUniqueId(models.Model):
 class ParticipantReleasedResults(models.Model):
     participants = models.ManyToManyField(Learner, blank=True)
     assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ProjectAssessmentMapping(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
+    assessments =models.ManyToManyField(Assessment, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)

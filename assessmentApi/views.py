@@ -22,6 +22,7 @@ from .models import (
     AssessmentNotification,
     ParticipantUniqueId,
     ParticipantReleasedResults,
+    ProjectAssessmentMapping,
 )
 from .serializers import (
     CompetencySerializerDepthOne,
@@ -40,13 +41,24 @@ from .serializers import (
     AssessmentNotificationSerializer,
     ParticipantReleasedResultsSerializerDepthOne,
     ParticipantObserverMappingSerializerDepthOne,
+    ProjectAssessmentMappingSerializerDepthOne,
 )
 from django.db import transaction, IntegrityError
 import json
 import string
 import random
 from django.contrib.auth.models import User
-from api.models import Profile, Learner, Organisation, HR, SentEmailActivity, Role, Pmo
+from api.models import (
+    Profile,
+    Learner,
+    Organisation,
+    HR,
+    SentEmailActivity,
+    Role,
+    Pmo,
+    Project,
+    Engagement,
+)
 from api.serializers import OrganisationSerializer
 from django.core.mail import EmailMessage, BadHeaderError
 from api.serializers import LearnerSerializer
@@ -2125,7 +2137,7 @@ def add_multiple_participants(participant, assessment_id, assessment, name_seper
     assessment.save()
     particpant_data = [{"name": name, "email": participant["email"]}]
     # send_reset_password_link(particpant_data)
-    if assessment.assessment_timing == "pre" :
+    if assessment.assessment_timing == "pre":
         post_assessment = Assessment.objects.filter(pre_assessment=assessment).first()
         mapping = ParticipantObserverMapping.objects.create(participant=new_participant)
         mapping.save()
@@ -2153,7 +2165,9 @@ def add_multiple_participants(participant, assessment_id, assessment, name_seper
     return serializer
 
 
-def add_multiple_participants_for_project(participant, assessment_id, assessment, name_seperated,project):
+def add_multiple_participants_for_project(
+    participant, assessment_id, assessment, name_seperated, project
+):
     if assessment.participants_observers.filter(
         participant__email=participant["email"]
     ).exists():
@@ -2203,7 +2217,7 @@ def add_multiple_participants_for_project(participant, assessment_id, assessment
             assessment=post_assessment,
             unique_id=post_unique_id,
         )
-    elif assessment.assessment_timing == "post"and project.pre_assessment:
+    elif assessment.assessment_timing == "post" and project.pre_assessment:
         pre_assessment = Assessment.objects.get(id=assessment.pre_assessment.id)
         mapping = ParticipantObserverMapping.objects.create(participant=new_participant)
         mapping.save()
@@ -4543,9 +4557,9 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                     pre_assessment_id,
                     post_assessment_id,
                 ) = create_pre_post_assessments(request, batch.project)
-              
+
                 pre_assessment = Assessment.objects.get(id=pre_assessment_id)
-              
+
                 if created:
 
                     for participant in batch.learners.all():
@@ -4555,9 +4569,13 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                             "email": participant.email,
                             "phone": participant.phone,
                         }
-                        
+
                         serializer = add_multiple_participants_for_project(
-                            participant_object, pre_assessment_id, pre_assessment, False, batch.project
+                            participant_object,
+                            pre_assessment_id,
+                            pre_assessment,
+                            False,
+                            batch.project,
                         )
 
                         course = Course.objects.get(id=request.data.get("course_id"))
@@ -4570,7 +4588,7 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
                         )
 
                         for lesson in lessons:
-                          
+
                             assessment_lesson = AssessmentLesson.objects.filter(
                                 lesson=lesson
                             ).first()
@@ -4608,8 +4626,7 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
 
                     return Response(
                         {
-                            "message": "Pre and Post assessment created and batch added successfully.",
-                            "assessment_data": serializer.data,
+                            "message": "Assessment created and batch added successfully.",
                         },
                         status=status.HTTP_200_OK,
                     )
@@ -4618,6 +4635,73 @@ class CreateAssessmentAndAddMultipleParticipantsFromBatch(APIView):
             # Handle specific exceptions if needed
             return Response(
                 {"error": "Faliled to create assessments"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class CreateCoachingAssessmentAndAddMultipleParticipants(APIView):
+    def post(self, request):
+        try:
+            with transaction.atomic():
+                project = Project.objects.get(id=request.data.get("project_id"))
+                (
+                    created,
+                    pre_assessment_id,
+                    post_assessment_id,
+                ) = create_pre_post_assessments(request, project)
+
+                pre_assessment = None
+                if project.pre_assessment:
+                    pre_assessment = Assessment.objects.get(id=pre_assessment_id)
+
+                post_assessment = None
+                if project.post_assessment:
+                    post_assessment = Assessment.objects.get(id=post_assessment_id)
+                engagements = Engagement.objects.filter(project=project)
+                if created:
+                    serializer = None
+                    for engagement in engagements:
+                        participant = engagement.learner
+                        participant_object = {
+                            "name": participant.name,
+                            "email": participant.email,
+                            "phone": participant.phone,
+                        }
+
+                        serializer = add_multiple_participants_for_project(
+                            participant_object,
+                            pre_assessment_id,
+                            pre_assessment,
+                            False,
+                            project,
+                        )
+
+                    mapping = ProjectAssessmentMapping.objects.create(project=project)
+
+                    if pre_assessment:
+                        mapping.assessments.add(pre_assessment)
+                    if post_assessment:
+                        mapping.assessments.add(post_assessment)
+
+                    mapping.save()
+
+                    return Response(
+                        {
+                            "message": "Assessment created and batch added successfully.",
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                else:
+                    return Response(
+                        {
+                            "error": "Failed to create assessment.",
+                        },
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": f"Failed to create assessment."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -5119,6 +5203,81 @@ class DownloadQuestionWiseExcelForProject(APIView):
 
             return response
 
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get data"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetAssessmentOfCoachingProject(APIView):
+    def get(self, request, assessment_id):
+        assessment = get_object_or_404(Assessment, id=assessment_id)
+        try:
+            # get batch and project of assessment
+            assessment_lessons = AssessmentLesson.objects.filter(
+                assessment_modal__id=assessment_id
+            )
+            if assessment_lessons.exists():
+                assessment_lesson = assessment_lessons.first()
+                batch = assessment_lesson.lesson.course.batch
+                project = batch.project
+                return Response(
+                    {"batch": {"id": batch.id}, "project": {"id": project.id}}
+                )
+            else:
+                return Response(
+                    {"error": "Batch and project not found for the assessment"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        except Exception as e:
+            # Handle specific exceptions if needed
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class GetAssessmentOfCoachingProject(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, project_id):
+        try:
+            mapping = ProjectAssessmentMapping.objects.get(project__id=project_id)
+            assessment_list = []
+            for assessment in mapping.assessments.all():
+                total_responses_count = ParticipantResponse.objects.filter(
+                    assessment=assessment
+                ).count()
+                assessment_data = {
+                    "id": assessment.id,
+                    "name": assessment.name,
+                    "participant_view_name": assessment.participant_view_name,
+                    "assessment_type": assessment.assessment_type,
+                    "assessment_timing": assessment.assessment_timing,
+                    "assessment_start_date": assessment.assessment_start_date,
+                    "assessment_end_date": assessment.assessment_end_date,
+                    "status": assessment.status,
+                    "total_learners_count": assessment.participants_observers.count(),
+                    "total_responses_count": total_responses_count,
+                    "created_at": assessment.created_at,
+                    "whatsapp_reminder": assessment.whatsapp_reminder,
+                    "email_reminder": assessment.email_reminder,
+                    "reminders": assessment.reminders,
+                    "questionnaire": assessment.questionnaire.id,
+                    "organisation": assessment.organisation.id,
+                    "hr": list(assessment.hr.all().values_list("id", flat=True)),
+                    "pre_assessment": (
+                        assessment.pre_assessment.id
+                        if assessment.assessment_timing == "post"
+                        else None
+                    ),
+                }
+
+                assessment_list.append(assessment_data)
+
+            return Response(assessment_list)
         except Exception as e:
             print(str(e))
             return Response(

@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError
 from django_celery_beat.models import PeriodicTask
 import uuid
 from assessmentApi.models import Assessment as AssessmentModal
-from api.models import SessionRequestCaas
+from api.models import SessionRequestCaas ,Project
 
 # Create your models here.
 
@@ -282,6 +282,9 @@ class Nudge(models.Model):
     # course = models.ForeignKey(Course, on_delete=models.CASCADE)
     batch = models.ForeignKey(
         SchedularBatch, on_delete=models.CASCADE, null=True, blank=True, default=None
+    )
+    caas_project=models.ForeignKey(
+        Project, on_delete=models.CASCADE, null=True, blank=True, default=None
     )
     trigger_date = models.DateField(default=None, blank=True, null=True)
     is_sent = models.BooleanField(default=False)

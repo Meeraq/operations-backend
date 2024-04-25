@@ -346,6 +346,11 @@ urlpatterns = [
         views.get_nudges_by_project_id,
         name="get_nudges_by_project_id",
     ),
+    path(
+        "coaching-project/<int:project_id>/nudges/",
+        views.get_nudges_of_coaching_project,
+        name="get_nudges_of_coaching_project",
+    ),
     path("send-test-nudge/<int:nudge_id>/", views.send_nudge_to_email),
     path(
         "nudges/<int:nudge_id>/duplicate/<int:batch_id>/",
