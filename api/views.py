@@ -5908,10 +5908,10 @@ def get_current_session(request, user_type, room_id, user_id):
     five_minutes_in_milliseconds = 300000
     current_time = int(timezone.now().timestamp() * 1000)
     five_minutes_plus_current_time = current_time + five_minutes_in_milliseconds
-    sessions = None
-    session_modal = "CAAS"
+    caas_sessions = None
+    seeq_sessions = None
     if user_type == "coach":
-        sessions = SessionRequestCaas.objects.filter(
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
@@ -5920,17 +5920,15 @@ def get_current_session(request, user_type, room_id, user_id):
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-        if sessions.count() == 0:
-            coach = Coach.objects.get(id=user_id)
-            sessions = SchedularSessions.objects.filter(
-                availibility__end_time__gt=current_time,
-                availibility__coach__email=coach.email,
-                availibility__coach__room_id=room_id,
-            ).order_by("availibility__start_time")
-            session_modal = "SEEQ"
+        coach = Coach.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            availibility__coach__email=coach.email,
+            availibility__coach__room_id=room_id,
+        ).order_by("availibility__start_time")
 
     elif user_type == "learner":
-        sessions = SessionRequestCaas.objects.filter(
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(learner__id=user_id),
@@ -5939,62 +5937,51 @@ def get_current_session(request, user_type, room_id, user_id):
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-        if sessions.count() == 0:
-            learner = Learner.objects.get(id=user_id)
-            sessions = SchedularSessions.objects.filter(
-                availibility__end_time__gt=current_time,
-                learner__email=learner.email,
-                availibility__coach__room_id=room_id,
-            ).order_by("availibility__start_time")
-            session_modal = "SEEQ"
+        learner = Learner.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            learner__email=learner.email,
+            availibility__coach__room_id=room_id,
+        ).order_by("availibility__start_time")
 
-    elif user_type == "hr":
-        sessions = SessionRequestCaas.objects.filter(
+    elif user_type in ["hr", "pmo"]:
+
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
-            Q(hr__id=user_id),
+            Q(hr__id=user_id) if user_type == "hr" else Q(pmo__id=user_id),
             (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-    elif user_type == "pmo":
-        sessions = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__gt=current_time),
-            Q(pmo__id=user_id),
-            (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
-            Q(is_archive=False),
-            ~Q(status="completed"),
-        ).order_by("confirmed_availability__start_time")
-
-    if not sessions:
+    if not seeq_sessions and not caas_sessions:
         return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
-    # Get the upcoming next session and current session
-    upcoming_session = sessions.first()
-    if session_modal == "CAAS" and upcoming_session:
+    nearest_session = None
+    if caas_sessions:
+        nearest_session = caas_sessions.first()
+    if seeq_sessions:
+        if nearest_session:
+            if seeq_sessions.first().availibility.start_time < nearest_session.confirmed_availability.start_time:
+                nearest_session = seeq_sessions.first()
+        else:
+            nearest_session = seeq_sessions.first()
+   
+    if nearest_session:
         session_details = {
-            "session_id": upcoming_session.id,
-            "type": "CAAS",
-            "start_time": upcoming_session.confirmed_availability.start_time,
-            "end_time": upcoming_session.confirmed_availability.end_time,
+            "session_id": nearest_session.id,
+            "type": "CAAS" if isinstance(nearest_session, SessionRequestCaas) else "SEEQ",
+            "start_time": nearest_session.confirmed_availability.start_time if isinstance(nearest_session, SessionRequestCaas) else nearest_session.availibility.start_time,
+            "end_time": nearest_session.confirmed_availability.end_time if isinstance(nearest_session, SessionRequestCaas) else nearest_session.availibility.end_time,
         }
-    elif session_modal == "SEEQ" and upcoming_session:
-        session_details = {
-            "session_id": upcoming_session.id,
-            "type": "SEEQ",
-            "start_time": upcoming_session.availibility.start_time,
-            "end_time": upcoming_session.availibility.end_time,
+        response_data = {
+            "message": "success",
+            "upcoming_session": session_details,
         }
-
-    # You can customize the response data based on your requirements
-    response_data = {
-        "message": "success",
-        "upcoming_session": session_details if upcoming_session else None,
-    }
-
-    return Response(response_data, status=200)
+        return Response(response_data, status=200)
+    else:
+        return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
 
 @api_view(["GET"])

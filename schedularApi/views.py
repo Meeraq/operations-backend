@@ -6222,11 +6222,11 @@ def edit_status_expense(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_all_courses_for_all_batches(request):
+def get_all_courses_for_all_batches(request, project_id):
     try:
         facilitator_id = request.query_params.get("facilitator_id", None)
         batches = SchedularBatch.objects.filter(
-            livesession__facilitator__id=facilitator_id
+            livesession__facilitator__id=facilitator_id, project__id=project_id
         )
         courses = Course.objects.filter(batch__in=batches)
         course_serializer = CourseSerializer(courses, many=True)

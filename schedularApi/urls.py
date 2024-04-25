@@ -345,7 +345,11 @@ urlpatterns = [
         views.edit_expense_amount,
     ),
     path(
-        "get-all-courses-for-all-batches/",
+        "edit-amount-expense/",
+        views.edit_expense_amount,
+    ),
+    path(
+        "get-all-courses-for-all-batches/<int:project_id>/",
         views.get_all_courses_for_all_batches,
         name="get_all_courses_for_all_batches",
     ),
