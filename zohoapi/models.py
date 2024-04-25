@@ -1271,7 +1271,7 @@ class ClientInvoice(models.Model):
     page_width = models.CharField(max_length=20, null=True, blank=True)
     page_height = models.CharField(max_length=20, null=True, blank=True)
     orientation = models.CharField(max_length=20, null=True, blank=True)
-    is_backorder = models.CharField(max_length=100, null=True, blank=True)
+    is_backorder = models.BooleanField(default=False)
     sales_channel = models.CharField(max_length=50, null=True, blank=True)
     sales_channel_formatted = models.CharField(max_length=50, null=True, blank=True)
     is_pre_gst = models.BooleanField(default=False)
