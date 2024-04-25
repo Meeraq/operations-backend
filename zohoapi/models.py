@@ -991,7 +991,7 @@ class ClientInvoice(models.Model):
     sales_order = models.ForeignKey(
         SalesOrder, on_delete=models.SET_NULL, blank=True, null=True, default=None
     )
-    client_invoice_line_items = models.ManyToManyField(ClientInvoiceLineItem)
+    client_invoice_line_items = models.ManyToManyField(ClientInvoiceLineItem, blank=True)
     invoice_id = models.CharField(max_length=100, null=True, blank=True)
     invoice_number = models.CharField(max_length=100, null=True, blank=True)
     date = models.DateField(null=True, blank=True)
@@ -1641,7 +1641,7 @@ class Bill(models.Model):
         ZohoVendor, on_delete=models.SET_NULL, blank=True, null=True, default=None
     )
     purchase_orders = models.ManyToManyField(
-        PurchaseOrder
+        PurchaseOrder, blank=True
     )
     bill_line_items = models.ManyToManyField(BillLineItem, blank=True)
     bill_id = models.CharField(max_length=100, blank=True, null=True)

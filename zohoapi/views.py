@@ -3663,8 +3663,10 @@ def get_sales_order(salesorder_id):
             sales_order = response.json().get("salesorder")
             return sales_order
         else:
+            print(response.json())
             return None
     else:
+        print("no access token")
         return None
 
 
@@ -3679,8 +3681,10 @@ def get_purchase_order(purchaseorder_id):
             purchase_order = response.json().get("purchaseorder")
             return purchase_order
         else:
+            print(response.json())
             return None
     else:
+        print("no access token")
         return None
 
 
@@ -3694,8 +3698,10 @@ def get_client_invoice(invoice_id):
             client_invoice = response.json().get("invoice")
             return client_invoice
         else:
+            print(response.json())
             return None
     else:
+        print("no access token")
         return None
 
 
@@ -3709,8 +3715,10 @@ def get_bill(bill_id):
             bill = response.json().get("bill")
             return bill
         else:
+            print(response.json())
             return None
     else:
+        print("no access token")
         return None
 
 
@@ -3777,7 +3785,7 @@ def create_so_with_line_items(salesorder_id):
         except Exception as e:
             print(str(e))
             print(
-                "error assigning zoho custoemr to client invoice",
+                "error assigning zoho custoemr to so",
                 so_instance,
             )
     else:
@@ -3787,7 +3795,7 @@ def create_so_with_line_items(salesorder_id):
 
 def add_multiple_so(data):
     for so in data:
-        create_so_with_line_items(so["contact_id"])
+        create_so_with_line_items(so["salesorder_id"])
         sleep(1)
 
 
@@ -3816,7 +3824,7 @@ def create_po_with_line_items(purchase_order_id):
         except Exception as e:
             print(str(e))
             print(
-                "error assigning zoho vendor to bill",
+                "error assigning zoho vendor to po",
                 po_instance,
             )
     else:
@@ -3825,7 +3833,7 @@ def create_po_with_line_items(purchase_order_id):
 
 def add_multiple_po(data):
     for po in data:
-        create_po_with_line_items(po["contact_id"])
+        create_po_with_line_items(po["purchaseorder_id"])
         sleep(1)
 
 
@@ -3876,8 +3884,8 @@ def create_client_invoice_with_line_items(clientinvoice_id):
 
 def create_bill_with_line_items(bill_id):
     bill = get_bill(bill_id)
-    if "shipment_date" in bill and not bill["shipment_date"]:
-        bill["shipment_date"] = None
+    if "payment_expected_date" in bill and not bill["payment_expected_date"]:
+        bill["payment_expected_date"] = None
     # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
     serializer = BillSerializer(data=bill)
     if serializer.is_valid():
@@ -3897,7 +3905,7 @@ def create_bill_with_line_items(bill_id):
             except Exception as e:
                 print(str(e))
                 print(
-                    "error assigning zoho vendor to bill",
+                    "error assigning purchase order to bill",
                     bill_instance,
                 )
         # adding vendor to bill
