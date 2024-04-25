@@ -4626,7 +4626,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
             is_archive=False,
             project__hr__id=user_id,
         )
-        schedular_sessions = SchedularSessions.objects.all()
+        schedular_sessions = SchedularSessions.objects.filter(coaching_session__batch__project__hr__id=user_id)
     res = []
     for session_request in session_requests:
         project_name = session_request.project.name
