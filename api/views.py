@@ -143,6 +143,7 @@ from .models import (
     Task,
     Finance,
     Sales,
+    CoachProfileShare,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -10099,5 +10100,114 @@ def get_facilitator_summary_data(request, facilitator_id):
         print(str(e))
         return Response(
             {"detail": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+        
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sharable_emails(request):
+    try:
+        all_emails = set()
+        all_coach_profiles = CoachProfileShare.objects.all()
+        for profile in all_coach_profiles:
+            all_emails.update(profile.emails)
+
+        return Response({'emails': list(all_emails)})
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def coach_profile_sharable_email(request):
+    try:
+        emails = request.data.get('emails', [])
+        if not emails:
+            return Response({"message": "No emails provided."}, status=400)
+
+        masked_coach_profile = request.data.get('masked_coach_profile', False)
+        unique_id = request.data.get('unique_id', '')
+        coaches = request.data.get('coaches', [])
+
+        coach_profile_share = CoachProfileShare.objects.create(
+            masked_coach_profile=masked_coach_profile,
+            unique_id=unique_id,
+        )
+
+        for coach_id in coaches:
+            coach_profile_share.coaches.add(coach_id)
+
+        coach_profile_share.save()
+
+        for email in emails:
+            print("emails",email)
+            print("id",unique_id)
+            send_mail_templates(
+                "coach_profile_share.html",
+                [email],
+                "Meeraq Coaching | Shared Coach Profiles!",
+                {
+                    "profiles_id": unique_id,
+                },
+                [],
+            )
+        return Response({"message": "Coach Profile Shared successfully."})
+    
+    except Exception as e:
+        print(str(e))
+        return Response({"message": str(e)}, status=500) 
+    
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def coach_profile_share_email_validation(request):
+    try:
+        unique_id = request.data.get("unique_id")
+        email = request.data.get("email").strip().lower()
+
+        coach_profile_share = CoachProfileShare.objects.get(unique_id=unique_id)
+        
+        # Check if the email exists in the emails field
+        if email in coach_profile_share.emails:
+            # Email is verified
+            return Response(
+                {"message": "Email is verified."},
+                status=status.HTTP_200_OK,
+            )
+        else:
+            # Email is not verified
+            return Response(
+                {"error": "Email is not verified."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    except CoachProfileShare.DoesNotExist:
+        return Response(
+            {"error": "Coach Profile Share not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to validate email."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    
+    
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def get_coach_profile_sharing_form(request,unique_id):
+    try:
+        coach_profile_share=CoachProfileShare.objects.get(unique_id=unique_id)
+        return Response(
+            {
+                "coaches": coach_profile_share.coaches,
+                "masked_coach_profile": coach_profile_share.masked_coach_profile,
+            },
+            status=status.HTTP_200_OK,
+            )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get Coach Profiles."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
