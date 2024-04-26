@@ -949,6 +949,7 @@ def create_task(task_details, number_of_days):
     else:
         return None
 
+
 def add_new_pmo(data):
     try:
 
@@ -962,7 +963,9 @@ def add_new_pmo(data):
 
         # Check if required data is provided
         if not all([name, email, phone, username, password, room_id]):
-            return Response({"error": "All required fields must be provided."}, status=400)
+            return Response(
+                {"error": "All required fields must be provided."}, status=400
+            )
 
         with transaction.atomic():
             # Check if the user already exists
@@ -999,20 +1002,21 @@ def add_new_pmo(data):
 
             # Return success response without room_id
             return True
-    
+
     except Exception as e:
         print(str(e))
         return False
-        
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("superadmin")])
 def create_pmo(request):
     try:
-   
+
         data = request.data
         added = add_new_pmo(data=data)
 
-        if added :
+        if added:
             return Response({"message": "PMO added successfully."}, status=201)
         else:
             return Response({"error": "Failed to add pmo"}, status=500)
@@ -1058,7 +1062,6 @@ def edit_pmo(request):
         return Response({"error": "Failed to update pmo."}, status=500)
 
 
-
 @api_view(["PUT"])
 @permission_classes([AllowAny, IsInRoles("superadmin")])
 def edit_ctt_pmo(request, ctt_pmo_id):
@@ -1070,7 +1073,9 @@ def edit_ctt_pmo(request, ctt_pmo_id):
     try:
         with transaction.atomic():
             existing_user = (
-                User.objects.filter(username=email).exclude(username=ctt_pmo.user.user.username).first()
+                User.objects.filter(username=email)
+                .exclude(username=ctt_pmo.user.user.username)
+                .first()
             )
             if existing_user:
                 return Response(
@@ -1091,7 +1096,6 @@ def edit_ctt_pmo(request, ctt_pmo_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update CTT PMO."}, status=500)
-
 
 
 @api_view(["PUT"])
@@ -4514,6 +4518,7 @@ def get_learners_engagement(request, learner_id):
     serializer = EngagementDepthOneSerializer(engagements, many=True)
     return Response(serializer.data, status=200)
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_coaches_of_learner(request, learner_id):
@@ -4526,16 +4531,19 @@ def get_coaches_of_learner(request, learner_id):
             project_name = engagement.project.name
             profile_pic_url = None  # Default to None
             if engagement.coach.profile_pic:
-                coach_serializer =  CoachSerializer(engagement.coach)
-            data.append({
-                'coach': engagement.coach.id,
-                'project': engagement.project.id,
-                'coach_name': coach_name,
-                'project_name': project_name,
-                'profile_pic': coach_serializer.data['profile_pic']
-            })
+                coach_serializer = CoachSerializer(engagement.coach)
+            data.append(
+                {
+                    "coach": engagement.coach.id,
+                    "project": engagement.project.id,
+                    "coach_name": coach_name,
+                    "project_name": project_name,
+                    "profile_pic": coach_serializer.data["profile_pic"],
+                }
+            )
 
     return Response(data, status=200)
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("learner")])
@@ -4692,7 +4700,9 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
             is_archive=False,
             project__hr__id=user_id,
         )
-        schedular_sessions = SchedularSessions.objects.filter(coaching_session__batch__project__hr__id=user_id)
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
     res = []
     for session_request in session_requests:
         project_name = session_request.project.name
@@ -6041,17 +6051,30 @@ def get_current_session(request, user_type, room_id, user_id):
         nearest_session = caas_sessions.first()
     if seeq_sessions:
         if nearest_session:
-            if seeq_sessions.first().availibility.start_time < nearest_session.confirmed_availability.start_time:
+            if (
+                seeq_sessions.first().availibility.start_time
+                < nearest_session.confirmed_availability.start_time
+            ):
                 nearest_session = seeq_sessions.first()
         else:
             nearest_session = seeq_sessions.first()
-   
+
     if nearest_session:
         session_details = {
             "session_id": nearest_session.id,
-            "type": "CAAS" if isinstance(nearest_session, SessionRequestCaas) else "SEEQ",
-            "start_time": nearest_session.confirmed_availability.start_time if isinstance(nearest_session, SessionRequestCaas) else nearest_session.availibility.start_time,
-            "end_time": nearest_session.confirmed_availability.end_time if isinstance(nearest_session, SessionRequestCaas) else nearest_session.availibility.end_time,
+            "type": (
+                "CAAS" if isinstance(nearest_session, SessionRequestCaas) else "SEEQ"
+            ),
+            "start_time": (
+                nearest_session.confirmed_availability.start_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.start_time
+            ),
+            "end_time": (
+                nearest_session.confirmed_availability.end_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.end_time
+            ),
         }
         response_data = {
             "message": "success",
@@ -6060,9 +6083,6 @@ def get_current_session(request, user_type, room_id, user_id):
         return Response(response_data, status=200)
     else:
         return Response({"error": "You don't have any upcoming sessions."}, status=404)
-
-
-
 
 
 @api_view(["GET"])
@@ -6074,8 +6094,7 @@ def get_current_session_for_coach(request, user_type, user_id):
     caas_sessions = None
     seeq_sessions = None
     if user_type == "coach":
-        sessions = SessionRequestCaas.objects.filter(   
-
+        sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
@@ -6137,9 +6156,21 @@ def get_current_session_for_coach(request, user_type, user_id):
                 if isinstance(nearest_session, SessionRequestCaas)
                 else nearest_session.availibility.end_time
             ),
-            "project_name": nearest_session.project.name if isinstance(nearest_session, SessionRequestCaas) else nearest_session.coaching_session.batch.project.name,
-            "session_name":f"{nearest_session.session_type}" if isinstance(nearest_session, SessionRequestCaas) else nearest_session.coaching_session.session_type,
-            "room_id": nearest_session.coach.room_id if isinstance(nearest_session, SessionRequestCaas) else nearest_session.availibility.coach.room_id,
+            "project_name": (
+                nearest_session.project.name
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.coaching_session.batch.project.name
+            ),
+            "session_name": (
+                f"{nearest_session.session_type}"
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.coaching_session.session_type
+            ),
+            "room_id": (
+                nearest_session.coach.room_id
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.coach.room_id
+            ),
         }
         response_data = {
             "message": "success",
@@ -9286,7 +9317,7 @@ def add_ctt_pmo(request):
             ctt_pmo_serializer = CTTPmoSerializer(data=data)
             if ctt_pmo_serializer.is_valid():
                 name = data.get("name")
-                email = data.get("email","").strip().lower()
+                email = data.get("email", "").strip().lower()
                 phone = data.get("phone")
 
                 if not (name and phone and email):
@@ -9328,7 +9359,6 @@ def get_ctt_pmos(request):
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 
 PATH_ACTIVITY_MAPPING = {
@@ -10298,30 +10328,34 @@ def add_new_user(request):
         with transaction.atomic():
             data = request.data
             print(request.data)
-            name = data.get("name",None)
-            email = data.get("email","").strip().lower()
-            roles = data.get("role",None)
-            sub_role = data.get("sub_role","")
-            phone = data.get("phone","")
+            name = data.get("name", None)
+            email = data.get("email", "").strip().lower()
+            roles = data.get("role", None)
+            sub_role = data.get("sub_role", "")
+            phone = data.get("phone", "")
             password = str(uuid.uuid4())
-            if not email or name or roles:
-                return Response({"error": "Please fill all the required feilds."}, status=500)
 
-            if "pmo" in  roles:
-                
-                add_new_pmo({
-                   "name":name,
-                   "email":email,
-                   "phone":phone,
-                   "password":password ,
-                   "sub_role": sub_role,
-                })
+            if not email or not name or not roles:
+                return Response(
+                    {"error": "Please fill all the required feilds."}, status=500
+                )
+
+            if "pmo" in roles:
+
+                add_new_pmo(
+                    {
+                        "name": name,
+                        "email": email,
+                        "phone": phone,
+                        "password": password,
+                        "sub_role": sub_role,
+                    }
+                )
             # if "sales" in roles:
             #     add_new_sales_user({})
 
-            if "finance" in  roles:
+            if "finance" in roles:
 
-              
                 # Check if the user already exists
                 user = User.objects.filter(email=email).first()
 
@@ -10345,11 +10379,10 @@ def add_new_user(request):
                     user=profile,
                     name=name,
                     email=email,
-                    
                 )
 
-            if "sales" in  roles:
-              
+            if "sales" in roles:
+
                 # Check if the user already exists
                 user = User.objects.filter(email=email).first()
 
@@ -10373,13 +10406,13 @@ def add_new_user(request):
                     user=profile,
                     name=name,
                     email=email,
-                    
                 )
 
         return Response({"message": "User added sucessfully!"}, status=200)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to add user!"}, status=500)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -10512,13 +10545,17 @@ def get_all_po_of_project(request, project_id):
             {"error": f"Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-        
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner")])
 def get_all_to_be_booked_sessions_for_coachee(request, learner_id):
-    sessions = SessionRequestCaas.objects.filter(learner__id=learner_id).order_by("order")
+    sessions = SessionRequestCaas.objects.filter(learner__id=learner_id).order_by(
+        "order"
+    )
     serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])

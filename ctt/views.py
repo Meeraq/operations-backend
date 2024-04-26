@@ -27,6 +27,8 @@ from .models import (
     MentorCoachSessions,
 )
 
+from zohoapi.models import SalesOrder, ClientInvoice
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -347,6 +349,107 @@ def get_all_faculties(request):
         faculties = Faculties.objects.using("ctt").all()
         serializer = FacultiesSerializer(faculties, many=True)
         return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_finance(request):
+    try:
+        batch_users = BatchUsers.objects.using("ctt").all()
+        data = []
+        index = 1
+        for batch_user in batch_users:
+            salesorders = SalesOrder.objects.filter(
+                zoho_customer__email=batch_user.user.email,
+                custom_field_hash__cf_ctt_batch=batch_user.batch.name,
+            )
+
+            total = 0
+            invoiced_amount = 0
+            paid_amount = 0
+            currency_code = None
+            sales_persons = set()
+            all_invoices_paid = True
+
+            for sales_order in salesorders:
+                total += sales_order.total
+                currency_code = sales_order.currency_code
+                sales_persons.add(sales_order.salesperson_name)
+
+                for invoice in sales_order.invoices:
+                    invoiced_amount += invoice["total"]
+
+                    if invoice["status"] == "paid":
+                        paid_amount += invoice["total"]
+                    else:
+                        all_invoices_paid = False
+
+            pending_amount = invoiced_amount - paid_amount
+
+            payment_status = "Paid" if all_invoices_paid else "Not Paid"
+
+            temp = {
+                "index": index,
+                "participant_name": batch_user.user.first_name
+                + " "
+                + batch_user.user.last_name,
+                "participant_email": batch_user.user.email,
+                "participant_id": batch_user.user.id,
+                "participant_phone": batch_user.user.phone,
+                "batch_name": batch_user.batch.name,
+                "batch_id": batch_user.batch.id,
+                "program_name": batch_user.batch.program.name,
+                "payment_status": payment_status,
+                "program_start_date": batch_user.batch.start_date,
+                "salesperson_name": list(sales_persons),
+                "total": total,
+                "invoiced_amount": invoiced_amount,
+                "pending_amount": pending_amount,
+                "paid_amount": paid_amount,
+                "currency_code": currency_code,
+                "no_of_sales_orders": len(salesorders),
+            }
+            index += 1
+            data.append(temp)
+
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_client_invoice_of_participant_for_batch(request, participant_id, batch_id):
+    try:
+        batch_users = BatchUsers.objects.using("ctt").all()
+        data = []
+
+        for batch_user in batch_users:
+            salesorders = SalesOrder.objects.filter(
+                zoho_customer__email=batch_user.user.email,
+                custom_field_hash__cf_ctt_batch=batch_user.batch.name,
+            )
+            for sales_order in salesorders:
+                client_invoices = ClientInvoice.objects.filter(sales_order=sales_order)
+                for client_invoice in client_invoices:
+                    payment_status = (
+                        "Paid" if client_invoice.status == "paid" else "Not Paid"
+                    )
+
+                    temp = {
+                        "invoice_number": client_invoice.invoice_number,
+                        "so_number": sales_order.salesorder_number,
+                        "date": client_invoice.date_formatted,
+                        "payment_status": payment_status,
+                    }
+
+                    data.append(temp)
+
+        return Response(data)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
