@@ -28,4 +28,9 @@ urlpatterns = [
         views.participant_finances,
         name="participant-finances",
     ),
+     path(
+        "get-all-faculties/",
+        views.get_all_faculties,
+        name="get_all_faculties",
+    ),
 ]

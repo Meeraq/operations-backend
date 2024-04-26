@@ -12,7 +12,7 @@ from zohoapi.tasks import (
 from collections import defaultdict
 
 
-from .serializers import BatchSerializer
+from .serializers import BatchSerializer, FacultiesSerializer
 from .models import (
     Batches,
     BatchUsers,
@@ -280,3 +280,18 @@ def participant_finances(request):
                 }
     result = res.items()
     return Response(result)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_faculties(request):
+    try:
+        faculties = Faculties.objects.using("ctt").all()
+        serializer = FacultiesSerializer(faculties, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error":"Failed to get data"},status=500)
+
+
+
