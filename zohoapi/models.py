@@ -926,7 +926,9 @@ class ClientInvoiceLineItem(models.Model):
     internal_name = models.CharField(max_length=255, blank=True, null=True)
     description = models.TextField(blank=True, null=True)
     unit = models.CharField(max_length=255, blank=True, null=True)
-    quantity = models.IntegerField(blank=True, null=True)
+    quantity = models.DecimalField(
+        max_digits=15, decimal_places=2, blank=True, null=True
+    )
     discount_amount = models.DecimalField(
         max_digits=10, decimal_places=2, blank=True, null=True
     )
@@ -1365,15 +1367,21 @@ class PurchaseOrderLineItem(models.Model):
     header_name = models.CharField(max_length=100, null=True, blank=True)
     rate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     rate_formatted = models.CharField(max_length=20, null=True, blank=True)
-    quantity = models.IntegerField(null=True, blank=True)
+    quantity = models.DecimalField(
+        max_digits=15, decimal_places=2, blank=True, null=True
+    )
     discount = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
     )
     discounts = models.JSONField(
         default=list, null=True, blank=True
     )  # New field for discounts
-    quantity_cancelled = models.IntegerField(null=True, blank=True)
-    quantity_billed = models.IntegerField(null=True, blank=True)
+    quantity_cancelled = models.DecimalField(
+        max_digits=15, decimal_places=2, blank=True, null=True
+    )
+    quantity_billed = models.DecimalField(
+        max_digits=15, decimal_places=2, blank=True, null=True
+    )
     unit = models.CharField(max_length=50, null=True, blank=True)
     item_total = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
@@ -1408,7 +1416,7 @@ class PurchaseOrderLineItem(models.Model):
     purchase_request_items = models.JSONField(default=list, null=True, blank=True)
 
     def __str__(self):
-        return self.item_id  # or any other field you prefer
+        return self.line_item_id  # or any other field you prefer
 
 
 class PurchaseOrder(models.Model):
@@ -1470,7 +1478,7 @@ class PurchaseOrder(models.Model):
     currency_code = models.CharField(max_length=10, null=True, blank=True)
     currency_symbol = models.CharField(max_length=10, null=True, blank=True)
     exchange_rate = models.DecimalField(
-        max_digits=10, decimal_places=2, null=True, blank=True
+        max_digits=15, decimal_places=6, null=True, blank=True
     )
     delivery_date = models.CharField(max_length=100, null=True, blank=True)
     delivery_date_formatted = models.CharField(max_length=100, null=True, blank=True)
@@ -1598,7 +1606,9 @@ class BillLineItem(models.Model):
     header_id = models.CharField(max_length=100, null=True, blank=True)
     header_name = models.CharField(max_length=100, null=True, blank=True)
     tags = models.JSONField(default=list, null=True, blank=True)
-    quantity = models.IntegerField(null=True, blank=True)
+    quantity = models.DecimalField(
+        max_digits=15, decimal_places=2, blank=True, null=True
+    )
     discount = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
     )
@@ -1735,7 +1745,7 @@ class Bill(models.Model):
     subject_content = models.CharField(max_length=100, blank=True, null=True)
     price_precision = models.IntegerField(blank=True, null=True)
     exchange_rate = models.DecimalField(
-        max_digits=10, decimal_places=2, blank=True, null=True
+        max_digits=15, decimal_places=6, blank=True, null=True
     )
     custom_fields = models.JSONField(default=list, blank=True, null=True)
     custom_field_hash = models.JSONField(default=dict, blank=True, null=True)

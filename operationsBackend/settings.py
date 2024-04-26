@@ -346,6 +346,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_on_same_day_morning",
         "schedule": crontab(hour=2, minute=30),  # 8 AM
     },
+    "update_zoho_data": {
+        "task": "zohoapi.tasks.update_zoho_data",
+        "schedule": crontab(hour=0, minute=1),
+    },
 }
 
 
