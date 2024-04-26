@@ -81,7 +81,7 @@ def batch_details(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def participant_details(request):
-    batch_users = BatchUsers.objects.using("ctt").all()
+    batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
     data = []
     for batch_user in batch_users:
         try:
