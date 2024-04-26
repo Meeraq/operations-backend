@@ -79,7 +79,7 @@ def batch_details(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def participant_details(request):
-    batch_users = BatchUsers.objects.using("ctt").all()
+    batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
     data = []
     for batch_user in batch_users:
         try:
@@ -220,7 +220,7 @@ def sales_persons_finances(request):
         date_query = f"&date_start={start_date}&date_end={end_date}"
     # query_params = f"&salesorder_number_contains=CTT{date_query}"
     # sales_orders = fetch_sales_orders(organization_id, query_params)
-    sales_orders = SalesOrder.objects.filter(salesorder_number__startswith='CTT')
+    sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT")
     salesperson_totals = defaultdict(lambda: {"l1": 0, "l2": 0, "l3": 0, "actc": 0})
     for order in sales_orders:
         batch = order.custom_field_hash.get("cf_ctt_batch", "")
@@ -349,7 +349,4 @@ def get_all_faculties(request):
         return Response(serializer.data)
     except Exception as e:
         print(str(e))
-        return Response({"error":"Failed to get data"},status=500)
-
-
-
+        return Response({"error": "Failed to get data"}, status=500)
