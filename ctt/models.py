@@ -511,7 +511,6 @@ class MentorCoachSessions(models.Model):
 
     class Meta:
         managed = False
-
         db_table = "mentor_coach_sessions"
 
 

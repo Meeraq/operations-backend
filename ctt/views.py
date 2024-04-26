@@ -9,7 +9,9 @@ from zohoapi.tasks import (
     fetch_sales_orders,
     fetch_client_invoices,
 )
+from zohoapi.models import SalesOrder
 from collections import defaultdict
+from django.utils import timezone
 
 
 from .serializers import BatchSerializer, FacultiesSerializer
@@ -22,6 +24,7 @@ from .models import (
     BatchMentorCoach,
     UserAssignments,
     Assignments,
+    MentorCoachSessions,
 )
 
 
@@ -204,7 +207,6 @@ def sales_persons_finances(request):
     l3_batches = []
     actc_batches = []
     for batch in all_batches:
-        print(batch.name)
         if batch.program.certification_level.name == "Level 1":
             l1_batches.append(batch.name)
         elif batch.program.certification_level.name == "Level 2":
@@ -216,15 +218,15 @@ def sales_persons_finances(request):
     date_query = ""
     if start_date and end_date:
         date_query = f"&date_start={start_date}&date_end={end_date}"
-    query_params = f"&salesorder_number_contains=CTT{date_query}"
-    sales_orders = fetch_sales_orders(organization_id, query_params)
-    print(sales_orders)
+    # query_params = f"&salesorder_number_contains=CTT{date_query}"
+    # sales_orders = fetch_sales_orders(organization_id, query_params)
+    sales_orders = SalesOrder.objects.filter(salesorder_number__startswith='CTT')
     salesperson_totals = defaultdict(lambda: {"l1": 0, "l2": 0, "l3": 0, "actc": 0})
     for order in sales_orders:
-        batch = order.get("cf_ctt_batch", "")
+        batch = order.custom_field_hash.get("cf_ctt_batch", "")
         if not batch:
             continue
-        salesperson = order["salesperson_name"]
+        salesperson = order.salesperson_name
         # amount = order["total"]
         if batch in l1_batches:
             salesperson_totals[salesperson]["l1"] += 1
@@ -280,6 +282,62 @@ def participant_finances(request):
                 }
     result = res.items()
     return Response(result)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_faculties(request):
+    batch_faculties = BatchFaculty.objects.using("ctt").all()
+    res = []
+    for batch_faculty in batch_faculties:
+        obj = {
+            "id": batch_faculty.id,
+            "name": batch_faculty.faculty.first_name
+            + " "
+            + batch_faculty.faculty.last_name,
+            "email": batch_faculty.faculty.email,
+            "phone": batch_faculty.faculty.phone,
+            "batch": batch_faculty.batch.name,
+            "program": batch_faculty.batch.program.name,
+        }
+        # assignment completion status
+        participant_count = (
+            BatchUsers.objects.using("ctt").filter(batch=batch_faculty.batch).count()
+        )
+        total_assignments = (
+            Assignments.objects.using("ctt").filter(batch=batch_faculty.batch).count()
+        )
+        assignments_count = (
+            UserAssignments.objects.using("ctt")
+            .filter(assignment__batch=batch_faculty.batch)
+            .count()
+        )
+        obj["participant_count"] = participant_count
+        obj["assignments_count"] = assignments_count
+        obj["total_assignments"] = total_assignments
+        # mentor coaching status
+        mentor_coaching_sessions = (
+            MentorCoachSessions.objects.using("ctt")
+            .filter(batch=batch_faculty.batch)
+            .count()
+        )
+        obj["mentor_coaching_sessions"] = mentor_coaching_sessions
+        # session completion status
+        current_date = timezone.now().date()
+        total_sessions = Sessions.objects.using("ctt").filter(batch=batch_faculty.batch)
+        total_sessions_count = total_sessions.count()
+        completed_sessions_count = total_sessions.filter(date__lt=current_date).count()
+        obj["total_sessions_count"] = total_sessions_count
+        obj["completed_sessions_count"] = completed_sessions_count
+
+        # batch payment status
+        salesorders = SalesOrder.objects.filter(
+            invoiced_status="invoiced",
+            custom_field_hash__cf_ctt_batch=batch_faculty.batch.name,
+        ).count()
+        obj["salesorders"] = salesorders
+        res.append(obj)
+    return Response(res)
 
 
 @api_view(["GET"])

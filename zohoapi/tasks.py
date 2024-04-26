@@ -33,6 +33,7 @@ from django.utils import timezone
 import os
 import environ
 from datetime import datetime
+from time import sleep
 from django.template.loader import render_to_string
 from django.core.mail import send_mail, EmailMessage
 from operationsBackend import settings
