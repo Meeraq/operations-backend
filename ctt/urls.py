@@ -29,9 +29,19 @@ urlpatterns = [
         name="participant-finances",
     ),
     path("faculties/", views.get_faculties),
-     path(
+    path(
         "get-all-faculties/",
         views.get_all_faculties,
         name="get_all_faculties",
+    ),
+    path(
+        "get-all-finance/",
+        views.get_all_finance,
+        name="get_all_finance",
+    ),
+    path(
+        "get-all-client-invoice-of-participant-for-batch/<str:participant_id>/<int:batch_id>/",
+        views.get_all_client_invoice_of_participant_for_batch,
+        name="get_all_client_invoice_of_participant_for_batch",
     ),
 ]
