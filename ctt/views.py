@@ -222,7 +222,7 @@ def sales_persons_finances(request):
         date_query = f"&date_start={start_date}&date_end={end_date}"
     # query_params = f"&salesorder_number_contains=CTT{date_query}"
     # sales_orders = fetch_sales_orders(organization_id, query_params)
-    sales_orders = SalesOrder.objects.filter(salesorder_number__startswith='CTT')
+    sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT")
     salesperson_totals = defaultdict(lambda: {"l1": 0, "l2": 0, "l3": 0, "actc": 0})
     for order in sales_orders:
         batch = order.custom_field_hash.get("cf_ctt_batch", "")
@@ -372,7 +372,7 @@ def get_all_finance(request):
             paid_amount = 0
             currency_code = None
             sales_persons = set()
-            all_invoices_paid = True
+            all_invoices_paid = []
 
             for sales_order in salesorders:
                 total += sales_order.total
@@ -384,12 +384,18 @@ def get_all_finance(request):
 
                     if invoice["status"] == "paid":
                         paid_amount += invoice["total"]
+                        all_invoices_paid.append(True)
                     else:
-                        all_invoices_paid = False
+                        all_invoices_paid.append(False)
 
             pending_amount = invoiced_amount - paid_amount
 
-            payment_status = "Paid" if all_invoices_paid else "Not Paid"
+            if all(all_invoices_paid) and len(all_invoices_paid) > 0:
+                payment_status = "Paid"
+            elif any(all_invoices_paid) and len(all_invoices_paid) > 0:
+                payment_status = "Partially Paid"
+            else:
+                payment_status = "Not Paid"
 
             temp = {
                 "index": index,
