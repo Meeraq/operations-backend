@@ -1998,7 +1998,7 @@ class AddMultipleQuestions(APIView):
                     competency, created = Competency.objects.get_or_create(
                         name=question["compentency_name"].strip()
                     )
-
+                    competency.description = question["compentency_description"]
                     competency.behaviors.add(behavior)
                     competency.save()
 
