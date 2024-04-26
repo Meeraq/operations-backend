@@ -89,6 +89,11 @@ urlpatterns = [
         name="get_all_invoices",
     ),
     path(
+        "pmo/pending-invoices/",
+        views.get_pending_invoices_for_pmo,
+        name="get_pending_invoices_for_pmo",
+    ),
+    path(
         "sales/invoices/",
         views.get_invoices_for_sales,
         name="get_all_invoices",
@@ -167,6 +172,7 @@ urlpatterns = [
         name="delete_coaching_purchase_order",
     ),
     path("coach/finances/", views.get_coach_wise_finances),
+    path("facilitator/finances/", views.get_facilitator_wise_finances),
     path("project/finances/", views.get_project_wise_finances),
     path(
         "invoices-data/",
@@ -341,4 +347,15 @@ urlpatterns = [
         views.get_total_so_created_count,
         name="get_total_so_created_count",
     ),
+    path(
+        "get-handovers-count/<str:sales_person_id>/",
+        views.get_handovers_count,
+        name="get_handovers_count"
+    ),
+    path(
+        "sales-orders-with-due-invoices/<str:sales_person_id>/",
+        views.sales_orders_with_due_invoices,
+        name="sales_orders_with_due_invoices",
+    ),
+    path("line-items/", views.get_line_items, name="get_line_items"),
 ]

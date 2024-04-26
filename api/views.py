@@ -949,24 +949,21 @@ def create_task(task_details, number_of_days):
     else:
         return None
 
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
-def create_pmo(request):
-    # Get data from request
-    name = request.data.get("name")
-    email = request.data.get("email", "").strip().lower()
-    phone = request.data.get("phone")
-    username = email  # username and email are the same
-    password = request.data.get("password")
-    sub_role = request.data.get("sub_role")
-    room_id = generate_room_id(email)
-
-    # Check if required data is provided
-    if not all([name, email, phone, username, password, room_id]):
-        return Response({"error": "All required fields must be provided."}, status=400)
-
+def add_new_pmo(data):
     try:
+
+        name = data.get("name")
+        email = data.get("email", "").strip().lower()
+        phone = data.get("phone")
+        username = email  # username and email are the same
+        password = data.get("password")
+        sub_role = data.get("sub_role")
+        room_id = generate_room_id(email)
+
+        # Check if required data is provided
+        if not all([name, email, phone, username, password, room_id]):
+            return Response({"error": "All required fields must be provided."}, status=400)
+
         with transaction.atomic():
             # Check if the user already exists
             user = User.objects.filter(email=email).first()
@@ -997,17 +994,31 @@ def create_pmo(request):
             )
 
             name = pmo_user.name
-            add_contact_in_wati("pmo", name, pmo_user.phone)
+            if pmo_user.phone:
+                add_contact_in_wati("pmo", name, pmo_user.phone)
 
             # Return success response without room_id
-            return Response({"message": "PMO added successfully."}, status=201)
-
-    except IntegrityError as e:
-        return Response({"error": "User with this email already exists."}, status=400)
-
+            return True
+    
     except Exception as e:
-        # Return error response if any exception occurs
-        return Response({"error": str(e)}, status=500)
+        print(str(e))
+        return False
+        
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
+def create_pmo(request):
+    try:
+   
+        data = request.data
+        added = add_new_pmo(data=data)
+
+        if added :
+            return Response({"message": "PMO added successfully."}, status=201)
+        else:
+            return Response({"error": "Failed to add pmo"}, status=500)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to add pmo"}, status=500)
 
 
 @api_view(["PUT"])
@@ -1175,6 +1186,7 @@ def update_coach_profile(request, id):
     remove_education_upload_file = request.data.get(
         "remove_education_upload_file", False
     )
+
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
@@ -1477,7 +1489,9 @@ def create_project_cass(request):
             project.save()
             add_so_to_project("CAAS", project.id, handover.sales_order_ids)
         else:
-            raise Exception("No handover found")
+            sales_order_ids = request.data["sales_order_ids"]
+            if sales_order_ids:
+                add_so_to_project("CAAS", project.id, sales_order_ids)
 
     except IntegrityError as e:
         print(str(e))
@@ -4500,6 +4514,28 @@ def get_learners_engagement(request, learner_id):
     serializer = EngagementDepthOneSerializer(engagements, many=True)
     return Response(serializer.data, status=200)
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coaches_of_learner(request, learner_id):
+    engagements = Engagement.objects.filter(learner__id=learner_id)
+    data = []
+
+    for engagement in engagements:
+        if engagement.coach:
+            coach_name = f"{engagement.coach.first_name} {engagement.coach.last_name}"
+            project_name = engagement.project.name
+            profile_pic_url = None  # Default to None
+            if engagement.coach.profile_pic:
+                coach_serializer =  CoachSerializer(engagement.coach)
+            data.append({
+                'coach': engagement.coach.id,
+                'project': engagement.project.id,
+                'coach_name': coach_name,
+                'project_name': project_name,
+                'profile_pic': coach_serializer.data['profile_pic']
+            })
+
+    return Response(data, status=200)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("learner")])
@@ -4656,7 +4692,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
             is_archive=False,
             project__hr__id=user_id,
         )
-        schedular_sessions = SchedularSessions.objects.all()
+        schedular_sessions = SchedularSessions.objects.filter(coaching_session__batch__project__hr__id=user_id)
     res = []
     for session_request in session_requests:
         project_name = session_request.project.name
@@ -5950,10 +5986,10 @@ def get_current_session(request, user_type, room_id, user_id):
     five_minutes_in_milliseconds = 300000
     current_time = int(timezone.now().timestamp() * 1000)
     five_minutes_plus_current_time = current_time + five_minutes_in_milliseconds
-    sessions = None
-    session_modal = "CAAS"
+    caas_sessions = None
+    seeq_sessions = None
     if user_type == "coach":
-        sessions = SessionRequestCaas.objects.filter(
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
@@ -5962,17 +5998,15 @@ def get_current_session(request, user_type, room_id, user_id):
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-        if sessions.count() == 0:
-            coach = Coach.objects.get(id=user_id)
-            sessions = SchedularSessions.objects.filter(
-                availibility__end_time__gt=current_time,
-                availibility__coach__email=coach.email,
-                availibility__coach__room_id=room_id,
-            ).order_by("availibility__start_time")
-            session_modal = "SEEQ"
+        coach = Coach.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            availibility__coach__email=coach.email,
+            availibility__coach__room_id=room_id,
+        ).order_by("availibility__start_time")
 
     elif user_type == "learner":
-        sessions = SessionRequestCaas.objects.filter(
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(learner__id=user_id),
@@ -5981,62 +6015,54 @@ def get_current_session(request, user_type, room_id, user_id):
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-        if sessions.count() == 0:
-            learner = Learner.objects.get(id=user_id)
-            sessions = SchedularSessions.objects.filter(
-                availibility__end_time__gt=current_time,
-                learner__email=learner.email,
-                availibility__coach__room_id=room_id,
-            ).order_by("availibility__start_time")
-            session_modal = "SEEQ"
+        learner = Learner.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            learner__email=learner.email,
+            availibility__coach__room_id=room_id,
+        ).order_by("availibility__start_time")
 
-    elif user_type == "hr":
-        sessions = SessionRequestCaas.objects.filter(
+    elif user_type in ["hr", "pmo"]:
+
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
-            Q(hr__id=user_id),
+            Q(hr__id=user_id) if user_type == "hr" else Q(pmo__id=user_id),
             (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-    elif user_type == "pmo":
-        sessions = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__gt=current_time),
-            Q(pmo__id=user_id),
-            (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
-            Q(is_archive=False),
-            ~Q(status="completed"),
-        ).order_by("confirmed_availability__start_time")
-
-    if not sessions:
+    if not seeq_sessions and not caas_sessions:
         return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
-    # Get the upcoming next session and current session
-    upcoming_session = sessions.first()
-    if session_modal == "CAAS" and upcoming_session:
+    nearest_session = None
+    if caas_sessions:
+        nearest_session = caas_sessions.first()
+    if seeq_sessions:
+        if nearest_session:
+            if seeq_sessions.first().availibility.start_time < nearest_session.confirmed_availability.start_time:
+                nearest_session = seeq_sessions.first()
+        else:
+            nearest_session = seeq_sessions.first()
+   
+    if nearest_session:
         session_details = {
-            "session_id": upcoming_session.id,
-            "type": "CAAS",
-            "start_time": upcoming_session.confirmed_availability.start_time,
-            "end_time": upcoming_session.confirmed_availability.end_time,
+            "session_id": nearest_session.id,
+            "type": "CAAS" if isinstance(nearest_session, SessionRequestCaas) else "SEEQ",
+            "start_time": nearest_session.confirmed_availability.start_time if isinstance(nearest_session, SessionRequestCaas) else nearest_session.availibility.start_time,
+            "end_time": nearest_session.confirmed_availability.end_time if isinstance(nearest_session, SessionRequestCaas) else nearest_session.availibility.end_time,
         }
-    elif session_modal == "SEEQ" and upcoming_session:
-        session_details = {
-            "session_id": upcoming_session.id,
-            "type": "SEEQ",
-            "start_time": upcoming_session.availibility.start_time,
-            "end_time": upcoming_session.availibility.end_time,
+        response_data = {
+            "message": "success",
+            "upcoming_session": session_details,
         }
+        return Response(response_data, status=200)
+    else:
+        return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
-    # You can customize the response data based on your requirements
-    response_data = {
-        "message": "success",
-        "upcoming_session": session_details if upcoming_session else None,
-    }
 
-    return Response(response_data, status=200)
+
 
 
 @api_view(["GET"])
@@ -6045,10 +6071,27 @@ def get_current_session(request, user_type, room_id, user_id):
 )
 def get_current_session_for_coach(request, user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
-    sessions = None
-    session_modal = "CAAS"
+    caas_sessions = None
+    seeq_sessions = None
     if user_type == "coach":
-        sessions = SessionRequestCaas.objects.filter(
+        sessions = SessionRequestCaas.objects.filter(   
+
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__gt=current_time),
+            Q(coach__id=user_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        ).order_by("confirmed_availability__start_time")
+        coach = Coach.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            availibility__coach__email=coach.email,
+        ).order_by("availibility__start_time")
+    current_time = int(timezone.now().timestamp() * 1000)
+    caas_sessions = None
+    seeq_sessions = None
+    if user_type == "coach":
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
@@ -6056,46 +6099,55 @@ def get_current_session_for_coach(request, user_type, user_id):
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-        if sessions.count() == 0:
-            coach = Coach.objects.get(id=user_id)
-            sessions = SchedularSessions.objects.filter(
-                availibility__end_time__gt=current_time,
-                availibility__coach__email=coach.email,
-            ).order_by("availibility__start_time")
-
-    if not sessions:
+        coach = Coach.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            availibility__coach__email=coach.email,
+        ).order_by("availibility__start_time")
+    if not seeq_sessions and not caas_sessions:
         return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
-    # Get the upcoming next session and current session
-    upcoming_session = sessions.first()
-    if session_modal == "CAAS" and upcoming_session:
-        session_details = {
-            "session_id": upcoming_session.id,
-            "type": "CAAS",
-            "start_time": upcoming_session.confirmed_availability.start_time,
-            "end_time": upcoming_session.confirmed_availability.end_time,
-            "project_name": upcoming_session.project.name,
-            "room_id": upcoming_session.coach.room_id,
-            "session_name": f"{upcoming_session.session_type}",
-        }
-    elif session_modal == "SEEQ" and upcoming_session:
-        session_details = {
-            "session_id": upcoming_session.id,
-            "type": "SEEQ",
-            "start_time": upcoming_session.availibility.start_time,
-            "end_time": upcoming_session.availibility.end_time,
-            "project_name": upcoming_session.project.name,
-            "room_id": upcoming_session.coach.room_id,
-            "session_name": f"{upcoming_session.session_type}",
-        }
+    nearest_session = None
+    if caas_sessions:
+        nearest_session = caas_sessions.first()
+    if seeq_sessions:
+        print("seeq", seeq_sessions)
+        if nearest_session:
+            if (
+                seeq_sessions.first().availibility.start_time
+                < nearest_session.confirmed_availability.start_time
+            ):
+                nearest_session = seeq_sessions.first()
+        else:
+            nearest_session = seeq_sessions.first()
 
-    # You can customize the response data based on your requirements
-    response_data = {
-        "message": "success",
-        "upcoming_session": session_details if upcoming_session else None,
-    }
-
-    return Response(response_data, status=200)
+    if nearest_session:
+        session_details = {
+            "session_id": nearest_session.id,
+            "type": (
+                "CAAS" if isinstance(nearest_session, SessionRequestCaas) else "SEEQ"
+            ),
+            "start_time": (
+                nearest_session.confirmed_availability.start_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.start_time
+            ),
+            "end_time": (
+                nearest_session.confirmed_availability.end_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.end_time
+            ),
+            "project_name": nearest_session.project.name if isinstance(nearest_session, SessionRequestCaas) else nearest_session.coaching_session.batch.project.name,
+            "session_name":f"{nearest_session.session_type}" if isinstance(nearest_session, SessionRequestCaas) else nearest_session.coaching_session.session_type,
+            "room_id": nearest_session.coach.room_id if isinstance(nearest_session, SessionRequestCaas) else nearest_session.availibility.coach.room_id,
+        }
+        response_data = {
+            "message": "success",
+            "upcoming_session": session_details,
+        }
+        return Response(response_data, status=200)
+    else:
+        return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
 
 @api_view(["POST"])
@@ -10239,6 +10291,96 @@ def create_goal_without_enagagement(request):
         )
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_new_user(request):
+    try:
+        with transaction.atomic():
+            data = request.data
+            print(request.data)
+            name = data.get("name",None)
+            email = data.get("email","").strip().lower()
+            roles = data.get("role",None)
+            sub_role = data.get("sub_role","")
+            phone = data.get("phone","")
+            password = str(uuid.uuid4())
+            if not email or name or roles:
+                return Response({"error": "Please fill all the required feilds."}, status=500)
+
+            if "pmo" in  roles:
+                
+                add_new_pmo({
+                   "name":name,
+                   "email":email,
+                   "phone":phone,
+                   "password":password ,
+                   "sub_role": sub_role,
+                })
+            # if "sales" in roles:
+            #     add_new_sales_user({})
+
+            if "finance" in  roles:
+
+              
+                # Check if the user already exists
+                user = User.objects.filter(email=email).first()
+
+                if not user:
+                    # If the user does not exist, create a new user
+                    user = User.objects.create_user(
+                        username=email, password=password, email=email
+                    )
+                    profile = Profile.objects.create(user=user)
+
+                else:
+                    profile = Profile.objects.get(user=user)
+
+                # Create or get the "finance" role
+                finance_role, created = Role.objects.get_or_create(name="finance")
+                profile.roles.add(finance_role)
+                profile.save()
+
+                # Create the finance User using the Profile
+                finance_user = Finance.objects.create(
+                    user=profile,
+                    name=name,
+                    email=email,
+                    
+                )
+
+            if "sales" in  roles:
+              
+                # Check if the user already exists
+                user = User.objects.filter(email=email).first()
+
+                if not user:
+                    # If the user does not exist, create a new user
+                    user = User.objects.create_user(
+                        username=email, password=password, email=email
+                    )
+                    profile = Profile.objects.create(user=user)
+
+                else:
+                    profile = Profile.objects.get(user=user)
+
+                # Create or get the "sales" role
+                sales_role, created = Role.objects.get_or_create(name="sales")
+                profile.roles.add(sales_role)
+                profile.save()
+
+                # Create the sales User using the Profile
+                sales_user = Sales.objects.create(
+                    user=profile,
+                    name=name,
+                    email=email,
+                    
+                )
+
+        return Response({"message": "User added sucessfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to add user!"}, status=500)
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_competency_of_goal(request, goal_id):
@@ -10370,3 +10512,17 @@ def get_all_po_of_project(request, project_id):
             {"error": f"Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+        
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner")])
+def get_all_to_be_booked_sessions_for_coachee(request, learner_id):
+    sessions = SessionRequestCaas.objects.filter(learner__id=learner_id).order_by("order")
+    serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
+    return Response(serializer.data, status=200)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_engagement_of_a_coachee(request, learner_id):
+    engagement = Engagement.objects.get(learner__id=learner_id)
+    serializer = EngagementDepthOneSerializer(engagement)
+    return Response(serializer.data, status=200)

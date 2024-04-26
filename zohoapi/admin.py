@@ -16,6 +16,7 @@ from .models import (
     ClientInvoiceLineItem,
     Bill,
     BillLineItem,
+    LineItems,
 )
 
 # Register your models here.
@@ -25,6 +26,7 @@ admin.site.register(AccessToken)
 admin.site.register(PoReminder)
 admin.site.register(InvoiceStatusUpdate)
 admin.site.register(OrdersAndProjectMapping)
+admin.site.register(LineItems)
 admin.site.register(ZohoCustomer)
 admin.site.register(ZohoVendor)
 admin.site.register(SalesOrder)

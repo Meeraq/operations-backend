@@ -21,7 +21,7 @@ from api.models import (
     Project,
     Engagement,
 )
-
+from schedularApi.models import HandoverDetails
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 import json
@@ -80,6 +80,7 @@ from .models import (
     Vendor,
     InvoiceStatusUpdate,
     OrdersAndProjectMapping,
+    LineItems,
     ZohoCustomer,
     ZohoVendor,
     PurchaseOrder,
@@ -93,6 +94,7 @@ import environ
 import os
 import os
 from django.http import HttpResponse
+from django.http import JsonResponse
 import io
 import pdfkit
 from django.middleware.csrf import get_token
@@ -1300,6 +1302,26 @@ def get_invoices_for_pmo(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
+def get_pending_invoices_for_pmo(request):
+    try:
+        all_invoices = fetch_invoices(organization_id)
+        pmos_allowed = json.loads(env("PMOS_ALLOWED_TO_VIEW_ALL_INVOICES_AND_POS"))
+        if not request.user.username in pmos_allowed:
+            all_invoices = [
+                invoice
+                for invoice in all_invoices
+                if invoice["approver_email"].strip().lower() == request.user.username
+                and invoice["status"] == "pending"
+                and invoice["bill"] is None
+            ]
+        return Response(all_invoices, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_invoices_for_sales(request):
     try:
         all_invoices = fetch_invoices(organization_id)
@@ -2144,6 +2166,104 @@ def get_coach_wise_finances(request):
         return Response(status=403)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
+def get_facilitator_wise_finances(request):
+    try:
+        # Fetch all invoices and purchase orders
+        coach_id = request.query_params.get("coach_id")
+        facilitator_id = request.query_params.get("facilitator_id")
+        all_invoices = fetch_invoices(organization_id)
+        all_purchase_orders = fetch_purchase_orders(organization_id)
+        # Filter vendors who are coaches
+        vendors = []
+        if coach_id or facilitator_id:
+            vendor_user = None
+            if coach_id:
+                vendor_user = Coach.objects.get(id=int(coach_id))
+            else:
+                vendor_user = Facilitator.objects.get(id=int(facilitator_id))
+            vendors = Vendor.objects.filter(email=vendor_user.email.strip().lower())
+        else:
+            vendors = Vendor.objects.filter(user__roles__name="facilitator")
+        # Calculate purchase order amounts
+        vendor_po_amounts = {}
+        for po in all_purchase_orders:
+            if po["status"] not in ["draft", "cancelled"]:
+                vendor_id = po["vendor_id"]
+                total_amount = Decimal(po["total"])
+                if vendor_id in vendor_po_amounts:
+                    vendor_po_amounts[vendor_id] += total_amount
+                else:
+                    vendor_po_amounts[vendor_id] = total_amount
+
+        # Calculate invoice amounts and paid amounts
+        vendor_invoice_amounts = {}
+        for invoice in all_invoices:
+            vendor_id = invoice["vendor_id"]
+            invoiced_amount = Decimal(invoice["total"])
+            paid_amount = (
+                Decimal(invoice["total"])
+                if invoice["bill"] and invoice["bill"]["status"] == "paid"
+                else Decimal(0)
+            )
+
+            if vendor_id in vendor_invoice_amounts:
+                vendor_invoice_amounts[vendor_id]["invoiced_amount"] += invoiced_amount
+                vendor_invoice_amounts[vendor_id]["paid_amount"] += paid_amount
+                vendor_invoice_amounts[vendor_id]["currency_symbol"] = (
+                    invoice["currency_symbol"]
+                    if not vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                    else vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                )
+            else:
+                vendor_invoice_amounts[vendor_id] = {
+                    "invoiced_amount": 00,
+                    "paid_amount": paid_amount,
+                    "currency_symbol": invoice["currency_symbol"],
+                    "currency_code": invoice.get("currency_code", ""),
+                }
+
+        # Prepare response
+        res = []
+        for vendor in vendors:
+            vendor_id = vendor.vendor_id
+            res.append(
+                {
+                    "id": vendor.id,
+                    "vendor_id": vendor_id,
+                    "vendor_name": vendor.name,
+                    "po_amount": vendor_po_amounts.get(vendor_id, Decimal(0)),
+                    "invoiced_amount": vendor_invoice_amounts.get(
+                        vendor_id, {"invoiced_amount": Decimal(0)}
+                    )["invoiced_amount"],
+                    "paid_amount": vendor_invoice_amounts.get(
+                        vendor_id, {"paid_amount": Decimal(0)}
+                    )["paid_amount"],
+                    "currency_symbol": (
+                        vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                        if vendor_id in vendor_invoice_amounts
+                        else None
+                    ),
+                    "currency_code": (
+                        vendor_invoice_amounts[vendor_id]["currency_code"]
+                        if vendor_id in vendor_invoice_amounts
+                        else None
+                    ),
+                    "pending_amount": vendor_invoice_amounts.get(
+                        vendor_id, {"invoiced_amount": Decimal(0)}
+                    )["invoiced_amount"]
+                    - vendor_invoice_amounts.get(
+                        vendor_id, {"paid_amount": Decimal(0)}
+                    )["paid_amount"],
+                }
+            )
+        return Response(res)
+    except Exception as e:
+        print(str(e))
+        return Response(status=403)
+
+
 def create_purchase_order_project_mapping():
     coach_pricings = CoachPricing.objects.all()
     facilitator_pricings = FacilitatorPricing.objects.all()
@@ -2774,8 +2894,63 @@ def create_sales_order(request):
                     salesorder_created["salesorder_id"],
                 ]
                 mapping.save()
-
+            so_number = salesorder_created["salesorder_number"]
+            customer_name = salesorder_created["customer_name"]
+            salesperson_name = salesorder_created["salesperson_name"]
+            if so_number.startswith("CTT"):
+                ctt = True
+            else:
+                ctt = False
+            send_mail_templates(
+                "so_emails/sales_order_mail.html",
+                (
+                    ["finance@coachtotransformation.com"]
+                    if ctt
+                    else [
+                        "finance@coachtotransformation.com",
+                        "madhuri@coachtotransformation.com",
+                        "nisha@coachtotransformation.com",
+                        "pmotraining@meeraq.com",
+                        "pmocoaching@meeraq.com",
+                    ]
+                ),
+                ["New Sales Order Created"],
+                {
+                    "so_number": so_number,
+                    "customer_name": customer_name,
+                    "salesperson": salesperson_name,
+                    "project_type": project_type,
+                },
+                (
+                    [
+                        "rajat@coachtotransformation.com",
+                        "Sujata@coachtotransformation.com",
+                        "arvind@coachtotransformation.com",
+                    ]
+                    if ctt
+                    else [
+                        "rajat@coachtotransformation.com",
+                        "Sujata@coachtotransformation.com",
+                    ]
+                ),
+            )
             if status == "open":
+                line_items = salesorder_created["line_items"]
+                for line_item in line_items:
+                    custom_fields = line_item.get("item_custom_fields", [])
+                    due_date = None
+                    for field in custom_fields:
+                        if field.get("api_name") == "cf_due_date":
+                            due_date = field.get("value")
+                            break
+                    LineItems.objects.create(
+                        sales_order_id=salesorder_created["salesorder_id"],
+                        sales_order_number=salesorder_created["salesorder_number"],
+                        due_date=due_date,
+                        line_item_id=line_item["line_item_id"],
+                        client_name=salesorder_created["customer_name"],
+                        line_item_description=line_item["description"],
+                    )
                 # mark sales order as open and return message  "SO has been created successfully and  Saved as Open"
                 if update_sales_order_status_to_open(
                     salesorder_created["salesorder_id"], "open"
@@ -3651,6 +3826,81 @@ def get_total_so_created_count(request, sales_person_id):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_handovers_count(request, sales_person_id):
+    try:
+        handovers_count = HandoverDetails.objects.filter(
+            sales__id=sales_person_id
+        ).count()
+        return Response({"handovers_count": handovers_count}, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get handover count."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sales_orders_with_due_invoices(request, sales_person_id):
+    try:
+        all_sales_orders = fetch_sales_orders(
+            organization_id, f"&salesperson_id={sales_person_id}"
+        )
+        res = get_sales_orders_with_project_details(all_sales_orders)
+        count = len(res)
+        return Response(count, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_line_items(request):
+    line_items = LineItems.objects.all()
+    order_mappings = OrdersAndProjectMapping.objects.all()
+    sales_order_ids = [mapping.sales_order_ids for mapping in order_mappings]
+    line_item_data = []
+
+    for item in line_items:
+        line_item = {
+            "sales_order_id": item.sales_order_id,
+            "sales_order_number": item.sales_order_number,
+            "line_item_id": item.line_item_id,
+            "client_name": item.client_name,
+            "line_item_description": item.line_item_description,
+            "due_date": item.due_date.strftime("%Y-%m-%d") if item.due_date else None,
+            "created_at": item.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        associated_mapping = order_mappings.filter(
+            sales_order_ids__contains=item.sales_order_id
+        ).first()
+        if associated_mapping:
+            # Determine project_type based on whether the project is taken from project or schedular_project
+            if associated_mapping.project is not None:
+                line_item["project_type"] = "Coaching"
+                line_item["project_name"] = (
+                    associated_mapping.project.name
+                    if associated_mapping.project
+                    else None
+                )
+            elif associated_mapping.schedular_project is not None:
+                line_item["project_type"] = "Skill Training"
+                line_item["project_name"] = (
+                    associated_mapping.schedular_project.name
+                    if associated_mapping.schedular_project
+                    else None
+                )
+            else:
+                line_item["project_type"] = None
+                line_item["project_name"] = None
+        line_item_data.append(line_item)
+    return JsonResponse(line_item_data, safe=False)
+
+
 def get_sales_order(salesorder_id):
     access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if access_token_sales_order:
@@ -3792,12 +4042,10 @@ def create_so_with_line_items(salesorder_id):
         print(salesorder["salesorder_number"], serializer.errors)
 
 
-
 def add_multiple_so(data):
     for so in data:
         create_so_with_line_items(so["salesorder_id"])
         sleep(1)
-
 
 
 def create_po_with_line_items(purchase_order_id):

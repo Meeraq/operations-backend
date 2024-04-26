@@ -110,9 +110,25 @@ purchase_orders_allowed = [
     "CTT/PO/22-23/065",
     "CTT/PO/22-23/066",
     "CTT/PO/22-23/067",
+    "CTT/PO/23-24/003",
     "Meeraq/PO/CaaS/23-24/0066",
     "Meeraq/PO/CaaS/23-24/0094",
     "Meeraq/PO/22-23/0045",
+    "Meeraq/PO/CaaS/23-24/0101",
+    "Meeraq/PO/CaaS/23-24/0060",
+    "Meeraq/PO/CaaS/23-24/0004",
+    "Meeraq/PO/CaaS/23-24/0102",
+    "Meeraq/PO/22-23/0045",
+    "Meeraq/PO/22-23/0002",
+    "Meeraq/PO/22-23/0014",
+    "Meeraq/PO/22-23/0017",
+    "Meeraq/PO/22-23/0021",
+    "Meeraq/PO/22-23/0034",
+    "Meeraq/PO/22-23/0036",
+    "Meeraq/PO/Caas/23-24/0021",
+    "Meeraq/PO/23-24/T/0014",
+    "Meeraq/PO/23-24/T/0018",
+    "Meeraq/PO/CaaS/23-24/0079",
 ]
 
 
@@ -178,7 +194,7 @@ def filter_purchase_order_data(purchase_orders):
         return None
 
 
-def fetch_purchase_orders(organization_id):
+def fetch_purchase_orders(organization_id, query_params=""):
     access_token_purchase_data = get_access_token(env("ZOHO_REFRESH_TOKEN"))
     if not access_token_purchase_data:
         raise Exception(
@@ -191,7 +207,7 @@ def fetch_purchase_orders(organization_id):
 
     while has_more_page:
         api_url = (
-            f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}"
+            f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}{query_params}"
         )
         auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
         response = requests.get(api_url, headers=auth_header)

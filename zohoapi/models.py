@@ -9,6 +9,7 @@ from schedularApi.models import SchedularProject
 
 class Vendor(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
     name = models.CharField(max_length=155)
     phone = models.CharField(max_length=25)
     email = models.EmailField()
@@ -128,6 +129,17 @@ class OrdersAndProjectMapping(models.Model):
 
     purchase_order_ids = models.JSONField(default=list, blank=True)
     sales_order_ids = models.JSONField(default=list, blank=True)
+
+
+class LineItems(models.Model):
+    sales_order_id = models.CharField(max_length=200, default=None)
+    sales_order_number = models.CharField(max_length=200, default=None)
+    line_item_id = models.CharField(max_length=200, default=None)
+    client_name = models.CharField(max_length=200, default=None, blank=True)
+    line_item_description = models.TextField(default=None, blank=True)
+    due_date = models.DateField(blank=True, default=None)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class ZohoCustomer(models.Model):
@@ -991,7 +1003,9 @@ class ClientInvoice(models.Model):
     sales_order = models.ForeignKey(
         SalesOrder, on_delete=models.SET_NULL, blank=True, null=True, default=None
     )
-    client_invoice_line_items = models.ManyToManyField(ClientInvoiceLineItem, blank=True)
+    client_invoice_line_items = models.ManyToManyField(
+        ClientInvoiceLineItem, blank=True
+    )
     invoice_id = models.CharField(max_length=100, null=True, blank=True)
     invoice_number = models.CharField(max_length=100, null=True, blank=True)
     date = models.DateField(null=True, blank=True)
@@ -1512,7 +1526,7 @@ class PurchaseOrder(models.Model):
     total_formatted = models.CharField(max_length=20, null=True, blank=True)
     taxes = models.JSONField(default=list, null=True, blank=True)
     tax_override = models.BooleanField(default=False)
-    tds_override_preference = models.CharField(max_length=100,null=True, blank=True)
+    tds_override_preference = models.CharField(max_length=100, null=True, blank=True)
     tds_summary = models.JSONField(default=list, null=True, blank=True)
     price_precision = models.IntegerField(null=True, blank=True)
     submitted_date = models.CharField(max_length=100, null=True, blank=True)
@@ -1640,9 +1654,7 @@ class Bill(models.Model):
     zoho_vendor = models.ForeignKey(
         ZohoVendor, on_delete=models.SET_NULL, blank=True, null=True, default=None
     )
-    purchase_orders = models.ManyToManyField(
-        PurchaseOrder, blank=True
-    )
+    purchase_orders = models.ManyToManyField(PurchaseOrder, blank=True)
     bill_line_items = models.ManyToManyField(BillLineItem, blank=True)
     bill_id = models.CharField(max_length=100, blank=True, null=True)
     branch_id = models.CharField(max_length=100, blank=True, null=True)

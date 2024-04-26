@@ -125,12 +125,16 @@ urlpatterns = [
     path("session/reschedule-request/<str:session_id>/", views.request_reschedule),
     path("session/reschedule/", views.reschedule_session),
     path("projects/engagement/all/<int:project_id>/", views.get_engagement_in_projects),
-    path("hr/engagement/all/<int:user_id>/", views.get_engagements_of_hr),
+    path("hr/engagement/all/<int:user_id>/", views.get_engagements_of_hr),  
     path(
         "engagement/<int:project_id>/<int:learner_id>/",
         views.get_learner_engagement_of_project,
     ),
     path("engagement/learner/<int:learner_id>/", views.get_learners_engagement),
+    path(
+        "coaches-of-learner/<int:learner_id>/",
+        views.get_coaches_of_learner,
+    ),
     path("sessions/create/<int:learner_id>/", views.create_session_request_by_learner),
     path(
         "sessions/requested/<str:user_type>/<int:user_id>/",
@@ -424,6 +428,7 @@ urlpatterns = [
     path("archive-project/", views.archive_project),
     path("change-user-password/", views.change_user_password),
     path("all-users/", views.get_all_users),
+    path("add-new-user/", views.add_new_user),
     path("add/sales-user/", views.add_sales_user),
     path("get-sales-user/", views.get_sales_user),
     path("get-coach-summary-data/<int:coach_id>/", views.get_coach_summary_data),
@@ -459,12 +464,20 @@ urlpatterns = [
         "edit-pmo-goal/",
         views.edit_pmo_goal,
     ),
-     path(
+    path(
         "get-all-competency/",
         views.get_all_competency,
     ),
-     path(
+    path(
         "get-all-po-of-project/<int:project_id>/",
         views.get_all_po_of_project,
+    ),
+    path(
+        "get-all-to-be-booked-sessions-for-coachee/<int:learner_id>/",
+        views.get_all_to_be_booked_sessions_for_coachee,
+    ),
+    path(
+        "get-engagement-of-a-coachee/<int:learner_id>/",
+        views.get_engagement_of_a_coachee,
     ),
 ]
