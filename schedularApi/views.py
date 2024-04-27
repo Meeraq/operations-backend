@@ -6317,6 +6317,7 @@ def send_mail_to_coaches(request):
             )
             email.content_subtype = "html"
             email.send()
+            sleep(5)
             print("Email sent to:", mail)
         return Response({"message": "Mails Send Successfully!"}, status=200)
     except Exception as e:
