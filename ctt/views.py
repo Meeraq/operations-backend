@@ -43,7 +43,7 @@ def get_batches(request):
 def batch_details(request):
     batches = Batches.objects.using("ctt").all()
     data = []
-
+    index = 1
     for batch in batches:
         total_participants = BatchUsers.objects.using("ctt").filter(batch=batch).count()
         no_of_sessions = Sessions.objects.using("ctt").filter(batch=batch).count()
@@ -65,6 +65,7 @@ def batch_details(request):
         ]
 
         batch_data = {
+            "index": index,
             "batch_name": batch.name,
             "program_name": batch.program.name,
             "start_date": batch.start_date,
@@ -73,6 +74,7 @@ def batch_details(request):
             "faculty": faculty_names,
             "mentor_coaches": mentor_coach_names,
         }
+        index = index + 1
         data.append(batch_data)
 
     return Response(data)
@@ -83,6 +85,7 @@ def batch_details(request):
 def participant_details(request):
     batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
     data = []
+    index = 1
     for batch_user in batch_users:
         try:
             batch_name = batch_user.batch.name
@@ -101,7 +104,9 @@ def participant_details(request):
                 "released" if batch_user.certificate else "not released"
             )
             organization_name = batch_user.user.current_organisation_name
+
             user_data = {
+                "index": index,
                 "name": batch_user.user.first_name + " " + batch_user.user.last_name,
                 "email": batch_user.user.email,
                 "phone_number": batch_user.user.phone,
@@ -112,6 +117,7 @@ def participant_details(request):
                 "certificate_status": certificate_status,
                 "organisation": organization_name,
             }
+            index += 1
             data.append(user_data)
         except Exception as e:
             print(str(e))
@@ -241,8 +247,10 @@ def sales_persons_finances(request):
 
     res_dict = dict(salesperson_totals)
     res_list = [
-        {"salesperson": salesperson, **totals}
-        for salesperson, totals in salesperson_totals.items()
+        {"index": index, "salesperson": salesperson, **totals}
+        for index, (salesperson, totals) in enumerate(
+            salesperson_totals.items(), start=1
+        )
     ]
     return Response(res_list)
 
@@ -291,8 +299,10 @@ def participant_finances(request):
 def get_faculties(request):
     batch_faculties = BatchFaculty.objects.using("ctt").all()
     res = []
+    index = 1
     for batch_faculty in batch_faculties:
         obj = {
+            "index": index,
             "id": batch_faculty.id,
             "name": batch_faculty.faculty.first_name
             + " "
@@ -302,6 +312,7 @@ def get_faculties(request):
             "batch": batch_faculty.batch.name,
             "program": batch_faculty.batch.program.name,
         }
+        index += 1
         # assignment completion status
         participant_count = (
             BatchUsers.objects.using("ctt").filter(batch=batch_faculty.batch).count()
