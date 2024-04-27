@@ -343,16 +343,25 @@ def create_project_schedular(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 @transaction.atomic
 def create_handover(request):
-    serializer = HandoverDetailsSerializer(data=request.data)
+    handover_details = json.loads(request.data.get('payload'))
+    serializer = HandoverDetailsSerializer(data=handover_details)
     if serializer.is_valid():
-        organisation_name = request.data.get("organisation_name")
+        organisation_name = handover_details.get("organisation_name")
         # create or get organisation
         organisation, created = Organisation.objects.get_or_create(
             name=organisation_name
         )
+        # for saving gm_sheets and proposals
         handover_instance = serializer.save()
         handover_instance.organisation = organisation
         handover_instance.save()
+        
+        serializer = HandoverDetailsSerializer(handover_instance,data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+        else:
+            print(serializer.errors)
+            
         res_serializer = HandoverDetailsSerializer(handover_instance)
         return Response(
             {
