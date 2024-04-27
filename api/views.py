@@ -143,6 +143,7 @@ from .models import (
     Task,
     Finance,
     Sales,
+    TableHiddenColumn,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -183,7 +184,7 @@ from schedularApi.serializers import (
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-from zohoapi.models import Vendor, InvoiceData,OrdersAndProjectMapping
+from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping
 from courses.models import CourseEnrollment, CoachingSessionsFeedbackResponse, Answer
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
@@ -218,7 +219,6 @@ def get_current_date_timestamps():
     return start_timestamp, end_timestamp
 
 
-
 def calculate_nps(ratings):
     promoters = sum(rating >= 9 for rating in ratings)
     detractors = sum(rating <= 6 for rating in ratings)
@@ -231,7 +231,6 @@ def calculate_nps_from_answers(answers):
     if ratings:
         return calculate_nps(ratings)
     return None
-
 
 
 def add_contact_in_wati(user_type, name, phone):
@@ -779,6 +778,7 @@ def get_trimmed_emails(emails):
         res.append(email.strip().lower())
     return res
 
+
 def add_so_to_project(project_type, project_id, sales_order_ids):
     if project_type == "CAAS":
         orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
@@ -878,7 +878,6 @@ SESSIONS_WITH_STAKEHOLDERS = [
     "stakeholder_without_coach",
     "stakeholder_interview",
 ]
-
 
 
 def get_booked_session_of_user_confirmed_avalibility(user_type, user_id, date):
@@ -1148,14 +1147,16 @@ def update_coach_profile(request, id):
             new_email
             and User.objects.filter(username=new_email).exclude(id=user.id).exists()
         ):
-            existing_user_with_same_email = User.objects.filter(username=new_email).exclude(id=user.id).first()
+            existing_user_with_same_email = (
+                User.objects.filter(username=new_email).exclude(id=user.id).first()
+            )
             current_user_profile = user.profile
             existing_profile_with_same_email = existing_user_with_same_email.profile
             # coach exists with the new email
             if existing_profile_with_same_email.roles.filter(name="coach").exists():
                 return Response(
-                {"error": "Coach with the same email already exists."},
-                status=400,
+                    {"error": "Coach with the same email already exists."},
+                    status=400,
                 )
             # another user exists with the new email
             else:
@@ -1168,7 +1169,7 @@ def update_coach_profile(request, id):
                 existing_profile_with_same_email.save()
 
         # no other user exists with the new email
-        else :
+        else:
             user.email = new_email
             user.username = new_email
             user.save()
@@ -1780,6 +1781,9 @@ def add_coach(request):
     education_pic = request.data.get("education_pic", None)
     educational_qualification = json.loads(request.data["educational_qualification"])
     education_upload_file = request.data.get("education_upload_file", None)
+    is_coach = request.data.get("is_coach", False)
+    is_mentor = request.data.get("is_mentor", False)
+    is_consultant = request.data.get("is_consultant", False)
 
     # Check if required data is provided
     if not all(
@@ -1869,6 +1873,9 @@ def add_coach(request):
                 education_pic=education_pic,
                 educational_qualification=educational_qualification,
                 education_upload_file=education_upload_file,
+                is_coach=is_coach,
+                is_mentor = is_mentor,
+                is_consultant = is_consultant,
             )
 
             # Approve coach
@@ -4604,7 +4611,9 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
             is_archive=False,
             project__hr__id=user_id,
         )
-        schedular_sessions = SchedularSessions.objects.filter(coaching_session__batch__project__hr__id=user_id)
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
     res = []
     for session_request in session_requests:
         project_name = session_request.project.name
@@ -5280,18 +5289,20 @@ def get_learner_of_user_optimized(request, user_type, user_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
-    
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "hr")])
 def get_coachee_of_coach(request):
     try:
-        engagements = Engagement.objects.filter(coach__user__user__id=request.user.id).distinct()
+        engagements = Engagement.objects.filter(
+            coach__user__user__id=request.user.id
+        ).distinct()
         serializer = EngagementDepthOneSerializer(engagements, many=True)
         return Response(serializer.data)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
-
 
 
 @api_view(["GET"])
@@ -5978,6 +5989,7 @@ def get_current_session(request, user_type, room_id, user_id):
 
     return Response(response_data, status=200)
 
+
 @api_view(["GET"])
 @permission_classes(
     [IsAuthenticated, IsInRoles("coach", "learner", "pmo", "hr", "facilitator")]
@@ -5987,7 +5999,7 @@ def get_current_session_for_coach(request, user_type, user_id):
     sessions = None
     session_modal = "CAAS"
     if user_type == "coach":
-        sessions = SessionRequestCaas.objects.filter(   
+        sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
@@ -5999,7 +6011,7 @@ def get_current_session_for_coach(request, user_type, user_id):
             coach = Coach.objects.get(id=user_id)
             sessions = SchedularSessions.objects.filter(
                 availibility__end_time__gt=current_time,
-                availibility__coach__email=coach.email
+                availibility__coach__email=coach.email,
             ).order_by("availibility__start_time")
 
     if not sessions:
@@ -6014,8 +6026,8 @@ def get_current_session_for_coach(request, user_type, user_id):
             "start_time": upcoming_session.confirmed_availability.start_time,
             "end_time": upcoming_session.confirmed_availability.end_time,
             "project_name": upcoming_session.project.name,
-            "room_id":upcoming_session.coach.room_id,
-            "session_name":f"{upcoming_session.session_type}",
+            "room_id": upcoming_session.coach.room_id,
+            "session_name": f"{upcoming_session.session_type}",
         }
     elif session_modal == "SEEQ" and upcoming_session:
         session_details = {
@@ -6024,8 +6036,8 @@ def get_current_session_for_coach(request, user_type, user_id):
             "start_time": upcoming_session.availibility.start_time,
             "end_time": upcoming_session.availibility.end_time,
             "project_name": upcoming_session.project.name,
-            "room_id":upcoming_session.coach.room_id,
-            "session_name":f"{upcoming_session.session_type}",
+            "room_id": upcoming_session.coach.room_id,
+            "session_name": f"{upcoming_session.session_type}",
         }
 
     # You can customize the response data based on your requirements
@@ -8135,7 +8147,17 @@ class StandardizedFieldRequestAcceptReject(APIView):
                                 ):
                                     field_value.remove(value)
                                     instance.save()
-
+                send_mail_templates(
+                    "coach_templates/reject_feild_item_request.html",
+                    [request_instance.coach.email],
+                    "Meeraq | Feild Rejected",
+                    {
+                        "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
+                        "value": value,
+                        "feild": field_name,
+                    },
+                    [],
+                )
                 return Response({"message": f"Request {status}"}, status=200)
         except StandardizedFieldRequest.DoesNotExist:
             return Response({"error": f"Request not found."}, status=404)
@@ -10010,12 +10032,11 @@ def get_coach_summary_data(request, coach_id):
             availibility__coach=coach,
             coaching_session__session_type="laser_coaching_session",
         ).count()
-        
+
         total_mentoring_sessions = SchedularSessions.objects.filter(
             availibility__coach=coach,
             coaching_session__session_type="mentoring_session",
         ).count()
-        
 
         pending_schedular_session = SchedularSessions.objects.filter(
             availibility__coach=coach, status="pending"
@@ -10027,10 +10048,10 @@ def get_coach_summary_data(request, coach_id):
                 "coaching_projects": coach_status_count,
                 "training_projects": distinct_project_count,
                 "coach_rating": get_coach_overall_rating(coach.id),
-                "total_coaching_session":total_coaching_session,
+                "total_coaching_session": total_coaching_session,
                 "laser_coaching_sessions": laser_coaching_sessions,
                 "pending_session": pending_schedular_session,
-                "total_mentoring_sessions":total_mentoring_sessions,
+                "total_mentoring_sessions": total_mentoring_sessions,
             }
         )
 
@@ -10073,5 +10094,62 @@ def get_facilitator_summary_data(request, facilitator_id):
         print(str(e))
         return Response(
             {"detail": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def hide_columns(request):
+    try:
+        hidden_columns = request.data.get("hidden_columns")
+        table_name = request.data.get("table_name")
+        table_hidden_column, created = TableHiddenColumn.objects.get_or_create(
+            table_name=table_name
+        )
+        table_hidden_column.hidden_columns = hidden_columns
+        table_hidden_column.save()
+        return Response(status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to hide column"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_table_hide_columns(request, table_name):
+    try:
+
+        table_hidden_column = TableHiddenColumn.objects.get(table_name=table_name)
+
+        return Response(table_hidden_column.hidden_columns)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def edit_remark(request):
+    try:
+        coach_id = request.data.get("coach_id")
+        remark = request.data.get("remark")
+        coach = Coach.objects.get(id=int(coach_id))
+        coach.remark = remark
+        coach.save()
+        return Response({"message": f"Remark updated successfully!"}, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to update remark"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
