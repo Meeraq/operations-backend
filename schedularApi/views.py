@@ -481,8 +481,11 @@ def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
     pmo_id = request.query_params.get("pmo")
     coach_id = request.query_params.get("coach_id")
+    finance = request.query_params.get("finance")
     projects = None
-    if pmo_id:
+    if finance:
+       projects = SchedularProject.objects.all() 
+    elif pmo_id:
         pmo = Pmo.objects.get(id=int(pmo_id))
 
         if pmo.sub_role == "junior_pmo":
