@@ -265,7 +265,6 @@ class Expense(models.Model):
         ("rejected", "Rejected"),
         ("created", "Created"),
         ("invoiced", "Invoiced"),
-
     ]
 
     name = models.CharField(max_length=255)
@@ -345,7 +344,7 @@ class HandoverDetails(models.Model):
     invoice_status = models.BooleanField(default=False, blank=True)
     reporting_requirements = models.TextField(blank=True, null=True)
     coach_names = models.TextField(blank=True, null=True)
-    poc_contact_details = models.CharField(max_length=255, blank=True, null=True)
+    poc_contact_details = models.TextField(blank=True, null=True)
     audience_level = models.JSONField(max_length=255, blank=True, null=True)
     project_structure = models.JSONField(default=list, blank=True, null=True)
     sales_order_ids = models.JSONField(default=list, blank=True, null=True)
