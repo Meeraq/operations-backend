@@ -29,7 +29,9 @@ from django.db.models import (
     Case,
     When,
     Value,
-    IntegerField, Count, Q,
+    IntegerField,
+    Count,
+    Q,
     BooleanField,
     CharField,
 )
@@ -344,19 +346,30 @@ def create_project_schedular(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
 @transaction.atomic
 def create_handover(request):
-    serializer = HandoverDetailsSerializer(data=request.data)
+    handover_details = json.loads(request.data.get("payload"))
+    serializer = HandoverDetailsSerializer(data=handover_details)
     if serializer.is_valid():
-        organisation_name = request.data.get("organisation_name")
+        organisation_name = handover_details.get("organisation_name")
         # create or get organisation
         organisation, created = Organisation.objects.get_or_create(
             name=organisation_name
         )
+        # for saving gm_sheets and proposals
         handover_instance = serializer.save()
         handover_instance.organisation = organisation
         handover_instance.save()
+
+        serializer = HandoverDetailsSerializer(
+            handover_instance, data=request.data, partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+        else:
+            print(serializer.errors)
+
         res_serializer = HandoverDetailsSerializer(handover_instance)
         return Response(
             {
@@ -371,18 +384,30 @@ def create_handover(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
 def update_handover(request):
+    handover_details = json.loads(request.data.get("payload"))
     try:
         handover_instance = HandoverDetails.objects.get(id=request.data.get("id"))
     except HandoverDetails.DoesNotExist:
         return Response({"error": "Handover not found."}, status=404)
 
     serializer = HandoverDetailsSerializer(
-        handover_instance, data=request.data, partial=True
+        handover_instance, data=handover_details, partial=True
     )
     if serializer.is_valid():
         handover_instance = serializer.save()
+        try:
+            files_saving_serializer = HandoverDetailsSerializer(
+                handover_instance, data=request.data, partial=True
+            )
+            if files_saving_serializer.is_valid():
+                handover_instance = files_saving_serializer.save()
+            else:
+                print(files_saving_serializer.errors)
+        except Exception as e:
+            pass
+
         # when handover is being edited and the project is already created, sending the mails
         if handover_instance.caas_project or handover_instance.schedular_project:
             # junior pmo and pmo training and coaching if a handover is edited by the sales person
@@ -447,7 +472,10 @@ def get_project_handover(request, project_type, project_id):
 
 @api_view(["GET"])
 @permission_classes(
-    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+    [
+        IsAuthenticated,
+        IsInRoles("hr", "pmo", "coach", "facilitator", "learner", "sales"),
+    ]
 )
 def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
@@ -466,7 +494,8 @@ def get_all_Schedular_Projects(request):
         projects = SchedularProject.objects.filter(
             Q(schedularbatch__coaches=coach)
         ).distinct()
-        
+    else:
+        projects = SchedularProject.objects.all()
 
     if status:
         projects = projects.exclude(status="completed")
@@ -715,7 +744,10 @@ def create_project_structure(request, project_id):
 
 @api_view(["GET"])
 @permission_classes(
-    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+    [
+        IsAuthenticated,
+        IsInRoles("hr", "pmo", "coach", "facilitator", "learner", "sales"),
+    ]
 )
 def get_schedular_batches(request):
     try:
@@ -890,7 +922,7 @@ def get_batch_calendar(request, batch_id):
         facilitator = (
             Facilitator.objects.filter(livesession__batch__id=batch_id)
             .distinct()
-        .annotate(
+            .annotate(
                 is_vendor=Case(
                     When(user__vendor__isnull=False, then=Value(True)),
                     default=Value(False),
@@ -4277,7 +4309,10 @@ def add_new_session_in_project_structure(request):
 
 @api_view(["GET"])
 @permission_classes(
-    [IsAuthenticated, IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer")]
+    [
+        IsAuthenticated,
+        IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer", "sales"),
+    ]
 )
 def get_completed_sessions_for_project(request, project_id):
     try:
@@ -6064,8 +6099,14 @@ def create_expense(request):
                     expense.batch.project.junior_pmo.email,
                 ],
                 "Verification Required: Facilitators Expenses",
-                {"facilitator_name":facilitator_name,"expense_name":expense_name,"project_name":project_name,"description":expense.description,"amount":expense.amount}
-            )           
+                {
+                    "facilitator_name": facilitator_name,
+                    "expense_name": expense_name,
+                    "project_name": project_name,
+                    "description": expense.description,
+                    "amount": expense.amount,
+                },
+            )
             try:
                 email_array = json.loads(env("EXPENSE_NOTIFICATION_EMAILS"))
                 if batch.project.junior_pmo:
@@ -6091,7 +6132,7 @@ def create_expense(request):
                     sleep(2)
             except Exception as e:
                 print(str(e))
-        
+
             return Response({"message": "Expense created successfully!"}, status=201)
         else:
             return Response(
@@ -6209,18 +6250,22 @@ def get_expense_for_facilitator(request, batch_or_project_id, usertype, user_id)
 
             all_expenses.extend(expenses)
 
-        po_ids = [] # po ids
+        po_ids = []  # po ids
         for expense in all_expenses:
             if expense.purchase_order_id:
                 po_ids.append(expense.purchase_order_id)
-        po_ids_str = ",".join(po_ids) 
-        purchase_orders =  fetch_purchase_orders(organization_id, f"&purchaseorder_ids={po_ids_str}")
+        po_ids_str = ",".join(po_ids)
+        purchase_orders = fetch_purchase_orders(
+            organization_id, f"&purchaseorder_ids={po_ids_str}"
+        )
         serializer = ExpenseSerializerDepthOne(all_expenses, many=True)
         for expense in serializer.data:
-            if expense['purchase_order_id']:
-                expense['purchase_order'] = get_purchase_order(purchase_orders, expense['purchase_order_id'])
+            if expense["purchase_order_id"]:
+                expense["purchase_order"] = get_purchase_order(
+                    purchase_orders, expense["purchase_order_id"]
+                )
             else:
-                expense['purchase_order'] = None
+                expense["purchase_order"] = None
         return Response(serializer.data)
     except Exception as e:
         print(str(e))
@@ -6276,8 +6321,6 @@ def get_all_courses_for_all_batches(request, project_id):
         print(str(e))
 
 
-
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
@@ -6310,19 +6353,33 @@ def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
         last_end_date = merged_dates[-1][1] if merged_dates else None
 
         # Convert dates to datetime objects
-        first_start_datetime = datetime.combine(first_start_date, datetime.min.time()) if first_start_date else None
-        last_end_datetime = datetime.combine(last_end_date, datetime.min.time()) if last_end_date else None
+        first_start_datetime = (
+            datetime.combine(first_start_date, datetime.min.time())
+            if first_start_date
+            else None
+        )
+        last_end_datetime = (
+            datetime.combine(last_end_date, datetime.min.time())
+            if last_end_date
+            else None
+        )
 
         # Get timestamps for start and end dates
-        start_timestamp = first_start_datetime.timestamp() * 1000 if first_start_datetime else None
-        end_timestamp = (last_end_datetime + timedelta(days=1)).timestamp() * 1000 if last_end_datetime else None
+        start_timestamp = (
+            first_start_datetime.timestamp() * 1000 if first_start_datetime else None
+        )
+        end_timestamp = (
+            (last_end_datetime + timedelta(days=1)).timestamp() * 1000
+            if last_end_datetime
+            else None
+        )
 
         # Count available slots
         avaliable_solts = CoachSchedularAvailibilty.objects.filter(
             coach=coach,
             start_time__gte=start_timestamp,
             end_time__lte=end_timestamp,
-           is_confirmed=False
+            is_confirmed=False,
         )
 
         # Count booked slots (pending sessions)
@@ -6338,7 +6395,7 @@ def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
             coaching_session__batch__project=project,
             status="completed",
         ).count()
-       
+
         return Response(
             {
                 "total_laser_coaching_session": total_laser_coaching_session,

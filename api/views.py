@@ -1738,7 +1738,7 @@ def get_ongoing_projects_of_hr(request, hr_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr", "sales")])
 def get_hr(request):
     try:
         # Get all the Coach objects
