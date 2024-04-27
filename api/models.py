@@ -172,13 +172,13 @@ class Sales(models.Model):
 
 
 class Pmo(models.Model):
-
     SUB_ROLE_CHOICES = [
         ("manager", "Manager"),
         ("junior_pmo", "Junior PMO"),
     ]
 
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
@@ -186,6 +186,17 @@ class Pmo(models.Model):
         max_length=50, choices=SUB_ROLE_CHOICES, blank=True, default="manager"
     )
     room_id = models.CharField(max_length=50, blank=True)
+    active_inactive = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class CTTPmo(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+    phone = models.CharField(max_length=25)
     active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
@@ -324,6 +335,7 @@ class Organisation(models.Model):
 
 class HR(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()

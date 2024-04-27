@@ -131,6 +131,10 @@ urlpatterns = [
         views.get_learner_engagement_of_project,
     ),
     path("engagement/learner/<int:learner_id>/", views.get_learners_engagement),
+    path(
+        "coaches-of-learner/<int:learner_id>/",
+        views.get_coaches_of_learner,
+    ),
     path("sessions/create/<int:learner_id>/", views.create_session_request_by_learner),
     path(
         "sessions/requested/<str:user_type>/<int:user_id>/",
@@ -351,6 +355,8 @@ urlpatterns = [
     path("add/pmo/", views.add_pmo),
     path("get/all/pmo/", views.get_pmo, name="get_pmo"),
     path("get/junior/pmo/<int:user_id>/", views.get_junior_pmo),
+    path("ctt-pmos/", views.get_ctt_pmos),
+    path("ctt-pmos/create/", views.add_ctt_pmo),
     path(
         "get-learner-of-user-optimized/<str:user_type>/<int:user_id>/",
         views.get_learner_of_user_optimized,
@@ -407,6 +413,7 @@ urlpatterns = [
     #     views.delete_pmo,
     # ),
     path("edit-pmo/", views.edit_pmo),
+    path("ctt-pmo/edit/<int:ctt_pmo_id>/", views.edit_pmo),
     path(
         "get-coaches-in-project-is-vendor/<int:project_id>/",
         views.get_coaches_in_project_is_vendor,
@@ -420,6 +427,7 @@ urlpatterns = [
     path("archive-project/", views.archive_project),
     path("change-user-password/", views.change_user_password),
     path("all-users/", views.get_all_users),
+    path("add-new-user/", views.add_new_user),
     path("add/sales-user/", views.add_sales_user),
     path("get-sales-user/", views.get_sales_user),
     path("get-coach-summary-data/<int:coach_id>/", views.get_coach_summary_data),
@@ -455,13 +463,20 @@ urlpatterns = [
         "edit-pmo-goal/",
         views.edit_pmo_goal,
     ),
-     path(
+    path(
         "get-all-competency/",
         views.get_all_competency,
     ),
-     path(
+    path(
         "get-all-po-of-project/<int:project_id>/",
         views.get_all_po_of_project,
     ),
-    
+    path(
+        "get-all-to-be-booked-sessions-for-coachee/<int:learner_id>/",
+        views.get_all_to_be_booked_sessions_for_coachee,
+    ),
+    path(
+        "get-engagement-of-a-coachee/<int:learner_id>/",
+        views.get_engagement_of_a_coachee,
+    ),
 ]
