@@ -226,6 +226,10 @@ urlpatterns = [
         "current-session/<str:user_type>/<str:room_id>/<int:user_id>/",
         views.get_current_session,
     ),
+     path(
+        "current-session-for-learner/<str:user_type>/<int:user_id>/",
+        views.get_current_session_for_learner,
+    ),
     path(
         "current-session-for-coach/<str:user_type>/<int:user_id>/",
         views.get_current_session_for_coach,
