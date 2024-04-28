@@ -151,11 +151,11 @@ class Finance(models.Model):
     active_inactive = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-  
 
     def __str__(self):
         return self.name
-    
+
+
 class Sales(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -164,9 +164,10 @@ class Sales(models.Model):
     active_inactive = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-  
+
     def __str__(self):
         return self.name
+
 
 class Pmo(models.Model):
 
@@ -218,6 +219,7 @@ class Coach(models.Model):
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
     years_of_coaching_experience = models.CharField(max_length=20, blank=True)
     is_approved = models.BooleanField(blank=True, default=False)
+    is_rejected = models.BooleanField(blank=True, default=False)
     location = models.JSONField(default=list, blank=True)
     ctt_nctt = models.BooleanField(blank=True, default=False)
     language = models.JSONField(default=list, blank=True)
@@ -239,8 +241,15 @@ class Coach(models.Model):
     education_pic = models.ImageField(upload_to="post_images", blank=True)
     educational_qualification = models.JSONField(default=list, blank=True)
     education_upload_file = models.FileField(
-        upload_to="pdf_files", blank=True, null=True, validators=[validate_pdf_extension]
+        upload_to="pdf_files",
+        blank=True,
+        null=True,
+        validators=[validate_pdf_extension],
     )
+    remark = models.TextField(blank=True)
+    is_coach = models.BooleanField(blank=True, default=False)
+    is_mentor = models.BooleanField(blank=True, default=False)
+    is_consultant = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -287,6 +296,7 @@ class Facilitator(models.Model):
     fees_per_day = models.CharField(max_length=20, blank=True)
     topic = models.JSONField(default=list, blank=True)
     is_approved = models.BooleanField(blank=True, default=False)
+    is_rejected = models.BooleanField(blank=True, default=False)
     active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
@@ -926,3 +936,11 @@ class Task(models.Model):
 
     def __str__(self):
         return self.task
+
+
+class TableHiddenColumn(models.Model):
+
+    table_name = models.CharField(max_length=225, blank=True)
+    hidden_columns = models.JSONField(default=list, blank=True)
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

@@ -362,4 +362,5 @@ urlpatterns = [
         name="get_project_and_handover",
     ),
     path("handovers/", views.get_handovers, name="get_handovers"),
+    path("send-mail-to-coaches/", views.send_mail_to_coaches, name="send_mail_to_coaches"),
 ]
