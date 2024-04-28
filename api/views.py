@@ -8150,7 +8150,7 @@ class StandardizedFieldRequestAcceptReject(APIView):
                 send_mail_templates(
                     "coach_templates/reject_feild_item_request.html",
                     [request_instance.coach.email],
-                    "Meeraq | Feild Rejected",
+                    "Meeraq | Field Rejected",
                     {
                         "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
                         "value": value,
