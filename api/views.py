@@ -1086,6 +1086,43 @@ def approve_coach(request):
         # Return error response if any other exception occurs
         return Response({"error": str(e)}, status=500)
 
+@api_view(["PUT"])
+@permission_classes([AllowAny])
+def reject_coach(request, coach_id):
+    try:
+        # Get the coach object
+        coach = Coach.objects.get(id=coach_id)
+        # Set is_rejected to True
+        coach.is_rejected = True
+        coach.save()
+        # Serialize the updated coach
+        serializer = CoachSerializer(coach)
+        # Return the serialized coach as the response
+        return Response(serializer.data, status=200)
+    except Coach.DoesNotExist:
+        return Response({"error": "Coach not found"}, status=404)
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({"error": str(e)}, status=500)
+    
+@api_view(["PUT"])
+@permission_classes([AllowAny])
+def reject_facilitator(request, facilitator_id):
+    try:
+        # Get the coach object
+        facilitator = Facilitator.objects.get(id=facilitator_id)
+        # Set is_rejected to True
+        facilitator.is_rejected = True
+        facilitator.save()
+        # Serialize the updated coach
+        serializer = FacilitatorSerializer(facilitator)
+        # Return the serialized coach as the response
+        return Response(serializer.data, status=200)
+    except Facilitator.DoesNotExist:
+        return Response({"error": "facilitator not found"}, status=404)
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({"error": str(e)}, status=500)
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
@@ -8150,7 +8187,7 @@ class StandardizedFieldRequestAcceptReject(APIView):
                 send_mail_templates(
                     "coach_templates/reject_feild_item_request.html",
                     [request_instance.coach.email],
-                    "Meeraq | Feild Rejected",
+                    "Meeraq | Field Rejected",
                     {
                         "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
                         "value": value,
