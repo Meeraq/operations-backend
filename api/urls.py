@@ -429,4 +429,16 @@ urlpatterns = [
         "get-facilitator-summary-data/<int:facilitator_id>/",
         views.get_facilitator_summary_data,
     ),
+    path(
+        "hide-columns/",
+        views.hide_columns,
+    ),
+    path(
+        "get-table-hide-columns/<str:table_name>/",
+        views.get_table_hide_columns,
+    ),
+     path(
+        "edit-remark/",
+        views.edit_remark,
+    ),
 ]
