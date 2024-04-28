@@ -1086,6 +1086,7 @@ def approve_coach(request):
         # Return error response if any other exception occurs
         return Response({"error": str(e)}, status=500)
 
+
 @api_view(["PUT"])
 @permission_classes([AllowAny])
 def reject_coach(request, coach_id):
@@ -1095,6 +1096,15 @@ def reject_coach(request, coach_id):
         # Set is_rejected to True
         coach.is_rejected = True
         coach.save()
+        send_mail_templates(
+            "coach_templates/coach_is_rejected.html",
+            [coach.email],
+            "Meeraq | Profile Rejected",
+            {
+                "name": f"{coach.first_name}",
+            },
+            [],
+        )
         # Serialize the updated coach
         serializer = CoachSerializer(coach)
         # Return the serialized coach as the response
@@ -1104,7 +1114,8 @@ def reject_coach(request, coach_id):
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
-    
+
+
 @api_view(["PUT"])
 @permission_classes([AllowAny])
 def reject_facilitator(request, facilitator_id):
@@ -1123,6 +1134,7 @@ def reject_facilitator(request, facilitator_id):
     except Exception as e:
         # Return error response if any exception occurs
         return Response({"error": str(e)}, status=500)
+
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
@@ -1911,8 +1923,8 @@ def add_coach(request):
                 educational_qualification=educational_qualification,
                 education_upload_file=education_upload_file,
                 is_coach=is_coach,
-                is_mentor = is_mentor,
-                is_consultant = is_consultant,
+                is_mentor=is_mentor,
+                is_consultant=is_consultant,
             )
 
             # Approve coach
