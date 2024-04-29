@@ -1750,6 +1750,25 @@ def generate_new_po_number(po_list, regex_to_match):
     new_po_number = f"{regex_to_match}{str(new_number).zfill(4)}"
     return new_po_number
 
+def generate_new_ctt_po_number(po_list, regex_to_match):
+    # pattern to match the purchase order number
+    pattern = rf"^{regex_to_match}\d+$"
+    # Filter out purchase orders with the desired format
+    filtered_pos = [
+        po for po in po_list if re.match(pattern, po["purchaseorder_number"])
+    ]
+    latest_number = 0
+    # Finding the latest number for each year
+    for po in filtered_pos:
+        print(po["purchaseorder_number"].split("/"))
+        _, _, _, po_number = po["purchaseorder_number"].split("/")
+        latest_number = max(latest_number, int(po_number))
+    # Generating the new purchase order number
+    new_number = latest_number + 1
+    new_po_number = f"{regex_to_match}{str(new_number).zfill(4)}"
+    return new_po_number
+
+
 
 def generate_new_so_number(so_list, regex_to_match):
     # pattern to match the sales order number
@@ -1817,9 +1836,13 @@ def get_po_number_to_create(request, po_type):
         current_financial_year = get_current_financial_year()
         if po_type =="meeraq":
             regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
+            new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
         elif po_type == "others":
             regex_to_match = f"Meeraq/PO/{current_financial_year}/OTH/"
-        new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
+            new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
+        elif po_type == "ctt":
+            regex_to_match = f"CTT/PO/{current_financial_year}/"
+            new_po_number = generate_new_ctt_po_number(purchase_orders, regex_to_match)
         return Response({"new_po_number": new_po_number})
     except Exception as e:
         print(str(e))
