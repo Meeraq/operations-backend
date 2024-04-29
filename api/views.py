@@ -1837,6 +1837,9 @@ def add_coach(request):
             level,
             username,
             room_id,
+            corporate_experience,
+            coaching_experience,
+
         ]
     ):
         return Response({"error": "All required fields must be provided."}, status=400)
