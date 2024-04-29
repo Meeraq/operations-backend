@@ -30,6 +30,8 @@ from django.db.models import (
     When,
     Value,
     IntegerField,
+    Count,
+    Q,
     BooleanField,
     CharField,
 )
@@ -53,6 +55,7 @@ from api.models import (
     CoachStatus,
     Project,
 )
+
 from .serializers import (
     SchedularProjectSerializer,
     SchedularBatchSerializer,
@@ -82,6 +85,7 @@ from .serializers import (
     ExpenseSerializer,
     SchedularProjectSerializerArchiveCheck,
     HandoverDetailsSerializer,
+    HandoverDetailsSerializerWithOrganisationName,
 )
 from .models import (
     SchedularBatch,
@@ -169,8 +173,8 @@ import re
 from rest_framework.views import APIView
 from api.views import get_user_data
 from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping
-from zohoapi.views import fetch_purchase_orders
-from zohoapi.tasks import organization_id
+from zohoapi.views import fetch_purchase_orders, organization_id, fetch_sales_persons
+from zohoapi.tasks import organization_id, fetch_sales_orders
 from courses.views import calculate_nps
 from api.permissions import IsInRoles
 
@@ -307,9 +311,8 @@ def create_project_schedular(request):
             junior_pmo=junior_pmo,
         )
         schedularProject.save()
-    except IntegrityError:
-        return Response({"error": "Project with this name already exists"}, status=400)
     except Exception as e:
+        print(str(e))
         return Response({"error": "Failed to create project."}, status=400)
 
     for hr in project_details["hr"]:
@@ -320,9 +323,14 @@ def create_project_schedular(request):
         handover = HandoverDetails.objects.get(id=handover_id)
         handover.schedular_project = schedularProject
         handover.save()
+        schedularProject.project_structure = handover.project_structure
+        schedularProject.save()
         add_so_to_project("SEEQ", schedularProject.id, handover.sales_order_ids)
     else:
-        raise Exception("No handover found")
+        sales_order_ids = project_details["sales_order_ids"]
+        if sales_order_ids:
+            add_so_to_project("SEEQ", schedularProject.id, sales_order_ids)
+        # raise Exception("No handover found")
 
     try:
         path = ""
@@ -338,46 +346,117 @@ def create_project_schedular(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
 @transaction.atomic
 def create_handover(request):
-    serializer = HandoverDetailsSerializer(data=request.data)
+    handover_details = json.loads(request.data.get("payload"))
+    serializer = HandoverDetailsSerializer(data=handover_details)
     if serializer.is_valid():
-        serializer.save()
+        organisation_name = handover_details.get("organisation_name")
+        # create or get organisation
+        organisation, created = Organisation.objects.get_or_create(
+            name=organisation_name
+        )
+        # for saving gm_sheets and proposals
+        handover_instance = serializer.save()
+        handover_instance.organisation = organisation
+        handover_instance.save()
+
+        serializer = HandoverDetailsSerializer(
+            handover_instance, data=request.data, partial=True
+        )
+        if serializer.is_valid():
+            serializer.save()
+        else:
+            print(serializer.errors)
+
+        res_serializer = HandoverDetailsSerializer(handover_instance)
         return Response(
-            {"message": "Handover created successfully.", "handover": serializer.data},
-            status=200,
+            {
+                "message": "Handover created successfully.",
+                "handover": res_serializer.data,
+            },
+            status=status.HTTP_200_OK,
         )
     else:
         print(serializer.errors)
         return Response({"error": "Failed to add handover. "}, status=400)
 
 
-@api_view(["PUT"])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
-@transaction.atomic
-def edit_handover(request, handover_id):
+def update_handover(request):
+    handover_details = json.loads(request.data.get("payload"))
     try:
-        handover_instance = HandoverDetails.objects.get(id=handover_id)
+        handover_instance = HandoverDetails.objects.get(id=request.data.get("id"))
     except HandoverDetails.DoesNotExist:
-        handover_instance = None
+        return Response({"error": "Handover not found."}, status=404)
+
     serializer = HandoverDetailsSerializer(
-        handover_instance, data=request.data, partial=True
+        handover_instance, data=handover_details, partial=True
     )
     if serializer.is_valid():
-        serializer.save()
-        if handover_instance.schedular_project:
-            schedular_project = handover_instance.schedular_project
-            schedular_project.nudges = handover_instance.nudges
-            schedular_project.pre_post_assessment = (
-                handover_instance.pre_post_assessment
+        handover_instance = serializer.save()
+        try:
+            files_saving_serializer = HandoverDetailsSerializer(
+                handover_instance, data=request.data, partial=True
             )
-            schedular_project.save()
+            if files_saving_serializer.is_valid():
+                handover_instance = files_saving_serializer.save()
+            else:
+                print(files_saving_serializer.errors)
+        except Exception as e:
+            pass
 
-        return Response({"message": "Handover updated successfully."}, status=200)
+        # when handover is being edited and the project is already created, sending the mails
+        if handover_instance.caas_project or handover_instance.schedular_project:
+            # junior pmo and pmo training and coaching if a handover is edited by the sales person
+            if handover_instance.caas_project:
+                junior_pmo = handover_instance.caas_project.junior_pmo
+                project_name = handover_instance.caas_project.name
+            elif handover_instance.schedular_project:
+                junior_pmo = handover_instance.schedular_project.junior_pmo
+                project_name = handover_instance.schedular_project.name
+            else:
+                junior_pmo = None
+                project_name = ""
+            emails = ["pmocoaching@meeraq.com", "pmotraining@meeraq.com"]
+            if junior_pmo:
+                emails.append(junior_pmo.email)
+
+            send_mail_templates(
+                "pmo_emails/edit_handover.html",
+                emails if env("ENVIRONMENT") == "PRODUCTION" else ["tech@meeraq.com"],
+                "Meeraq Platform | Handover Details Updated",
+                {"project_name": project_name},
+                [],  # no bcc
+            )
+
+        return Response(
+            {"message": "Handover updated successfully.", "handover": serializer.data},
+            status=200,
+        )
     else:
         print(serializer.errors)
         return Response({"error": "Failed to update handover."}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
+def get_handover_salesorders(request, handover_id):
+    try:
+        handover = HandoverDetails.objects.get(id=handover_id)
+        sales_orders_ids_str = ",".join(handover.sales_order_ids)
+        print(sales_orders_ids_str, handover.sales_order_ids)
+        all_sales_orders = []
+        if sales_orders_ids_str:
+            all_sales_orders = fetch_sales_orders(
+                organization_id, f"&salesorder_ids={sales_orders_ids_str}"
+            )
+        return Response(all_sales_orders)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])
@@ -393,19 +472,33 @@ def get_project_handover(request, project_type, project_id):
 
 @api_view(["GET"])
 @permission_classes(
-    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+    [
+        IsAuthenticated,
+        IsInRoles("hr", "pmo", "coach", "facilitator", "learner", "sales"),
+    ]
 )
 def get_all_Schedular_Projects(request):
     status = request.query_params.get("status")
     pmo_id = request.query_params.get("pmo")
-    projects = SchedularProject.objects.all()
-    if pmo_id:
+    coach_id = request.query_params.get("coach_id")
+    finance = request.query_params.get("finance")
+    projects = None
+    if finance:
+        projects = SchedularProject.objects.all()
+    elif pmo_id:
         pmo = Pmo.objects.get(id=int(pmo_id))
 
         if pmo.sub_role == "junior_pmo":
             projects = SchedularProject.objects.filter(junior_pmo=pmo)
         else:
             projects = SchedularProject.objects.all()
+    elif coach_id:
+        coach = Coach.objects.get(id=int(coach_id))
+        projects = SchedularProject.objects.filter(
+            Q(schedularbatch__coaches=coach)
+        ).distinct()
+    else:
+        projects = SchedularProject.objects.all()
 
     if status:
         projects = projects.exclude(status="completed")
@@ -654,7 +747,10 @@ def create_project_structure(request, project_id):
 
 @api_view(["GET"])
 @permission_classes(
-    [IsAuthenticated, IsInRoles("hr", "pmo", "coach", "facilitator", "learner")]
+    [
+        IsAuthenticated,
+        IsInRoles("hr", "pmo", "coach", "facilitator", "learner", "sales"),
+    ]
 )
 def get_schedular_batches(request):
     try:
@@ -768,6 +864,7 @@ def generate_slots(start, end, duration):
 )
 def get_batch_calendar(request, batch_id):
     try:
+        fetch_po = request.query_params.get("fetch_po")
         live_sessions = LiveSession.objects.filter(batch__id=batch_id)
         coaching_sessions = CoachingSession.objects.filter(batch__id=batch_id)
         live_sessions_serializer = LiveSessionSerializerDepthOne(
@@ -844,40 +941,41 @@ def get_batch_calendar(request, batch_id):
 
         coaches_serializer = CoachSerializer(coaches, many=True)
         facilitator_serializer = FacilitatorSerializerIsVendor(facilitator, many=True)
-
-        try:
-            purchase_orders = fetch_purchase_orders(organization_id)
-            for facilitator_item in facilitator_serializer.data:
-                expense = Expense.objects.filter(
-                    batch__id=batch_id, facilitator__id=facilitator_item["id"]
-                ).first()
-                facilitator_item["purchase_order_id"] = expense.purchase_order_id
-                facilitator_item["purchase_order_no"] = expense.purchase_order_no
-                is_delete_purchase_order_allowed = True
-                if facilitator_item["purchase_order_id"]:
-                    purchase_order = get_purchase_order(
-                        purchase_orders, facilitator_item["purchase_order_id"]
-                    )
-                    if not purchase_order:
-                        Expense.objects.filter(
-                            batch__id=batch_id, facilitator__id=facilitator_item["id"]
-                        ).update(purchase_order_id="", purchase_order_no="")
-                        facilitator_item["purchase_order_id"] = None
-                        facilitator_item["purchase_order_no"] = None
-                    else:
-                        invoices = InvoiceData.objects.filter(
-                            purchase_order_id=facilitator_item["purchase_order_id"]
+        if fetch_po == "True":
+            try:
+                purchase_orders = fetch_purchase_orders(organization_id)
+                for facilitator_item in facilitator_serializer.data:
+                    expense = Expense.objects.filter(
+                        batch__id=batch_id, facilitator__id=facilitator_item["id"]
+                    ).first()
+                    facilitator_item["purchase_order_id"] = expense.purchase_order_id
+                    facilitator_item["purchase_order_no"] = expense.purchase_order_no
+                    is_delete_purchase_order_allowed = True
+                    if facilitator_item["purchase_order_id"]:
+                        purchase_order = get_purchase_order(
+                            purchase_orders, facilitator_item["purchase_order_id"]
                         )
-                        if invoices.exists():
-                            is_delete_purchase_order_allowed = False
-                    facilitator_item["is_delete_purchase_order_allowed"] = (
-                        is_delete_purchase_order_allowed
-                    )
-                    facilitator_item["purchase_order"] = purchase_order
-                else:
-                    facilitator_item["purchase_order"] = None
-        except Exception as e:
-            print(str(e))
+                        if not purchase_order:
+                            Expense.objects.filter(
+                                batch__id=batch_id,
+                                facilitator__id=facilitator_item["id"],
+                            ).update(purchase_order_id="", purchase_order_no="")
+                            facilitator_item["purchase_order_id"] = None
+                            facilitator_item["purchase_order_no"] = None
+                        else:
+                            invoices = InvoiceData.objects.filter(
+                                purchase_order_id=facilitator_item["purchase_order_id"]
+                            )
+                            if invoices.exists():
+                                is_delete_purchase_order_allowed = False
+                        facilitator_item["is_delete_purchase_order_allowed"] = (
+                            is_delete_purchase_order_allowed
+                        )
+                        facilitator_item["purchase_order"] = purchase_order
+                    else:
+                        facilitator_item["purchase_order"] = None
+            except Exception as e:
+                print(str(e))
 
         sessions = [*live_sessions_serializer.data, *coaching_sessions_result]
         sorted_sessions = sorted(sessions, key=lambda x: x["order"])
@@ -1009,7 +1107,7 @@ def update_live_session(request, live_session_id):
                 if (
                     not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
                     and update_live_session.batch.project.status == "ongoing"
-                    and update_live_session.batch.project.calendar_invites
+                    and update_live_session.batch.calendar_invites
                 ):
                     try:
                         learners = live_session.batch.learners.all()
@@ -2018,7 +2116,7 @@ def schedule_session_fixed(request):
                 # Only send email if project status is ongoing
                 if coaching_session.batch.project.status == "ongoing":
                     attendees = None
-                    if coaching_session.batch.project.calendar_invites:
+                    if coaching_session.batch.calendar_invites:
                         attendees = [
                             {
                                 "emailAddress": {
@@ -2294,7 +2392,7 @@ def reschedule_session(request, session_id):
                 # Only send email if project status is ongoing
                 if coaching_session.batch.project.status == "ongoing":
                     attendees = None
-                    if coaching_session.batch.project.calendar_invites:
+                    if coaching_session.batch.calendar_invites:
                         attendees = [
                             {
                                 "emailAddress": {
@@ -4080,6 +4178,7 @@ def add_new_session_in_project_structure(request):
                 "description": description,
                 "price": price,
             }
+
             # Update the project structure
             prev_structure.append(new_session)
             project.project_structure = prev_structure
@@ -4213,7 +4312,10 @@ def add_new_session_in_project_structure(request):
 
 @api_view(["GET"])
 @permission_classes(
-    [IsAuthenticated, IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer")]
+    [
+        IsAuthenticated,
+        IsInRoles("pmo", "hr", "facilitator", "coach", "leanrer", "sales"),
+    ]
 )
 def get_completed_sessions_for_project(request, project_id):
     try:
@@ -5933,12 +6035,21 @@ def add_facilitator_pricing(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def edit_facilitator_pricing(request, facilitator_pricing_id):
-    pricing_instance = get_object_or_404(FacilitatorPricing, id=facilitator_pricing_id)
-    serializer = FacilitatorPricingSerializer(pricing_instance, data=request.data)
-    if serializer.is_valid():
-        serializer.save()
+    try:
+        pricing_instance = get_object_or_404(
+            FacilitatorPricing, id=facilitator_pricing_id
+        )
+        pricing_instance.price = request.data.get("price")
+        pricing_instance.save()
+        serializer = FacilitatorPricingSerializer(pricing_instance)
+
         return Response(serializer.data, status=200)
-    return Response(serializer.errors, status=400)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to create expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["POST"])
@@ -5978,6 +6089,58 @@ def create_expense(request):
                 file=file,
                 amount=amount,
             )
+
+            facilitator_name = f"{facilitator.first_name} {facilitator.last_name}"
+            expense_name = expense.name
+            project_name = expense.batch.project.name
+
+            try:
+                emails = [
+                    "madhuri@coachtotransformation.com",
+                    "nisha@coachtotransformation.com",
+                    "pmotraining@meeraq.com",
+                    "pmocoaching@meeraq.com",
+                ]
+                if batch.project.junior_pmo:
+                    emails.append(batch.project.junior_pmo.email)
+
+                send_mail_templates(
+                    "expenses/expenses_emails.html",
+                    emails,
+                    "Verification Required: Facilitators Expenses",
+                    {
+                        "facilitator_name": facilitator_name,
+                        "expense_name": expense_name,
+                        "project_name": project_name,
+                        "description": expense.description,
+                        "amount": expense.amount,
+                    },
+                )
+
+                email_array = json.loads(env("EXPENSE_NOTIFICATION_EMAILS"))
+                if batch.project.junior_pmo:
+                    email_array.append(batch.project.junior_pmo.email)
+                for email in email_array:
+                    pmo = Pmo.objects.filter(email=email.strip().lower()).first()
+                    send_mail_templates(
+                        "pmo_emails/expense_added_by_facilitator.html",
+                        [email],
+                        "Meeraq | Expense Upload Notification",
+                        {
+                            "name": pmo.name if pmo else "User",
+                            "project_name": batch.project.name,
+                            "facilitator_name": facilitator.first_name
+                            + " "
+                            + facilitator.last_name,
+                            "description": expense.description,
+                            "amount": expense.amount,
+                            "date_of_expense": expense.created_at.strftime("%d/%m/%Y"),
+                        },
+                        [],
+                    )
+                    sleep(2)
+            except Exception as e:
+                print(str(e))
 
             return Response({"message": "Expense created successfully!"}, status=201)
         else:
@@ -6096,7 +6259,22 @@ def get_expense_for_facilitator(request, batch_or_project_id, usertype, user_id)
 
             all_expenses.extend(expenses)
 
+        po_ids = []  # po ids
+        for expense in all_expenses:
+            if expense.purchase_order_id:
+                po_ids.append(expense.purchase_order_id)
+        po_ids_str = ",".join(po_ids)
+        purchase_orders = fetch_purchase_orders(
+            organization_id, f"&purchaseorder_ids={po_ids_str}"
+        )
         serializer = ExpenseSerializerDepthOne(all_expenses, many=True)
+        for expense in serializer.data:
+            if expense["purchase_order_id"]:
+                expense["purchase_order"] = get_purchase_order(
+                    purchase_orders, expense["purchase_order_id"]
+                )
+            else:
+                expense["purchase_order"] = None
         return Response(serializer.data)
     except Exception as e:
         print(str(e))
@@ -6129,11 +6307,11 @@ def edit_status_expense(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_all_courses_for_all_batches(request):
+def get_all_courses_for_all_batches(request, project_id):
     try:
         facilitator_id = request.query_params.get("facilitator_id", None)
         batches = SchedularBatch.objects.filter(
-            livesession__facilitator__id=facilitator_id
+            livesession__facilitator__id=facilitator_id, project__id=project_id
         )
         courses = Course.objects.filter(batch__in=batches)
         course_serializer = CourseSerializer(courses, many=True)
@@ -6150,6 +6328,105 @@ def get_all_courses_for_all_batches(request):
         )
     except Exception as e:
         print(str(e))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
+    try:
+        project = SchedularProject.objects.get(id=project_id)
+        coach = Coach.objects.get(id=coach_id)
+
+        # Count total laser coaching sessions and mentoring sessions
+        session_counts = (
+            CoachingSession.objects.filter(batch__coaches=coach, batch__project=project)
+            .values("session_type")
+            .annotate(count=Count("id"))
+        )
+
+        total_laser_coaching_session = sum(
+            s["count"]
+            for s in session_counts
+            if s["session_type"] == "laser_coaching_session"
+        )
+        total_mentoring_session = sum(
+            s["count"]
+            for s in session_counts
+            if s["session_type"] == "mentoring_session"
+        )
+
+        # Get merged dates for coaching sessions
+        batches = SchedularBatch.objects.filter(project=project)
+        merged_dates = get_merged_date_of_coaching_session_for_a_batches(batches)
+        first_start_date = merged_dates[0][0] if merged_dates else None
+        last_end_date = merged_dates[-1][1] if merged_dates else None
+
+        # Convert dates to datetime objects
+        first_start_datetime = (
+            datetime.combine(first_start_date, datetime.min.time())
+            if first_start_date
+            else None
+        )
+        last_end_datetime = (
+            datetime.combine(last_end_date, datetime.min.time())
+            if last_end_date
+            else None
+        )
+
+        # Get timestamps for start and end dates
+        start_timestamp = (
+            first_start_datetime.timestamp() * 1000 if first_start_datetime else None
+        )
+        end_timestamp = (
+            (last_end_datetime + timedelta(days=1)).timestamp() * 1000
+            if last_end_datetime
+            else None
+        )
+
+        # Count available slots
+        avaliable_solts = CoachSchedularAvailibilty.objects.filter(
+            coach=coach,
+            start_time__gte=start_timestamp,
+            end_time__lte=end_timestamp,
+            is_confirmed=False,
+        )
+
+        # Count booked slots (pending sessions)
+        booked_slots = SchedularSessions.objects.filter(
+            coaching_session__batch__coaches=coach,
+            coaching_session__batch__project=project,
+            status="pending",
+        ).count()
+
+        # Count completed sessions
+        completed_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__coaches=coach,
+            coaching_session__batch__project=project,
+            status="completed",
+        ).count()
+
+        return Response(
+            {
+                "total_laser_coaching_session": total_laser_coaching_session,
+                "total_mentoring_session": total_mentoring_session,
+                "first_start_date": (
+                    first_start_date.strftime("%d-%m-%Y") if first_start_date else None
+                ),
+                "last_end_date": (
+                    last_end_date.strftime("%d-%m-%Y") if last_end_date else None
+                ),
+                "available_slots": avaliable_solts.count(),
+                "booked_slots": booked_slots,
+                "completed_sessions": completed_sessions,
+            },
+            status=200,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to get data."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["GET"])
@@ -6244,14 +6521,15 @@ def get_project_and_handover(request):
         except (SchedularProject.DoesNotExist, Project.DoesNotExist):
             return Response({"error": "Project not found"}, status=404)
 
-        if not handover_details.exists():
-            return Response({"error": "Handover details not found"}, status=404)
-        handover_serializer = HandoverDetailsSerializer(handover_details.first())
+        handover_serializer = None
+        if handover_details.exists():
+            handover_serializer = HandoverDetailsSerializer(handover_details.first())
 
         return Response(
             {
                 "project": project_serializer.data,
-                "handover": handover_serializer.data,
+                "handover": handover_serializer.data if handover_serializer else None,
+                "project_type": project_type,
             }
         )
     elif handover_id:
@@ -6262,29 +6540,125 @@ def get_project_and_handover(request):
 
         if handover.schedular_project:
             project_serializer = SchedularProjectSerializer(handover.schedular_project)
+            project_type = "skill_training"
         elif handover.caas_project:
             project_serializer = ProjectSerializer(handover.caas_project)
+            project_type = "caas"
         else:
+            project_type = None
             project_serializer = None
         handover_serializer = HandoverDetailsSerializer(handover)
         return Response(
             {
                 "project": project_serializer.data if project_serializer else None,
                 "handover": handover_serializer.data,
+                "project_type": project_type,
             }
         )
     else:
         return Response({"error": "Invalid query parameters"}, status=400)
 
 
+def get_formatted_handovers(handovers):
+    try:
+        sales_order_ids_list = []
+        for handover in handovers:
+            for sales_order_id in handover.sales_order_ids:
+                sales_order_ids_list.append(sales_order_id)
+        sales_order_ids_str = ",".join(map(str, sales_order_ids_list))
+        serializer = HandoverDetailsSerializerWithOrganisationName(handovers, many=True)
+        # Fetch sales orders for the given sales order IDs
+        if sales_order_ids_str:
+            sales_orders = fetch_sales_orders(
+                organization_id, f"&salesorder_ids={sales_order_ids_str}"
+            )
+            if not sales_orders:
+                raise Exception("Failed to get sales orders.")
+            # Create a dictionary to map sales order ID to sales person ID
+            sales_order_to_sales_person = {
+                sales_order["salesorder_id"]: sales_order["salesperson_name"]
+                for sales_order in sales_orders
+            }
+            # Fetch sales persons based on sales person IDs from sales orders
+            sales_persons = fetch_sales_persons(organization_id)
+            if not sales_persons:
+                raise Exception(
+                    "Failed to get sales persons."
+                )  # Map sales persons to handovers
+            for handover in serializer.data:
+                sales_order_ids = handover["sales_order_ids"]
+                salespersons = []
+                added_salespersons = (
+                    set()
+                )  # Keep track of added salespersons for each handover
+                for sales_order_id in sales_order_ids:
+                    sales_person_name = sales_order_to_sales_person.get(sales_order_id)
+                    if sales_person_name:
+                        # Check if sales person has already been added for this handover
+                        if sales_person_name not in added_salespersons:
+                            for person in sales_persons:
+                                if person["salesperson_name"] == sales_person_name:
+                                    salespersons.append(person)
+                                    added_salespersons.add(
+                                        sales_person_name
+                                    )  # Add the sales person to the set of added salespersons
+                handover["salespersons"] = salespersons
+        return serializer.data
+    except Exception as e:
+        print(str(e))
+        raise Exception("Failed to get formatted handovers")
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_handovers(request):
-    handovers = HandoverDetails.objects.filter(
-        schedular_project__isnull=True, caas_project__isnull=True
-    )
-    serializer = HandoverDetailsSerializer(handovers, many=True)
-    return Response(serializer.data)
+def get_handovers(request, sales_id):
+    try:
+        handovers = HandoverDetails.objects.filter(sales__id=sales_id).order_by(
+            "-created_at"
+        )
+        formatted_handovers = get_formatted_handovers(handovers)
+        return Response(formatted_handovers, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get handovers."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_pmo_handovers(request):
+    try:
+        handovers = HandoverDetails.objects.filter(
+            schedular_project__isnull=True, caas_project__isnull=True
+        ).order_by("-created_at")
+        formatted_handovers = get_formatted_handovers(handovers)
+        return Response(formatted_handovers, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get handovers."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_reminder_in_batch(request, batch_id):
+    try:
+        email_reminder = request.data.get("email_reminder")
+        whatsapp_reminder = request.data.get("whatsapp_reminder")
+        calendar_invites = request.data.get("calendar_invites")
+        batch = SchedularBatch.objects.get(id=batch_id)
+        batch.email_reminder = email_reminder
+        batch.whatsapp_reminder = whatsapp_reminder
+        batch.calendar_invites = calendar_invites
+        batch.save()
+        return Response({"message": "Reminder Updated successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)
 
 
 @api_view(["POST"])
