@@ -42,7 +42,7 @@ from .serializers import (
     VendorDepthOneSerializer,
     VendorSerializer,
     InvoiceStatusUpdateGetSerializer,
-    VendorEditSerializer
+    VendorEditSerializer,ZohoVendorSerializer
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -1202,6 +1202,21 @@ def get_all_vendors(request):
             {"detail": f"Error fetching vendors: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+    
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("finance")])
+def get_zoho_vendors(request):
+    try:
+        vendors = ZohoVendor.objects.all()
+        serializer = ZohoVendorSerializer(vendors, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Error fetching vendors: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["GET"])
@@ -1796,11 +1811,14 @@ def get_current_month_start_and_end_date():
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
-def get_po_number_to_create(request):
+def get_po_number_to_create(request, po_type):
     try:
         purchase_orders = fetch_purchase_orders(organization_id)
         current_financial_year = get_current_financial_year()
-        regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
+        if po_type =="meeraq":
+            regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
+        elif po_type == "others":
+            regex_to_match = f"Meeraq/PO/{current_financial_year}/OTH/"
         new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
         return Response({"new_po_number": new_po_number})
     except Exception as e:
@@ -1906,6 +1924,30 @@ def coching_purchase_order_create(request, coach_id, project_id):
     except Exception as e:
         print(str(e))
         return Response(status=500)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_purchase_order_for_outside_vendors(request):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header, data=request.data)
+        if response.status_code == 201:
+            purchaseorder_created = response.json().get("purchaseorder")
+            return Response({"message": "Purchase Order created successfully."})
+        else:
+            print(response.json())
+            return Response(status=500)
+    except Exception as e:
+        print(str(e))
+        return Response(status=500)
+
+
 
 
 @api_view(["PUT"])
