@@ -32,6 +32,8 @@ urlpatterns = [
     path("pmos/", views.create_pmo),
     path("coaches/all/", views.get_coaches),
     path("coaches/approve/", views.approve_coach),
+    path('reject-coach/<int:coach_id>/', views.reject_coach, name='reject_coach'),
+    path('reject-facilitator/<int:facilitator_id>/', views.reject_facilitator, name='reject_facilitator'),
     path("facilitators/approve/", views.approve_facilitator),
     path(
         "password_reset/",
@@ -435,6 +437,18 @@ urlpatterns = [
     path(
         "get-facilitator-summary-data/<int:facilitator_id>/",
         views.get_facilitator_summary_data,
+    ),
+    path(
+        "hide-columns/",
+        views.hide_columns,
+    ),
+    path(
+        "get-table-hide-columns/<str:table_name>/",
+        views.get_table_hide_columns,
+    ),
+     path(
+        "edit-remark/",
+        views.edit_remark,
     ),
     path(
         "get-all-goals/",
