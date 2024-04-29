@@ -3800,6 +3800,48 @@ def get_so_for_the_project(request):
         return Response({"error": str(e)}, status=500)
 
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_handovers_so(request, sales_id):
+    try:
+        handovers = HandoverDetails.objects.filter(sales__id=sales_id).order_by(
+            "-created_at"
+        )
+        all_sales_order_ids = []
+        for handover in handovers:
+            all_sales_order_ids.extend(handover.sales_order_ids)
+
+        sales_orders_ids_str = ",".join(all_sales_order_ids)
+        all_sales_orders = []
+        if sales_orders_ids_str:
+            all_sales_orders = fetch_sales_orders(
+                organization_id, f"&salesorder_ids={sales_orders_ids_str}"
+            )
+        final_data = {}
+        sales_order_dict = {order["salesorder_id"]: order['salesorder_number'] for order in all_sales_orders}
+        if handovers:
+            for handover in handovers:
+                handover_id =handover.id
+                res = []
+                sales_order_ids = handover.sales_order_ids
+                for sales_order_id in sales_order_ids:
+                    sales_order_number = sales_order_dict.get(sales_order_id)
+                    if sales_order_number:
+                        res.append(sales_order_number)
+                final_data[handover_id] = res
+        return Response(final_data)
+
+    except ObjectDoesNotExist as e:
+        print(str(e))
+        return Response({"error": "Project does not exist"}, status=404)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_total_so_created_count(request, sales_person_id):

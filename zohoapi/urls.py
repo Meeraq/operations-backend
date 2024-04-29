@@ -343,6 +343,11 @@ urlpatterns = [
         name="get_so_for_the_project",
     ),
     path(
+        "get-handovers-so/<int:sales_id>/",
+        views.get_handovers_so,
+        name="get_handovers_so",
+    ),
+    path(
         "get-total-so-created-count/<str:sales_person_id>/",
         views.get_total_so_created_count,
         name="get_total_so_created_count",
@@ -350,7 +355,7 @@ urlpatterns = [
     path(
         "get-handovers-count/<str:sales_person_id>/",
         views.get_handovers_count,
-        name="get_handovers_count"
+        name="get_handovers_count",
     ),
     path(
         "sales-orders-with-due-invoices/<str:sales_person_id>/",
