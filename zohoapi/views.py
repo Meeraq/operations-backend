@@ -42,7 +42,7 @@ from .serializers import (
     VendorDepthOneSerializer,
     VendorSerializer,
     InvoiceStatusUpdateGetSerializer,
-    VendorEditSerializer
+    VendorEditSerializer,
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -1973,6 +1973,9 @@ def expense_purchase_order_create(request, facilitator_id, batch_or_project_id):
     try:
         is_all_batch = request.query_params.get("is_all_batch")
         expenses = []
+        JSONString = json.loads(request.data.get("JSONString"))
+
+        selected_expenses = JSONString.get("selected_expenses")
 
         facilitator = Facilitator.objects.get(id=facilitator_id)
 
@@ -1996,16 +1999,20 @@ def expense_purchase_order_create(request, facilitator_id, batch_or_project_id):
         if response.status_code == 201:
             purchaseorder_created = response.json().get("purchaseorder")
             for expense in expenses:
-                expense.purchase_order_id = purchaseorder_created["purchaseorder_id"]
-                expense.purchase_order_no = purchaseorder_created[
-                    "purchaseorder_number"
-                ]
-                expense.save()
+                if expense.id in selected_expenses:
+                    expense.purchase_order_id = purchaseorder_created[
+                        "purchaseorder_id"
+                    ]
+                    expense.purchase_order_no = purchaseorder_created[
+                        "purchaseorder_number"
+                    ]
+                    expense.save()
 
             return Response({"message": "Purchase Order created successfully."})
         else:
             print(response.json())
             return Response(status=500)
+        return Response(status=500)
     except Exception as e:
         print(str(e))
         return Response(status=500)
@@ -3800,7 +3807,6 @@ def get_so_for_the_project(request):
         return Response({"error": str(e)}, status=500)
 
 
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_handovers_so(request, sales_id):
@@ -3819,10 +3825,13 @@ def get_handovers_so(request, sales_id):
                 organization_id, f"&salesorder_ids={sales_orders_ids_str}"
             )
         final_data = {}
-        sales_order_dict = {order["salesorder_id"]: order['salesorder_number'] for order in all_sales_orders}
+        sales_order_dict = {
+            order["salesorder_id"]: order["salesorder_number"]
+            for order in all_sales_orders
+        }
         if handovers:
             for handover in handovers:
-                handover_id =handover.id
+                handover_id = handover.id
                 res = []
                 sales_order_ids = handover.sales_order_ids
                 for sales_order_id in sales_order_ids:
@@ -3839,7 +3848,6 @@ def get_handovers_so(request, sales_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
-
 
 
 @api_view(["GET"])
@@ -3930,6 +3938,3 @@ def get_line_items(request):
                 line_item["project_name"] = None
         line_item_data.append(line_item)
     return JsonResponse(line_item_data, safe=False)
-
-
-
