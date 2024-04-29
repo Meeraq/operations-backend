@@ -162,21 +162,25 @@ class Sales(models.Model):
     email = models.EmailField()
     phone = models.CharField(max_length=25)
     active_inactive = models.BooleanField(default=True)
+    sales_person_id = models.CharField(max_length=255, blank=True, default="")
+    business = models.CharField(max_length=255, blank=True, default="meeraq")
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
 
     def __str__(self):
         return self.name
 
 
-class Pmo(models.Model):
 
+class Pmo(models.Model):
     SUB_ROLE_CHOICES = [
         ("manager", "Manager"),
         ("junior_pmo", "Junior PMO"),
     ]
 
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
@@ -184,6 +188,17 @@ class Pmo(models.Model):
         max_length=50, choices=SUB_ROLE_CHOICES, blank=True, default="manager"
     )
     room_id = models.CharField(max_length=50, blank=True)
+    active_inactive = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class CTTPmo(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+    phone = models.CharField(max_length=25)
     active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
@@ -328,6 +343,7 @@ class Organisation(models.Model):
 
 class HR(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
@@ -564,8 +580,12 @@ class Goal(models.Model):
     )
     name = models.TextField()
     description = models.TextField()
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
-    engagement = models.ForeignKey(Engagement, on_delete=models.CASCADE)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, blank=True, null=True
+    )
+    engagement = models.ForeignKey(
+        Engagement, on_delete=models.CASCADE, blank=True, null=True
+    )
 
 
 class Competency(models.Model):

@@ -1,5 +1,5 @@
-{% extends "table_parent_template.html" %} 
-{% block title %}Meeraq Coachinge {%endblock %} {% block content %}
+{% extends "table_parent_template.html" %} {% block title %}Meeraq Coaching |
+Handover updated {% endblock %} {% block content %}
 <tr style="border: 0">
   <td style="padding: 20px; background: #f8f7f8; border: 0">
     <div align="center">
@@ -27,16 +27,17 @@
             <td style="padding: 15pt 15pt 15pt 15pt">
               <p>
                 <strong><span style="font-size: 14px">Dear&nbsp;</span></strong
-                ><b>{{name}}</b><strong>,</strong>
+                ><b>PMO Team</b><strong>,</strong>
               </p>
-              <p class="welcome-text child-para">
-                The requested value {{value}} for feild {{feild}} is rejected.
-              </p>
-
+              <h3>
+                The handover details for
+                <span id="">{{project_name}}</span> have been updated. Kindly
+                review the changes at your earliest convenience.
+              </h3>
               <p class="child-para">
-                Click <a href="https://caas.meeraq.com/">here</a> to login.
+                Click <a href="https://caas.meeraq.com/">here</a> to login and
+                view the handovers.
               </p>
-
               <p><br /></p>
               <p>Best regards,</p>
               <p>Team Meeraq.</p>

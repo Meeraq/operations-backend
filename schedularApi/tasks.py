@@ -709,7 +709,7 @@ def send_participant_morning_reminder_email():
     )
     for session in today_sessions:
         if (
-            session.coaching_session.batch.project.email_reminder
+            session.coaching_session.batch.email_reminder
             and session.coaching_session.batch.project.status == "ongoing"
         ):
             name = session.learner.name
@@ -786,7 +786,7 @@ def send_participant_morning_reminder_one_day_before_email():
     )
     for session in tomorrow_sessions:
         if (
-            session.coaching_session.batch.project.email_reminder
+            session.coaching_session.batch.email_reminder
             and session.coaching_session.batch.project.status == "ongoing"
         ):
             name = session.learner.name
@@ -876,7 +876,7 @@ def send_whatsapp_reminder_1_day_before_live_session():
 
         for session in live_sessions:
             if (
-                session.batch.project.whatsapp_reminder
+                session.batch.whatsapp_reminder
                 and session.batch.project.status == "ongoing"
             ):
                 learners = session.batch.learners.all()
@@ -925,7 +925,7 @@ def send_whatsapp_reminder_same_day_morning():
 
         for session in live_sessions:
             if (
-                session.batch.project.whatsapp_reminder
+                session.batch.whatsapp_reminder
                 and session.batch.project.status == "ongoing"
             ):
                 learners = session.batch.learners.all()
@@ -978,7 +978,7 @@ def send_whatsapp_reminder_30_min_before_live_session(id):
     try:
         live_session = LiveSession.objects.get(id=id)
         if (
-            live_session.batch.project.whatsapp_reminder
+            live_session.batch.whatsapp_reminder
             and live_session.batch.project.status == "ongoing"
         ):
             learners = live_session.batch.learners.all()
@@ -1035,7 +1035,7 @@ def send_feedback_lesson_reminders():
     today_live_sessions = LiveSession.objects.filter(date_time__date=today)
     for live_session in today_live_sessions:
         if (
-            live_session.batch.project.whatsapp_reminder
+            live_session.batch.whatsapp_reminder
             and live_session.batch.project.status == "ongoing"
         ):
             try:
@@ -1218,7 +1218,7 @@ def send_participant_morning_reminder_whatsapp_message_at_8AM_seeq():
         )
         for session in today_sessions:
             if (
-                session.coaching_session.batch.project.whatsapp_reminder
+                session.coaching_session.batch.whatsapp_reminder
                 and session.coaching_session.batch.project.status == "ongoing"
             ):
                 name = session.learner.name
@@ -1517,7 +1517,7 @@ def coachee_booking_reminder_whatsapp_at_8am():
         for coaching_session in coaching_sessions_exist:
             result = available_slots_count_for_participant(coaching_session.id)
             if (
-                coaching_session.batch.project.whatsapp_reminder
+                coaching_session.batch.whatsapp_reminder
                 and coaching_session.batch.project.status == "ongoing"
             ):
                 learners_in_coaching_session = coaching_session.batch.learners.all()
@@ -1544,6 +1544,7 @@ def coachee_booking_reminder_whatsapp_at_8am():
                             project_name = coaching_session.batch.project.name
                             path_parts = coaching_session.booking_link.split("/")
                             booking_id = path_parts[-1]
+                            expiry_date = coaching_session.expiry_date.strftime("%d-%m-%Y")
                             send_whatsapp_message_template(
                                 phone,
                                 {
@@ -1565,8 +1566,12 @@ def coachee_booking_reminder_whatsapp_at_8am():
                                             "name": "1",
                                             "value": booking_id,
                                         },
+                                        {
+                                            "name": "expiry_date",
+                                            "value": expiry_date,
+                                        },
                                     ],
-                                    "template_name": "reminder_coachee_book_slot_daily",
+                                    "template_name": "participant_slot_booking_reminder_for_skill_training_sessions",
                                 },
                             )
                     except Exception as e:
@@ -2513,7 +2518,7 @@ def send_live_session_link_whatsapp_to_facilitators_30_min_before(id):
     try:
         live_session = LiveSession.objects.get(id=id)
         if (
-            live_session.batch.project.whatsapp_reminder
+            live_session.batch.whatsapp_reminder
             and live_session.batch.project.status == "ongoing"
         ):
             facilitator = live_session.facilitator
@@ -2553,7 +2558,7 @@ def send_live_session_link_whatsapp_to_facilitators_one_day_before():
         live_sessions = LiveSession.objects.filter(date_time__date=tomorrow.date())
         for live_session in live_sessions:
             if (
-                live_session.batch.project.whatsapp_reminder
+                live_session.batch.whatsapp_reminder
                 and live_session.batch.project.status == "ongoing"
             ):
                 facilitator = live_session.facilitator
@@ -2601,7 +2606,7 @@ def send_live_session_reminder_to_facilitator_one_day_before():
         live_sessions = LiveSession.objects.filter(date_time__date=tomorrow.date())
         for live_session in live_sessions:
             if (
-                live_session.batch.project.whatsapp_reminder
+                live_session.batch.whatsapp_reminder
                 and live_session.batch.project.status == "ongoing"
             ):
                 facilitator = live_session.facilitator
@@ -2642,7 +2647,7 @@ def send_live_session_whatsapp_reminder_same_day_morning_for_facilitator():
 
         for session in live_sessions:
             if (
-                session.batch.project.whatsapp_reminder
+                session.batch.whatsapp_reminder
                 and session.batch.project.status == "ongoing"
             ):
                 facilitator = session.batch.facilitator
@@ -2764,8 +2769,11 @@ def add_batch_to_project(data):
                     batch = SchedularBatch.objects.create(
                         name=batch_name, project=project
                     )
+                    batch.email_reminder = project.email_reminder
+                    batch.whatsapp_reminder = project.whatsapp_reminder
+                    batch.calendar_invites = project.calendar_invites
+                    batch.save()
                     create_batch_calendar(batch)
-
                     # Create Live Sessions and Coaching Sessions based on project structure
 
                 # Check if participant with the same email exists
