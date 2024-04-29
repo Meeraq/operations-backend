@@ -1049,13 +1049,13 @@ def edit_pmo(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def approve_coach(request):
     try:
-        # Get the Coach object
+
         unapproved_coach = request.data["coach"]
         room_id = request.data["room_id"]
         coach = Coach.objects.get(id=unapproved_coach["id"])
 
-        # Change the is_approved field to True
         coach.is_approved = True
+        coach.is_rejected = False
         coach.active_inactive = True
         coach.room_id = room_id
         coach.save()
@@ -1065,8 +1065,7 @@ def approve_coach(request):
         message = f"Congratulations ! Your profile has been approved. You will be notified for projects that match your profile. Thank You !"
 
         create_notification(coach.user.user, path, message)
-        # Return success response
-        # Send approval email to the coach
+
         send_mail_templates(
             "coach_templates/pmo_approves_profile.html",
             [coach.email],
@@ -1078,24 +1077,22 @@ def approve_coach(request):
         )
         return Response({"message": "Coach approved successfully."}, status=200)
 
-    except Coach.DoesNotExist:
-        # Return error response if Coach with the provided ID does not exist
-        return Response({"error": "Coach does not exist."}, status=404)
-
     except Exception as e:
-        # Return error response if any other exception occurs
-        return Response({"error": str(e)}, status=500)
+        print(str(e))
+
+        return Response({"error": "Failed to approve coach."}, status=500)
 
 
 @api_view(["PUT"])
 @permission_classes([AllowAny])
 def reject_coach(request, coach_id):
     try:
-        # Get the coach object
+
         coach = Coach.objects.get(id=coach_id)
-        # Set is_rejected to True
+
         coach.is_rejected = True
         coach.save()
+
         send_mail_templates(
             "coach_templates/coach_is_rejected.html",
             [coach.email],
@@ -1105,35 +1102,29 @@ def reject_coach(request, coach_id):
             },
             [],
         )
-        # Serialize the updated coach
-        serializer = CoachSerializer(coach)
-        # Return the serialized coach as the response
-        return Response(serializer.data, status=200)
-    except Coach.DoesNotExist:
-        return Response({"error": "Coach not found"}, status=404)
+
+        return Response({"message": "Coach rejected successfully!"}, status=200)
     except Exception as e:
-        # Return error response if any exception occurs
-        return Response({"error": str(e)}, status=500)
+        print(str(e))
+
+        return Response({"error": "Failed to reject coach."}, status=500)
 
 
 @api_view(["PUT"])
 @permission_classes([AllowAny])
 def reject_facilitator(request, facilitator_id):
     try:
-        # Get the coach object
+
         facilitator = Facilitator.objects.get(id=facilitator_id)
-        # Set is_rejected to True
+
         facilitator.is_rejected = True
         facilitator.save()
-        # Serialize the updated coach
-        serializer = FacilitatorSerializer(facilitator)
-        # Return the serialized coach as the response
-        return Response(serializer.data, status=200)
-    except Facilitator.DoesNotExist:
-        return Response({"error": "facilitator not found"}, status=404)
+
+        return Response({"message": "Facilitator rejected successfully!"}, status=200)
+
     except Exception as e:
-        # Return error response if any exception occurs
-        return Response({"error": str(e)}, status=500)
+        print(str(e))
+        return Response({"error": "Failed to reject facilitator."}, status=500)
 
 
 @api_view(["PUT"])
@@ -1846,6 +1837,9 @@ def add_coach(request):
             level,
             username,
             room_id,
+            corporate_experience,
+            coaching_experience,
+
         ]
     ):
         return Response({"error": "All required fields must be provided."}, status=400)
@@ -8157,59 +8151,61 @@ class StandardizedFieldRequestAcceptReject(APIView):
         request_id = request.data.get("request_id")
 
         try:
-            request_instance = StandardizedFieldRequest.objects.get(id=request_id)
-            field_name = request_instance.standardized_field_name.field
-            value = request_instance.value
+            with transaction.atomic():
+                request_instance = StandardizedFieldRequest.objects.get(id=request_id)
+                field_name = request_instance.standardized_field_name.field
+                value = request_instance.value
 
-            standardized_field, created = StandardizedField.objects.get_or_create(
-                field=field_name
-            )
-            if status == "accepted":
-                request_instance.status = status
-                request_instance.save()
-
-                # if value not in standardized_field.values:
-                #     standardized_field.values.append(value)
-                #     standardized_field.save()
-                # else:
-                #     return Response({"error": "Value already present."}, status=404)
-                return Response({"message": f"Request {status}"}, status=200)
-            else:
-                request_instance.status = status
-                request_instance.save()
-
-                if value in standardized_field.values:
-                    standardized_field.values.remove(value)
-                    standardized_field.save()
-
-                for model_name, fields in models_to_update.items():
-                    model_class = globals()[model_name]
-                    instances = model_class.objects.all()
-
-                    for instance in instances:
-                        for field in fields:
-                            field_value = getattr(instance, field, None)
-                            if field_value is not None:
-                                if (
-                                    isinstance(field_value, list)
-                                    and value in field_value
-                                ):
-                                    field_value.remove(value)
-                                    instance.save()
-                send_mail_templates(
-                    "coach_templates/reject_feild_item_request.html",
-                    [request_instance.coach.email],
-                    "Meeraq | Field Rejected",
-                    {
-                        "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
-                        "value": value,
-                        "feild": field_name,
-                    },
-                    [],
+                standardized_field, created = StandardizedField.objects.get_or_create(
+                    field=field_name
                 )
-                return Response({"message": f"Request {status}"}, status=200)
-        except StandardizedFieldRequest.DoesNotExist:
-            return Response({"error": f"Request not found."}, status=404)
+                if status == "accepted":
+                    request_instance.status = status
+                    request_instance.save()
+
+                    # if value not in standardized_field.values:
+                    #     standardized_field.values.append(value)
+                    #     standardized_field.save()
+                    # else:
+                    #     return Response({"error": "Value already present."}, status=404)
+                    return Response({"message": f"Request {status}"}, status=200)
+                else:
+                    request_instance.status = status
+                    request_instance.save()
+
+                    if value in standardized_field.values:
+                        standardized_field.values.remove(value)
+                        standardized_field.save()
+
+                    for model_name, fields in models_to_update.items():
+                        model_class = globals()[model_name]
+                        instances = model_class.objects.all()
+
+                        for instance in instances:
+                            for field in fields:
+                                field_value = getattr(instance, field, None)
+                                if field_value is not None:
+                                    if (
+                                        isinstance(field_value, list)
+                                        and value in field_value
+                                    ):
+                                        field_value.remove(value)
+                                        instance.save()
+                    send_mail_templates(
+                        "coach_templates/reject_feild_item_request.html",
+                        [request_instance.coach.email],
+                        "Meeraq | Field Rejected",
+                        {
+                            "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
+                            "value": value,
+                            "feild": field_name.replace(" ", "_").title(),
+                        },
+                        [],
+                    )
+                    return Response({"message": f"Request {status}"}, status=200)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": f"Failed to perform operation."}, status=500)
 
 
 class StandardFieldDeleteValue(APIView):
