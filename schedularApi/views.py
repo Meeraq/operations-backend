@@ -484,7 +484,7 @@ def get_all_Schedular_Projects(request):
     finance = request.query_params.get("finance")
     projects = None
     if finance:
-       projects = SchedularProject.objects.all() 
+        projects = SchedularProject.objects.all()
     elif pmo_id:
         pmo = Pmo.objects.get(id=int(pmo_id))
 
@@ -6089,28 +6089,34 @@ def create_expense(request):
                 file=file,
                 amount=amount,
             )
+
             facilitator_name = f"{facilitator.first_name} {facilitator.last_name}"
             expense_name = expense.name
             project_name = expense.batch.project.name
-            send_mail_templates(
-                "expenses/expenses_emails.html",
-                [
+
+            try:
+                emails = [
                     "madhuri@coachtotransformation.com",
                     "nisha@coachtotransformation.com",
                     "pmotraining@meeraq.com",
                     "pmocoaching@meeraq.com",
-                    expense.batch.project.junior_pmo.email,
-                ],
-                "Verification Required: Facilitators Expenses",
-                {
-                    "facilitator_name": facilitator_name,
-                    "expense_name": expense_name,
-                    "project_name": project_name,
-                    "description": expense.description,
-                    "amount": expense.amount,
-                },
-            )
-            try:
+                ]
+                if batch.project.junior_pmo:
+                    emails.append(batch.project.junior_pmo.email)
+
+                send_mail_templates(
+                    "expenses/expenses_emails.html",
+                    emails,
+                    "Verification Required: Facilitators Expenses",
+                    {
+                        "facilitator_name": facilitator_name,
+                        "expense_name": expense_name,
+                        "project_name": project_name,
+                        "description": expense.description,
+                        "amount": expense.amount,
+                    },
+                )
+
                 email_array = json.loads(env("EXPENSE_NOTIFICATION_EMAILS"))
                 if batch.project.junior_pmo:
                     email_array.append(batch.project.junior_pmo.email)
