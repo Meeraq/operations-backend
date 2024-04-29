@@ -331,6 +331,21 @@
 						</tr>
 					</tbody>
 				</table>
+				{% if invoice.tax_names %}
+					<table style="margin-top: 5pt; border: 0px;" cellspacing="0" border="0" width="100%">
+						<tbody>
+							<tr>
+								<td id="total" style="text-align: right;font-size: 12pt; ">
+									
+										{% for tax_name in invoice.tax_names %}
+											<li>{{ tax_name }}</li>
+										{% endfor %}
+									
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				{% endif %}
 				<table style="margin-top: 10pt; border: 0px;" cellspacing="0" border="0" width="100%">
 					<tbody>
 						<tr>

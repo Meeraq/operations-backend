@@ -214,3 +214,16 @@ class HandoverDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = HandoverDetails
         fields = "__all__"
+
+
+class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer):
+    organisation_name = serializers.SerializerMethodField()
+
+    def get_organisation_name(self, obj):
+        if obj.organisation:
+            return obj.organisation.name
+        return None
+
+    class Meta:
+        model = HandoverDetails
+        fields = '__all__'
