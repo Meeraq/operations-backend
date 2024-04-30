@@ -62,6 +62,7 @@ from .tasks import (
     fetch_client_invoices,
     get_all_so_of_po,
     fetch_sales_persons,
+    create_or_update_so,
 )
 from .models import (
     InvoiceData,
@@ -2853,6 +2854,7 @@ def create_sales_order(request):
         response = requests.post(api_url, headers=auth_header, data=request.data)
         if response.status_code == 201:
             salesorder_created = response.json().get("salesorder")
+            create_or_update_so(salesorder_created["salesorder_id"])
             project_id = request.data.get("project_id", "")
             project_type = request.data.get("project_type", "")
             status = request.data.get("status", "")
