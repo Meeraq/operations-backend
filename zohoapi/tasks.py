@@ -158,6 +158,12 @@ purchase_orders_allowed = [
     "Meeraq/PO/23-24/T/0014",
     "Meeraq/PO/23-24/T/0018",
     "Meeraq/PO/CaaS/23-24/0079",
+    "Meeraq/PO/CaaS/23-24/0092",
+    "Meeraq/PO/CaaS/23-24/0090",
+    "Meeraq/PO/CaaS/23-24/0040",
+    "Meeraq/PO/CaaS/23-24/0028",
+    "Meeraq/PO/CaaS/23-24/0093",
+    "Meeraq/PO/CaaS/23-24/0091"
 ]
 
 
@@ -235,9 +241,7 @@ def fetch_purchase_orders(organization_id, query_params=""):
     page = 1
 
     while has_more_page:
-        api_url = (
-            f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}{query_params}"
-        )
+        api_url = f"{base_url}/purchaseorders/?organization_id={organization_id}&page={page}{query_params}"
         auth_header = {"Authorization": f"Bearer {access_token_purchase_data}"}
         response = requests.get(api_url, headers=auth_header)
 
@@ -283,6 +287,14 @@ def fetch_sales_orders(organization_id, queryParams=""):
             raise Exception("Failed to fetch sales orders")
 
     return all_sales_orders
+
+
+def create_or_update_so(so_id):
+
+    if not SalesOrder.objects.filter(salesorder_id=so_id).exists():
+        create_so_with_line_items(so_id)
+    else:
+        update_so_with_line_items(so_id)
 
 
 def fetch_sales_persons(organization_id):

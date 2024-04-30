@@ -373,14 +373,14 @@ def create_handover(request):
         res_serializer = HandoverDetailsSerializer(handover_instance)
         return Response(
             {
-                "message": "Handover created successfully.",
+                "message": "Handover created successfully. Please contact the PMO team for acceptance of the handover.",
                 "handover": res_serializer.data,
             },
             status=status.HTTP_200_OK,
         )
     else:
         print(serializer.errors)
-        return Response({"error": "Failed to add handover. "}, status=400)
+        return Response({"error": "Failed to add handover. "}, status=500)
 
 
 @api_view(["POST"])
