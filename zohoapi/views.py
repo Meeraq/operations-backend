@@ -3869,10 +3869,30 @@ def get_total_so_created_count(request, sales_person_id):
 @permission_classes([IsAuthenticated])
 def get_handovers_count(request, sales_person_id):
     try:
-        handovers_count = HandoverDetails.objects.filter(
-            sales__id=sales_person_id
+        # Count handovers where is_drafted is true
+        drafted_count = HandoverDetails.objects.filter(
+            sales__id=sales_person_id, is_drafted=True
         ).count()
-        return Response({"handovers_count": handovers_count}, status=status.HTTP_200_OK)
+        
+        # Count handovers where is_accepted is true
+        accepted_count = HandoverDetails.objects.filter(
+            sales__id=sales_person_id, is_accepted=True
+        ).count()
+        
+        # Count handovers where both is_drafted and is_accepted are false (pending)
+        pending_count = HandoverDetails.objects.filter(
+            sales__id=sales_person_id, is_drafted=False, is_accepted=False
+        ).count()
+
+        # Calculate total count
+        total_count = drafted_count + accepted_count + pending_count
+
+        return Response({
+            "drafted_count": drafted_count,
+            "accepted_count": accepted_count,
+            "pending_count": pending_count,
+            "total_count": total_count
+        }, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response(
