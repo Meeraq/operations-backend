@@ -1465,6 +1465,10 @@ def create_project_cass(request):
         )
     organisation.save()
     desc = request.data["project_description"]
+    total_credits_in_minutes = 0
+    if request.data["total_credits"]:
+        total_credits_in_hours = int(request.data["total_credits"]) 
+        total_credits_in_minutes = total_credits_in_hours * 60
     try:
         project = Project(
             # print(organisation.name, organisation.image_url, "details of org")
@@ -1510,6 +1514,8 @@ def create_project_cass(request):
             junior_pmo=junior_pmo,
             calendar_invites=request.data["calendar_invites"],
             finance=request.data["finance"],
+            is_project_structure = request.data["is_project_structure"],
+            total_credits = total_credits_in_minutes
         )
 
         project.save()
