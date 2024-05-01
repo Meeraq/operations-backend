@@ -514,7 +514,7 @@ def get_total_revenue(request, vendor_id):
         for invoice in invoices:
             total_revenue += invoice.total
 
-        return Response({"total_revenue": total_revenue})
+        return Response(total_revenue)
     except Exception as e:
         return Response({"error": str(e)}, status=400)
 
