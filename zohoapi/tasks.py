@@ -20,6 +20,7 @@ from .serializers import (
     ZohoCustomerSerializer,
     ZohoVendorSerializer,
     SalesOrderSerializer,
+    SalesOrderGetSerializer,
     SalesOrderLineItemSerializer,
     PurchaseOrderSerializer,
     PurchaseOrderLineItemSerializer,

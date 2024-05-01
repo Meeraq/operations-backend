@@ -44,9 +44,11 @@ from .serializers import (
     InvoiceStatusUpdateGetSerializer,
     VendorEditSerializer,
     SalesOrderSerializer,
+    SalesOrderGetSerializer,
     PurchaseOrderSerializer,
     BillSerializer,
     ClientInvoiceSerializer,
+    ClientInvoiceGetSerializer,
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -1876,7 +1878,7 @@ def get_client_invoice_number_to_create(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_so_number_to_create(request, brand):
     try:
-        sales_orders = SalesOrderSerializer(SalesOrder.objects.all(), many=True).data
+        sales_orders = SalesOrderGetSerializer(SalesOrder.objects.all(), many=True).data
         current_financial_year = get_current_financial_year()
         regex_to_match = None
         if brand == "ctt":
@@ -2653,7 +2655,7 @@ def get_all_sales_orders(request):
         query_params = (
             f"&salesorder_number_contains={search_text}" if search_text else ""
         )
-        all_sales_orders = SalesOrderSerializer(
+        all_sales_orders = SalesOrderGetSerializer(
             SalesOrder.objects.all(), many=True
         ).data
         res = get_sales_orders_with_project_details(all_sales_orders)
@@ -3048,7 +3050,7 @@ def create_sales_order(request):
 @permission_classes([IsAuthenticated])
 def get_all_client_invoices(request):
     try:
-        all_client_invoices = ClientInvoiceSerializer(
+        all_client_invoices = ClientInvoiceGetSerializer(
             ClientInvoice.objects.all(), many=True
         ).data
         # fetch_client_invoices(organization_id)
@@ -3062,7 +3064,7 @@ def get_all_client_invoices(request):
 @permission_classes([IsAuthenticated])
 def get_all_client_invoices_for_project(request):
     try:
-        all_client_invoices = ClientInvoiceSerializer(
+        all_client_invoices = ClientInvoiceGetSerializer(
             ClientInvoice.objects.all(), many=True
         ).data
         return Response(all_client_invoices, status=status.HTTP_200_OK)
@@ -3138,7 +3140,7 @@ def get_project_sales_orders(request, project_type, project_id):
             sales_orders = []
             if salesorder_ids:
                 ids = ",".join(salesorder_ids)
-                sales_orders = SalesOrderSerializer(
+                sales_orders = SalesOrderGetSerializer(
                     SalesOrder.objects.filter(salesorder_id__in=salesorder_ids),
                     many=True,
                 ).data
@@ -3771,7 +3773,7 @@ def get_client_invoices(request):
             sales_order_ids = list(sales_order_ids_set)  # [1,2,3]
             invoices = []
             if len(sales_order_ids) > 0:
-                invoices = ClientInvoiceSerializer(
+                invoices = ClientInvoiceGetSerializer(
                     ClientInvoice.objects.filter(sales_order__id__in=sales_order_ids),
                     many=True,
                 ).data
@@ -3784,7 +3786,7 @@ def get_client_invoices(request):
                 )
             else:
                 clientinvoices = ClientInvoice.objects.all()
-            invoices = ClientInvoiceSerializer(
+            invoices = ClientInvoiceGetSerializer(
                 clientinvoices,
                 many=True,
             ).data
@@ -3867,7 +3869,7 @@ def get_so_for_the_project(request):
         sales_orders_ids_str = ",".join(all_sales_order_ids)
         all_sales_orders = []
         if sales_orders_ids_str:
-            all_sales_orders = SalesOrderSerializer(
+            all_sales_orders = SalesOrderGetSerializer(
                 SalesOrder.objects.filter(salesorder_id__in=all_sales_order_ids),
                 many=True,
             ).data
@@ -3924,7 +3926,7 @@ def get_handovers_so(request, sales_id):
         sales_orders_ids_str = ",".join(all_sales_order_ids)
         all_sales_orders = []
         if sales_orders_ids_str:
-            all_sales_orders = SalesOrderSerializer(
+            all_sales_orders = SalesOrderGetSerializer(
                 SalesOrder.objects.filter(salesorder_id__in=all_sales_order_ids),
                 many=True,
             ).data
@@ -3961,7 +3963,7 @@ def get_handovers_so(request, sales_id):
 @permission_classes([IsAuthenticated])
 def get_total_so_created_count(request, sales_person_id):
     try:
-        all_sales_orders = SalesOrderSerializer(
+        all_sales_orders = SalesOrderGetSerializer(
             SalesOrder.objects.filter(salesperson_id=sales_person_id), many=True
         ).data
         # fetch_sales_orders(
@@ -3995,7 +3997,7 @@ def get_handovers_count(request, sales_person_id):
 @permission_classes([IsAuthenticated])
 def sales_orders_with_due_invoices(request, sales_person_id):
     try:
-        all_sales_orders = SalesOrderSerializer(
+        all_sales_orders = SalesOrderGetSerializer(
             SalesOrder.objects.filter(salesperson_id=sales_person_id), many=True
         ).data
         # fetch_sales_orders(

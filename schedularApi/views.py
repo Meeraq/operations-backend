@@ -175,7 +175,7 @@ from api.views import get_user_data
 from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping, SalesOrder, PurchaseOrder
 from zohoapi.views import fetch_purchase_orders, organization_id, fetch_sales_persons, filter_purchase_order_data
 from zohoapi.tasks import organization_id, fetch_sales_orders
-from zohoapi.serializers import SalesOrderSerializer, PurchaseOrderSerializer
+from zohoapi.serializers import SalesOrderSerializer, PurchaseOrderSerializer,SalesOrderGetSerializer
 from courses.views import calculate_nps
 from api.permissions import IsInRoles
 
@@ -6575,7 +6575,7 @@ def get_formatted_handovers(handovers):
         serializer = HandoverDetailsSerializerWithOrganisationName(handovers, many=True)
         # Fetch sales orders for the given sales order IDs
         if sales_order_ids_str:
-            sales_orders = SalesOrderSerializer(SalesOrder.objects.all(),many=True).data
+            sales_orders = SalesOrderGetSerializer(SalesOrder.objects.all(),many=True).data
             # fetch_sales_orders(
             #     organization_id, f"&salesorder_ids={sales_order_ids_str}"
             # )
