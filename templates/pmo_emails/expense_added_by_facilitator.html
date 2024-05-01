@@ -1,0 +1,69 @@
+{% extends "table_parent_template.html" %} {% block title %}Meeraq Coaching |
+Coach assigned to Coachee Cc {% endblock %} {% block content %}
+<tr style="border: 0">
+  <td style="padding: 20px; background: #f8f7f8; border: 0">
+    <div align="center">
+      <table
+        border="0"
+        cellpadding="0"
+        cellspacing="0"
+        style="
+          width: 100%;
+          mso-cellspacing: 0cm;
+          background: #f8f7f8;
+          mso-yfti-tbllook: 1184;
+          mso-padding-alt: 0cm 0cm 0cm 0cm;
+        "
+        width="100%"
+      >
+        <tbody>
+          <tr
+            style="
+              mso-yfti-irow: 0;
+              mso-yfti-firstrow: yes;
+              mso-yfti-lastrow: yes;
+            "
+          >
+            <td style="padding: 15pt 15pt 15pt 15pt">
+              <p>
+                <strong><span style="font-size: 14px">Dear&nbsp;</span></strong
+                ><b>{{name}}</b><strong>,</strong>
+              </p>
+              <p>
+                We hope this message finds you well. I wanted to inform you that
+                a new expense has been uploaded to the system by one of our
+                facilitators.
+              </p>
+
+              <h4>Expense Details:</h4>
+
+              <ul>
+                <li><strong>Facilitator Name:</strong> {{facilitator_name}}</li>
+                <li><strong>Project Name:</strong> {{project_name}}</li>
+                <li><strong>Expense Description:</strong> {{description}}</li>
+                <li><strong>Amount:</strong> {{amount}}</li>
+                <li><strong>Date:</strong> {{date_of_expense}}</li>
+              </ul>
+
+              <p>
+                Please review the expense at your earliest convenience and take
+                appropriate action. If the expense is approved, please mark it
+                as such in the system. If further clarification is needed or if
+                you have any questions, please don't hesitate to reach out to
+                the trainer directly.
+              </p>
+
+              <p>Thank you for your attention to this matter.</p>
+
+              <p><br /></p>
+              <p>Best regards,</p>
+              <p>Team Meeraq.</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </td>
+</tr>
+
+{% endblock %}

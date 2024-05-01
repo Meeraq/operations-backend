@@ -14,6 +14,8 @@ from .models import (
     SchedularUpdate,
     CalendarInvites,
     FacilitatorPricing,
+    Expense,
+    HandoverDetails,
 )
 
 # Register your models here.
@@ -32,3 +34,5 @@ admin.site.register(SchedularUpdate)
 admin.site.register(CalendarInvites)
 admin.site.register(CoachPricing)
 admin.site.register(FacilitatorPricing)
+admin.site.register(Expense)
+admin.site.register(HandoverDetails)
