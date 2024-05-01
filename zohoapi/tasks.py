@@ -289,14 +289,6 @@ def fetch_sales_orders(organization_id, queryParams=""):
     return all_sales_orders
 
 
-def create_or_update_so(so_id):
-
-    if not SalesOrder.objects.filter(salesorder_id=so_id).exists():
-        create_so_with_line_items(so_id)
-    else:
-        update_so_with_line_items(so_id)
-
-
 def fetch_sales_persons(organization_id):
     try:
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
@@ -1439,6 +1431,34 @@ def update_bill_with_line_items(bill_id):
             )
     else:
         print(bill["bill_number"], serializer.errors)
+
+
+def create_or_update_so(so_id):
+    if not SalesOrder.objects.filter(salesorder_id=so_id).exists():
+        create_so_with_line_items(so_id)
+    else:
+        update_so_with_line_items(so_id)
+
+
+def create_or_update_po(po_id):
+    if not PurchaseOrder.objects.filter(purchaseorder_id=po_id).exists():
+        create_po_with_line_items(po_id)
+    else:
+        update_po_with_line_items(po_id)
+
+
+def create_or_update_client_invoice(invoice_id):
+    if not ClientInvoice.objects.filter(invoice_id=invoice_id).exists():
+        create_client_invoice_with_line_items(invoice_id)
+    else:
+        update_client_invoice_with_line_items(invoice_id)
+
+
+def create_or_update_bills(bill_id):
+    if not Bill.objects.filter(bill_id=bill_id).exists():
+        create_bill_with_line_items(bill_id)
+    else:
+        update_bill_with_line_items(bill_id)
 
 
 @shared_task
