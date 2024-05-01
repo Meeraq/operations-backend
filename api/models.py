@@ -491,6 +491,23 @@ class Availibility(models.Model):
 #     coach_joined = models.BooleanField(blank=True,default=False)
 #     learner_joined = models.BooleanField(blank=True,default=False)
 
+class Engagement(models.Model):
+    STATUS_CHOICES = (
+        ("active", "Active"),
+        ("completed", "Completed"),
+        ("archived", "Archived"),
+    )
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, null=True, blank=True)
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    project_structure = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Project: {self.project.name} - Learner: {self.learner.name}"
+
+
 
 class SessionRequestCaas(models.Model):
     hr = models.ForeignKey(
@@ -502,6 +519,9 @@ class SessionRequestCaas(models.Model):
 
     learner = models.ForeignKey(
         Learner, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    engagement = models.ForeignKey(
+        Engagement, on_delete=models.CASCADE, blank=True, null=True, default=None
     )
     project = models.ForeignKey(Project, on_delete=models.CASCADE, default=None)
     coach = models.ForeignKey(
@@ -556,22 +576,6 @@ class Notification(models.Model):
     def __str__(self):
         return self.user.username
 
-
-class Engagement(models.Model):
-    STATUS_CHOICES = (
-        ("active", "Active"),
-        ("completed", "Completed"),
-        ("archived", "Archived"),
-    )
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, null=True, blank=True)
-    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
-    project_structure = models.JSONField(default=list, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Project: {self.project.name} - Learner: {self.learner.name}"
 
 
 class Goal(models.Model):
