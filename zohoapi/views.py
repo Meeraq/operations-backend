@@ -70,7 +70,7 @@ from .tasks import (
     create_or_update_po,
     create_or_update_client_invoice,
     create_or_update_bills,
-    update_zoho_data
+    update_zoho_data,
 )
 from .models import (
     InvoiceData,
@@ -1244,7 +1244,8 @@ def get_all_purchase_orders_for_pmo(request):
             all_purchase_orders = [
                 purchase_order
                 for purchase_order in all_purchase_orders
-                if "cf_invoice_approver_s_email" in purchase_order
+                if "custom_field_hash" in purchase_order
+                and "cf_invoice_approver_s_email" in purchase_order["custom_field_hash"]
                 and purchase_order["cf_invoice_approver_s_email"].strip().lower()
                 == request.user.username.strip().lower()
             ]
@@ -3776,15 +3777,17 @@ def get_client_invoices(request):
                 ).data
                 # fetch_client_invoices_for_sales_orders(sales_order_ids)
         else:
-            clientinvoices=[]
+            clientinvoices = []
             if salesperson_id:
-                clientinvoices = ClientInvoice.objects.filter(salesperson_id=salesperson_id)
+                clientinvoices = ClientInvoice.objects.filter(
+                    salesperson_id=salesperson_id
+                )
             else:
                 clientinvoices = ClientInvoice.objects.all()
             invoices = ClientInvoiceSerializer(
-                    clientinvoices,
-                    many=True,
-                ).data
+                clientinvoices,
+                many=True,
+            ).data
             # invoices = fetch_client_invoices_page_wise(
             #     organization_id,
             #     page,
@@ -4049,8 +4052,9 @@ def get_line_items(request):
         line_item_data.append(line_item)
     return JsonResponse(line_item_data, safe=False)
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_latest_data(request):
     update_zoho_data()
-    return Response({'message': "Success"})
+    return Response({"message": "Success"})

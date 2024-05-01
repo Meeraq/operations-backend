@@ -203,6 +203,9 @@ def filter_purchase_order_data(purchase_orders):
     try:
         filtered_purchase_orders = []
         for order in purchase_orders:
+            order["cf_invoice_approver_s_email"] = order.get(
+                "custom_field_hash", {}
+            ).get("cf_invoice_approver_s_email", "")
             purchaseorder_number = order.get("purchaseorder_number", "").strip()
             mapping_instance = get_all_so_of_po(
                 order.get("purchaseorder_id", "").strip()
@@ -763,7 +766,7 @@ def add_multiple_vendors(data):
 
 def create_so_with_line_items(salesorder_id):
     salesorder = get_sales_order(salesorder_id)
-    if ['shipment_date'] in salesorder and not salesorder["shipment_date"]:
+    if ["shipment_date"] in salesorder and not salesorder["shipment_date"]:
         salesorder["shipment_date"] = None
     # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
     serializer = SalesOrderSerializer(data=salesorder)
