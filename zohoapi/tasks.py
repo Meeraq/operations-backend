@@ -172,7 +172,6 @@ def get_all_so_of_po(purchase_order_id):
         mapping_instance = None
         for order_project_mapping in OrdersAndProjectMapping.objects.all():
             if str(purchase_order_id) in order_project_mapping.purchase_order_ids:
-
                 mapping_instance = order_project_mapping
                 break
         return mapping_instance
@@ -277,7 +276,6 @@ def fetch_sales_orders(organization_id, queryParams=""):
 
         if response.status_code == 200:
             sales_orders = response.json().get("salesorders", [])
-            # sales_orders = filter_sales_order_data(sales_orders)
             all_sales_orders.extend(sales_orders)
 
             page_context = response.json().get("page_context", {})
@@ -765,7 +763,7 @@ def add_multiple_vendors(data):
 
 def create_so_with_line_items(salesorder_id):
     salesorder = get_sales_order(salesorder_id)
-    if not salesorder["shipment_date"]:
+    if ['shipment_date'] in salesorder and not salesorder["shipment_date"]:
         salesorder["shipment_date"] = None
     # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
     serializer = SalesOrderSerializer(data=salesorder)
@@ -978,7 +976,7 @@ def update_so_with_line_items(salesorder_id):
     new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
     line_item_ids_to_remove = list(set(existing_line_item_ids) - set(new_line_item_ids))
 
-    if not salesorder["shipment_date"]:
+    if "shipment_date" in salesorder and not salesorder["shipment_date"]:
         salesorder["shipment_date"] = None
 
     # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")

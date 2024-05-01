@@ -43,6 +43,10 @@ from .serializers import (
     VendorSerializer,
     InvoiceStatusUpdateGetSerializer,
     VendorEditSerializer,
+    SalesOrderSerializer,
+    PurchaseOrderSerializer,
+    BillSerializer,
+    ClientInvoiceSerializer,
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -64,8 +68,9 @@ from .tasks import (
     fetch_sales_persons,
     create_or_update_so,
     create_or_update_po,
-    create_or_update_client_invoice, 
-    create_or_update_bills
+    create_or_update_client_invoice,
+    create_or_update_bills,
+    update_zoho_data
 )
 from .models import (
     InvoiceData,
@@ -78,6 +83,8 @@ from .models import (
     ZohoVendor,
     PurchaseOrder,
     SalesOrder,
+    Bill,
+    ClientInvoice,
 )
 import base64
 from django.core.mail import EmailMessage
@@ -1214,7 +1221,10 @@ def get_all_vendors(request):
 )
 def get_all_purchase_orders(request):
     try:
-        all_purchase_orders = fetch_purchase_orders(organization_id)
+        all_purchase_orders = filter_purchase_order_data(
+            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
+        )
+        # fetch_purchase_orders(organization_id)
         return Response(all_purchase_orders, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -1225,7 +1235,10 @@ def get_all_purchase_orders(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_all_purchase_orders_for_pmo(request):
     try:
-        all_purchase_orders = fetch_purchase_orders(organization_id)
+        all_purchase_orders = filter_purchase_order_data(
+            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
+        )
+        # fetch_purchase_orders(organization_id)
         pmos_allowed = json.loads(env("PMOS_ALLOWED_TO_VIEW_ALL_INVOICES_AND_POS"))
         if not request.user.username in pmos_allowed:
             all_purchase_orders = [
@@ -1264,11 +1277,33 @@ def fetch_invoices(organization_id):
     return all_invoices
 
 
+def fetch_invoices_db(organization_id):
+    all_bills = BillSerializer(Bill.objects.all(), many=True).data
+    invoices = InvoiceData.objects.all()
+    invoices = filter_invoice_data(invoices)
+    invoice_serializer = InvoiceDataSerializer(invoices, many=True)
+    all_invoices = []
+    for invoice in invoice_serializer.data:
+        matching_bill = next(
+            (
+                bill
+                for bill in all_bills
+                if (
+                    bill.get(env("INVOICE_FIELD_NAME")) == invoice["invoice_number"]
+                    and bill.get("vendor_id") == invoice["vendor_id"]
+                )
+            ),
+            None,
+        )
+        all_invoices.append({**invoice, "bill": matching_bill})
+    return all_invoices
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_all_invoices(request):
     try:
-        all_invoices = fetch_invoices(organization_id)
+        all_invoices = fetch_invoices_db(organization_id)
         return Response(all_invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -1279,7 +1314,7 @@ def get_all_invoices(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_invoices_for_pmo(request):
     try:
-        all_invoices = fetch_invoices(organization_id)
+        all_invoices = fetch_invoices_db(organization_id)
         pmos_allowed = json.loads(env("PMOS_ALLOWED_TO_VIEW_ALL_INVOICES_AND_POS"))
         if not request.user.username in pmos_allowed:
             all_invoices = [
@@ -1297,7 +1332,7 @@ def get_invoices_for_pmo(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_pending_invoices_for_pmo(request):
     try:
-        all_invoices = fetch_invoices(organization_id)
+        all_invoices = fetch_invoices_db(organization_id)
         pmos_allowed = json.loads(env("PMOS_ALLOWED_TO_VIEW_ALL_INVOICES_AND_POS"))
         if not request.user.username in pmos_allowed:
             all_invoices = [
@@ -1317,7 +1352,7 @@ def get_pending_invoices_for_pmo(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_invoices_for_sales(request):
     try:
-        all_invoices = fetch_invoices(organization_id)
+        all_invoices = fetch_invoices_db(organization_id)
         return Response(all_invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -1328,7 +1363,7 @@ def get_invoices_for_sales(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_invoices_by_status(request, status):
     try:
-        all_invoices = fetch_invoices(organization_id)
+        all_invoices = fetch_invoices_db(organization_id)
         res = []
         for invoice_data in all_invoices:
             if status == "approved":
@@ -1380,7 +1415,7 @@ def get_purchase_order_ids_for_project(project_id, project_type):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_invoices_by_status_for_founders(request, status):
     try:
-        all_invoices = fetch_invoices(organization_id)
+        all_invoices = fetch_invoices_db(organization_id)
         project_id = request.query_params.get("project_id")
         project_type = request.query_params.get("projectType")
         if project_id and project_type:
@@ -1694,7 +1729,9 @@ def delete_purchase_order(request, user_type, purchase_order_id):
         response = requests.delete(api_url, headers=auth_header)
 
         if response.status_code == 200:
-            purchaseorders_to_delete  = PurchaseOrder.objects.filter(purchaseorder_id=purchase_order_id)
+            purchaseorders_to_delete = PurchaseOrder.objects.filter(
+                purchaseorder_id=purchase_order_id
+            )
             purchaseorders_to_delete.delete()
             if user_type == "coach":
                 CoachPricing.objects.filter(purchase_order_id=purchase_order_id).update(
@@ -1806,7 +1843,10 @@ def get_current_month_start_and_end_date():
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_po_number_to_create(request):
     try:
-        purchase_orders = fetch_purchase_orders(organization_id)
+        purchase_orders = filter_purchase_order_data(
+            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
+        )
+        # fetch_purchase_orders(organization_id)
         current_financial_year = get_current_financial_year()
         regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
         new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
@@ -1835,7 +1875,7 @@ def get_client_invoice_number_to_create(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_so_number_to_create(request, brand):
     try:
-        sales_orders = fetch_sales_orders(organization_id)
+        sales_orders = SalesOrderSerializer(SalesOrder.objects.all(), many=True).data
         current_financial_year = get_current_financial_year()
         regex_to_match = None
         if brand == "ctt":
@@ -1963,7 +2003,9 @@ def delete_coaching_purchase_order(request, purchase_order_id):
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.delete(api_url, headers=auth_header)
         if response.status_code == 200:
-            purchaseorders_to_delete = PurchaseOrder.objects.filter(purchaseorder_id=purchase_order_id)
+            purchaseorders_to_delete = PurchaseOrder.objects.filter(
+                purchaseorder_id=purchase_order_id
+            )
             purchaseorders_to_delete.delete()
             CoachStatus.objects.filter(purchase_order_id=purchase_order_id).update(
                 purchase_order_id="", purchase_order_no=""
@@ -2082,8 +2124,10 @@ def get_coach_wise_finances(request):
         # Fetch all invoices and purchase orders
         coach_id = request.query_params.get("coach_id")
         facilitator_id = request.query_params.get("facilitator_id")
-        all_invoices = fetch_invoices(organization_id)
-        all_purchase_orders = fetch_purchase_orders(organization_id)
+        all_invoices = fetch_invoices_db(organization_id)
+        all_purchase_orders = filter_purchase_order_data(
+            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
+        )
         # Filter vendors who are coaches
         vendors = []
         if coach_id or facilitator_id:
@@ -2180,8 +2224,11 @@ def get_facilitator_wise_finances(request):
         # Fetch all invoices and purchase orders
         coach_id = request.query_params.get("coach_id")
         facilitator_id = request.query_params.get("facilitator_id")
-        all_invoices = fetch_invoices(organization_id)
-        all_purchase_orders = fetch_purchase_orders(organization_id)
+        all_invoices = fetch_invoices_db(organization_id)
+        all_purchase_orders = filter_purchase_order_data(
+            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
+        )
+        # fetch_purchase_orders(organization_id)
         # Filter vendors who are coaches
         vendors = []
         if coach_id or facilitator_id:
@@ -2298,9 +2345,11 @@ def create_purchase_order_project_mapping():
 def get_project_wise_finances(request):
     try:
         purchase_order_project_mapping = create_purchase_order_project_mapping()
-        all_invoices = fetch_invoices(organization_id)
-        all_purchase_orders = fetch_purchase_orders(organization_id)
-
+        all_invoices = fetch_invoices_db(organization_id)
+        all_purchase_orders = filter_purchase_order_data(
+            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
+        )
+        # fetch_purchase_orders(organization_id)
         # Filter vendors who are coaches
         schedular_projects = SchedularProject.objects.all()
 
@@ -2384,7 +2433,7 @@ def get_project_wise_finances(request):
 @permission_classes([IsAuthenticated])
 def get_all_the_invoices_counts(request):
     try:
-        all_invoices = fetch_invoices(organization_id)
+        all_invoices = fetch_invoices_db(organization_id)
         res = []
         status_counts = defaultdict(int)
         for invoice_data in all_invoices:
@@ -2510,7 +2559,9 @@ def delete_expense_purchase_order(request, purchase_order_id):
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.delete(api_url, headers=auth_header)
         if response.status_code == 200:
-            purchaseorders_to_delete = PurchaseOrder.objects.filter(purchaseorder_id =purchase_order_id )
+            purchaseorders_to_delete = PurchaseOrder.objects.filter(
+                purchaseorder_id=purchase_order_id
+            )
             purchaseorders_to_delete.delete()
             Expense.objects.filter(purchase_order_id=purchase_order_id).update(
                 purchase_order_id="", purchase_order_no=""
@@ -2601,7 +2652,9 @@ def get_all_sales_orders(request):
         query_params = (
             f"&salesorder_number_contains={search_text}" if search_text else ""
         )
-        all_sales_orders = fetch_sales_orders(organization_id, query_params)
+        all_sales_orders = SalesOrderSerializer(
+            SalesOrder.objects.all(), many=True
+        ).data
         res = get_sales_orders_with_project_details(all_sales_orders)
         return Response(res, status=status.HTTP_200_OK)
     except Exception as e:
@@ -2772,9 +2825,9 @@ def create_invoice(request):
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.post(api_url, headers=auth_header, data=request.data)
         if response.status_code == 201:
-            invoice_created = response.json().get('invoice')
+            invoice_created = response.json().get("invoice")
             if invoice_created:
-                create_or_update_client_invoice(invoice_created['invoice_id'])
+                create_or_update_client_invoice(invoice_created["invoice_id"])
 
             return Response(
                 {"message": "The Invoice Generated is saved as Draft Successfully."}
@@ -2801,9 +2854,9 @@ def edit_so_invoice(request, invoice_id):
         response = requests.put(api_url, headers=auth_header, data=request.data)
 
         if response.status_code == 200:
-            invoice = response.json().get('invoice')
+            invoice = response.json().get("invoice")
             if invoice:
-                create_or_update_client_invoice(invoice['invoice_id'])
+                create_or_update_client_invoice(invoice["invoice_id"])
             return Response({"message": "Invoice updated successfully."})
         else:
             return Response({"error": response.json()}, status=response.status_code)
@@ -2994,7 +3047,10 @@ def create_sales_order(request):
 @permission_classes([IsAuthenticated])
 def get_all_client_invoices(request):
     try:
-        all_client_invoices = fetch_client_invoices(organization_id)
+        all_client_invoices = ClientInvoiceSerializer(
+            ClientInvoice.objects.all(), many=True
+        ).data
+        # fetch_client_invoices(organization_id)
         return Response(all_client_invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -3005,7 +3061,9 @@ def get_all_client_invoices(request):
 @permission_classes([IsAuthenticated])
 def get_all_client_invoices_for_project(request):
     try:
-        all_client_invoices = fetch_client_invoices(organization_id)
+        all_client_invoices = ClientInvoiceSerializer(
+            ClientInvoice.objects.all(), many=True
+        ).data
         return Response(all_client_invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -3079,9 +3137,13 @@ def get_project_sales_orders(request, project_type, project_id):
             sales_orders = []
             if salesorder_ids:
                 ids = ",".join(salesorder_ids)
-                sales_orders = fetch_sales_orders(
-                    organization_id, f"&salesorder_ids={ids}"
-                )
+                sales_orders = SalesOrderSerializer(
+                    SalesOrder.objects.filter(salesorder_id__in=salesorder_ids),
+                    many=True,
+                ).data
+                # fetch_sales_orders(
+                #     organization_id, f"&salesorder_ids={ids}"
+                # )
                 return Response(
                     {"sales_orders": sales_orders, "salesorder_ids": salesorder_ids}
                 )
@@ -3708,13 +3770,26 @@ def get_client_invoices(request):
             sales_order_ids = list(sales_order_ids_set)  # [1,2,3]
             invoices = []
             if len(sales_order_ids) > 0:
-                invoices = fetch_client_invoices_for_sales_orders(sales_order_ids)
+                invoices = ClientInvoiceSerializer(
+                    ClientInvoice.objects.filter(sales_order__id__in=sales_order_ids),
+                    many=True,
+                ).data
+                # fetch_client_invoices_for_sales_orders(sales_order_ids)
         else:
-            invoices = fetch_client_invoices_page_wise(
-                organization_id,
-                page,
-                f"&salesperson_id={salesperson_id}" if salesperson_id else "",
-            )
+            clientinvoices=[]
+            if salesperson_id:
+                clientinvoices = ClientInvoice.objects.filter(salesperson_id=salesperson_id)
+            else:
+                clientinvoices = ClientInvoice.objects.all()
+            invoices = ClientInvoiceSerializer(
+                    clientinvoices,
+                    many=True,
+                ).data
+            # invoices = fetch_client_invoices_page_wise(
+            #     organization_id,
+            #     page,
+            #     f"&salesperson_id={salesperson_id}" if salesperson_id else "",
+            # )
         return Response(invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -3789,9 +3864,13 @@ def get_so_for_the_project(request):
         sales_orders_ids_str = ",".join(all_sales_order_ids)
         all_sales_orders = []
         if sales_orders_ids_str:
-            all_sales_orders = fetch_sales_orders(
-                organization_id, f"&salesorder_ids={sales_orders_ids_str}"
-            )
+            all_sales_orders = SalesOrderSerializer(
+                SalesOrder.objects.filter(salesorder_id__in=all_sales_order_ids),
+                many=True,
+            ).data
+            # fetch_sales_orders(
+            #     organization_id, f"&salesorder_ids={sales_orders_ids_str}"
+            # )
         final_data = {}
         sales_order_dict = {order["salesorder_id"]: order for order in all_sales_orders}
         if caas_project_mapping:
@@ -3842,9 +3921,13 @@ def get_handovers_so(request, sales_id):
         sales_orders_ids_str = ",".join(all_sales_order_ids)
         all_sales_orders = []
         if sales_orders_ids_str:
-            all_sales_orders = fetch_sales_orders(
-                organization_id, f"&salesorder_ids={sales_orders_ids_str}"
-            )
+            all_sales_orders = SalesOrderSerializer(
+                SalesOrder.objects.filter(salesorder_id__in=all_sales_order_ids),
+                many=True,
+            ).data
+            # fetch_sales_orders(
+            #     organization_id, f"&salesorder_ids={sales_orders_ids_str}"
+            # )
         final_data = {}
         sales_order_dict = {
             order["salesorder_id"]: order["salesorder_number"]
@@ -3875,9 +3958,12 @@ def get_handovers_so(request, sales_id):
 @permission_classes([IsAuthenticated])
 def get_total_so_created_count(request, sales_person_id):
     try:
-        all_sales_orders = fetch_sales_orders(
-            organization_id, f"&salesperson_id={sales_person_id}"
-        )
+        all_sales_orders = SalesOrderSerializer(
+            SalesOrder.objects.filter(salesperson_id=sales_person_id), many=True
+        ).data
+        # fetch_sales_orders(
+        #     organization_id, f"&salesperson_id={sales_person_id}"
+        # )
         res = get_sales_orders_with_project_details(all_sales_orders)
         count = len(res)
         return Response(count, status=status.HTTP_200_OK)
@@ -3906,9 +3992,12 @@ def get_handovers_count(request, sales_person_id):
 @permission_classes([IsAuthenticated])
 def sales_orders_with_due_invoices(request, sales_person_id):
     try:
-        all_sales_orders = fetch_sales_orders(
-            organization_id, f"&salesperson_id={sales_person_id}"
-        )
+        all_sales_orders = SalesOrderSerializer(
+            SalesOrder.objects.filter(salesperson_id=sales_person_id), many=True
+        ).data
+        # fetch_sales_orders(
+        #     organization_id, f"&salesperson_id={sales_person_id}"
+        # )
         res = get_sales_orders_with_project_details(all_sales_orders)
         count = len(res)
         return Response(count, status=status.HTTP_200_OK)
@@ -3959,3 +4048,9 @@ def get_line_items(request):
                 line_item["project_name"] = None
         line_item_data.append(line_item)
     return JsonResponse(line_item_data, safe=False)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_latest_data(request):
+    update_zoho_data()
+    return Response({'message': "Success"})
