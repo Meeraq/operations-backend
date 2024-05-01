@@ -1467,7 +1467,7 @@ def create_project_cass(request):
     desc = request.data["project_description"]
     total_credits_in_minutes = 0
     if request.data["total_credits"]:
-        total_credits_in_hours = int(request.data["total_credits"]) 
+        total_credits_in_hours = int(request.data["total_credits"])
         total_credits_in_minutes = total_credits_in_hours * 60
     try:
         project = Project(
@@ -1514,8 +1514,8 @@ def create_project_cass(request):
             junior_pmo=junior_pmo,
             calendar_invites=request.data["calendar_invites"],
             finance=request.data["finance"],
-            is_project_structure = request.data["is_project_structure"],
-            total_credits = total_credits_in_minutes
+            is_project_structure=request.data["is_project_structure"],
+            total_credits=total_credits_in_minutes,
         )
 
         project.save()
@@ -1785,7 +1785,9 @@ def get_ongoing_projects_of_hr(request, hr_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr", "sales")])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr", "sales")]
+)
 def get_hr(request):
     try:
         # Get all the Coach objects
@@ -1906,7 +1908,6 @@ def add_coach(request):
             room_id,
             corporate_experience,
             coaching_experience,
-
         ]
     ):
         return Response({"error": "All required fields must be provided."}, status=400)
@@ -6140,6 +6141,7 @@ def get_current_session(request, user_type, room_id, user_id):
     else:
         return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
+
 @api_view(["GET"])
 @permission_classes(
     [IsAuthenticated, IsInRoles("coach", "learner", "pmo", "hr", "facilitator")]
@@ -6149,7 +6151,7 @@ def get_current_session_for_coach(request, user_type, user_id):
     caas_sessions = None
     seeq_sessions = None
     if user_type == "coach":
-       
+
         coach = Coach.objects.get(id=user_id)
         seeq_sessions = SchedularSessions.objects.filter(
             availibility__end_time__gt=current_time,
@@ -7766,6 +7768,15 @@ def edit_project_caas(request, project_id):
         project.calendar_invites = request.data.get(
             "calendar_invites", project.calendar_invites
         )
+
+        if project.project_type == "COD":
+            project.is_project_structure = request.data.get(
+                "is_project_structure", project.is_project_structure
+            )
+            total_credits_in_hours = int(request.data.get("total_credits"))
+            total_credits_in_minutes = total_credits_in_hours * 60
+            project.total_credits = total_credits_in_minutes
+
         project.finance = request.data.get("finance", project.finance)
         project.junior_pmo = junior_pmo
 
