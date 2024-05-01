@@ -163,7 +163,7 @@ purchase_orders_allowed = [
     "Meeraq/PO/CaaS/23-24/0040",
     "Meeraq/PO/CaaS/23-24/0028",
     "Meeraq/PO/CaaS/23-24/0093",
-    "Meeraq/PO/CaaS/23-24/0091"
+    "Meeraq/PO/CaaS/23-24/0091",
 ]
 
 
@@ -1445,7 +1445,8 @@ def update_bill_with_line_items(bill_id):
 def update_zoho_data():
     all_activit_logs = fetch_activity_logs(organization_id)
     filtered_activity_logs = filter_objects_by_date(all_activit_logs, 2)
-    for activity in filtered_activity_logs:
+    reversed_logs = list(reversed(filtered_activity_logs))
+    for activity in reversed_logs:
         if "activity_details" in activity:
             transaction_type = activity["activity_details"]["transaction_type"]
             operation_type = activity["activity_details"]["operation_type"]
