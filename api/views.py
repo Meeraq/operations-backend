@@ -846,6 +846,30 @@ def add_so_to_project(project_type, project_id, sales_order_ids):
         )
 
 
+def get_available_credit_for_project(project_id, status):
+    try:
+        project = Project.objects.get(id=int(project_id))
+        filters = Q(project=project)
+
+        if status == "both":
+            filters &= Q(status__in=["booked", "completed"])
+        else:
+            filters &= Q(status=status)
+
+        total_durations = (
+            SessionRequestCaas.objects.filter(filters).aggregate(
+                total_duration=Sum("session_duration")
+            )["total_duration"]
+            or 0
+        )
+
+        return project.total_credits - total_durations
+
+    except Exception as e:
+        print(str(e))
+        return None
+
+
 SESSION_TYPE_VALUE = {
     "chemistry": "Chemistry",
     "tripartite": "Tripartite",
