@@ -1,7 +1,12 @@
 from celery import shared_task
 from .views import create_task
-from zohoapi.models import Vendor
-from zohoapi.tasks import fetch_purchase_orders, organization_id
+from zohoapi.models import Vendor, PurchaseOrder
+from zohoapi.tasks import (
+    fetch_purchase_orders,
+    organization_id,
+    filter_purchase_order_data,
+)
+from zohoapi.serializers import PurchaseOrderSerializer
 from .models import Engagement, SessionRequestCaas
 from django.utils import timezone
 from django.db.models import Q
@@ -25,7 +30,10 @@ def get_start_and_end_of_current_month():
 @shared_task
 def generate_invoice_task_for_pmo_on_25th_of_month():
     vendors = Vendor.objects.all()
-    all_purchase_orders = fetch_purchase_orders(organization_id)
+    all_purchase_orders = filter_purchase_order_data(
+        PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
+    )
+    # fetch_purchase_orders(organization_id)
     for vendor in vendors:
         open_purchase_order_count = 0
         purchase_orders = [
