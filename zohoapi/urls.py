@@ -24,7 +24,7 @@ urlpatterns = [
         views.get_invoices_with_status,
     ),
     path(
-        "api/total-revenue/<vendor_id>/",
+        "total-revenue/<vendor_id>/",
         views.get_total_revenue,
         name="get_total_revenue",
     ),
