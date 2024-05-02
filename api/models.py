@@ -435,6 +435,8 @@ class Project(models.Model):
     finance = models.BooleanField(blank=True, default=False)
     is_project_structure= models.BooleanField(blank=True, default=True)
     total_credits = models.IntegerField(default=0, blank=True, null=True)
+    duration_of_each_session = models.IntegerField(blank=True, default=None, null=True)
+    request_expiry_time = models.IntegerField(default=0, blank=True, null=True)
 
     class Meta:
         ordering = ["-created_at"]
