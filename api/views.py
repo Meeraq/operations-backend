@@ -91,6 +91,7 @@ import jwt
 import jwt
 import uuid
 import pytz
+import math
 from django.db.models import IntegerField
 from django.db.models.functions import Cast
 from rest_framework.exceptions import AuthenticationFailed
@@ -1492,162 +1493,188 @@ def get_management_token(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 @transaction.atomic
 def create_project_cass(request):
-    organisation = Organisation.objects.filter(
-        id=request.data["organisation_name"]
-    ).first()
-    junior_pmo = None
-    if "junior_pmo" in request.data:
-        junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
+    with transaction.atomic():
+        organisation = Organisation.objects.filter(
+            id=request.data["organisation_name"]
+        ).first()
+        junior_pmo = None
+        if "junior_pmo" in request.data:
+            junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
 
-    if not organisation:
-        organisation = Organisation(
-            name=request.data["organisation_name"], image_url=request.data["image_url"]
-        )
-    organisation.save()
-    desc = request.data["project_description"]
-    total_credits_in_minutes = 0
-    request_expiry_time_in_minutes = 0
-    if request.data["total_credits"]:
-        total_credits_in_hours = int(request.data["total_credits"])
-        total_credits_in_minutes = total_credits_in_hours * 60
-    if request.data["request_expiry_time"]:
-        request_expiry_time_in_hours = int(request.data["request_expiry_time"])
-        request_expiry_time_in_minutes =request_expiry_time_in_hours * 60
-    try:
-        project = Project(
-            # print(organisation.name, organisation.image_url, "details of org")
-            name=request.data["project_name"],
-            organisation=organisation,
-            approx_coachee=request.data["approx_coachee"],
-            frequency_of_session=request.data["frequency_of_session"],
-            # currency=request.data["currency"],
-            # price_per_hour=request.data["price_per_hour"],
-            # coach_fees_per_hour=request.data["coach_fees_per_hour"],
-            project_type=request.data["project_type"],
-            interview_allowed=request.data["interview_allowed"],
-            # chemistry_allowed= request.data['chemistry_allowed'],
-            specific_coach=request.data["specific_coach"],
-            empanelment=request.data["empanelment"],
-            end_date=datetime.now() + timedelta(days=365),
-            tentative_start_date=request.data["tentative_start_date"],
-            mode=request.data["mode"],
-            sold=request.data["sold"],
-            project_description=desc,
-            # updated_to_sold= request.data['updated_to_sold'],
-            location=json.loads(request.data["location"]),
-            enable_emails_to_hr_and_coachee=request.data.get(
-                "enable_emails_to_hr_and_coachee", True
-            ),
-            steps=dict(
-                project_structure={"status": "pending"},
-                coach_list={"status": "pending"},
-                coach_consent={"status": "pending"},
-                coach_list_to_hr={"status": "pending"},
-                interviews={"status": "pending"},
-                add_learners={"status": "pending"},
-                coach_approval={"status": "pending"},
-                chemistry_session={"status": "pending"},
-                coach_selected={"status": "pending"},
-                final_coaches={"status": "pending"},
-                project_live="pending",
-            ),
-            status="presales",
-            masked_coach_profile=request.data["masked_coach_profile"],
-            email_reminder=request.data["email_reminder"],
-            whatsapp_reminder=request.data["whatsapp_reminder"],
-            junior_pmo=junior_pmo,
-            calendar_invites=request.data["calendar_invites"],
-            finance=request.data["finance"],
-            is_project_structure=request.data["is_project_structure"],
-            total_credits=total_credits_in_minutes,
-            duration_of_each_session=request.data["duration_of_each_session"],
-            request_expiry_time=request_expiry_time_in_minutes,
-        )
+        if not organisation:
+            organisation = Organisation(
+                name=request.data["organisation_name"],
+                image_url=request.data["image_url"],
+            )
+        organisation.save()
+        desc = request.data["project_description"]
+        total_credits_in_minutes = 0
+        request_expiry_time_in_minutes = 0
+        if request.data["total_credits"]:
+            total_credits_in_hours = int(request.data["total_credits"])
+            total_credits_in_minutes = total_credits_in_hours * 60
+        if request.data["request_expiry_time"]:
+            request_expiry_time_in_hours = int(request.data["request_expiry_time"])
+            request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
+        try:
+            project = Project(
+                # print(organisation.name, organisation.image_url, "details of org")
+                name=request.data["project_name"],
+                organisation=organisation,
+                approx_coachee=request.data["approx_coachee"],
+                frequency_of_session=request.data["frequency_of_session"],
+                # currency=request.data["currency"],
+                # price_per_hour=request.data["price_per_hour"],
+                # coach_fees_per_hour=request.data["coach_fees_per_hour"],
+                project_type=request.data["project_type"],
+                interview_allowed=request.data["interview_allowed"],
+                # chemistry_allowed= request.data['chemistry_allowed'],
+                specific_coach=request.data["specific_coach"],
+                empanelment=request.data["empanelment"],
+                end_date=datetime.now() + timedelta(days=365),
+                tentative_start_date=request.data["tentative_start_date"],
+                mode=request.data["mode"],
+                sold=request.data["sold"],
+                project_description=desc,
+                # updated_to_sold= request.data['updated_to_sold'],
+                location=json.loads(request.data["location"]),
+                enable_emails_to_hr_and_coachee=request.data.get(
+                    "enable_emails_to_hr_and_coachee", True
+                ),
+                steps=dict(
+                    project_structure={"status": "pending"},
+                    coach_list={"status": "pending"},
+                    coach_consent={"status": "pending"},
+                    coach_list_to_hr={"status": "pending"},
+                    interviews={"status": "pending"},
+                    add_learners={"status": "pending"},
+                    coach_approval={"status": "pending"},
+                    chemistry_session={"status": "pending"},
+                    coach_selected={"status": "pending"},
+                    final_coaches={"status": "pending"},
+                    project_live="pending",
+                ),
+                status="presales",
+                masked_coach_profile=request.data["masked_coach_profile"],
+                email_reminder=request.data["email_reminder"],
+                whatsapp_reminder=request.data["whatsapp_reminder"],
+                junior_pmo=junior_pmo,
+                calendar_invites=request.data["calendar_invites"],
+                finance=request.data["finance"],
+                is_project_structure=request.data["is_project_structure"],
+                total_credits=total_credits_in_minutes,
+                duration_of_each_session=request.data["duration_of_each_session"],
+                request_expiry_time=request_expiry_time_in_minutes,
+            )
 
-        project.save()
+            project.save()
+
+            try:
+                userId = request.data.get("user_id")
+                user_who_created = User.objects.get(id=userId)
+                timestamp = timezone.now()
+                createProject = CreateProjectActivity.objects.create(
+                    user_who_created=user_who_created,
+                    project=project,
+                    timestamp=timestamp,
+                )
+                createProject.save()
+            except Exception as e:
+                pass
+
+            handover_id = request.data.get("handover")
+            if handover_id:
+                handover = HandoverDetails.objects.get(id=handover_id)
+                handover.caas_project = project
+                handover.save()
+                project.project_structure = handover.project_structure
+                project.save()
+                add_so_to_project("CAAS", project.id, handover.sales_order_ids)
+            else:
+                sales_order_ids = request.data["sales_order_ids"]
+                if sales_order_ids:
+                    add_so_to_project("CAAS", project.id, sales_order_ids)
+
+        except IntegrityError as e:
+            print(str(e))
+            return Response(
+                {"error": "Project with this name already exists"}, status=400
+            )
+        except Exception as e:
+            print(str(e))
+            return Response({"error": "Failed to create project."}, status=400)
+
+        if project.project_type == "COD" and not project.is_project_structure:
+            total_sessions = math.floor(
+                project.total_credits / project.duration_of_each_session
+            )
+
+            project.project_structure = [
+                {
+                    "f2f": False,
+                    "index": 0,
+                    "price": "100",
+                    "billable": True,
+                    "coach_price": "100",
+                    "session_type": "coaching_session",
+                    "no_of_sessions": total_sessions,
+                    "session_duration": f"{project.duration_of_each_session}",
+                }
+            ]
+            project.steps["project_structure"]["status"] = "complete"
+            project.save()
+
+        for hr in request.data["hr"]:
+            single_hr = HR.objects.get(id=hr)
+            project.hr.add(single_hr)
+
+        # create tasks for the pmo
+        try:
+            print("creating tasks here")
+            create_task(
+                {
+                    "task": "add_project_structure",
+                    "caas_project": project.id,
+                    "priority": "high",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                30,
+            )
+            create_task(
+                {
+                    "task": "add_coach",
+                    "caas_project": project.id,
+                    "priority": "high",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                7,
+            )
+            create_task(
+                {
+                    "task": "add_coach_contract",
+                    "caas_project": project.id,
+                    "priority": "high",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                1,
+            )
+        except Exception as e:
+            print("Error", str(e))
 
         try:
-            userId = request.data.get("user_id")
-            user_who_created = User.objects.get(id=userId)
-            timestamp = timezone.now()
-            createProject = CreateProjectActivity.objects.create(
-                user_who_created=user_who_created, project=project, timestamp=timestamp
-            )
-            createProject.save()
+            path = f"/projects/caas/progress/{project.id}"
+            message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
+            for hr_member in project.hr.all():
+                create_notification(hr_member.user.user, path, message)
         except Exception as e:
-            pass
-
-        handover_id = request.data.get("handover")
-        if handover_id:
-            handover = HandoverDetails.objects.get(id=handover_id)
-            handover.caas_project = project
-            handover.save()
-            project.project_structure = handover.project_structure
-            project.save()
-            add_so_to_project("CAAS", project.id, handover.sales_order_ids)
-        else:
-            sales_order_ids = request.data["sales_order_ids"]
-            if sales_order_ids:
-                add_so_to_project("CAAS", project.id, sales_order_ids)
-
-    except IntegrityError as e:
-        print(str(e))
-        return Response({"error": "Project with this name already exists"}, status=400)
-    except Exception as e:
-        print(str(e))
-        return Response({"error": "Failed to create project."}, status=400)
-
-    for hr in request.data["hr"]:
-        single_hr = HR.objects.get(id=hr)
-        project.hr.add(single_hr)
-
-    # create tasks for the pmo
-    try:
-        print("creating tasks here")
-        create_task(
-            {
-                "task": "add_project_structure",
-                "caas_project": project.id,
-                "priority": "high",
-                "status": "pending",
-                "remarks": [],
-            },
-            30,
+            print(f"Error occurred while creating notification: {str(e)}")
+        return Response(
+            {"message": "Project created successfully", "project_id": project.id},
+            status=200,
         )
-        create_task(
-            {
-                "task": "add_coach",
-                "caas_project": project.id,
-                "priority": "high",
-                "status": "pending",
-                "remarks": [],
-            },
-            7,
-        )
-        create_task(
-            {
-                "task": "add_coach_contract",
-                "caas_project": project.id,
-                "priority": "high",
-                "status": "pending",
-                "remarks": [],
-            },
-            1,
-        )
-    except Exception as e:
-        print("Error", str(e))
-
-    try:
-        path = f"/projects/caas/progress/{project.id}"
-        message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
-        for hr_member in project.hr.all():
-            create_notification(hr_member.user.user, path, message)
-    except Exception as e:
-        print(f"Error occurred while creating notification: {str(e)}")
-    return Response(
-        {"message": "Project created successfully", "project_id": project.id},
-        status=200,
-    )
 
 
 def create_learners(learners_data):
@@ -3659,33 +3686,34 @@ def create_engagement(learner, project):
         )
         engagement = Engagement(learner=learner, project=project, status="active")
         engagement.save()
-        for index, session in enumerate(engagemenet_project_structure):
-            session_data = SessionRequestCaas.objects.create(
-                learner=learner,
-                project=project,
-                session_duration=session["session_duration"],
-                session_number=session["session_number"],
-                session_type=session["session_type"],
-                billable_session_number=session["billable_session_number"],
-                status="pending",
-                order=index + 1,
-                engagement=engagement,
-            )
+        if project.is_project_structure:
+            for index, session in enumerate(engagemenet_project_structure):
+                session_data = SessionRequestCaas.objects.create(
+                    learner=learner,
+                    project=project,
+                    session_duration=session["session_duration"],
+                    session_number=session["session_number"],
+                    session_type=session["session_type"],
+                    billable_session_number=session["billable_session_number"],
+                    status="pending",
+                    order=index + 1,
+                    engagement=engagement,
+                )
 
-        #  create task
-        try:
-            create_task(
-                {
-                    "task": "select_a_coach",
-                    "engagement": engagement.id,
-                    "priority": "high",
-                    "status": "pending",
-                    "remarks": [],
-                },
-                30,
-            )
-        except Exception as e:
-            print(str(e))
+            #  create task
+            try:
+                create_task(
+                    {
+                        "task": "select_a_coach",
+                        "engagement": engagement.id,
+                        "priority": "high",
+                        "status": "pending",
+                        "remarks": [],
+                    },
+                    30,
+                )
+            except Exception as e:
+                print(str(e))
         return engagement
     return existing_engagement
 
@@ -7923,7 +7951,7 @@ def edit_project_caas(request, project_id):
                 "duration_of_each_session", project.duration_of_each_session
             )
             request_expiry_time_in_hours = int(request.data["request_expiry_time"])
-            request_expiry_time_in_minutes =request_expiry_time_in_hours * 60
+            request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
             project.request_expiry_time = request_expiry_time_in_minutes
 
         project.finance = request.data.get("finance", project.finance)
@@ -10938,10 +10966,8 @@ def get_available_credits(request, engagement_id):
 @permission_classes([IsAuthenticated])
 def get_available_credit_of_project(request, project_id):
     try:
-        
-        available_credits = get_available_credit_for_project(
-            project_id, "both"
-        )
+
+        available_credits = get_available_credit_for_project(project_id, "both")
 
         return Response(
             {
