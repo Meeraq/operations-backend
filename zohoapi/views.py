@@ -49,6 +49,7 @@ from .serializers import (
     BillSerializer,
     ClientInvoiceSerializer,
     ClientInvoiceGetSerializer,
+    BillGetSerializer
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -1282,7 +1283,7 @@ def fetch_invoices(organization_id):
 
 
 def fetch_invoices_db(organization_id):
-    all_bills = BillSerializer(Bill.objects.all(), many=True).data
+    all_bills = BillGetSerializer(Bill.objects.all(), many=True).data
     invoices = InvoiceData.objects.all()
     invoices = filter_invoice_data(invoices)
     invoice_serializer = InvoiceDataSerializer(invoices, many=True)

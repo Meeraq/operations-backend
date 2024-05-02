@@ -136,6 +136,18 @@ class BillSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class BillGetSerializer(serializers.ModelSerializer):
+    cf_invoice = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Bill
+        fields = "__all__"
+
+    def get_cf_invoice(self, obj):
+        # Implement logic to compute the first custom field value based on obj
+        return obj.custom_field_hash.get("cf_invoice", "")
+
+
 class BillLineItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = BillLineItem
