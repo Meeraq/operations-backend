@@ -81,9 +81,9 @@ from .serializers import (
     SalesDepthOneSerializer,
     GoalDescriptionSerializer,
 )
-from zohoapi.serializers import VendorDepthOneSerializer
+from zohoapi.serializers import VendorDepthOneSerializer, PurchaseOrderSerializer
 from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
-from zohoapi.tasks import organization_id, get_access_token, base_url
+from zohoapi.tasks import organization_id, get_access_token, base_url, filter_purchase_order_data
 from .permissions import IsInRoles
 from rest_framework import generics
 from django.utils.crypto import get_random_string
@@ -189,7 +189,7 @@ from schedularApi.serializers import (
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping
+from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping, PurchaseOrder
 from courses.models import CourseEnrollment, CoachingSessionsFeedbackResponse, Answer
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
@@ -10283,7 +10283,8 @@ def get_coaches_in_project_is_vendor(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
         data = {}
-        purchase_orders = fetch_purchase_orders(organization_id)
+        purchase_orders = filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data) 
+        # fetch_purchase_orders(organization_id)
         for coach_status in project.coaches_status.all():
             is_vendor = coach_status.coach.user.roles.filter(name="vendor").exists()
             vendor_id = None

@@ -307,7 +307,7 @@ class HandoverDetails(models.Model):
 
     LOGISTICE_MANAGER_CHOICES = [
         ("client", "Client"),
-        ("pmo", "PMO"),
+        ("meeraq", "Meeraq"),
         ("faculty", "Faculty"),
     ]
 
