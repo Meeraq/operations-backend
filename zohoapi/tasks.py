@@ -1445,7 +1445,7 @@ def update_client_invoice_with_line_items(clientinvoice_id):
 def update_bill_with_line_items(bill_id):
     try:
         bill = get_bill(bill_id)
-        existing_bill = Bill.objects.get(invoice_id=bill_id)
+        existing_bill = Bill.objects.get(bill_id=bill_id)
         existing_line_items = existing_bill.bill_line_items.all()
         existing_line_item_ids = [
             line_item.line_item_id for line_item in existing_line_items

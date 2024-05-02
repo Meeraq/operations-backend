@@ -87,6 +87,7 @@ from .models import (
     SalesOrder,
     Bill,
     ClientInvoice,
+    SalesOrderLineItem,
 )
 import base64
 from django.core.mail import EmailMessage
@@ -2669,9 +2670,13 @@ def get_all_sales_orders(request):
 @permission_classes([IsAuthenticated])
 def get_sales_persons_sales_orders(request, sales_person_id):
     try:
-        all_sales_orders = fetch_sales_orders(
-            organization_id, f"&salesperson_id={sales_person_id}"
-        )
+        all_sales_orders = SalesOrderGetSerializer(
+            SalesOrder.objects.filter(salesperson_id=sales_person_id),
+            many=True,
+        ).data
+        # fetch_sales_orders(
+        #     organization_id, f"&salesperson_id={sales_person_id}"
+        # )
         res = get_sales_orders_with_project_details(all_sales_orders)
         return Response(res, status=status.HTTP_200_OK)
     except Exception as e:
@@ -4014,44 +4019,53 @@ def sales_orders_with_due_invoices(request, sales_person_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_line_items(request):
-    line_items = LineItems.objects.all()
+    current_date = datetime.now().date()
+    salesperson_id = request.query_params.get('salesperson_id')
+    line_items = SalesOrderLineItem.objects.filter(
+        custom_field_hash__cf_due_date__isnull=False, is_invoiced=False
+    )
     order_mappings = OrdersAndProjectMapping.objects.all()
-    sales_order_ids = [mapping.sales_order_ids for mapping in order_mappings]
     line_item_data = []
 
     for item in line_items:
-        line_item = {
-            "sales_order_id": item.sales_order_id,
-            "sales_order_number": item.sales_order_number,
-            "line_item_id": item.line_item_id,
-            "client_name": item.client_name,
-            "line_item_description": item.line_item_description,
-            "due_date": item.due_date.strftime("%Y-%m-%d") if item.due_date else None,
-            "created_at": item.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        associated_mapping = order_mappings.filter(
-            sales_order_ids__contains=item.sales_order_id
-        ).first()
-        if associated_mapping:
-            # Determine project_type based on whether the project is taken from project or schedular_project
-            if associated_mapping.project is not None:
-                line_item["project_type"] = "Coaching"
-                line_item["project_name"] = (
-                    associated_mapping.project.name
-                    if associated_mapping.project
-                    else None
-                )
-            elif associated_mapping.schedular_project is not None:
-                line_item["project_type"] = "Skill Training"
-                line_item["project_name"] = (
-                    associated_mapping.schedular_project.name
-                    if associated_mapping.schedular_project
-                    else None
-                )
-            else:
-                line_item["project_type"] = None
-                line_item["project_name"] = None
-        line_item_data.append(line_item)
+        due_date = datetime.strptime(
+            item.custom_field_hash["cf_due_date"], "%d/%m/%Y"
+        ).date()
+        if due_date <= current_date:
+            sales_order = SalesOrder.objects.filter(
+                so_line_items__line_item_id=item.line_item_id
+            ).first()
+            if sales_order and (not salesperson_id or sales_order.salesperson_id == salesperson_id):
+                line_item = {
+                    "sales_order_id": sales_order.salesorder_id,
+                    "sales_order_number": sales_order.salesorder_number,
+                    "line_item_id": item.line_item_id,
+                    "client_name": sales_order.customer_name,
+                    "line_item_description": item.description,
+                    "due_date": item.custom_field_hash["cf_due_date"],
+                }
+                associated_mapping = order_mappings.filter(
+                    sales_order_ids__contains=sales_order.salesorder_id
+                ).first()
+                if associated_mapping:
+                    if associated_mapping.project is not None:
+                        line_item["project_type"] = "Coaching"
+                        line_item["project_name"] = (
+                            associated_mapping.project.name
+                            if associated_mapping.project
+                            else None
+                        )
+                    elif associated_mapping.schedular_project is not None:
+                        line_item["project_type"] = "Skill Training"
+                        line_item["project_name"] = (
+                            associated_mapping.schedular_project.name
+                            if associated_mapping.schedular_project
+                            else None
+                        )
+                    else:
+                        line_item["project_type"] = None
+                        line_item["project_name"] = None
+                line_item_data.append(line_item)
     return JsonResponse(line_item_data, safe=False)
 
 
