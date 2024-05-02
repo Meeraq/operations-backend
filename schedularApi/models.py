@@ -361,6 +361,7 @@ class HandoverDetails(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     project_name = models.CharField(max_length=255, blank=True, null=True)
     is_accepted = models.BooleanField(default=False, blank=True)
+    is_drafted = models.BooleanField(default=False, blank=True)
     gm_sheet = models.FileField(upload_to="gm_sheets/", blank=True, null=True)
     proposals = models.FileField(upload_to="proposals/", blank=True, null=True)
 

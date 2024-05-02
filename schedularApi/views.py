@@ -6571,9 +6571,11 @@ def get_formatted_handovers(handovers):
         serializer = HandoverDetailsSerializerWithOrganisationName(handovers, many=True)
         # Fetch sales orders for the given sales order IDs
         if sales_order_ids_str:
+            print(sales_order_ids_str)
             sales_orders = fetch_sales_orders(
                 organization_id, f"&salesorder_ids={sales_order_ids_str}"
             )
+            print(sales_orders)
             if not sales_orders:
                 raise Exception("Failed to get sales orders.")
             # Create a dictionary to map sales order ID to sales person ID
@@ -6633,8 +6635,9 @@ def get_handovers(request, sales_id):
 def get_pmo_handovers(request):
     try:
         handovers = HandoverDetails.objects.filter(
-            schedular_project__isnull=True, caas_project__isnull=True
+            schedular_project__isnull=True, caas_project__isnull=True, is_drafted=False
         ).order_by("-created_at")
+        print(handovers)
         formatted_handovers = get_formatted_handovers(handovers)
         return Response(formatted_handovers, status=status.HTTP_200_OK)
     except Exception as e:
