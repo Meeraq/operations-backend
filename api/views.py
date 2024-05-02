@@ -83,7 +83,12 @@ from .serializers import (
 )
 from zohoapi.serializers import VendorDepthOneSerializer, PurchaseOrderSerializer
 from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
-from zohoapi.tasks import organization_id, get_access_token, base_url, filter_purchase_order_data
+from zohoapi.tasks import (
+    organization_id,
+    get_access_token,
+    base_url,
+    filter_purchase_order_data,
+)
 from .permissions import IsInRoles
 from rest_framework import generics
 from django.utils.crypto import get_random_string
@@ -160,7 +165,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 import json
 import string
 import random
-from django.db.models import Q, Min
+from django.db.models import Q, Min ,F, Exists, OuterRef
 from collections import defaultdict
 from django.db.models import Avg
 from rest_framework import status
@@ -3688,7 +3693,12 @@ def create_engagement(learner, project):
         engagemenet_project_structure = transform_project_structure(
             project.project_structure
         )
-        engagement = Engagement(learner=learner, project=project, status="active")
+        engagement = Engagement(
+            learner=learner,
+            project=project,
+            status="active",
+            type="caas" if project.is_project_structure else "cod",
+        )
         engagement.save()
         if project.is_project_structure:
             for index, session in enumerate(engagemenet_project_structure):
@@ -4735,9 +4745,44 @@ def get_session_requests_of_user(request, user_type, user_id):
             & ~Q(status="pending")
         )
     if user_type == "coach":
+        # session_requests = SessionRequestCaas.objects.filter(
+        #     Q(confirmed_availability=None)
+        #     & (Q(coach__id=user_id) | Q(coach__isnull=True))
+        #     & ~Q(status="pending")
+        #     & Q(project__coaches_status__coach__id=user_id)
+        # # )
+        # session_requests = []
+        # for session in SessionRequestCaas.objects.all():
+        #     if not session.confirmed_availability and not session.status == "pending":
+        #         if session.coach and session.coach.id == user_id:
+        #             session_requests.append(session)
+        #         # is contract approved
+        #         # is selected and confirmed, and coach is in the project
+        #         elif session.engagement and session.engagement.type=="cod" and CoachContract.objects.filter(project=session.project, coach__id=user_id, status="approved").exists() and  session.project.coaches_status.filter(coach__id = user_id , status__hr__status="select").exists():
+        #             session_requests.append(session)
+        
         session_requests = SessionRequestCaas.objects.filter(
-            Q(confirmed_availability=None) & Q(coach__id=user_id) & ~Q(status="pending")
-        )
+                Q(confirmed_availability=None) &
+                ~Q(status="pending") &
+                (
+                    Q(coach__id=user_id) |
+                    (
+                        Q(project__engagement__type="cod") &
+                        Q(project__coaches_status__coach__id=user_id) &
+                        Q(project__coaches_status__status__hr__status="select") &
+                        Exists(
+                            CoachContract.objects.filter(
+                                project_id=OuterRef('project_id'),
+                                coach_id=user_id,
+                                status="approved"
+                            )
+                        )
+                    )
+                )
+            )
+        
+                    
+
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
             Q(confirmed_availability=None)
@@ -10289,7 +10334,9 @@ def get_coaches_in_project_is_vendor(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
         data = {}
-        purchase_orders = filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data) 
+        purchase_orders = filter_purchase_order_data(
+            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
+        )
         # fetch_purchase_orders(organization_id)
         for coach_status in project.coaches_status.all():
             is_vendor = coach_status.coach.user.roles.filter(name="vendor").exists()
@@ -11064,7 +11111,3 @@ def get_available_credits_without_project_structure(request, engagement_id):
             {"error": "Failed to retrieve data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-        
-        
-        
-        

@@ -167,10 +167,8 @@ class Sales(models.Model):
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-
     def __str__(self):
         return self.name
-
 
 
 class Pmo(models.Model):
@@ -433,7 +431,7 @@ class Project(models.Model):
     )
     is_archive = models.BooleanField(default=False)
     finance = models.BooleanField(blank=True, default=False)
-    is_project_structure= models.BooleanField(blank=True, default=True)
+    is_project_structure = models.BooleanField(blank=True, default=True)
     total_credits = models.IntegerField(default=0, blank=True, null=True)
     duration_of_each_session = models.IntegerField(blank=True, default=None, null=True)
     request_expiry_time = models.IntegerField(default=0, blank=True, null=True)
@@ -494,22 +492,29 @@ class Availibility(models.Model):
 #     coach_joined = models.BooleanField(blank=True,default=False)
 #     learner_joined = models.BooleanField(blank=True,default=False)
 
+
 class Engagement(models.Model):
     STATUS_CHOICES = (
         ("active", "Active"),
         ("completed", "Completed"),
         ("archived", "Archived"),
     )
+    TYPE_CHOICES = (
+        ("cod", "COD"),
+        ("caas", "CAAS"),
+    )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE, null=True, blank=True)
     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     project_structure = models.JSONField(default=list, blank=True)
+    type = models.CharField(
+        max_length=225, null=True, blank=True, choices=TYPE_CHOICES
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Project: {self.project.name} - Learner: {self.learner.name}"
-
 
 
 class SessionRequestCaas(models.Model):
@@ -578,7 +583,6 @@ class Notification(models.Model):
 
     def __str__(self):
         return self.user.username
-
 
 
 class Goal(models.Model):
