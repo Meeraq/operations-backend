@@ -373,14 +373,14 @@ def create_handover(request):
         res_serializer = HandoverDetailsSerializer(handover_instance)
         return Response(
             {
-                "message": "Handover created successfully.",
+                "message": "Handover created successfully. Please contact the PMO team for acceptance of the handover.",
                 "handover": res_serializer.data,
             },
             status=status.HTTP_200_OK,
         )
     else:
         print(serializer.errors)
-        return Response({"error": "Failed to add handover. "}, status=400)
+        return Response({"error": "Failed to add handover. "}, status=500)
 
 
 @api_view(["POST"])
@@ -484,7 +484,7 @@ def get_all_Schedular_Projects(request):
     finance = request.query_params.get("finance")
     projects = None
     if finance:
-       projects = SchedularProject.objects.all() 
+        projects = SchedularProject.objects.all()
     elif pmo_id:
         pmo = Pmo.objects.get(id=int(pmo_id))
 
@@ -6089,28 +6089,34 @@ def create_expense(request):
                 file=file,
                 amount=amount,
             )
+
             facilitator_name = f"{facilitator.first_name} {facilitator.last_name}"
             expense_name = expense.name
             project_name = expense.batch.project.name
-            send_mail_templates(
-                "expenses/expenses_emails.html",
-                [
+
+            try:
+                emails = [
                     "madhuri@coachtotransformation.com",
                     "nisha@coachtotransformation.com",
                     "pmotraining@meeraq.com",
                     "pmocoaching@meeraq.com",
-                    expense.batch.project.junior_pmo.email,
-                ],
-                "Verification Required: Facilitators Expenses",
-                {
-                    "facilitator_name": facilitator_name,
-                    "expense_name": expense_name,
-                    "project_name": project_name,
-                    "description": expense.description,
-                    "amount": expense.amount,
-                },
-            )
-            try:
+                ]
+                if batch.project.junior_pmo:
+                    emails.append(batch.project.junior_pmo.email)
+
+                send_mail_templates(
+                    "expenses/expenses_emails.html",
+                    emails,
+                    "Verification Required: Facilitators Expenses",
+                    {
+                        "facilitator_name": facilitator_name,
+                        "expense_name": expense_name,
+                        "project_name": project_name,
+                        "description": expense.description,
+                        "amount": expense.amount,
+                    },
+                )
+
                 email_array = json.loads(env("EXPENSE_NOTIFICATION_EMAILS"))
                 if batch.project.junior_pmo:
                     email_array.append(batch.project.junior_pmo.email)
@@ -6653,3 +6659,41 @@ def update_reminder_in_batch(request, batch_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_mail_to_coaches(request):
+    try:
+        template_id = request.data.get("template_id")
+        coaches = request.data.get("coaches")
+        subject = request.data.get("subject")
+        template = EmailTemplate.objects.get(id=template_id)
+
+        temp1 = template.template_data
+
+        for coach_id in coaches:
+            coach = Coach.objects.get(id = int(coach_id))
+            mail = coach.email
+            email_message_learner = render_to_string(
+                "default.html",
+                {
+                    "email_content": mark_safe(temp1),
+                    "email_title": "hello",
+                    "subject": subject,
+                },
+            )
+            email = EmailMessage(
+                subject,
+                email_message_learner,
+                settings.DEFAULT_FROM_EMAIL,
+                [mail],
+            )
+            email.content_subtype = "html"
+            email.send()
+            sleep(5)
+            print("Email sent to:", mail)
+        return Response({"message": "Mails Send Successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to send mail!"}, status=500)

@@ -147,6 +147,7 @@ from .models import (
     Task,
     Finance,
     Sales,
+    TableHiddenColumn,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -1102,13 +1103,13 @@ def edit_ctt_pmo(request, ctt_pmo_id):
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def approve_coach(request):
     try:
-        # Get the Coach object
+
         unapproved_coach = request.data["coach"]
         room_id = request.data["room_id"]
         coach = Coach.objects.get(id=unapproved_coach["id"])
 
-        # Change the is_approved field to True
         coach.is_approved = True
+        coach.is_rejected = False
         coach.active_inactive = True
         coach.room_id = room_id
         coach.save()
@@ -1118,8 +1119,7 @@ def approve_coach(request):
         message = f"Congratulations ! Your profile has been approved. You will be notified for projects that match your profile. Thank You !"
 
         create_notification(coach.user.user, path, message)
-        # Return success response
-        # Send approval email to the coach
+
         send_mail_templates(
             "coach_templates/pmo_approves_profile.html",
             [coach.email],
@@ -1131,13 +1131,54 @@ def approve_coach(request):
         )
         return Response({"message": "Coach approved successfully."}, status=200)
 
-    except Coach.DoesNotExist:
-        # Return error response if Coach with the provided ID does not exist
-        return Response({"error": "Coach does not exist."}, status=404)
+    except Exception as e:
+        print(str(e))
+
+        return Response({"error": "Failed to approve coach."}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny])
+def reject_coach(request, coach_id):
+    try:
+
+        coach = Coach.objects.get(id=coach_id)
+
+        coach.is_rejected = True
+        coach.save()
+
+        send_mail_templates(
+            "coach_templates/coach_is_rejected.html",
+            [coach.email],
+            "Meeraq | Profile Rejected",
+            {
+                "name": f"{coach.first_name}",
+            },
+            [],
+        )
+
+        return Response({"message": "Coach rejected successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+
+        return Response({"error": "Failed to reject coach."}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny])
+def reject_facilitator(request, facilitator_id):
+    try:
+
+        facilitator = Facilitator.objects.get(id=facilitator_id)
+
+        facilitator.is_rejected = True
+        facilitator.save()
+
+        return Response({"message": "Facilitator rejected successfully!"}, status=200)
 
     except Exception as e:
-        # Return error response if any other exception occurs
-        return Response({"error": str(e)}, status=500)
+        print(str(e))
+        return Response({"error": "Failed to reject facilitator."}, status=500)
 
 
 @api_view(["PUT"])
@@ -1841,6 +1882,9 @@ def add_coach(request):
     education_pic = request.data.get("education_pic", None)
     educational_qualification = json.loads(request.data["educational_qualification"])
     education_upload_file = request.data.get("education_upload_file", None)
+    is_coach = request.data.get("is_coach", False)
+    is_mentor = request.data.get("is_mentor", False)
+    is_consultant = request.data.get("is_consultant", False)
 
     # Check if required data is provided
     if not all(
@@ -1854,6 +1898,9 @@ def add_coach(request):
             level,
             username,
             room_id,
+            corporate_experience,
+            coaching_experience,
+
         ]
     ):
         return Response({"error": "All required fields must be provided."}, status=400)
@@ -1930,6 +1977,9 @@ def add_coach(request):
                 education_pic=education_pic,
                 educational_qualification=educational_qualification,
                 education_upload_file=education_upload_file,
+                is_coach=is_coach,
+                is_mentor=is_mentor,
+                is_consultant=is_consultant,
             )
 
             # Approve coach
@@ -6084,7 +6134,6 @@ def get_current_session(request, user_type, room_id, user_id):
     else:
         return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
-
 @api_view(["GET"])
 @permission_classes(
     [IsAuthenticated, IsInRoles("coach", "learner", "pmo", "hr", "facilitator")]
@@ -6094,13 +6143,7 @@ def get_current_session_for_coach(request, user_type, user_id):
     caas_sessions = None
     seeq_sessions = None
     if user_type == "coach":
-        sessions = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__gt=current_time),
-            Q(coach__id=user_id),
-            Q(is_archive=False),
-            ~Q(status="completed"),
-        ).order_by("confirmed_availability__start_time")
+       
         coach = Coach.objects.get(id=user_id)
         seeq_sessions = SchedularSessions.objects.filter(
             availibility__end_time__gt=current_time,
@@ -8240,49 +8283,61 @@ class StandardizedFieldRequestAcceptReject(APIView):
         request_id = request.data.get("request_id")
 
         try:
-            request_instance = StandardizedFieldRequest.objects.get(id=request_id)
-            field_name = request_instance.standardized_field_name.field
-            value = request_instance.value
+            with transaction.atomic():
+                request_instance = StandardizedFieldRequest.objects.get(id=request_id)
+                field_name = request_instance.standardized_field_name.field
+                value = request_instance.value
 
-            standardized_field, created = StandardizedField.objects.get_or_create(
-                field=field_name
-            )
-            if status == "accepted":
-                request_instance.status = status
-                request_instance.save()
+                standardized_field, created = StandardizedField.objects.get_or_create(
+                    field=field_name
+                )
+                if status == "accepted":
+                    request_instance.status = status
+                    request_instance.save()
 
-                # if value not in standardized_field.values:
-                #     standardized_field.values.append(value)
-                #     standardized_field.save()
-                # else:
-                #     return Response({"error": "Value already present."}, status=404)
-                return Response({"message": f"Request {status}"}, status=200)
-            else:
-                request_instance.status = status
-                request_instance.save()
+                    # if value not in standardized_field.values:
+                    #     standardized_field.values.append(value)
+                    #     standardized_field.save()
+                    # else:
+                    #     return Response({"error": "Value already present."}, status=404)
+                    return Response({"message": f"Request {status}"}, status=200)
+                else:
+                    request_instance.status = status
+                    request_instance.save()
 
-                if value in standardized_field.values:
-                    standardized_field.values.remove(value)
-                    standardized_field.save()
+                    if value in standardized_field.values:
+                        standardized_field.values.remove(value)
+                        standardized_field.save()
 
-                for model_name, fields in models_to_update.items():
-                    model_class = globals()[model_name]
-                    instances = model_class.objects.all()
+                    for model_name, fields in models_to_update.items():
+                        model_class = globals()[model_name]
+                        instances = model_class.objects.all()
 
-                    for instance in instances:
-                        for field in fields:
-                            field_value = getattr(instance, field, None)
-                            if field_value is not None:
-                                if (
-                                    isinstance(field_value, list)
-                                    and value in field_value
-                                ):
-                                    field_value.remove(value)
-                                    instance.save()
-
-                return Response({"message": f"Request {status}"}, status=200)
-        except StandardizedFieldRequest.DoesNotExist:
-            return Response({"error": f"Request not found."}, status=404)
+                        for instance in instances:
+                            for field in fields:
+                                field_value = getattr(instance, field, None)
+                                if field_value is not None:
+                                    if (
+                                        isinstance(field_value, list)
+                                        and value in field_value
+                                    ):
+                                        field_value.remove(value)
+                                        instance.save()
+                    send_mail_templates(
+                        "coach_templates/reject_feild_item_request.html",
+                        [request_instance.coach.email],
+                        "Meeraq | Field Rejected",
+                        {
+                            "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
+                            "value": value,
+                            "feild": field_name.replace(" ", "_").title(),
+                        },
+                        [],
+                    )
+                    return Response({"message": f"Request {status}"}, status=200)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": f"Failed to perform operation."}, status=500)
 
 
 class StandardFieldDeleteValue(APIView):
@@ -10285,6 +10340,63 @@ def get_facilitator_summary_data(request, facilitator_id):
         print(str(e))
         return Response(
             {"error": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def hide_columns(request):
+    try:
+        hidden_columns = request.data.get("hidden_columns")
+        table_name = request.data.get("table_name")
+        table_hidden_column, created = TableHiddenColumn.objects.get_or_create(
+            table_name=table_name
+        )
+        table_hidden_column.hidden_columns = hidden_columns
+        table_hidden_column.save()
+        return Response(status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to hide column"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_table_hide_columns(request, table_name):
+    try:
+
+        table_hidden_column = TableHiddenColumn.objects.get(table_name=table_name)
+
+        return Response(table_hidden_column.hidden_columns)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def edit_remark(request):
+    try:
+        coach_id = request.data.get("coach_id")
+        remark = request.data.get("remark")
+        coach = Coach.objects.get(id=int(coach_id))
+        coach.remark = remark
+        coach.save()
+        return Response({"message": f"Remark updated successfully!"}, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to update remark"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 

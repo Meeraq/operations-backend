@@ -12,8 +12,6 @@ from zohoapi.tasks import (
 from zohoapi.models import SalesOrder
 from collections import defaultdict
 from django.utils import timezone
-
-
 from .serializers import BatchSerializer, FacultiesSerializer
 from .models import (
     Batches,
@@ -26,8 +24,39 @@ from .models import (
     Assignments,
     MentorCoachSessions,
 )
-
 from zohoapi.models import SalesOrder, ClientInvoice
+from datetime import datetime, timedelta
+
+
+def get_month_start_end_dates():
+    today = datetime.today()
+    month_start_date = today.replace(day=1)
+    next_month = month_start_date.replace(month=month_start_date.month + 1)
+    month_end_date = next_month - timedelta(days=1)
+    return month_start_date, month_end_date
+
+
+def get_current_quarter_dates():
+    today = datetime.today()
+    quarter_month = (today.month - 1) // 3 + 1
+    quarter_start_date = datetime(today.year, 3 * quarter_month - 2, 1)
+    quarter_end_date = datetime(today.year, 3 * quarter_month, 1) - timedelta(days=1)
+    return quarter_start_date, quarter_end_date
+
+
+def get_current_financial_year_dates():
+    today = datetime.today()
+    financial_year_start_month = 4  # Assuming financial year starts in April
+    if today.month < financial_year_start_month:
+        financial_year_start_date = datetime(
+            today.year - 1, financial_year_start_month, 1
+        )
+    else:
+        financial_year_start_date = datetime(today.year, financial_year_start_month, 1)
+    financial_year_end_date = datetime(
+        today.year + 1, financial_year_start_month, 1
+    ) - timedelta(days=1)
+    return financial_year_start_date, financial_year_end_date
 
 
 @api_view(["GET"])
@@ -83,46 +112,70 @@ def batch_details(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def participant_details(request):
-    batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
-    data = []
-    index = 1
-    for batch_user in batch_users:
-        try:
-            batch_name = batch_user.batch.name
-            batch = batch_user.batch
-            batch_start_date = batch_user.batch.start_date
-            program_name = batch_user.batch.program.name
-            assignment_completion = (
-                UserAssignments.objects.using("ctt")
-                .filter(user=batch_user.user, assignment__batch=batch)
-                .count()
-            )
-            total_assignments_in_batch = (
-                Assignments.objects.using("ctt").filter(batch=batch).count()
-            )
-            certificate_status = (
-                "released" if batch_user.certificate else "not released"
-            )
-            organization_name = batch_user.user.current_organisation_name
+    try:
+        batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
+        data = []
+        index = 1
+        for batch_user in batch_users:
+            try:
+                batch_name = batch_user.batch.name
+                batch = batch_user.batch
+                batch_start_date = batch_user.batch.start_date
+                program_name = batch_user.batch.program.name
+                assignment_completion = (
+                    UserAssignments.objects.using("ctt")
+                    .filter(user=batch_user.user, assignment__batch=batch)
+                    .count()
+                )
+                total_assignments_in_batch = (
+                    Assignments.objects.using("ctt").filter(batch=batch).count()
+                )
+                certificate_status = (
+                    "released" if batch_user.certificate else "not released"
+                )
+                organization_name = batch_user.user.current_organisation_name
+                salesorders = SalesOrder.objects.filter(
+                    zoho_customer__email=batch_user.user.email,
+                    custom_field_hash__cf_ctt_batch=batch_user.batch.name,
+                )
+                payment_status = None
 
-            user_data = {
-                "index": index,
-                "name": batch_user.user.first_name + " " + batch_user.user.last_name,
-                "email": batch_user.user.email,
-                "phone_number": batch_user.user.phone,
-                "batch": batch_name,
-                "program": program_name,
-                "assignment_completion": assignment_completion,
-                "total_assignments_in_batch": total_assignments_in_batch,
-                "certificate_status": certificate_status,
-                "organisation": organization_name,
-            }
-            index += 1
-            data.append(user_data)
-        except Exception as e:
-            print(str(e))
-            pass
-    return Response(data)
+                for sales_order in salesorders:
+                    if sales_order.invoiced_status != "invoiced":
+                        if sales_order.invoiced_status == "partially_invoiced":
+                            payment_status = "Partially Invoiced"
+                            break
+                        elif sales_order.invoiced_status == "not_invoiced":
+                            payment_status = "Not Invoiced"
+                            break
+                    else:
+                        payment_status = "Invoiced"
+
+                user_data = {
+                    "index": index,
+                    "name": batch_user.user.first_name
+                    + " "
+                    + batch_user.user.last_name,
+                    "email": batch_user.user.email,
+                    "phone_number": batch_user.user.phone,
+                    "batch": batch_name,
+                    "program": program_name,
+                    "assignment_completion": assignment_completion,
+                    "total_assignments_in_batch": total_assignments_in_batch,
+                    "certificate_status": certificate_status,
+                    "organisation": organization_name,
+                    "payment_status": payment_status,
+                }
+
+                index += 1
+                data.append(user_data)
+            except Exception as e:
+                print(str(e))
+
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)
 
 
 def find_customer_by_email(customers, email):
@@ -214,6 +267,12 @@ def sales_persons_finances(request):
     l2_batches = []
     l3_batches = []
     actc_batches = []
+
+    month_start_date, month_end_date = get_month_start_end_dates()
+    quarter_start_date, quarter_end_date = get_current_quarter_dates()
+    financial_year_start_date, financial_year_end_date = (
+        get_current_financial_year_dates()
+    )
     for batch in all_batches:
         if batch.program.certification_level.name == "Level 1":
             l1_batches.append(batch.name)
@@ -229,7 +288,17 @@ def sales_persons_finances(request):
     # query_params = f"&salesorder_number_contains=CTT{date_query}"
     # sales_orders = fetch_sales_orders(organization_id, query_params)
     sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT")
-    salesperson_totals = defaultdict(lambda: {"l1": 0, "l2": 0, "l3": 0, "actc": 0})
+    salesperson_totals = defaultdict(
+        lambda: {
+            "l1": 0,
+            "l2": 0,
+            "l3": 0,
+            "monthly": 0,
+            "quarterly": 0,
+            "yearly": 0,
+            "actc": 0,
+        }
+    )
     for order in sales_orders:
         batch = order.custom_field_hash.get("cf_ctt_batch", "")
         if not batch:
@@ -245,7 +314,19 @@ def sales_persons_finances(request):
         elif batch in actc_batches:
             salesperson_totals[salesperson]["actc"] += 1
 
+        if month_start_date.date() <= order.date <= month_end_date.date():
+            salesperson_totals[salesperson]["monthly"] += 1
+        if quarter_start_date.date() <= order.date <= quarter_end_date.date():
+            salesperson_totals[salesperson]["quarterly"] += 1
+        if (
+            financial_year_start_date.date()
+            <= order.date
+            <= financial_year_end_date.date()
+        ):
+            salesperson_totals[salesperson]["yearly"] += 1
+    
     res_dict = dict(salesperson_totals)
+    
     res_list = [
         {"index": index, "salesperson": salesperson, **totals}
         for index, (salesperson, totals) in enumerate(
@@ -460,6 +541,7 @@ def get_all_client_invoice_of_participant_for_batch(request, participant_id, bat
                     temp = {
                         "invoice_number": client_invoice.invoice_number,
                         "so_number": sales_order.salesorder_number,
+                        "due_date": client_invoice.due_date_formatted,
                         "date": client_invoice.date_formatted,
                         "payment_status": payment_status,
                     }

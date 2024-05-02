@@ -42,7 +42,8 @@ from .serializers import (
     VendorDepthOneSerializer,
     VendorSerializer,
     InvoiceStatusUpdateGetSerializer,
-    VendorEditSerializer,ZohoVendorSerializer
+    VendorEditSerializer,
+    ZohoVendorSerializer
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -62,6 +63,10 @@ from .tasks import (
     fetch_client_invoices,
     get_all_so_of_po,
     fetch_sales_persons,
+    create_or_update_so,
+    create_or_update_po,
+    create_or_update_client_invoice, 
+    create_or_update_bills
 )
 from .models import (
     InvoiceData,
@@ -513,7 +518,7 @@ def get_total_revenue(request, vendor_id):
         for invoice in invoices:
             total_revenue += invoice.total
 
-        return Response({"total_revenue": total_revenue})
+        return Response(total_revenue)
     except Exception as e:
         return Response({"error": str(e)}, status=400)
 
@@ -1614,6 +1619,7 @@ def create_purchase_order(request, user_type, facilitator_pricing_id):
         response = requests.post(api_url, headers=auth_header, data=request.data)
         if response.status_code == 201:
             purchaseorder_created = response.json().get("purchaseorder")
+            create_or_update_po(purchaseorder_created["purchaseorder_id"])
             if user_type == "facilitator":
                 facilitator_pricing.purchase_order_id = purchaseorder_created[
                     "purchaseorder_id"
@@ -1663,6 +1669,7 @@ def update_purchase_order(request, user_type, facilitator_pricing_id):
         response = requests.put(api_url, headers=auth_header, data=request.data)
         if response.status_code == 200:
             purchaseorder_created = response.json().get("purchaseorder")
+            create_or_update_po(purchaseorder_created["purchaseorder_id"])
             if user_type == "facilitator":
                 facilitator_pricing.purchase_order_id = purchaseorder_created[
                     "purchaseorder_id"
@@ -1701,8 +1708,10 @@ def delete_purchase_order(request, user_type, purchase_order_id):
         api_url = f"{base_url}/purchaseorders/{purchase_order_id}?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.delete(api_url, headers=auth_header)
-        print(response.json())
+
         if response.status_code == 200:
+            purchaseorders_to_delete  = PurchaseOrder.objects.filter(purchaseorder_id=purchase_order_id)
+            purchaseorders_to_delete.delete()
             if user_type == "coach":
                 CoachPricing.objects.filter(purchase_order_id=purchase_order_id).update(
                     purchase_order_id="", purchase_order_no=""
@@ -1905,8 +1914,8 @@ def update_purchase_order_status(request, purchase_order_id, status):
         api_url = f"{base_url}/purchaseorders/{purchase_order_id}/status/{status}?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.post(api_url, headers=auth_header)
-        print(response.json())
         if response.status_code == 200:
+            create_or_update_po(purchase_order_id)
             return Response({"message": f"Purchase Order changed to {status}."})
         else:
             return Response(status=401)
@@ -1933,7 +1942,7 @@ def coching_purchase_order_create(request, coach_id, project_id):
         response = requests.post(api_url, headers=auth_header, data=request.data)
         if response.status_code == 201:
             purchaseorder_created = response.json().get("purchaseorder")
-
+            create_or_update_po(purchaseorder_created["purchaseorder_id"])
             coach_status.purchase_order_id = purchaseorder_created["purchaseorder_id"]
             coach_status.purchase_order_no = purchaseorder_created[
                 "purchaseorder_number"
@@ -1991,7 +2000,7 @@ def coching_purchase_order_update(request, coach_id, project_id):
         response = requests.put(api_url, headers=auth_header, data=request.data)
         if response.status_code == 200:
             purchaseorder_created = response.json().get("purchaseorder")
-
+            create_or_update_po(purchaseorder_created["purchaseorder_id"])
             coach_status.purchase_order_id = purchaseorder_created["purchaseorder_id"]
             coach_status.purchase_order_no = purchaseorder_created[
                 "purchaseorder_number"
@@ -2019,8 +2028,9 @@ def delete_coaching_purchase_order(request, purchase_order_id):
         api_url = f"{base_url}/purchaseorders/{purchase_order_id}?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.delete(api_url, headers=auth_header)
-        print(response.json())
         if response.status_code == 200:
+            purchaseorders_to_delete = PurchaseOrder.objects.filter(purchaseorder_id=purchase_order_id)
+            purchaseorders_to_delete.delete()
             CoachStatus.objects.filter(purchase_order_id=purchase_order_id).update(
                 purchase_order_id="", purchase_order_no=""
             )
@@ -2038,6 +2048,9 @@ def expense_purchase_order_create(request, facilitator_id, batch_or_project_id):
     try:
         is_all_batch = request.query_params.get("is_all_batch")
         expenses = []
+        JSONString = json.loads(request.data.get("JSONString"))
+
+        selected_expenses = JSONString.get("selected_expenses")
 
         facilitator = Facilitator.objects.get(id=facilitator_id)
 
@@ -2060,17 +2073,22 @@ def expense_purchase_order_create(request, facilitator_id, batch_or_project_id):
         response = requests.post(api_url, headers=auth_header, data=request.data)
         if response.status_code == 201:
             purchaseorder_created = response.json().get("purchaseorder")
+            create_or_update_po(purchaseorder_created["purchaseorder_id"])
             for expense in expenses:
-                expense.purchase_order_id = purchaseorder_created["purchaseorder_id"]
-                expense.purchase_order_no = purchaseorder_created[
-                    "purchaseorder_number"
-                ]
-                expense.save()
+                if expense.id in selected_expenses:
+                    expense.purchase_order_id = purchaseorder_created[
+                        "purchaseorder_id"
+                    ]
+                    expense.purchase_order_no = purchaseorder_created[
+                        "purchaseorder_number"
+                    ]
+                    expense.save()
 
             return Response({"message": "Purchase Order created successfully."})
         else:
             print(response.json())
             return Response(status=500)
+        return Response(status=500)
     except Exception as e:
         print(str(e))
         return Response(status=500)
@@ -2104,6 +2122,7 @@ def expense_purchase_order_update(request, facilitator_id, batch_or_project_id):
         response = requests.put(api_url, headers=auth_header, data=request.data)
         if response.status_code == 200:
             purchaseorder_created = response.json().get("purchaseorder")
+            create_or_update_po(purchaseorder_created["purchaseorder_id"])
             for expense in expenses:
                 expense.purchase_order_id = purchaseorder_created["purchaseorder_id"]
                 expense.purchase_order_no = purchaseorder_created[
@@ -2556,8 +2575,9 @@ def delete_expense_purchase_order(request, purchase_order_id):
         api_url = f"{base_url}/purchaseorders/{purchase_order_id}?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.delete(api_url, headers=auth_header)
-        print(response.json())
         if response.status_code == 200:
+            purchaseorders_to_delete = PurchaseOrder.objects.filter(purchaseorder_id =purchase_order_id )
+            purchaseorders_to_delete.delete()
             Expense.objects.filter(purchase_order_id=purchase_order_id).update(
                 purchase_order_id="", purchase_order_no=""
             )
@@ -2817,8 +2837,11 @@ def create_invoice(request):
         api_url = f"{base_url}/invoices?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.post(api_url, headers=auth_header, data=request.data)
-        print(response.json())
         if response.status_code == 201:
+            invoice_created = response.json().get('invoice')
+            if invoice_created:
+                create_or_update_client_invoice(invoice_created['invoice_id'])
+
             return Response(
                 {"message": "The Invoice Generated is saved as Draft Successfully."}
             )
@@ -2844,6 +2867,9 @@ def edit_so_invoice(request, invoice_id):
         response = requests.put(api_url, headers=auth_header, data=request.data)
 
         if response.status_code == 200:
+            invoice = response.json().get('invoice')
+            if invoice:
+                create_or_update_client_invoice(invoice['invoice_id'])
             return Response({"message": "Invoice updated successfully."})
         else:
             return Response({"error": response.json()}, status=response.status_code)
@@ -2862,9 +2888,9 @@ def update_sales_order_status_to_open(sales_order_id, status):
 
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.post(api_url, headers=auth_header)
-        print(response.json())
         # If response status is not 200, raise custom exception
         if response.status_code == 200:
+            create_or_update_so(sales_order_id)
             return True
         else:
             raise Exception(
@@ -2890,6 +2916,8 @@ def edit_sales_order(request, sales_order_id):
         response = requests.put(api_url, headers=auth_header, data=request.data)
 
         if response.status_code == 200:
+            sales_order = response.json().get("salesorder")
+            create_or_update_so(sales_order["salesorder_id"])
             return Response({"message": "Sales order updated successfully."})
         else:
             return Response({"error": response.json()}, status=response.status_code)
@@ -2911,6 +2939,7 @@ def create_sales_order(request):
         response = requests.post(api_url, headers=auth_header, data=request.data)
         if response.status_code == 201:
             salesorder_created = response.json().get("salesorder")
+            create_or_update_so(salesorder_created["salesorder_id"])
             project_id = request.data.get("project_id", "")
             project_type = request.data.get("project_type", "")
             status = request.data.get("status", "")
@@ -3865,7 +3894,6 @@ def get_so_for_the_project(request):
         return Response({"error": str(e)}, status=500)
 
 
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_handovers_so(request, sales_id):
@@ -3884,10 +3912,13 @@ def get_handovers_so(request, sales_id):
                 organization_id, f"&salesorder_ids={sales_orders_ids_str}"
             )
         final_data = {}
-        sales_order_dict = {order["salesorder_id"]: order['salesorder_number'] for order in all_sales_orders}
+        sales_order_dict = {
+            order["salesorder_id"]: order["salesorder_number"]
+            for order in all_sales_orders
+        }
         if handovers:
             for handover in handovers:
-                handover_id =handover.id
+                handover_id = handover.id
                 res = []
                 sales_order_ids = handover.sales_order_ids
                 for sales_order_id in sales_order_ids:
@@ -3904,7 +3935,6 @@ def get_handovers_so(request, sales_id):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
-
 
 
 @api_view(["GET"])
@@ -3995,6 +4025,3 @@ def get_line_items(request):
                 line_item["project_name"] = None
         line_item_data.append(line_item)
     return JsonResponse(line_item_data, safe=False)
-
-
-
