@@ -519,6 +519,6 @@ urlpatterns = [
     ),
        path(
         "get-avaliable-credits/<int:engagement_id>/",
-        views.get_avaliable_credits,
+        views.get_available_credits,
     ),
 ]
