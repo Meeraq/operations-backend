@@ -44,7 +44,6 @@ class SchedularProject(models.Model):
         blank=True,
     )
     is_archive = models.BooleanField(default=False)
-    teams_enabled = models.BooleanField(blank=True, default=True)
 
     class Meta:
         ordering = ["-created_at"]
