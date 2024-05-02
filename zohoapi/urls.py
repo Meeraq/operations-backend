@@ -24,7 +24,7 @@ urlpatterns = [
         views.get_invoices_with_status,
     ),
     path(
-        "api/total-revenue/<vendor_id>/",
+        "total-revenue/<vendor_id>/",
         views.get_total_revenue,
         name="get_total_revenue",
     ),
@@ -68,6 +68,7 @@ urlpatterns = [
     ),
     path("add/vendor/", views.add_vendor),
     path("vendors/", views.get_all_vendors),
+    path("zoho-vendors/", views.get_zoho_vendors),
     path(
         "get-all-purchase-orders/",
         views.get_all_purchase_orders,
@@ -139,7 +140,7 @@ urlpatterns = [
         name="update_purchase_order",
     ),
     path(
-        "po-number/meeraq/",
+        "po-number/<str:po_type>/",
         views.get_po_number_to_create,
         name="get_po_number_to_create",
     ),
@@ -161,6 +162,10 @@ urlpatterns = [
     path(
         "coching-purchase-order/create/<int:coach_id>/<int:project_id>/",
         views.coching_purchase_order_create,
+    ),
+    path(
+        "purchase-order/outside/create/",
+        views.create_purchase_order_for_outside_vendors,
     ),
     path(
         "coching-purchase-order/update/<int:coach_id>/<int:project_id>/",
@@ -343,6 +348,11 @@ urlpatterns = [
         name="get_so_for_the_project",
     ),
     path(
+        "get-handovers-so/<int:sales_id>/",
+        views.get_handovers_so,
+        name="get_handovers_so",
+    ),
+    path(
         "get-total-so-created-count/<str:sales_person_id>/",
         views.get_total_so_created_count,
         name="get_total_so_created_count",
@@ -350,7 +360,7 @@ urlpatterns = [
     path(
         "get-handovers-count/<str:sales_person_id>/",
         views.get_handovers_count,
-        name="get_handovers_count"
+        name="get_handovers_count",
     ),
     path(
         "sales-orders-with-due-invoices/<str:sales_person_id>/",
