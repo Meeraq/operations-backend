@@ -200,6 +200,7 @@ urlpatterns = [
         views.get_learner_sessions_in_project_from_engagement,
     ),
     path("session/request/<int:session_id>/<int:coach_id>/", views.request_session),
+    path("session/request/without-project-structure/<int:engagement_id>/", views.request_session_without_project_structure),
     path("session/reschedule/<int:session_id>/", views.reschedule_session_of_coachee),
     path("sessions/edit/<int:session_id>/", views.edit_session_availability),
     path("goals/", views.create_goal),

@@ -5826,6 +5826,48 @@ def request_session(request, session_id, coach_id):
 
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
+def request_session_without_project_structure(request, engagement_id):
+    try:
+        with transaction.atomic():
+            engagement = Engagement.objects.get(id=engagement_id)
+
+            project_structure_session = engagement.project.project_structure[0]
+            sessions = SessionRequestCaas.objects.filter(
+                engagement=engagement
+            ).order_by("order")
+
+            max_order = sessions.aggregate(Max("order"))["order__max"]
+
+            if max_order is None:
+                max_order = 0
+
+            session_data = SessionRequestCaas.objects.create(
+                learner=engagement.learner,
+                project=engagement.project,
+                session_duration=project_structure_session["session_duration"],
+                session_number=max_order + 1,
+                session_type=project_structure_session["session_type"],
+                billable_session_number=max_order + 1,
+                status="pending",
+                order=max_order + 1,
+                engagement=engagement,
+            )
+
+            time_arr = create_time_arr(request.data["availibility"])
+            session_data.availibility.set(time_arr)
+
+            session_data.status = "requested"
+            session_data.save()
+
+            return Response({"message": "Session requested successfully"}, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to create request."}, status=500)
+
+
+@api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def reschedule_session_of_coachee(request, session_id):
     session = SessionRequestCaas.objects.get(id=session_id)
