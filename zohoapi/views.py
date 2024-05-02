@@ -2997,7 +2997,7 @@ def create_sales_order(request):
                     "so_number": so_number,
                     "customer_name": customer_name,
                     "salesperson": salesperson_name,
-                    "project_type": project_type,
+                    "project_type": "CTT"  if ctt else project_type,
                 },
                 (
                     [
