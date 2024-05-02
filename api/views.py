@@ -3060,11 +3060,14 @@ def get_upcoming_booked_session_of_coach(request, coach_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "learner", "hr")])
+@transaction.atomic
 def book_session_caas(request):
     session_request = SessionRequestCaas.objects.get(
         id=request.data.get("session_request")
     )
-
+    coach = Coach.objects.get(id= request.data["coach"])
+    session_request.coach = coach
+    session_request.save()
     existing_calendar_invite = CalendarInvites.objects.filter(
         caas_session=session_request
     ).first()
