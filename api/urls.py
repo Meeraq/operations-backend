@@ -101,6 +101,10 @@ urlpatterns = [
     path(
         "get-chemistry-session-data/<int:project_id>/", views.get_chemistry_session_data
     ),
+    path(
+        "get-chemistry-session-data-for-engagement/<int:engagement_id>/",
+        views.get_chemistry_session_data_for_engagement,
+    ),
     path("mark_as_incomplete/", views.mark_as_incomplete),
     path("send_project_strure_to_hr/", views.send_project_strure_to_hr),
     path("send_reject_reason/", views.send_reject_reason),
@@ -182,6 +186,10 @@ urlpatterns = [
     path(
         "session/request/chemistry/<int:project_id>/<int:learner_id>/",
         views.request_chemistry_session,
+    ),
+    path(
+        "session/request/chemistry/engagement/<int:engagement_id>/",
+        views.request_chemistry_session_for_engagement,
     ),
     path(
         "session/<int:project_id>/<int:learner_id>/",
@@ -508,5 +516,9 @@ urlpatterns = [
     path(
         "create-new-engagement/",
         views.create_engagement_of_learner,
+    ),
+       path(
+        "get-avaliable-credits/<int:engagement_id>/",
+        views.get_avaliable_credits,
     ),
 ]
