@@ -4047,6 +4047,7 @@ def get_line_items(request):
                 associated_mapping = order_mappings.filter(
                     sales_order_ids__contains=sales_order.salesorder_id
                 ).first()
+                
                 if associated_mapping:
                     if associated_mapping.project is not None:
                         line_item["project_type"] = "Coaching"
