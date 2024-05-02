@@ -517,8 +517,12 @@ urlpatterns = [
         "create-new-engagement/",
         views.create_engagement_of_learner,
     ),
-       path(
+    path(
         "get-avaliable-credits/<int:engagement_id>/",
         views.get_available_credits,
+    ),
+    path(
+        "get-avaliable-credits-of-project/<int:project_id>/",
+        views.get_available_credit_of_project,
     ),
 ]

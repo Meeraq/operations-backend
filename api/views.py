@@ -4507,13 +4507,11 @@ def get_engagement_in_projects(request, project_id):
     for engagement in engagements:
         completed_sessions_count = SessionRequestCaas.objects.filter(
             status="completed",
-            project__id=engagement.project.id,
-            learner__id=engagement.learner.id,
+            engagement=engagement,
         ).count()
 
         total_sessions_count = SessionRequestCaas.objects.filter(
-            project__id=engagement.project.id,
-            learner__id=engagement.learner.id,
+            engagement=engagement,
             is_archive=False,
         ).count()
 
@@ -10898,11 +10896,13 @@ def get_available_credits(request, engagement_id):
         available_credits = get_available_credit_for_project(
             engagement.project.id, "both"
         )
-       
+
         total_durations = credits_needed_for_an_engagement(engagement)
-        
+
         if total_durations is not None and available_credits is not None:
-            needed_credits_present = available_credits >= total_durations if total_durations != 0 else False
+            needed_credits_present = (
+                available_credits >= total_durations if total_durations != 0 else False
+            )
         else:
             needed_credits_present = False
 
@@ -10910,15 +10910,10 @@ def get_available_credits(request, engagement_id):
             {
                 "available_credits": available_credits,
                 "total_durations": total_durations,
-                "needed_credits_present": needed_credits_present
+                "needed_credits_present": needed_credits_present,
             }
         )
 
-    except Engagement.DoesNotExist:
-        return Response(
-            {"error": "Engagement does not exist"},
-            status=status.HTTP_404_NOT_FOUND
-        )
     except Exception as e:
         print(str(e))
         return Response(
@@ -10926,3 +10921,25 @@ def get_available_credits(request, engagement_id):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_available_credit_of_project(request, project_id):
+    try:
+        
+        available_credits = get_available_credit_for_project(
+            project_id, "both"
+        )
+
+        return Response(
+            {
+                "available_credits": available_credits,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to retrieve data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
