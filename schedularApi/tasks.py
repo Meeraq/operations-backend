@@ -33,7 +33,14 @@ import json
 
 # /from assessmentApi.views import send_whatsapp_message
 from django.core.exceptions import ObjectDoesNotExist
-from assessmentApi.models import Assessment, ParticipantResponse, ParticipantUniqueId
+from assessmentApi.models import (
+    Assessment,
+    ParticipantResponse,
+    ParticipantUniqueId,
+    ObserverUniqueId,
+    ObserverResponse,
+    ParticipantObserverType,
+)
 from courses.models import (
     Course,
     Lesson,
@@ -2177,6 +2184,57 @@ def send_tomorrow_action_items_data():
 @shared_task
 def send_whatsapp_reminder_assessment(assessment_id):
     assessment = Assessment.objects.get(id=assessment_id)
+    # if assessment.assessment_type == "360":
+        # participants_observers = assessment.participants_observers.all()
+        # print(1,participants_observers)
+        # for participant_observer_mapping in participants_observers:
+        #     participant = participant_observer_mapping.participant
+        #     print(2,participant)
+        #     try:
+        #         observers = participant_observer_mapping.observers.all()
+        #         print(3,observers)
+        #         for observer in observers:
+        #             print(4, observer)
+        #             observer_response_exists = ObserverResponse.objects.filter(
+        #                 participant=participant,
+        #                 observer=observer,
+        #                 assessment=assessment,
+        #             ).exists()
+        #             if not observer_response_exists:
+        #                 observer_unique_id = ObserverUniqueId.objects.get(
+        #                     observer=observer, assessment=assessment
+        #                 )
+        #                 unique_id = observer_unique_id.unique_id
+        #                 print(5,unique_id, observer.phone)
+        #                 send_whatsapp_message_template(
+        #                     observer.phone,
+        #                     {
+        #                         "broadcast_name": "Assessment Reminder",
+        #                         "parameters": [
+        #                             {
+        #                                 "name": "observer_name",
+        #                                 "value": observer.name,
+        #                             },
+        #                             {
+        #                                 "name": "participant_name",
+        #                                 "value": participant.name,
+        #                             },
+        #                             {
+        #                                 "name": "assessment_name",
+        #                                 "value": assessment.participant_view_name,
+        #                             },
+        #                             {
+        #                                 "name": "observer_id",
+        #                                 "value": unique_id,
+        #                             },
+        #                         ],
+        #                         "template_name": "assessment_reminder_observer",
+        #                     },
+        #                 )
+        #     except ObjectDoesNotExist:
+        #         print(f"No unique ID found for participant {observer.name}")
+        #     sleep(2)
+        # else:
     participants_observers = assessment.participants_observers.all()
     for participant_observer_mapping in participants_observers:
         participant = participant_observer_mapping.participant
@@ -2189,8 +2247,20 @@ def send_whatsapp_reminder_assessment(assessment_id):
                     participant=participant, assessment=assessment
                 )
                 unique_id = participant_unique_id.unique_id
+                assessment_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{unique_id}"
                 print("Participant Unique ID:", unique_id)
                 send_whatsapp_message("learner", participant, assessment, unique_id)
+                send_mail_templates(
+                    "assessment/assessment_reminder_mail_to_participant.html",
+                    [participant.email],
+                    "Meeraq - Assessment Reminder !",
+                    {
+                        "assessment_name": assessment.participant_view_name,
+                        "participant_name": participant.name.capitalize(),
+                        "link": assessment_link,
+                    },
+                    [],
+                )
         except ObjectDoesNotExist:
             print(f"No unique ID found for participant {participant.name}")
         sleep(2)
@@ -2199,6 +2269,38 @@ def send_whatsapp_reminder_assessment(assessment_id):
 @shared_task
 def send_email_reminder_assessment(assessment_id):
     assessment = Assessment.objects.get(id=assessment_id)
+    # if assessment.assessment_type == "360":
+        # participants_observers = assessment.participants_observers.all()
+        # for participant_observer_mapping in participants_observers:
+        #     participant = participant_observer_mapping.participant
+        #     try:
+        #         observers = participant_observer_mapping.observers.all()
+        #         for observer in observers:
+        #             observer_response_exists = ObserverResponse.objects.filter(
+        #                 participant=participant,
+        #                 observer=observer,
+        #                 assessment=assessment,
+        #             ).exists()
+        #             if not observer_response_exists:
+        #                 observer_unique_id = ObserverUniqueId.objects.get(
+        #                     observer=observer, assessment=assessment
+        #                 )
+        #                 unique_id = observer_unique_id.unique_id
+        #                 assessment_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{unique_id}"
+        #                 send_mail_templates(
+        #                     "assessment/assessment_reminder_mail_to_observer.html",
+        #                     [observer.email],
+        #                     "Meeraq - Assessment Reminder !",
+        #                     {
+        #                         "assessment_name": assessment.participant_view_name,
+        #                         "observer_name": observer.name.capitalize(),
+        #                         "link": assessment_link,
+        #                     },
+        #                     [],
+        #                 )
+        #     except ObjectDoesNotExist:
+        #         print(f"No unique ID found for participant {observer.name}")
+        #     sleep(5)
     participants_observers = assessment.participants_observers.all()
     for participant_observer_mapping in participants_observers:
         participant = participant_observer_mapping.participant
@@ -2215,6 +2317,7 @@ def send_email_reminder_assessment(assessment_id):
                     f"{env('ASSESSMENT_URL')}/participant/meeraq/assessment/{unique_id}"
                 )
                 # Send email only if today's date is within the assessment date range
+                send_whatsapp_message("learner", participant, assessment, unique_id)
                 send_mail_templates(
                     "assessment/assessment_reminder_mail_to_participant.html",
                     [participant.email],
@@ -2232,10 +2335,73 @@ def send_email_reminder_assessment(assessment_id):
 
 
 @shared_task
+def schedule_assessment_reminders():
+    # Get the timezone for IST
+    ist = pytz.timezone("Asia/Kolkata")
+    # Get ongoing assessments with email or WhatsApp reminders enabled
+    ongoing_assessments = Assessment.objects.filter(
+        Q(status="ongoing"), Q(email_reminder=True) | Q(whatsapp_reminder=True)
+    )
+    # Loop through each ongoing assessment
+    for assessment in ongoing_assessments:
+        start_date = datetime.strptime(
+            assessment.assessment_start_date, "%Y-%m-%d"
+        ).date()
+        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
+        # Check if today's date is within the assessment date range
+        today = datetime.now().date()
+        day_of_week = today.strftime("%A")
+        if start_date <= today <= end_date and not day_of_week == "Sunday":
+            if assessment.whatsapp_reminder:
+                for time in assessment.reminders["whatsapp"]["timings"]:
+                    # Parse time in hh:mm A format to a datetime object
+                    reminder_time = datetime.strptime(time, "%I:%M %p")
+                    # Set the reminder time to today with the specified time in IST
+                    reminder_datetime_ist = ist.localize(
+                        datetime.combine(timezone.now().date(), reminder_time.time())
+                    )
+                    # Convert reminder time from IST to UTC
+                    reminder_datetime_utc = reminder_datetime_ist.astimezone(pytz.utc)
+                    # Create a clocked schedule for the reminder time
+                    clocked_schedule = ClockedSchedule.objects.create(
+                        clocked_time=reminder_datetime_utc
+                    )
+                    # Create a periodic task for sending the reminder
+                    periodic_task = PeriodicTask.objects.create(
+                        name=uuid.uuid1(),
+                        task="schedularApi.tasks.send_whatsapp_reminder_assessment",
+                        args=[assessment.id],
+                        clocked=clocked_schedule,
+                        one_off=True,
+                    )
+
+            # Check and schedule email reminders
+            if assessment.email_reminder:
+                for time in assessment.reminders["email"]["timings"]:
+                    reminder_time = datetime.strptime(time, "%I:%M %p")
+                    reminder_datetime_ist = ist.localize(
+                        datetime.combine(timezone.now().date(), reminder_time.time())
+                    )
+                    reminder_datetime_utc = reminder_datetime_ist.astimezone(pytz.utc)
+                    clocked_schedule = ClockedSchedule.objects.create(
+                        clocked_time=reminder_datetime_utc
+                    )
+                    periodic_task = PeriodicTask.objects.create(
+                        name=uuid.uuid1(),
+                        task="schedularApi.tasks.send_email_reminder_assessment",
+                        args=[assessment.id],
+                        clocked=clocked_schedule,
+                        one_off=True,
+                    )
+
+
+@shared_task
 def update_lesson_status_according_to_drip_dates():
     try:
         today = date.today()
-        lessons = Lesson.objects.all()
+        lessons = Lesson.objects.filter(
+            Q(live_session__date_time__date=today) | Q(drip_date=today)
+        )
         for lesson in lessons:
             change_status = False
             if (
