@@ -1517,6 +1517,9 @@ def create_project_cass(request):
             if request.data["request_expiry_time"]:
                 request_expiry_time_in_hours = int(request.data["request_expiry_time"])
                 request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
+        else:
+            duration_of_each_session = None
+            request_expiry_time = None
         try:
             project = Project(
                 # print(organisation.name, organisation.image_url, "details of org")
@@ -1564,8 +1567,8 @@ def create_project_cass(request):
                 finance=request.data["finance"],
                 is_project_structure=request.data["is_project_structure"],
                 total_credits=total_credits_in_minutes,
-                duration_of_each_session=request.data["duration_of_each_session"],
-                request_expiry_time=request_expiry_time_in_minutes,
+                duration_of_each_session=duration_of_each_session,
+                request_expiry_time=request_expiry_time,
             )
 
             project.save()
@@ -7996,6 +7999,8 @@ def edit_project_caas(request, project_id):
             request_expiry_time_in_hours = int(request.data["request_expiry_time"])
             request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
             project.request_expiry_time = request_expiry_time_in_minutes
+            if project.total_credits != request.data.get("total_credits"):
+                project.credit_history.append(request.data.get("total_credits"))  
 
         project.finance = request.data.get("finance", project.finance)
         project.junior_pmo = junior_pmo
