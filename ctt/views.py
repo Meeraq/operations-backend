@@ -105,8 +105,9 @@ def batch_details(request):
         }
         index = index + 1
         data.append(batch_data)
+        sorted_data = sorted(data, key=lambda x: x["start_date"], reverse=True)
 
-    return Response(data)
+    return Response(sorted_data)
 
 
 @api_view(["GET"])
@@ -287,7 +288,7 @@ def sales_persons_finances(request):
         date_query = f"&date_start={start_date}&date_end={end_date}"
     # query_params = f"&salesorder_number_contains=CTT{date_query}"
     # sales_orders = fetch_sales_orders(organization_id, query_params)
-    sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT")
+    sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT").order_by('-created_date')
     salesperson_totals = defaultdict(
         lambda: {
             "l1": 0,
@@ -512,8 +513,10 @@ def get_all_finance(request):
             }
             index += 1
             data.append(temp)
+            sorted_data = sorted(data, key=lambda x: x["program_start_date"], reverse=True)
 
-        return Response(data)
+
+        return Response(sorted_data)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
