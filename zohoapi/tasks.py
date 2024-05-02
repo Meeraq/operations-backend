@@ -20,6 +20,7 @@ from .serializers import (
     ZohoCustomerSerializer,
     ZohoVendorSerializer,
     SalesOrderSerializer,
+    SalesOrderGetSerializer,
     SalesOrderLineItemSerializer,
     PurchaseOrderSerializer,
     PurchaseOrderLineItemSerializer,
@@ -154,7 +155,7 @@ purchase_orders_allowed = [
     "Meeraq/PO/22-23/0021",
     "Meeraq/PO/22-23/0034",
     "Meeraq/PO/22-23/0036",
-    "Meeraq/PO/Caas/23-24/0021",
+    "Meeraq/PO/CaaS/23-24/0021",
     "Meeraq/PO/23-24/T/0014",
     "Meeraq/PO/23-24/T/0018",
     "Meeraq/PO/CaaS/23-24/0079",
@@ -172,7 +173,6 @@ def get_all_so_of_po(purchase_order_id):
         mapping_instance = None
         for order_project_mapping in OrdersAndProjectMapping.objects.all():
             if str(purchase_order_id) in order_project_mapping.purchase_order_ids:
-
                 mapping_instance = order_project_mapping
                 break
         return mapping_instance
@@ -204,6 +204,9 @@ def filter_purchase_order_data(purchase_orders):
     try:
         filtered_purchase_orders = []
         for order in purchase_orders:
+            order["cf_invoice_approver_s_email"] = order.get(
+                "custom_field_hash", {}
+            ).get("cf_invoice_approver_s_email", "")
             purchaseorder_number = order.get("purchaseorder_number", "").strip()
             mapping_instance = get_all_so_of_po(
                 order.get("purchaseorder_id", "").strip()
@@ -277,7 +280,6 @@ def fetch_sales_orders(organization_id, queryParams=""):
 
         if response.status_code == 200:
             sales_orders = response.json().get("salesorders", [])
-            # sales_orders = filter_sales_order_data(sales_orders)
             all_sales_orders.extend(sales_orders)
 
             page_context = response.json().get("page_context", {})
@@ -1443,7 +1445,7 @@ def update_client_invoice_with_line_items(clientinvoice_id):
 def update_bill_with_line_items(bill_id):
     try:
         bill = get_bill(bill_id)
-        existing_bill = Bill.objects.get(invoice_id=bill_id)
+        existing_bill = Bill.objects.get(bill_id=bill_id)
         existing_line_items = existing_bill.bill_line_items.all()
         existing_line_item_ids = [
             line_item.line_item_id for line_item in existing_line_items
