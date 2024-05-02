@@ -323,6 +323,11 @@ urlpatterns = [
         name="update_sales_order_status",
     ),
     path(
+        "get-total-revenue-and-cost",
+        views.get_total_revenue_and_cost,
+        name="get_total_revenue_and_cost"
+    ),
+    path(
         "create-vendor/",
         views.create_vendor,
         name="create_vendor",
