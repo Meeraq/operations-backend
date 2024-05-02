@@ -74,64 +74,93 @@ class VendorEditSerializer(serializers.ModelSerializer):
 class OrdersAndProjectMappingSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrdersAndProjectMapping
-        fields = fields = "__all__"
+        fields = "__all__"
 
 
 class ZohoCustomerSerializer(serializers.ModelSerializer):
     class Meta:
         model = ZohoCustomer
-        fields = fields = "__all__"
+        fields = "__all__"
 
 
 class ZohoVendorSerializer(serializers.ModelSerializer):
     class Meta:
         model = ZohoVendor
-        fields = fields = "__all__"
+        fields = "__all__"
 
 
 class SalesOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesOrder
-        fields = fields = "__all__"
+        fields = "__all__"
+
+
+class SalesOrderGetSerializer(serializers.ModelSerializer):
+    cf_invoicing_type = serializers.SerializerMethodField()
+    cf_ctt_batch = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SalesOrder
+        fields = "__all__"
+
+    def get_cf_invoicing_type(self, obj):
+        # Implement logic to compute the first custom field value based on obj
+        return obj.custom_field_hash.get("cf_invoicing_type", "")
+
+    def get_cf_ctt_batch(self, obj):
+        # Implement logic to compute the first custom field value based on obj
+        return obj.custom_field_hash.get("cf_ctt_batch", "")
 
 
 class SalesOrderLineItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = SalesOrderLineItem
-        fields = fields = "__all__"
+        fields = "__all__"
 
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrder
-        fields = fields = "__all__"
+        fields = "__all__"
 
 
 class PurchaseOrderLineItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrderLineItem
-        fields = fields = "__all__"
+        fields = "__all__"
 
 
 class BillSerializer(serializers.ModelSerializer):
     class Meta:
         model = Bill
-        fields = fields = "__all__"
+        fields = "__all__"
 
 
 class BillLineItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = BillLineItem
-        fields = fields = "__all__"
+        fields = "__all__"
 
 
 class ClientInvoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientInvoice
-        fields = fields = "__all__"
+        fields = "__all__"
+
+
+class ClientInvoiceGetSerializer(serializers.ModelSerializer):
+    cf_ctt_batch = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClientInvoice
+        fields = "__all__"
+
+    def get_cf_ctt_batch(self, obj):
+        # Implement logic to compute the first custom field value based on obj
+        return obj.custom_field_hash.get("cf_ctt_batch", "")
 
 
 class ClientInvoiceLineItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientInvoiceLineItem
-        fields = fields = "__all__"
+        fields = "__all__"

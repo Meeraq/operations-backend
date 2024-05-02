@@ -172,9 +172,10 @@ import environ
 import re
 from rest_framework.views import APIView
 from api.views import get_user_data
-from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping
-from zohoapi.views import fetch_purchase_orders, organization_id, fetch_sales_persons
+from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping, SalesOrder, PurchaseOrder
+from zohoapi.views import fetch_purchase_orders, organization_id, fetch_sales_persons, filter_purchase_order_data
 from zohoapi.tasks import organization_id, fetch_sales_orders
+from zohoapi.serializers import SalesOrderSerializer, PurchaseOrderSerializer,SalesOrderGetSerializer
 from courses.views import calculate_nps
 from api.permissions import IsInRoles
 
@@ -447,7 +448,6 @@ def get_handover_salesorders(request, handover_id):
     try:
         handover = HandoverDetails.objects.get(id=handover_id)
         sales_orders_ids_str = ",".join(handover.sales_order_ids)
-        print(sales_orders_ids_str, handover.sales_order_ids)
         all_sales_orders = []
         if sales_orders_ids_str:
             all_sales_orders = fetch_sales_orders(
@@ -943,7 +943,8 @@ def get_batch_calendar(request, batch_id):
         facilitator_serializer = FacilitatorSerializerIsVendor(facilitator, many=True)
         if fetch_po == "True":
             try:
-                purchase_orders = fetch_purchase_orders(organization_id)
+                purchase_orders =filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data)  
+                # fetch_purchase_orders(organization_id)
                 for facilitator_item in facilitator_serializer.data:
                     expense = Expense.objects.filter(
                         batch__id=batch_id, facilitator__id=facilitator_item["id"]
@@ -4593,7 +4594,8 @@ class GetAllBatchesCoachDetails(APIView):
             batches = SchedularBatch.objects.filter(project__id=project_id)
             all_coaches = {}
             all_facilitators = {}
-            purchase_orders = fetch_purchase_orders(organization_id)
+            purchase_orders =  filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data)  
+            # fetch_purchase_orders(organization_id)
             for batch in batches:
                 coaches_data = []
                 for coach in batch.coaches.all():
@@ -5918,7 +5920,8 @@ def get_facilitators_and_pricing_for_project(request, project_id):
         ).distinct()
         facilitators_pricing = FacilitatorPricing.objects.filter(project__id=project_id)
         facilitators_data = []
-        purchase_orders = fetch_purchase_orders(organization_id)
+        purchase_orders =  filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data)  
+        # fetch_purchase_orders(organization_id)
         for facilitator in facilitators:
             serializer = FacilitatorBasicDetailsSerializer(facilitator)
             is_vendor = facilitator.user.roles.filter(name="vendor").exists()
@@ -5972,7 +5975,8 @@ def get_coaches_and_pricing_for_project(request, project_id):
             schedularbatch__project__id=project_id
         ).distinct()
         coaches_data = []
-        purchase_orders = fetch_purchase_orders(organization_id)
+        purchase_orders = filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data)   
+        # fetch_purchase_orders(organization_id)
         for coach in coaches:
             coaches_pricing = CoachPricing.objects.filter(
                 project__id=project_id, coach=coach
@@ -6264,9 +6268,10 @@ def get_expense_for_facilitator(request, batch_or_project_id, usertype, user_id)
             if expense.purchase_order_id:
                 po_ids.append(expense.purchase_order_id)
         po_ids_str = ",".join(po_ids)
-        purchase_orders = fetch_purchase_orders(
-            organization_id, f"&purchaseorder_ids={po_ids_str}"
-        )
+        purchase_orders = filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.filter(purchaseorder_id__in=po_ids), many=True).data)  
+        # fetch_purchase_orders(
+        #     organization_id, f"&purchaseorder_ids={po_ids_str}"
+        # )
         serializer = ExpenseSerializerDepthOne(all_expenses, many=True)
         for expense in serializer.data:
             if expense["purchase_order_id"]:
@@ -6457,7 +6462,8 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
     try:
         purchase_order_set = set()
         all_purchase_orders = []
-        purchase_orders = fetch_purchase_orders(organization_id)
+        purchase_orders = filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data) 
+        # fetch_purchase_orders(organization_id)
 
         if project_type == "SEEQ":
             coach_pricings = CoachPricing.objects.filter(project__id=project_id)
@@ -6569,9 +6575,10 @@ def get_formatted_handovers(handovers):
         serializer = HandoverDetailsSerializerWithOrganisationName(handovers, many=True)
         # Fetch sales orders for the given sales order IDs
         if sales_order_ids_str:
-            sales_orders = fetch_sales_orders(
-                organization_id, f"&salesorder_ids={sales_order_ids_str}"
-            )
+            sales_orders = SalesOrderGetSerializer(SalesOrder.objects.all(),many=True).data
+            # fetch_sales_orders(
+            #     organization_id, f"&salesorder_ids={sales_order_ids_str}"
+            # )
             if not sales_orders:
                 raise Exception("Failed to get sales orders.")
             # Create a dictionary to map sales order ID to sales person ID
