@@ -163,7 +163,7 @@ purchase_orders_allowed = [
     "Meeraq/PO/CaaS/23-24/0040",
     "Meeraq/PO/CaaS/23-24/0028",
     "Meeraq/PO/CaaS/23-24/0093",
-    "Meeraq/PO/CaaS/23-24/0091"
+    "Meeraq/PO/CaaS/23-24/0091",
 ]
 
 
@@ -287,14 +287,6 @@ def fetch_sales_orders(organization_id, queryParams=""):
             raise Exception("Failed to fetch sales orders")
 
     return all_sales_orders
-
-
-def create_or_update_so(so_id):
-
-    if not SalesOrder.objects.filter(salesorder_id=so_id).exists():
-        create_so_with_line_items(so_id)
-    else:
-        update_so_with_line_items(so_id)
 
 
 def fetch_sales_persons(organization_id):
@@ -732,17 +724,20 @@ def get_bill(bill_id):
 
 
 def create_zoho_customer(customer_id):
-    customer = get_vendor(customer_id)
-    if not customer["consent_date"]:
-        customer["consent_date"] = None
-    customer["created_date"] = datetime.strptime(
-        customer["created_date"], "%d/%m/%Y"
-    ).strftime("%Y-%m-%d")
-    serializer = ZohoCustomerSerializer(data=customer)
-    if serializer.is_valid():
-        serializer.save()
-    else:
-        print(serializer.errors)
+    try:
+        customer = get_vendor(customer_id)
+        if not customer["consent_date"]:
+            customer["consent_date"] = None
+        customer["created_date"] = datetime.strptime(
+            customer["created_date"], "%d/%m/%Y"
+        ).strftime("%Y-%m-%d")
+        serializer = ZohoCustomerSerializer(data=customer)
+        if serializer.is_valid():
+            serializer.save()
+        else:
+            print(serializer.errors)
+    except Exception as e:
+        print(customer_id, print(str(e)))
 
 
 def add_multiple_customers(data):
@@ -752,17 +747,20 @@ def add_multiple_customers(data):
 
 
 def create_zoho_vendor(vendor_id):
-    customer = get_vendor(vendor_id)
-    if not customer["consent_date"]:
-        customer["consent_date"] = None
-    customer["created_date"] = datetime.strptime(
-        customer["created_date"], "%d/%m/%Y"
-    ).strftime("%Y-%m-%d")
-    serializer = ZohoVendorSerializer(data=customer)
-    if serializer.is_valid():
-        serializer.save()
-    else:
-        print(serializer.errors)
+    try:
+        customer = get_vendor(vendor_id)
+        if not customer["consent_date"]:
+            customer["consent_date"] = None
+        customer["created_date"] = datetime.strptime(
+            customer["created_date"], "%d/%m/%Y"
+        ).strftime("%Y-%m-%d")
+        serializer = ZohoVendorSerializer(data=customer)
+        if serializer.is_valid():
+            serializer.save()
+        else:
+            print(serializer.errors)
+    except Exception as e:
+        print(vendor_id, print(str(e)))
 
 
 def add_multiple_vendors(data):
@@ -772,32 +770,35 @@ def add_multiple_vendors(data):
 
 
 def create_so_with_line_items(salesorder_id):
-    salesorder = get_sales_order(salesorder_id)
-    if not salesorder["shipment_date"]:
-        salesorder["shipment_date"] = None
-    # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
-    serializer = SalesOrderSerializer(data=salesorder)
-    if serializer.is_valid():
-        so_instance = serializer.save()
-        for line_item in salesorder["line_items"]:
-            line_item_serializer = SalesOrderLineItemSerializer(data=line_item)
-            if line_item_serializer.is_valid():
-                instance = line_item_serializer.save()
-                so_instance.so_line_items.add(instance)
-            else:
-                print(salesorder["salesorder_number"], line_item_serializer.errors)
-        try:
-            customer = ZohoCustomer.objects.get(contact_id=so_instance.customer_id)
-            so_instance.zoho_customer = customer
-            so_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning zoho custoemr to so",
-                so_instance,
-            )
-    else:
-        print(salesorder["salesorder_number"], serializer.errors)
+    try:
+        salesorder = get_sales_order(salesorder_id)
+        if not salesorder["shipment_date"]:
+            salesorder["shipment_date"] = None
+        # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
+        serializer = SalesOrderSerializer(data=salesorder)
+        if serializer.is_valid():
+            so_instance = serializer.save()
+            for line_item in salesorder["line_items"]:
+                line_item_serializer = SalesOrderLineItemSerializer(data=line_item)
+                if line_item_serializer.is_valid():
+                    instance = line_item_serializer.save()
+                    so_instance.so_line_items.add(instance)
+                else:
+                    print(salesorder["salesorder_number"], line_item_serializer.errors)
+            try:
+                customer = ZohoCustomer.objects.get(contact_id=so_instance.customer_id)
+                so_instance.zoho_customer = customer
+                so_instance.save()
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning zoho custoemr to so",
+                    so_instance,
+                )
+        else:
+            print(salesorder["salesorder_number"], serializer.errors)
+    except Exception as e:
+        print(salesorder_id, print(str(e)))
 
 
 def add_multiple_so(data):
@@ -807,34 +808,38 @@ def add_multiple_so(data):
 
 
 def create_po_with_line_items(purchase_order_id):
-    purchaseorder = get_purchase_order(purchase_order_id)
-    if "shipment_date" in purchaseorder and not purchaseorder["shipment_date"]:
-        purchaseorder["shipment_date"] = None
-    # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
-    serializer = PurchaseOrderSerializer(data=purchaseorder)
-    if serializer.is_valid():
-        po_instance = serializer.save()
-        for line_item in purchaseorder["line_items"]:
-            line_item_serializer = PurchaseOrderLineItemSerializer(data=line_item)
-            if line_item_serializer.is_valid():
-                instance = line_item_serializer.save()
-                po_instance.po_line_items.add(instance)
-            else:
+    try:
+        purchaseorder = get_purchase_order(purchase_order_id)
+        if "shipment_date" in purchaseorder and not purchaseorder["shipment_date"]:
+            purchaseorder["shipment_date"] = None
+        # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
+        serializer = PurchaseOrderSerializer(data=purchaseorder)
+        if serializer.is_valid():
+            po_instance = serializer.save()
+            for line_item in purchaseorder["line_items"]:
+                line_item_serializer = PurchaseOrderLineItemSerializer(data=line_item)
+                if line_item_serializer.is_valid():
+                    instance = line_item_serializer.save()
+                    po_instance.po_line_items.add(instance)
+                else:
+                    print(
+                        purchaseorder["purchaseorder_number"],
+                        line_item_serializer.errors,
+                    )
+            try:
+                vendor = ZohoVendor.objects.get(contact_id=po_instance.vendor_id)
+                po_instance.zoho_vendor = vendor
+                po_instance.save()
+            except Exception as e:
+                print(str(e))
                 print(
-                    purchaseorder["purchaseorder_number"], line_item_serializer.errors
+                    "error assigning zoho vendor to po",
+                    po_instance,
                 )
-        try:
-            vendor = ZohoVendor.objects.get(contact_id=po_instance.vendor_id)
-            po_instance.zoho_vendor = vendor
-            po_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning zoho vendor to po",
-                po_instance,
-            )
-    else:
-        print(purchaseorder["purchaseorder_number"], serializer.errors)
+        else:
+            print(purchaseorder["purchaseorder_number"], serializer.errors)
+    except Exception as e:
+        print(purchase_order_id, print(str(e)))
 
 
 def add_multiple_po(data):
@@ -844,49 +849,52 @@ def add_multiple_po(data):
 
 
 def create_client_invoice_with_line_items(clientinvoice_id):
-    clientinvoice = get_client_invoice(clientinvoice_id)
-    if "shipment_date" in clientinvoice and not clientinvoice["shipment_date"]:
-        clientinvoice["shipment_date"] = None
-    # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
-    clientinvoice["is_backorder"] = bool(clientinvoice["is_backorder"])
-    serializer = ClientInvoiceSerializer(data=clientinvoice)
-    if serializer.is_valid():
-        clientinvoice_instance = serializer.save()
-        for line_item in clientinvoice["line_items"]:
-            line_item_serializer = ClientInvoiceLineItemSerializer(data=line_item)
-            if line_item_serializer.is_valid():
-                instance = line_item_serializer.save()
-                clientinvoice_instance.client_invoice_line_items.add(instance)
-            else:
-                print(clientinvoice["invoice_number"], line_item_serializer.errors)
+    try:
+        clientinvoice = get_client_invoice(clientinvoice_id)
+        if "shipment_date" in clientinvoice and not clientinvoice["shipment_date"]:
+            clientinvoice["shipment_date"] = None
+        # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
+        clientinvoice["is_backorder"] = bool(clientinvoice["is_backorder"])
+        serializer = ClientInvoiceSerializer(data=clientinvoice)
+        if serializer.is_valid():
+            clientinvoice_instance = serializer.save()
+            for line_item in clientinvoice["line_items"]:
+                line_item_serializer = ClientInvoiceLineItemSerializer(data=line_item)
+                if line_item_serializer.is_valid():
+                    instance = line_item_serializer.save()
+                    clientinvoice_instance.client_invoice_line_items.add(instance)
+                else:
+                    print(clientinvoice["invoice_number"], line_item_serializer.errors)
 
-        try:
-            so = SalesOrder.objects.get(
-                salesorder_id=clientinvoice_instance.salesorder_id
-            )
-            clientinvoice_instance.sales_order = so
-            clientinvoice_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning so to CI",
-                clientinvoice_instance,
-            )
+            try:
+                so = SalesOrder.objects.get(
+                    salesorder_id=clientinvoice_instance.salesorder_id
+                )
+                clientinvoice_instance.sales_order = so
+                clientinvoice_instance.save()
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning so to CI",
+                    clientinvoice_instance,
+                )
 
-        try:
-            customer = ZohoCustomer.objects.get(
-                contact_id=clientinvoice_instance.customer_id
-            )
-            clientinvoice_instance.zoho_customer = customer
-            clientinvoice_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning zoho custoemr to client invoice",
-                clientinvoice_instance,
-            )
-    else:
-        print(clientinvoice["invoice_number"], serializer.errors)
+            try:
+                customer = ZohoCustomer.objects.get(
+                    contact_id=clientinvoice_instance.customer_id
+                )
+                clientinvoice_instance.zoho_customer = customer
+                clientinvoice_instance.save()
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning zoho custoemr to client invoice",
+                    clientinvoice_instance,
+                )
+        else:
+            print(clientinvoice["invoice_number"], serializer.errors)
+    except Exception as e:
+        print(clientinvoice_id, print(str(e)))
 
 
 def add_multiple_client_invoices(data):
@@ -896,47 +904,50 @@ def add_multiple_client_invoices(data):
 
 
 def create_bill_with_line_items(bill_id):
-    bill = get_bill(bill_id)
-    if "payment_expected_date" in bill and not bill["payment_expected_date"]:
-        bill["payment_expected_date"] = None
+    try:
+        bill = get_bill(bill_id)
+        if "payment_expected_date" in bill and not bill["payment_expected_date"]:
+            bill["payment_expected_date"] = None
 
-    bill["due_by_days"] = 0 if not bill["due_by_days"] else bill["due_by_days"]
+        bill["due_by_days"] = 0 if not bill["due_by_days"] else bill["due_by_days"]
 
-    # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
-    serializer = BillSerializer(data=bill)
-    if serializer.is_valid():
-        bill_instance = serializer.save()
-        for line_item in bill["line_items"]:
-            line_item_serializer = BillLineItemSerializer(data=line_item)
-            if line_item_serializer.is_valid():
-                instance = line_item_serializer.save()
-                bill_instance.bill_line_items.add(instance)
-            else:
-                print(bill["bill_number"], line_item_serializer.errors)
+        # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
+        serializer = BillSerializer(data=bill)
+        if serializer.is_valid():
+            bill_instance = serializer.save()
+            for line_item in bill["line_items"]:
+                line_item_serializer = BillLineItemSerializer(data=line_item)
+                if line_item_serializer.is_valid():
+                    instance = line_item_serializer.save()
+                    bill_instance.bill_line_items.add(instance)
+                else:
+                    print(bill["bill_number"], line_item_serializer.errors)
 
-        for po_id in bill_instance.purchaseorder_ids:
+            for po_id in bill_instance.purchaseorder_ids:
+                try:
+                    po = PurchaseOrder.objects.get(purchaseorder_id=po_id)
+                    bill_instance.purchase_orders.add(po)
+                except Exception as e:
+                    print(str(e))
+                    print(
+                        "error assigning purchase order to bill",
+                        bill_instance,
+                    )
+            # adding vendor to bill
             try:
-                po = PurchaseOrder.objects.get(purchaseorder_id=po_id)
-                bill_instance.purchase_orders.add(po)
+                vendor = ZohoVendor.objects.get(contact_id=bill_instance.vendor_id)
+                bill_instance.zoho_vendor = vendor
+                bill_instance.save()
             except Exception as e:
                 print(str(e))
                 print(
-                    "error assigning purchase order to bill",
+                    "error assigning zoho vendor to bill",
                     bill_instance,
                 )
-        # adding vendor to bill
-        try:
-            vendor = ZohoVendor.objects.get(contact_id=bill_instance.vendor_id)
-            bill_instance.zoho_vendor = vendor
-            bill_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning zoho vendor to bill",
-                bill_instance,
-            )
-    else:
-        print(bill["bill_number"], serializer.errors)
+        else:
+            print(bill["bill_number"], serializer.errors)
+    except Exception as e:
+        print(bill_id, print(str(e)))
 
 
 def add_multiple_bills(data):
@@ -946,506 +957,594 @@ def add_multiple_bills(data):
 
 
 def update_zoho_customer(customer_id):
-    customer = get_vendor(customer_id)
-    if not customer["consent_date"]:
-        customer["consent_date"] = None
-    customer["created_date"] = datetime.strptime(
-        customer["created_date"], "%d/%m/%Y"
-    ).strftime("%Y-%m-%d")
-    zoho_customer = ZohoCustomer.objects.get(contact_id=customer_id)
-    serializer = ZohoCustomerSerializer(zoho_customer, data=customer, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-    else:
-        print(serializer.errors)
+    try:
+        customer = get_vendor(customer_id)
+        if not customer["consent_date"]:
+            customer["consent_date"] = None
+        customer["created_date"] = datetime.strptime(
+            customer["created_date"], "%d/%m/%Y"
+        ).strftime("%Y-%m-%d")
+        zoho_customer = ZohoCustomer.objects.get(contact_id=customer_id)
+        serializer = ZohoCustomerSerializer(zoho_customer, data=customer, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+        else:
+            print(serializer.errors)
+    except Exception as e:
+        print(customer_id, print(str(e)))
 
 
 def update_zoho_vendor(vendor_id):
-    customer = get_vendor(vendor_id)
-    if not customer["consent_date"]:
-        customer["consent_date"] = None
-    customer["created_date"] = datetime.strptime(
-        customer["created_date"], "%d/%m/%Y"
-    ).strftime("%Y-%m-%d")
-    zoho_vendor = ZohoVendor.objects.get(contact_id=vendor_id)
-    serializer = ZohoVendorSerializer(zoho_vendor, data=customer, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-    else:
-        print(serializer.errors)
+    try:
+        customer = get_vendor(vendor_id)
+        if not customer["consent_date"]:
+            customer["consent_date"] = None
+        customer["created_date"] = datetime.strptime(
+            customer["created_date"], "%d/%m/%Y"
+        ).strftime("%Y-%m-%d")
+        zoho_vendor = ZohoVendor.objects.get(contact_id=vendor_id)
+        serializer = ZohoVendorSerializer(zoho_vendor, data=customer, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+        else:
+            print(serializer.errors)
+    except Exception as e:
+        print(vendor_id, print(str(e)))
 
 
 def update_so_with_line_items(salesorder_id):
-    salesorder = get_sales_order(salesorder_id)
-    existing_sales_order = SalesOrder.objects.get(salesorder_id=salesorder_id)
-    existing_line_items = existing_sales_order.so_line_items.all()
-    existing_line_item_ids = [
-        line_item.line_item_id for line_item in existing_line_items
-    ]
-    new_line_items = salesorder["line_items"]
-    new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
-    line_item_ids_to_remove = list(set(existing_line_item_ids) - set(new_line_item_ids))
+    try:
+        salesorder = get_sales_order(salesorder_id)
+        existing_sales_order = SalesOrder.objects.get(salesorder_id=salesorder_id)
+        existing_line_items = existing_sales_order.so_line_items.all()
+        existing_line_item_ids = [
+            line_item.line_item_id for line_item in existing_line_items
+        ]
+        new_line_items = salesorder["line_items"]
+        new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
+        line_item_ids_to_remove = list(
+            set(existing_line_item_ids) - set(new_line_item_ids)
+        )
 
-    if not salesorder["shipment_date"]:
-        salesorder["shipment_date"] = None
+        if not salesorder["shipment_date"]:
+            salesorder["shipment_date"] = None
 
-    # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
-    serializer = SalesOrderSerializer(
-        existing_sales_order, data=salesorder, partial=True
-    )
+        # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
+        serializer = SalesOrderSerializer(
+            existing_sales_order, data=salesorder, partial=True
+        )
 
-    if serializer.is_valid():
-        so_instance = serializer.save()
-        for line_item in salesorder["line_items"]:
-            if line_item["line_item_id"] in existing_line_item_ids:
-                existing_line_item = existing_line_items.get(
-                    line_item_id=line_item["line_item_id"]
-                )
-                line_item_serializer = SalesOrderLineItemSerializer(
-                    existing_line_item, data=line_item, partial=True
-                )
-            else:
-                line_item_serializer = SalesOrderLineItemSerializer(data=line_item)
-            if line_item_serializer.is_valid():
-                instance = line_item_serializer.save()
-                so_instance.so_line_items.add(instance)
-            else:
-                print(salesorder["salesorder_number"], line_item_serializer.errors)
+        if serializer.is_valid():
+            so_instance = serializer.save()
+            for line_item in salesorder["line_items"]:
+                if line_item["line_item_id"] in existing_line_item_ids:
+                    existing_line_item = existing_line_items.get(
+                        line_item_id=line_item["line_item_id"]
+                    )
+                    line_item_serializer = SalesOrderLineItemSerializer(
+                        existing_line_item, data=line_item, partial=True
+                    )
+                else:
+                    line_item_serializer = SalesOrderLineItemSerializer(data=line_item)
+                if line_item_serializer.is_valid():
+                    instance = line_item_serializer.save()
+                    so_instance.so_line_items.add(instance)
+                else:
+                    print(salesorder["salesorder_number"], line_item_serializer.errors)
 
-        # deleting the line items
-        SalesOrderLineItem.objects.filter(
-            line_item_id__in=line_item_ids_to_remove
-        ).delete()
+            # deleting the line items
+            SalesOrderLineItem.objects.filter(
+                line_item_id__in=line_item_ids_to_remove
+            ).delete()
 
-        try:
-            customer = ZohoCustomer.objects.get(contact_id=so_instance.customer_id)
-            so_instance.zoho_customer = customer
-            so_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning zoho custoemr to so",
-                so_instance,
-            )
-    else:
-        print(salesorder["salesorder_number"], serializer.errors)
-
-
-def update_po_with_line_items(purchase_order_id):
-    purchaseorder = get_purchase_order(purchase_order_id)
-    existing_purchase_order = PurchaseOrder.objects.get(
-        purchaseorder_id=purchase_order_id
-    )
-    existing_line_items = existing_purchase_order.po_line_items.all()
-    existing_line_item_ids = [
-        line_item.line_item_id for line_item in existing_line_items
-    ]
-    new_line_items = purchaseorder["line_items"]
-    new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
-    line_item_ids_to_remove = list(set(existing_line_item_ids) - set(new_line_item_ids))
-
-    if "shipment_date" in purchaseorder and not purchaseorder["shipment_date"]:
-        purchaseorder["shipment_date"] = None
-
-    # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
-    serializer = PurchaseOrderSerializer(
-        existing_purchase_order, data=purchaseorder, partial=True
-    )
-
-    if serializer.is_valid():
-        po_instance = serializer.save()
-        for line_item in purchaseorder["line_items"]:
-            if line_item["line_item_id"] in existing_line_item_ids:
-                existing_line_item = existing_line_items.get(
-                    line_item_id=line_item["line_item_id"]
-                )
-                line_item_serializer = PurchaseOrderLineItemSerializer(
-                    existing_line_item, data=line_item, partial=True
-                )
-            else:
-                line_item_serializer = PurchaseOrderLineItemSerializer(data=line_item)
-            if line_item_serializer.is_valid():
-                instance = line_item_serializer.save()
-                po_instance.po_line_items.add(instance)
-            else:
-                print(
-                    purchaseorder["purchaseorder_number"], line_item_serializer.errors
-                )
-        # deleting the line items
-        PurchaseOrderLineItem.objects.filter(
-            line_item_id__in=line_item_ids_to_remove
-        ).delete()
-
-        try:
-            vendor = ZohoVendor.objects.get(contact_id=po_instance.vendor_id)
-            po_instance.zoho_vendor = vendor
-            po_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning zoho vendor to po",
-                po_instance,
-            )
-    else:
-        print(purchaseorder["purchaseorder_number"], serializer.errors)
-
-
-def update_client_invoice_with_line_items(clientinvoice_id):
-    clientinvoice = get_client_invoice(clientinvoice_id)
-    existing_client_invoice = ClientInvoice.objects.get(invoice_id=clientinvoice_id)
-    existing_line_items = existing_client_invoice.client_invoice_line_items.all()
-    existing_line_item_ids = [
-        line_item.line_item_id for line_item in existing_line_items
-    ]
-    new_line_items = clientinvoice["line_items"]
-    new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
-    line_item_ids_to_remove = list(set(existing_line_item_ids) - set(new_line_item_ids))
-
-    if "shipment_date" in clientinvoice and not clientinvoice["shipment_date"]:
-        clientinvoice["shipment_date"] = None
-
-    clientinvoice["is_backorder"] = bool(clientinvoice["is_backorder"])
-    serializer = ClientInvoiceSerializer(
-        existing_client_invoice, data=clientinvoice, partial=True
-    )
-
-    if serializer.is_valid():
-        clientinvoice_instance = serializer.save()
-        for line_item in clientinvoice["line_items"]:
-            if line_item["line_item_id"] in existing_line_item_ids:
-                existing_line_item = existing_line_items.get(
-                    line_item_id=line_item["line_item_id"]
-                )
-                line_item_serializer = ClientInvoiceLineItemSerializer(
-                    existing_line_item, data=line_item, partial=True
-                )
-            else:
-                line_item_serializer = ClientInvoiceLineItemSerializer(data=line_item)
-            if line_item_serializer.is_valid():
-                instance = line_item_serializer.save()
-                clientinvoice_instance.client_invoice_line_items.add(instance)
-            else:
-                print(clientinvoice["invoice_number"], line_item_serializer.errors)
-
-        # deleting the line items
-        ClientInvoiceLineItem.objects.filter(
-            line_item_id__in=line_item_ids_to_remove
-        ).delete()
-
-        try:
-            so = SalesOrder.objects.get(
-                salesorder_id=clientinvoice_instance.salesorder_id
-            )
-            clientinvoice_instance.sales_order = so
-            clientinvoice_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning so to CI",
-                clientinvoice_instance,
-            )
-
-        try:
-            customer = ZohoCustomer.objects.get(
-                contact_id=clientinvoice_instance.customer_id
-            )
-            clientinvoice_instance.zoho_customer = customer
-            clientinvoice_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning zoho custoemr to client invoice",
-                clientinvoice_instance,
-            )
-    else:
-        print(clientinvoice["invoice_number"], serializer.errors)
-
-
-def update_zoho_customer(customer_id):
-    customer = get_vendor(customer_id)
-    if not customer["consent_date"]:
-        customer["consent_date"] = None
-    customer["created_date"] = datetime.strptime(
-        customer["created_date"], "%d/%m/%Y"
-    ).strftime("%Y-%m-%d")
-    zoho_customer = ZohoCustomer.objects.get(contact_id=customer_id)
-    serializer = ZohoCustomerSerializer(zoho_customer, data=customer, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-    else:
-        print(serializer.errors)
-
-
-def update_zoho_vendor(vendor_id):
-    customer = get_vendor(vendor_id)
-    if not customer["consent_date"]:
-        customer["consent_date"] = None
-    customer["created_date"] = datetime.strptime(
-        customer["created_date"], "%d/%m/%Y"
-    ).strftime("%Y-%m-%d")
-    zoho_vendor = ZohoVendor.objects.get(contact_id=vendor_id)
-    serializer = ZohoVendorSerializer(zoho_vendor, data=customer, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-    else:
-        print(serializer.errors)
-
-
-def update_so_with_line_items(salesorder_id):
-    salesorder = get_sales_order(salesorder_id)
-    existing_sales_order = SalesOrder.objects.get(salesorder_id=salesorder_id)
-    existing_line_items = existing_sales_order.so_line_items.all()
-    existing_line_item_ids = [
-        line_item.line_item_id for line_item in existing_line_items
-    ]
-    new_line_items = salesorder["line_items"]
-    new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
-    line_item_ids_to_remove = list(set(existing_line_item_ids) - set(new_line_item_ids))
-
-    if not salesorder["shipment_date"]:
-        salesorder["shipment_date"] = None
-
-    # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
-    serializer = SalesOrderSerializer(
-        existing_sales_order, data=salesorder, partial=True
-    )
-
-    if serializer.is_valid():
-        so_instance = serializer.save()
-        for line_item in salesorder["line_items"]:
-            if line_item["line_item_id"] in existing_line_item_ids:
-                existing_line_item = existing_line_items.get(
-                    line_item_id=line_item["line_item_id"]
-                )
-                line_item_serializer = SalesOrderLineItemSerializer(
-                    existing_line_item, data=line_item, partial=True
-                )
-            else:
-                line_item_serializer = SalesOrderLineItemSerializer(data=line_item)
-            if line_item_serializer.is_valid():
-                instance = line_item_serializer.save()
-                so_instance.so_line_items.add(instance)
-            else:
-                print(salesorder["salesorder_number"], line_item_serializer.errors)
-
-        # deleting the line items
-        SalesOrderLineItem.objects.filter(
-            line_item_id__in=line_item_ids_to_remove
-        ).delete()
-
-        try:
-            customer = ZohoCustomer.objects.get(contact_id=so_instance.customer_id)
-            so_instance.zoho_customer = customer
-            so_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning zoho custoemr to so",
-                so_instance,
-            )
-    else:
-        print(salesorder["salesorder_number"], serializer.errors)
-
-
-def update_po_with_line_items(purchase_order_id):
-    purchaseorder = get_purchase_order(purchase_order_id)
-    existing_purchase_order = PurchaseOrder.objects.get(
-        purchaseorder_id=purchase_order_id
-    )
-    existing_line_items = existing_purchase_order.po_line_items.all()
-    existing_line_item_ids = [
-        line_item.line_item_id for line_item in existing_line_items
-    ]
-    new_line_items = purchaseorder["line_items"]
-    new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
-    line_item_ids_to_remove = list(set(existing_line_item_ids) - set(new_line_item_ids))
-
-    if "shipment_date" in purchaseorder and not purchaseorder["shipment_date"]:
-        purchaseorder["shipment_date"] = None
-
-    # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
-    serializer = PurchaseOrderSerializer(
-        existing_purchase_order, data=purchaseorder, partial=True
-    )
-
-    if serializer.is_valid():
-        po_instance = serializer.save()
-        for line_item in purchaseorder["line_items"]:
-            if line_item["line_item_id"] in existing_line_item_ids:
-                existing_line_item = existing_line_items.get(
-                    line_item_id=line_item["line_item_id"]
-                )
-                line_item_serializer = PurchaseOrderLineItemSerializer(
-                    existing_line_item, data=line_item, partial=True
-                )
-            else:
-                line_item_serializer = PurchaseOrderLineItemSerializer(data=line_item)
-            if line_item_serializer.is_valid():
-                instance = line_item_serializer.save()
-                po_instance.po_line_items.add(instance)
-            else:
-                print(
-                    purchaseorder["purchaseorder_number"], line_item_serializer.errors
-                )
-        # deleting the line items
-        PurchaseOrderLineItem.objects.filter(
-            line_item_id__in=line_item_ids_to_remove
-        ).delete()
-
-        try:
-            vendor = ZohoVendor.objects.get(contact_id=po_instance.vendor_id)
-            po_instance.zoho_vendor = vendor
-            po_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning zoho vendor to po",
-                po_instance,
-            )
-    else:
-        print(purchaseorder["purchaseorder_number"], serializer.errors)
-
-
-def update_client_invoice_with_line_items(clientinvoice_id):
-    clientinvoice = get_client_invoice(clientinvoice_id)
-    existing_client_invoice = ClientInvoice.objects.get(invoice_id=clientinvoice_id)
-    existing_line_items = existing_client_invoice.client_invoice_line_items.all()
-    existing_line_item_ids = [
-        line_item.line_item_id for line_item in existing_line_items
-    ]
-    new_line_items = clientinvoice["line_items"]
-    new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
-    line_item_ids_to_remove = list(set(existing_line_item_ids) - set(new_line_item_ids))
-
-    if "shipment_date" in clientinvoice and not clientinvoice["shipment_date"]:
-        clientinvoice["shipment_date"] = None
-
-    clientinvoice["is_backorder"] = bool(clientinvoice["is_backorder"])
-    serializer = ClientInvoiceSerializer(
-        existing_client_invoice, data=clientinvoice, partial=True
-    )
-
-    if serializer.is_valid():
-        clientinvoice_instance = serializer.save()
-        for line_item in clientinvoice["line_items"]:
-            if line_item["line_item_id"] in existing_line_item_ids:
-                existing_line_item = existing_line_items.get(
-                    line_item_id=line_item["line_item_id"]
-                )
-                line_item_serializer = ClientInvoiceLineItemSerializer(
-                    existing_line_item, data=line_item, partial=True
-                )
-            else:
-                line_item_serializer = ClientInvoiceLineItemSerializer(data=line_item)
-            if line_item_serializer.is_valid():
-                instance = line_item_serializer.save()
-                clientinvoice_instance.client_invoice_line_items.add(instance)
-            else:
-                print(clientinvoice["invoice_number"], line_item_serializer.errors)
-
-        # deleting the line items
-        ClientInvoiceLineItem.objects.filter(
-            line_item_id__in=line_item_ids_to_remove
-        ).delete()
-
-        try:
-            so = SalesOrder.objects.get(
-                salesorder_id=clientinvoice_instance.salesorder_id
-            )
-            clientinvoice_instance.sales_order = so
-            clientinvoice_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning so to CI",
-                clientinvoice_instance,
-            )
-
-        try:
-            customer = ZohoCustomer.objects.get(
-                contact_id=clientinvoice_instance.customer_id
-            )
-            clientinvoice_instance.zoho_customer = customer
-            clientinvoice_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning zoho custoemr to client invoice",
-                clientinvoice_instance,
-            )
-    else:
-        print(clientinvoice["invoice_number"], serializer.errors)
-
-
-def update_bill_with_line_items(bill_id):
-    bill = get_bill(bill_id)
-    existing_bill = Bill.objects.get(invoice_id=bill_id)
-    existing_line_items = existing_bill.bill_line_items.all()
-    existing_line_item_ids = [
-        line_item.line_item_id for line_item in existing_line_items
-    ]
-    new_line_items = bill["line_items"]
-    new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
-    line_item_ids_to_remove = list(set(existing_line_item_ids) - set(new_line_item_ids))
-
-    if "payment_expected_date" in bill and not bill["payment_expected_date"]:
-        bill["payment_expected_date"] = None
-
-    bill["due_by_days"] = 0 if not bill["due_by_days"] else bill["due_by_days"]
-
-    # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
-    serializer = BillSerializer(data=bill)
-    if serializer.is_valid():
-        bill_instance = serializer.save()
-        for line_item in bill["line_items"]:
-            if line_item["line_item_id"] in existing_line_item_ids:
-                existing_line_item = existing_line_items.get(
-                    line_item_id=line_item["line_item_id"]
-                )
-                line_item_serializer = BillLineItemSerializer(
-                    existing_line_item, data=line_item, partial=True
-                )
-            else:
-                line_item_serializer = BillLineItemSerializer(data=line_item)
-            if line_item_serializer.is_valid():
-                instance = line_item_serializer.save()
-                bill_instance.bill_line_items.add(instance)
-            else:
-                print(bill["bill_number"], line_item_serializer.errors)
-
-        # deleting the line items
-        BillLineItem.objects.filter(line_item_id__in=line_item_ids_to_remove).delete()
-
-        for po_id in bill_instance.purchaseorder_ids:
             try:
-                po = PurchaseOrder.objects.get(purchaseorder_id=po_id)
-                bill_instance.purchase_orders.add(po)
+                customer = ZohoCustomer.objects.get(contact_id=so_instance.customer_id)
+                so_instance.zoho_customer = customer
+                so_instance.save()
             except Exception as e:
                 print(str(e))
                 print(
-                    "error assigning purchase order to bill",
+                    "error assigning zoho custoemr to so",
+                    so_instance,
+                )
+        else:
+            print(salesorder["salesorder_number"], serializer.errors)
+    except Exception as e:
+        print(salesorder_id, print(str(e)))
+
+
+def update_po_with_line_items(purchase_order_id):
+    try:
+        purchaseorder = get_purchase_order(purchase_order_id)
+        existing_purchase_order = PurchaseOrder.objects.get(
+            purchaseorder_id=purchase_order_id
+        )
+        existing_line_items = existing_purchase_order.po_line_items.all()
+        existing_line_item_ids = [
+            line_item.line_item_id for line_item in existing_line_items
+        ]
+        new_line_items = purchaseorder["line_items"]
+        new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
+        line_item_ids_to_remove = list(
+            set(existing_line_item_ids) - set(new_line_item_ids)
+        )
+
+        if "shipment_date" in purchaseorder and not purchaseorder["shipment_date"]:
+            purchaseorder["shipment_date"] = None
+
+        # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
+        serializer = PurchaseOrderSerializer(
+            existing_purchase_order, data=purchaseorder, partial=True
+        )
+
+        if serializer.is_valid():
+            po_instance = serializer.save()
+            for line_item in purchaseorder["line_items"]:
+                if line_item["line_item_id"] in existing_line_item_ids:
+                    existing_line_item = existing_line_items.get(
+                        line_item_id=line_item["line_item_id"]
+                    )
+                    line_item_serializer = PurchaseOrderLineItemSerializer(
+                        existing_line_item, data=line_item, partial=True
+                    )
+                else:
+                    line_item_serializer = PurchaseOrderLineItemSerializer(
+                        data=line_item
+                    )
+                if line_item_serializer.is_valid():
+                    instance = line_item_serializer.save()
+                    po_instance.po_line_items.add(instance)
+                else:
+                    print(
+                        purchaseorder["purchaseorder_number"],
+                        line_item_serializer.errors,
+                    )
+            # deleting the line items
+            PurchaseOrderLineItem.objects.filter(
+                line_item_id__in=line_item_ids_to_remove
+            ).delete()
+
+            try:
+                vendor = ZohoVendor.objects.get(contact_id=po_instance.vendor_id)
+                po_instance.zoho_vendor = vendor
+                po_instance.save()
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning zoho vendor to po",
+                    po_instance,
+                )
+        else:
+            print(purchaseorder["purchaseorder_number"], serializer.errors)
+    except Exception as e:
+        print(purchase_order_id, print(str(e)))
+
+
+def update_client_invoice_with_line_items(clientinvoice_id):
+    try:
+        clientinvoice = get_client_invoice(clientinvoice_id)
+        existing_client_invoice = ClientInvoice.objects.get(invoice_id=clientinvoice_id)
+        existing_line_items = existing_client_invoice.client_invoice_line_items.all()
+        existing_line_item_ids = [
+            line_item.line_item_id for line_item in existing_line_items
+        ]
+        new_line_items = clientinvoice["line_items"]
+        new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
+        line_item_ids_to_remove = list(
+            set(existing_line_item_ids) - set(new_line_item_ids)
+        )
+
+        if "shipment_date" in clientinvoice and not clientinvoice["shipment_date"]:
+            clientinvoice["shipment_date"] = None
+
+        clientinvoice["is_backorder"] = bool(clientinvoice["is_backorder"])
+        serializer = ClientInvoiceSerializer(
+            existing_client_invoice, data=clientinvoice, partial=True
+        )
+
+        if serializer.is_valid():
+            clientinvoice_instance = serializer.save()
+            for line_item in clientinvoice["line_items"]:
+                if line_item["line_item_id"] in existing_line_item_ids:
+                    existing_line_item = existing_line_items.get(
+                        line_item_id=line_item["line_item_id"]
+                    )
+                    line_item_serializer = ClientInvoiceLineItemSerializer(
+                        existing_line_item, data=line_item, partial=True
+                    )
+                else:
+                    line_item_serializer = ClientInvoiceLineItemSerializer(
+                        data=line_item
+                    )
+                if line_item_serializer.is_valid():
+                    instance = line_item_serializer.save()
+                    clientinvoice_instance.client_invoice_line_items.add(instance)
+                else:
+                    print(clientinvoice["invoice_number"], line_item_serializer.errors)
+
+            # deleting the line items
+            ClientInvoiceLineItem.objects.filter(
+                line_item_id__in=line_item_ids_to_remove
+            ).delete()
+
+            try:
+                so = SalesOrder.objects.get(
+                    salesorder_id=clientinvoice_instance.salesorder_id
+                )
+                clientinvoice_instance.sales_order = so
+                clientinvoice_instance.save()
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning so to CI",
+                    clientinvoice_instance,
+                )
+
+            try:
+                customer = ZohoCustomer.objects.get(
+                    contact_id=clientinvoice_instance.customer_id
+                )
+                clientinvoice_instance.zoho_customer = customer
+                clientinvoice_instance.save()
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning zoho custoemr to client invoice",
+                    clientinvoice_instance,
+                )
+        else:
+            print(clientinvoice["invoice_number"], serializer.errors)
+    except Exception as e:
+        print(clientinvoice_id, print(str(e)))
+
+
+def update_zoho_customer(customer_id):
+    try:
+        customer = get_vendor(customer_id)
+        if not customer["consent_date"]:
+            customer["consent_date"] = None
+        customer["created_date"] = datetime.strptime(
+            customer["created_date"], "%d/%m/%Y"
+        ).strftime("%Y-%m-%d")
+        zoho_customer = ZohoCustomer.objects.get(contact_id=customer_id)
+        serializer = ZohoCustomerSerializer(zoho_customer, data=customer, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+        else:
+            print(serializer.errors)
+    except Exception as e:
+        print(customer_id, print(str(e)))
+
+
+def update_zoho_vendor(vendor_id):
+    try:
+        customer = get_vendor(vendor_id)
+        if not customer["consent_date"]:
+            customer["consent_date"] = None
+        customer["created_date"] = datetime.strptime(
+            customer["created_date"], "%d/%m/%Y"
+        ).strftime("%Y-%m-%d")
+        zoho_vendor = ZohoVendor.objects.get(contact_id=vendor_id)
+        serializer = ZohoVendorSerializer(zoho_vendor, data=customer, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+        else:
+            print(serializer.errors)
+    except Exception as e:
+        print(vendor_id, print(str(e)))
+
+
+def update_so_with_line_items(salesorder_id):
+    try:
+        salesorder = get_sales_order(salesorder_id)
+        existing_sales_order = SalesOrder.objects.get(salesorder_id=salesorder_id)
+        existing_line_items = existing_sales_order.so_line_items.all()
+        existing_line_item_ids = [
+            line_item.line_item_id for line_item in existing_line_items
+        ]
+        new_line_items = salesorder["line_items"]
+        new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
+        line_item_ids_to_remove = list(
+            set(existing_line_item_ids) - set(new_line_item_ids)
+        )
+
+        if not salesorder["shipment_date"]:
+            salesorder["shipment_date"] = None
+
+        # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
+        serializer = SalesOrderSerializer(
+            existing_sales_order, data=salesorder, partial=True
+        )
+
+        if serializer.is_valid():
+            so_instance = serializer.save()
+            for line_item in salesorder["line_items"]:
+                if line_item["line_item_id"] in existing_line_item_ids:
+                    existing_line_item = existing_line_items.get(
+                        line_item_id=line_item["line_item_id"]
+                    )
+                    line_item_serializer = SalesOrderLineItemSerializer(
+                        existing_line_item, data=line_item, partial=True
+                    )
+                else:
+                    line_item_serializer = SalesOrderLineItemSerializer(data=line_item)
+                if line_item_serializer.is_valid():
+                    instance = line_item_serializer.save()
+                    so_instance.so_line_items.add(instance)
+                else:
+                    print(salesorder["salesorder_number"], line_item_serializer.errors)
+
+            # deleting the line items
+            SalesOrderLineItem.objects.filter(
+                line_item_id__in=line_item_ids_to_remove
+            ).delete()
+
+            try:
+                customer = ZohoCustomer.objects.get(contact_id=so_instance.customer_id)
+                so_instance.zoho_customer = customer
+                so_instance.save()
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning zoho custoemr to so",
+                    so_instance,
+                )
+        else:
+            print(salesorder["salesorder_number"], serializer.errors)
+    except Exception as e:
+        print(salesorder_id, print(str(e)))
+
+
+def update_po_with_line_items(purchase_order_id):
+    try:
+        purchaseorder = get_purchase_order(purchase_order_id)
+        existing_purchase_order = PurchaseOrder.objects.get(
+            purchaseorder_id=purchase_order_id
+        )
+        existing_line_items = existing_purchase_order.po_line_items.all()
+        existing_line_item_ids = [
+            line_item.line_item_id for line_item in existing_line_items
+        ]
+        new_line_items = purchaseorder["line_items"]
+        new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
+        line_item_ids_to_remove = list(
+            set(existing_line_item_ids) - set(new_line_item_ids)
+        )
+
+        if "shipment_date" in purchaseorder and not purchaseorder["shipment_date"]:
+            purchaseorder["shipment_date"] = None
+
+        # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
+        serializer = PurchaseOrderSerializer(
+            existing_purchase_order, data=purchaseorder, partial=True
+        )
+
+        if serializer.is_valid():
+            po_instance = serializer.save()
+            for line_item in purchaseorder["line_items"]:
+                if line_item["line_item_id"] in existing_line_item_ids:
+                    existing_line_item = existing_line_items.get(
+                        line_item_id=line_item["line_item_id"]
+                    )
+                    line_item_serializer = PurchaseOrderLineItemSerializer(
+                        existing_line_item, data=line_item, partial=True
+                    )
+                else:
+                    line_item_serializer = PurchaseOrderLineItemSerializer(
+                        data=line_item
+                    )
+                if line_item_serializer.is_valid():
+                    instance = line_item_serializer.save()
+                    po_instance.po_line_items.add(instance)
+                else:
+                    print(
+                        purchaseorder["purchaseorder_number"],
+                        line_item_serializer.errors,
+                    )
+            # deleting the line items
+            PurchaseOrderLineItem.objects.filter(
+                line_item_id__in=line_item_ids_to_remove
+            ).delete()
+
+            try:
+                vendor = ZohoVendor.objects.get(contact_id=po_instance.vendor_id)
+                po_instance.zoho_vendor = vendor
+                po_instance.save()
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning zoho vendor to po",
+                    po_instance,
+                )
+        else:
+            print(purchaseorder["purchaseorder_number"], serializer.errors)
+    except Exception as e:
+        print(purchase_order_id, print(str(e)))
+
+
+def update_client_invoice_with_line_items(clientinvoice_id):
+    try:
+        clientinvoice = get_client_invoice(clientinvoice_id)
+        existing_client_invoice = ClientInvoice.objects.get(invoice_id=clientinvoice_id)
+        existing_line_items = existing_client_invoice.client_invoice_line_items.all()
+        existing_line_item_ids = [
+            line_item.line_item_id for line_item in existing_line_items
+        ]
+        new_line_items = clientinvoice["line_items"]
+        new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
+        line_item_ids_to_remove = list(
+            set(existing_line_item_ids) - set(new_line_item_ids)
+        )
+
+        if "shipment_date" in clientinvoice and not clientinvoice["shipment_date"]:
+            clientinvoice["shipment_date"] = None
+
+        clientinvoice["is_backorder"] = bool(clientinvoice["is_backorder"])
+        serializer = ClientInvoiceSerializer(
+            existing_client_invoice, data=clientinvoice, partial=True
+        )
+
+        if serializer.is_valid():
+            clientinvoice_instance = serializer.save()
+            for line_item in clientinvoice["line_items"]:
+                if line_item["line_item_id"] in existing_line_item_ids:
+                    existing_line_item = existing_line_items.get(
+                        line_item_id=line_item["line_item_id"]
+                    )
+                    line_item_serializer = ClientInvoiceLineItemSerializer(
+                        existing_line_item, data=line_item, partial=True
+                    )
+                else:
+                    line_item_serializer = ClientInvoiceLineItemSerializer(
+                        data=line_item
+                    )
+                if line_item_serializer.is_valid():
+                    instance = line_item_serializer.save()
+                    clientinvoice_instance.client_invoice_line_items.add(instance)
+                else:
+                    print(clientinvoice["invoice_number"], line_item_serializer.errors)
+
+            # deleting the line items
+            ClientInvoiceLineItem.objects.filter(
+                line_item_id__in=line_item_ids_to_remove
+            ).delete()
+
+            try:
+                so = SalesOrder.objects.get(
+                    salesorder_id=clientinvoice_instance.salesorder_id
+                )
+                clientinvoice_instance.sales_order = so
+                clientinvoice_instance.save()
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning so to CI",
+                    clientinvoice_instance,
+                )
+
+            try:
+                customer = ZohoCustomer.objects.get(
+                    contact_id=clientinvoice_instance.customer_id
+                )
+                clientinvoice_instance.zoho_customer = customer
+                clientinvoice_instance.save()
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning zoho custoemr to client invoice",
+                    clientinvoice_instance,
+                )
+        else:
+            print(clientinvoice["invoice_number"], serializer.errors)
+    except Exception as e:
+        print(clientinvoice_id, print(str(e)))
+
+
+def update_bill_with_line_items(bill_id):
+    try:
+        bill = get_bill(bill_id)
+        existing_bill = Bill.objects.get(invoice_id=bill_id)
+        existing_line_items = existing_bill.bill_line_items.all()
+        existing_line_item_ids = [
+            line_item.line_item_id for line_item in existing_line_items
+        ]
+        new_line_items = bill["line_items"]
+        new_line_item_ids = [line_item["line_item_id"] for line_item in new_line_items]
+        line_item_ids_to_remove = list(
+            set(existing_line_item_ids) - set(new_line_item_ids)
+        )
+
+        if "payment_expected_date" in bill and not bill["payment_expected_date"]:
+            bill["payment_expected_date"] = None
+
+        bill["due_by_days"] = 0 if not bill["due_by_days"] else bill["due_by_days"]
+
+        # salesorder['created_date'] =  datetime.strptime(salesorder['created_date'], "%d/%m/%Y").strftime("%Y-%m-%d")
+        serializer = BillSerializer(data=bill)
+        if serializer.is_valid():
+            bill_instance = serializer.save()
+            for line_item in bill["line_items"]:
+                if line_item["line_item_id"] in existing_line_item_ids:
+                    existing_line_item = existing_line_items.get(
+                        line_item_id=line_item["line_item_id"]
+                    )
+                    line_item_serializer = BillLineItemSerializer(
+                        existing_line_item, data=line_item, partial=True
+                    )
+                else:
+                    line_item_serializer = BillLineItemSerializer(data=line_item)
+                if line_item_serializer.is_valid():
+                    instance = line_item_serializer.save()
+                    bill_instance.bill_line_items.add(instance)
+                else:
+                    print(bill["bill_number"], line_item_serializer.errors)
+
+            # deleting the line items
+            BillLineItem.objects.filter(
+                line_item_id__in=line_item_ids_to_remove
+            ).delete()
+
+            for po_id in bill_instance.purchaseorder_ids:
+                try:
+                    po = PurchaseOrder.objects.get(purchaseorder_id=po_id)
+                    bill_instance.purchase_orders.add(po)
+                except Exception as e:
+                    print(str(e))
+                    print(
+                        "error assigning purchase order to bill",
+                        bill_instance,
+                    )
+            # adding vendor to bill
+            try:
+                vendor = ZohoVendor.objects.get(contact_id=bill_instance.vendor_id)
+                bill_instance.zoho_vendor = vendor
+                bill_instance.save()
+            except Exception as e:
+                print(str(e))
+                print(
+                    "error assigning zoho vendor to bill",
                     bill_instance,
                 )
-        # adding vendor to bill
-        try:
-            vendor = ZohoVendor.objects.get(contact_id=bill_instance.vendor_id)
-            bill_instance.zoho_vendor = vendor
-            bill_instance.save()
-        except Exception as e:
-            print(str(e))
-            print(
-                "error assigning zoho vendor to bill",
-                bill_instance,
-            )
+        else:
+            print(bill["bill_number"], serializer.errors)
+    except Exception as e:
+        print(bill_id, print(str(e)))
+
+
+def create_or_update_so(so_id):
+    if not SalesOrder.objects.filter(salesorder_id=so_id).exists():
+        create_so_with_line_items(so_id)
     else:
-        print(bill["bill_number"], serializer.errors)
+        update_so_with_line_items(so_id)
+
+
+def create_or_update_po(po_id):
+    if not PurchaseOrder.objects.filter(purchaseorder_id=po_id).exists():
+        create_po_with_line_items(po_id)
+    else:
+        update_po_with_line_items(po_id)
+
+
+def create_or_update_client_invoice(invoice_id):
+    if not ClientInvoice.objects.filter(invoice_id=invoice_id).exists():
+        create_client_invoice_with_line_items(invoice_id)
+    else:
+        update_client_invoice_with_line_items(invoice_id)
+
+
+def create_or_update_bills(bill_id):
+    if not Bill.objects.filter(bill_id=bill_id).exists():
+        create_bill_with_line_items(bill_id)
+    else:
+        update_bill_with_line_items(bill_id)
 
 
 @shared_task
 def update_zoho_data():
     all_activit_logs = fetch_activity_logs(organization_id)
     filtered_activity_logs = filter_objects_by_date(all_activit_logs, 2)
-    for activity in filtered_activity_logs:
+    reversed_logs = list(reversed(filtered_activity_logs))
+    for activity in reversed_logs:
         if "activity_details" in activity:
             transaction_type = activity["activity_details"]["transaction_type"]
             operation_type = activity["activity_details"]["operation_type"]
