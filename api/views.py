@@ -1513,9 +1513,10 @@ def create_project_cass(request):
         if request.data["total_credits"]:
             total_credits_in_hours = int(request.data["total_credits"])
             total_credits_in_minutes = total_credits_in_hours * 60
-        if request.data["request_expiry_time"]:
-            request_expiry_time_in_hours = int(request.data["request_expiry_time"])
-            request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
+        if not request.data["is_project_structure"]:
+            if request.data["request_expiry_time"]:
+                request_expiry_time_in_hours = int(request.data["request_expiry_time"])
+                request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
         try:
             project = Project(
                 # print(organisation.name, organisation.image_url, "details of org")
@@ -11024,3 +11025,41 @@ def get_available_credit_of_project(request, project_id):
             {"error": "Failed to retrieve data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_available_credits_without_project_structure(request, engagement_id):
+    try:
+        engagement = Engagement.objects.get(id=engagement_id)
+        available_credits = get_available_credit_for_project(
+            engagement.project.id, "both"
+        )
+
+        total_durations = engagement.project.duration_of_each_session
+
+        if total_durations is not None and available_credits is not None:
+            needed_credits_present = (
+                available_credits >= total_durations if total_durations != 0 else False
+            )
+        else:
+            needed_credits_present = False
+
+        return Response(
+            {
+                "available_credits": available_credits,
+                "total_durations": total_durations,
+                "needed_credits_present": needed_credits_present,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to retrieve data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+        
+        
+        
+        
