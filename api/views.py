@@ -4782,7 +4782,7 @@ def get_session_requests_of_user(request, user_type, user_id):
                         )
                     )
                 )
-            )
+            ).distinct()
         
                     
 
