@@ -432,9 +432,9 @@ class Project(models.Model):
     is_archive = models.BooleanField(default=False)
     finance = models.BooleanField(blank=True, default=False)
     is_project_structure = models.BooleanField(blank=True, default=True)
-    total_credits = models.IntegerField(default=0, blank=True, null=True)
+    total_credits = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     duration_of_each_session = models.IntegerField(blank=True, default=None, null=True)
-    request_expiry_time = models.IntegerField(default=0, blank=True, null=True)
+    request_expiry_time = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     credit_history = models.JSONField(default=list, blank=True)
 
     class Meta:

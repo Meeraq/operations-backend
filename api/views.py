@@ -1517,12 +1517,12 @@ def create_project_cass(request):
         request_expiry_time_in_minutes = 0
         duration_of_each_session = 0
         if request.data["total_credits"]:
-            total_credits_in_hours = int(request.data["total_credits"])
+            total_credits_in_hours = float(request.data["total_credits"])
             total_credits_in_minutes = total_credits_in_hours * 60
         if not request.data["is_project_structure"]:
             if request.data["request_expiry_time"]:
                 duration_of_each_session = request.data["duration_of_each_session"]
-                request_expiry_time_in_hours = int(request.data["request_expiry_time"])
+                request_expiry_time_in_hours = float(request.data["request_expiry_time"])
                 request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
         
         try:
