@@ -6630,7 +6630,7 @@ def get_formatted_handovers(handovers):
         serializer = HandoverDetailsSerializerWithOrganisationName(handovers, many=True)
         for handover in serializer.data:
             sales_order_ids = handover["sales_order_ids"]
-            salesorders = SalesOrder.objects.filter(sales_order_id__in=sales_order_ids)
+            salesorders = SalesOrder.objects.filter(salesorder_id__in=sales_order_ids)
             salespersons = []
             added_salespersons = (
                 set()
