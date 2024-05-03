@@ -83,7 +83,7 @@ from .serializers import (
 )
 from zohoapi.serializers import VendorDepthOneSerializer, PurchaseOrderSerializer,PurchaseOrderGetSerializer
 from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
-from zohoapi.tasks import organization_id, get_access_token, base_url, filter_purchase_order_data
+from zohoapi.tasks import organization_id, get_access_token, base_url, filter_purchase_order_data, purchase_orders_allowed
 from .permissions import IsInRoles
 from rest_framework import generics
 from django.utils.crypto import get_random_string
