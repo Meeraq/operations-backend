@@ -84,6 +84,11 @@ urlpatterns = [
         name="get_all_invoices",
     ),
     path(
+        "get-invoice/<int:invoice_id>/",
+        views.get_invoice,
+        name="get_invoice",
+    ),
+    path(
         "pmo/invoices/",
         views.get_invoices_for_pmo,
         name="get_all_invoices",

@@ -5,8 +5,9 @@ from zohoapi.tasks import (
     fetch_purchase_orders,
     organization_id,
     filter_purchase_order_data,
+    purchase_orders_allowed,
 )
-from zohoapi.serializers import PurchaseOrderSerializer
+from zohoapi.serializers import PurchaseOrderSerializer, PurchaseOrderGetSerializer
 from .models import Engagement, SessionRequestCaas
 from django.utils import timezone
 from django.db.models import Q
@@ -30,9 +31,13 @@ def get_start_and_end_of_current_month():
 @shared_task
 def generate_invoice_task_for_pmo_on_25th_of_month():
     vendors = Vendor.objects.all()
-    all_purchase_orders = filter_purchase_order_data(
-        PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
-    )
+    all_purchase_orders = PurchaseOrderGetSerializer(
+        PurchaseOrder.objects.filter(
+            Q(created_time__year__gte=2024)
+            | Q(purchaseorder_number__in=purchase_orders_allowed)
+        ),
+        many=True,
+    ).data
     # fetch_purchase_orders(organization_id)
     for vendor in vendors:
         open_purchase_order_count = 0
