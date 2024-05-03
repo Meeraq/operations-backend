@@ -4921,7 +4921,7 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
     for session_request in session_requests:
         project_name = session_request.project.name
         project = ProjectSerializer(session_request.project).data
-        project_type = "caas"
+        project_type = "caas" if session_request.project.project_type == "CAAS" else "COD"
         organisation = session_request.project.organisation.name
         engagement = Engagement.objects.filter(
             learner_id=session_request.learner.id,
@@ -5694,7 +5694,7 @@ def get_project_organisation_learner_of_user_optimized(request, user_type, user_
                 project_dict = {
                     "project_id": project.id,
                     "name": project.name,
-                    "type": "CAAS",
+                    "type": "CAAS" if project.project_type == "CAAS" else "COD"
                 }
 
                 learner_dict_organisation[learner.id].add(project.organisation.name)
