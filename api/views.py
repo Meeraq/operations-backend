@@ -4766,6 +4766,7 @@ def get_session_requests_of_user(request, user_type, user_id):
         
         session_requests = SessionRequestCaas.objects.filter(
                 Q(confirmed_availability=None) &
+                Q(is_archive=False) &
                 ~Q(status="pending") &
                 (
                     Q(coach__id=user_id) |
@@ -5903,6 +5904,7 @@ def request_session_without_project_structure(request, engagement_id):
                 status="requested",
                 order=max_order + 1,
                 engagement=engagement,
+                requested_at = timezone.now(),
             )
 
             time_arr = create_time_arr(request.data["availibility"])

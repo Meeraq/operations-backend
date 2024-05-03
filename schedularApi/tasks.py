@@ -2334,66 +2334,6 @@ def send_email_reminder_assessment(assessment_id):
         sleep(5)
 
 
-@shared_task
-def schedule_assessment_reminders():
-    # Get the timezone for IST
-    ist = pytz.timezone("Asia/Kolkata")
-    # Get ongoing assessments with email or WhatsApp reminders enabled
-    ongoing_assessments = Assessment.objects.filter(
-        Q(status="ongoing"), Q(email_reminder=True) | Q(whatsapp_reminder=True)
-    )
-    # Loop through each ongoing assessment
-    for assessment in ongoing_assessments:
-        start_date = datetime.strptime(
-            assessment.assessment_start_date, "%Y-%m-%d"
-        ).date()
-        end_date = datetime.strptime(assessment.assessment_end_date, "%Y-%m-%d").date()
-        # Check if today's date is within the assessment date range
-        today = datetime.now().date()
-        day_of_week = today.strftime("%A")
-        if start_date <= today <= end_date and not day_of_week == "Sunday":
-            if assessment.whatsapp_reminder:
-                for time in assessment.reminders["whatsapp"]["timings"]:
-                    # Parse time in hh:mm A format to a datetime object
-                    reminder_time = datetime.strptime(time, "%I:%M %p")
-                    # Set the reminder time to today with the specified time in IST
-                    reminder_datetime_ist = ist.localize(
-                        datetime.combine(timezone.now().date(), reminder_time.time())
-                    )
-                    # Convert reminder time from IST to UTC
-                    reminder_datetime_utc = reminder_datetime_ist.astimezone(pytz.utc)
-                    # Create a clocked schedule for the reminder time
-                    clocked_schedule = ClockedSchedule.objects.create(
-                        clocked_time=reminder_datetime_utc
-                    )
-                    # Create a periodic task for sending the reminder
-                    periodic_task = PeriodicTask.objects.create(
-                        name=uuid.uuid1(),
-                        task="schedularApi.tasks.send_whatsapp_reminder_assessment",
-                        args=[assessment.id],
-                        clocked=clocked_schedule,
-                        one_off=True,
-                    )
-
-            # Check and schedule email reminders
-            if assessment.email_reminder:
-                for time in assessment.reminders["email"]["timings"]:
-                    reminder_time = datetime.strptime(time, "%I:%M %p")
-                    reminder_datetime_ist = ist.localize(
-                        datetime.combine(timezone.now().date(), reminder_time.time())
-                    )
-                    reminder_datetime_utc = reminder_datetime_ist.astimezone(pytz.utc)
-                    clocked_schedule = ClockedSchedule.objects.create(
-                        clocked_time=reminder_datetime_utc
-                    )
-                    periodic_task = PeriodicTask.objects.create(
-                        name=uuid.uuid1(),
-                        task="schedularApi.tasks.send_email_reminder_assessment",
-                        args=[assessment.id],
-                        clocked=clocked_schedule,
-                        one_off=True,
-                    )
-
 
 @shared_task
 def update_lesson_status_according_to_drip_dates():

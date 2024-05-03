@@ -432,9 +432,13 @@ class Project(models.Model):
     is_archive = models.BooleanField(default=False)
     finance = models.BooleanField(blank=True, default=False)
     is_project_structure = models.BooleanField(blank=True, default=True)
-    total_credits = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    total_credits = models.DecimalField(
+        max_digits=10, decimal_places=2, blank=True, null=True
+    )
     duration_of_each_session = models.IntegerField(blank=True, default=None, null=True)
-    request_expiry_time = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    request_expiry_time = models.DecimalField(
+        max_digits=10, decimal_places=2, blank=True, null=True
+    )
     credit_history = models.JSONField(default=list, blank=True)
 
     class Meta:
@@ -508,9 +512,7 @@ class Engagement(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     project_structure = models.JSONField(default=list, blank=True)
-    type = models.CharField(
-        max_length=225, null=True, blank=True, choices=TYPE_CHOICES
-    )
+    type = models.CharField(max_length=225, null=True, blank=True, choices=TYPE_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -564,6 +566,7 @@ class SessionRequestCaas(models.Model):
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
+    requested_at = models.DateTimeField(blank=True, null=True)
 
     def __str__(self):
         if self.session_type == "interview":
