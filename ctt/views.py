@@ -62,7 +62,7 @@ def get_current_financial_year_dates():
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_batches(request):
-    batches = Batches.objects.using("ctt").all()
+    batches = Batches.objects.using("ctt").all().order_by("-created_at")
     serializer = BatchSerializer(batches, many=True)
     return Response(serializer.data)
 
@@ -70,7 +70,7 @@ def get_batches(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def batch_details(request):
-    batches = Batches.objects.using("ctt").all()
+    batches = Batches.objects.using("ctt").all().order_by("-created_at")
     data = []
     index = 1
     for batch in batches:
@@ -262,7 +262,7 @@ def participant_so_and_invoices_in_batch(request, email):
 def sales_persons_finances(request):
     start_date = request.query_params.get("start_date", "")
     end_date = request.query_params.get("end_date", "")
-    all_batches = Batches.objects.using("ctt").all()
+    all_batches = Batches.objects.using("ctt").all().order_by("-created_at")
     l1_batches = []
     l2_batches = []
     l3_batches = []
@@ -324,9 +324,7 @@ def sales_persons_finances(request):
             <= financial_year_end_date.date()
         ):
             salesperson_totals[salesperson]["yearly"] += 1
-    
-    res_dict = dict(salesperson_totals)
-    
+
     res_list = [
         {"index": index, "salesperson": salesperson, **totals}
         for index, (salesperson, totals) in enumerate(
@@ -438,7 +436,7 @@ def get_faculties(request):
 @permission_classes([IsAuthenticated])
 def get_all_faculties(request):
     try:
-        faculties = Faculties.objects.using("ctt").all()
+        faculties = Faculties.objects.using("ctt").all().order_by("-created_at")
         serializer = FacultiesSerializer(faculties, many=True)
         return Response(serializer.data)
     except Exception as e:
@@ -450,7 +448,7 @@ def get_all_faculties(request):
 @permission_classes([IsAuthenticated])
 def get_all_finance(request):
     try:
-        batch_users = BatchUsers.objects.using("ctt").all()
+        batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
         data = []
         index = 1
         for batch_user in batch_users:
@@ -523,7 +521,7 @@ def get_all_finance(request):
 @permission_classes([IsAuthenticated])
 def get_all_client_invoice_of_participant_for_batch(request, participant_id, batch_id):
     try:
-        batch_users = BatchUsers.objects.using("ctt").all()
+        batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
         data = []
 
         for batch_user in batch_users:
