@@ -5884,7 +5884,6 @@ def request_session_without_project_structure(request, engagement_id):
         with transaction.atomic():
             engagement = Engagement.objects.get(id=engagement_id)
 
-            project_structure_session = engagement.project.project_structure[0]
             sessions = SessionRequestCaas.objects.filter(
                 engagement=engagement
             ).order_by("order")
@@ -5897,11 +5896,11 @@ def request_session_without_project_structure(request, engagement_id):
             session_data = SessionRequestCaas.objects.create(
                 learner=engagement.learner,
                 project=engagement.project,
-                session_duration=project_structure_session["session_duration"],
+                session_duration=engagement.project.duration_of_each_session,
                 session_number=max_order + 1,
-                session_type=project_structure_session["session_type"],
+                session_type="coaching_session",
                 billable_session_number=max_order + 1,
-                status="pending",
+                status="requested",
                 order=max_order + 1,
                 engagement=engagement,
             )
@@ -5909,7 +5908,6 @@ def request_session_without_project_structure(request, engagement_id):
             time_arr = create_time_arr(request.data["availibility"])
             session_data.availibility.set(time_arr)
 
-            session_data.status = "requested"
             session_data.save()
 
             return Response({"message": "Session requested successfully"}, status=200)
