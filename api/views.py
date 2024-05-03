@@ -81,13 +81,18 @@ from .serializers import (
     SalesDepthOneSerializer,
     GoalDescriptionSerializer,
 )
-from zohoapi.serializers import VendorDepthOneSerializer, PurchaseOrderSerializer,PurchaseOrderGetSerializer
+from zohoapi.serializers import (
+    VendorDepthOneSerializer,
+    PurchaseOrderSerializer,
+    PurchaseOrderGetSerializer,
+)
 from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
 from zohoapi.tasks import (
     organization_id,
     get_access_token,
     base_url,
     filter_purchase_order_data,
+    purchase_orders_allowed,
 )
 from .permissions import IsInRoles
 from rest_framework import generics
@@ -165,7 +170,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 import json
 import string
 import random
-from django.db.models import Q, Min ,F, Exists, OuterRef
+from django.db.models import Q, Min, F, Exists, OuterRef
 from collections import defaultdict
 from django.db.models import Avg
 from rest_framework import status
@@ -1522,9 +1527,11 @@ def create_project_cass(request):
         if not request.data["is_project_structure"]:
             if request.data["request_expiry_time"]:
                 duration_of_each_session = request.data["duration_of_each_session"]
-                request_expiry_time_in_hours = float(request.data["request_expiry_time"])
+                request_expiry_time_in_hours = float(
+                    request.data["request_expiry_time"]
+                )
                 request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
-        
+
         try:
             project = Project(
                 # print(organisation.name, organisation.image_url, "details of org")
@@ -3065,7 +3072,7 @@ def book_session_caas(request):
     session_request = SessionRequestCaas.objects.get(
         id=request.data.get("session_request")
     )
-    coach = Coach.objects.get(id= request.data["coach"])
+    coach = Coach.objects.get(id=request.data["coach"])
     session_request.coach = coach
     session_request.save()
     existing_calendar_invite = CalendarInvites.objects.filter(
@@ -4763,29 +4770,51 @@ def get_session_requests_of_user(request, user_type, user_id):
         #         # is selected and confirmed, and coach is in the project
         #         elif session.engagement and session.engagement.type=="cod" and CoachContract.objects.filter(project=session.project, coach__id=user_id, status="approved").exists() and  session.project.coaches_status.filter(coach__id = user_id , status__hr__status="select").exists():
         #             session_requests.append(session)
-        
-        session_requests = SessionRequestCaas.objects.filter(
-                Q(confirmed_availability=None) &
-                Q(is_archive=False) &
-                ~Q(status="pending") &
-                (
-                    Q(coach__id=user_id) |
-                    (
-                        Q(project__engagement__type="cod") &
-                        Q(project__coaches_status__coach__id=user_id) &
-                        Q(project__coaches_status__status__hr__status="select") &
-                        Exists(
+        project_id = request.query_params.get("project")
+        if project_id:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(confirmed_availability=None)
+                & Q(is_archive=False)
+                & Q(project__id=int(project_id))
+                & ~Q(status="pending")
+                & (
+                    Q(coach__id=user_id)
+                    | (
+                        Q(project__engagement__type="cod")
+                        & Q(project__coaches_status__coach__id=user_id)
+                        & Q(project__coaches_status__status__hr__status="select")
+                        & Exists(
                             CoachContract.objects.filter(
-                                project_id=OuterRef('project_id'),
+                                project_id=OuterRef("project_id"),
                                 coach_id=user_id,
-                                status="approved"
+                                status="approved",
                             )
                         )
                     )
                 )
             ).distinct()
-        
-                    
+        else:
+
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(confirmed_availability=None)
+                & Q(is_archive=False)
+                & ~Q(status="pending")
+                & (
+                    Q(coach__id=user_id)
+                    | (
+                        Q(project__engagement__type="cod")
+                        & Q(project__coaches_status__coach__id=user_id)
+                        & Q(project__coaches_status__status__hr__status="select")
+                        & Exists(
+                            CoachContract.objects.filter(
+                                project_id=OuterRef("project_id"),
+                                coach_id=user_id,
+                                status="approved",
+                            )
+                        )
+                    )
+                )
+            ).distinct()
 
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
@@ -4921,7 +4950,9 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
     for session_request in session_requests:
         project_name = session_request.project.name
         project = ProjectSerializer(session_request.project).data
-        project_type = "caas" if session_request.project.project_type == "CAAS" else "COD"
+        project_type = (
+            "caas" if session_request.project.project_type == "CAAS" else "COD"
+        )
         organisation = session_request.project.organisation.name
         engagement = Engagement.objects.filter(
             learner_id=session_request.learner.id,
@@ -5105,6 +5136,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time_seeq = timezone.now()
     timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
     avaliable_sessions = []
+
     if user_type == "pmo":
         pmo = Pmo.objects.get(id=user_id)
         if pmo.sub_role == "manager":
@@ -5147,16 +5179,33 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             availibility__end_time__gt=timestamp_milliseconds
         )
     if user_type == "coach":
-        session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__gt=current_time),
-            Q(coach__id=user_id),
-            Q(is_archive=False),
-            ~Q(status="completed"),
-        )
-        schedular_sessions = SchedularSessions.objects.filter(
-            availibility__coach__id=user_id
-        )
+        project_id = request.query_params.get("project")
+        if project_id:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__gt=current_time),
+                Q(coach__id=user_id),
+                Q(is_archive=False),
+                ~Q(status="completed"),
+                Q(project__id=int(project_id)),
+            )
+
+            schedular_sessions = SchedularSessions.objects.filter(
+                availibility__coach__id=user_id,
+                coaching_session__batch__project__id=int(project_id),
+            )
+        else:
+
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__gt=current_time),
+                Q(coach__id=user_id),
+                Q(is_archive=False),
+                ~Q(status="completed"),
+            )
+            schedular_sessions = SchedularSessions.objects.filter(
+                availibility__coach__id=user_id
+            )
         avaliable_sessions = schedular_sessions.filter(
             availibility__end_time__gt=timestamp_milliseconds
         )
@@ -5350,16 +5399,32 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             availibility__end_time__lt=timestamp_milliseconds
         )
     if user_type == "coach":
-        session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__lt=current_time)
-            | Q(status="completed"),
-            Q(coach__id=user_id),
-            Q(is_archive=False),
-        )
-        schedular_sessions = SchedularSessions.objects.filter(
-            availibility__coach__id=user_id
-        )
+        project_id = request.query_params.get("project")
+
+        if project_id:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__lt=current_time)
+                | Q(status="completed"),
+                Q(coach__id=user_id),
+                Q(is_archive=False),
+                Q(project__id=int(project_id)),
+            )
+            schedular_sessions = SchedularSessions.objects.filter(
+                availibility__coach__id=user_id,
+                coaching_session__batch__project__id=int(project_id),
+            )
+        else:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__lt=current_time)
+                | Q(status="completed"),
+                Q(coach__id=user_id),
+                Q(is_archive=False),
+            )
+            schedular_sessions = SchedularSessions.objects.filter(
+                availibility__coach__id=user_id
+            )
         avaliable_sessions = schedular_sessions.filter(
             availibility__end_time__lt=timestamp_milliseconds
         )
@@ -5694,7 +5759,7 @@ def get_project_organisation_learner_of_user_optimized(request, user_type, user_
                 project_dict = {
                     "project_id": project.id,
                     "name": project.name,
-                    "type": "CAAS" if project.project_type == "CAAS" else "COD"
+                    "type": "CAAS" if project.project_type == "CAAS" else "COD",
                 }
 
                 learner_dict_organisation[learner.id].add(project.organisation.name)
@@ -5904,7 +5969,7 @@ def request_session_without_project_structure(request, engagement_id):
                 status="requested",
                 order=max_order + 1,
                 engagement=engagement,
-                requested_at = timezone.now(),
+                requested_at=timezone.now(),
             )
 
             time_arr = create_time_arr(request.data["availibility"])
@@ -8048,7 +8113,7 @@ def edit_project_caas(request, project_id):
             request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
             project.request_expiry_time = request_expiry_time_in_minutes
             if project.total_credits != request.data.get("total_credits"):
-                project.credit_history.append(request.data.get("total_credits"))  
+                project.credit_history.append(request.data.get("total_credits"))
 
         project.finance = request.data.get("finance", project.finance)
         project.junior_pmo = junior_pmo
@@ -8733,7 +8798,7 @@ class ProjectContractAPIView(APIView):
 
 
 class ProjectContractDetailView(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo","hr")]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo", "hr")]
 
     def get(self, request, project_id, format=None):
         print(project_id)
@@ -10338,13 +10403,13 @@ def get_coaches_in_project_is_vendor(request, project_id):
         project = Project.objects.get(id=project_id)
         data = {}
         purchase_orders = PurchaseOrderGetSerializer(
-        PurchaseOrder.objects.filter(
-            Q(created_time__year__gte=2024)
-            | Q(purchaseorder_number__in=purchase_orders_allowed)
-        ),
-        many=True,
-    ).data 
-        # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data) 
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed)
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data)
         # fetch_purchase_orders(organization_id)
         for coach_status in project.coaches_status.all():
             is_vendor = coach_status.coach.user.roles.filter(name="vendor").exists()
