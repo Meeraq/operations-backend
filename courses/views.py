@@ -2544,7 +2544,7 @@ class AssignCourseTemplateToBatch(APIView):
 
                 create_lessons_for_batch(batch)
 
-                if assessment_creation and batch.project.post_assessment:
+                if  batch.project.post_assessment:
                     max_order = (
                         Lesson.objects.filter(course=new_course).aggregate(
                             Max("order")
