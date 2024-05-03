@@ -8731,7 +8731,7 @@ class ProjectContractAPIView(APIView):
 
 
 class ProjectContractDetailView(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo","hr")]
 
     def get(self, request, project_id, format=None):
         print(project_id)
