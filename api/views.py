@@ -1515,16 +1515,16 @@ def create_project_cass(request):
         desc = request.data["project_description"]
         total_credits_in_minutes = 0
         request_expiry_time_in_minutes = 0
+        duration_of_each_session = 0
         if request.data["total_credits"]:
             total_credits_in_hours = int(request.data["total_credits"])
             total_credits_in_minutes = total_credits_in_hours * 60
         if not request.data["is_project_structure"]:
             if request.data["request_expiry_time"]:
+                duration_of_each_session = request.data["duration_of_each_session"]
                 request_expiry_time_in_hours = int(request.data["request_expiry_time"])
                 request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
-        else:
-            duration_of_each_session = None
-            request_expiry_time = None
+        
         try:
             project = Project(
                 # print(organisation.name, organisation.image_url, "details of org")
@@ -1573,7 +1573,7 @@ def create_project_cass(request):
                 is_project_structure=request.data["is_project_structure"],
                 total_credits=total_credits_in_minutes,
                 duration_of_each_session=duration_of_each_session,
-                request_expiry_time=request_expiry_time,
+                request_expiry_time=request_expiry_time_in_minutes,
             )
 
             project.save()
