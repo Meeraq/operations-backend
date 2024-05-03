@@ -165,6 +165,8 @@ purchase_orders_allowed = [
     "Meeraq/PO/CaaS/23-24/0028",
     "Meeraq/PO/CaaS/23-24/0093",
     "Meeraq/PO/CaaS/23-24/0091",
+    "Meeraq/PO/CaaS/23-24/0025",
+    "Meeraq/PO/CaaS/23-24/0029",
 ]
 
 
