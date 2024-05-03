@@ -344,6 +344,9 @@ class ZohoCustomer(models.Model):
     zohopeople_client_id = models.CharField(max_length=50, blank=True, null=True)
     customer_currency_summaries = models.JSONField(blank=True, null=True)
 
+    class Meta:
+        ordering = ["-created_time"]
+
     def __str__(self):
         return self.contact_name
 
@@ -550,6 +553,9 @@ class ZohoVendor(models.Model):
     tags = models.JSONField(default=list, blank=True, null=True)
     zohopeople_client_id = models.CharField(max_length=100, blank=True, null=True)
     vendor_currency_summaries = models.JSONField(default=list, blank=True, null=True)
+
+    class Meta:
+        ordering = ["-created_time"]
 
     def __str__(self):
         return self.contact_name
@@ -907,6 +913,9 @@ class SalesOrder(models.Model):
     )
     balance_formatted = models.CharField(max_length=20, blank=True, null=True)
     approvers_list = models.JSONField(default=list, blank=True, null=True)
+
+    class Meta:
+        ordering = ["-created_time"]
 
     def __str__(self):
         return f"Sales Order {self.salesorder_number} {self.salesorder_id}"
@@ -1343,6 +1352,9 @@ class ClientInvoice(models.Model):
     approvers_list = models.JSONField(default=list, null=True, blank=True)
     qr_code = models.JSONField(default=dict, null=True, blank=True)
 
+    class Meta:
+        ordering = ["-created_time"]
+
     def __str__(self):
         return f"Invoice {self.invoice_number}"
 
@@ -1580,8 +1592,12 @@ class PurchaseOrder(models.Model):
     salesorders = models.JSONField(default=list, null=True, blank=True)
     bills = models.JSONField(default=list, null=True, blank=True)
 
+    class Meta:
+        ordering = ["-created_time"]
+
     def __str__(self):
         return self.purchaseorder_number
+    
 
 
 class BillLineItem(models.Model):
@@ -1870,6 +1886,9 @@ class Bill(models.Model):
     reference_bill_id = models.CharField(max_length=100, blank=True, null=True)
     can_send_in_mail = models.BooleanField(default=False)
     approvers_list = models.JSONField(default=list, blank=True, null=True)
+
+    class Meta:
+        ordering = ["-created_time"]
 
     def __str__(self):
         return self.bill_id

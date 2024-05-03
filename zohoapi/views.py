@@ -46,10 +46,12 @@ from .serializers import (
     SalesOrderSerializer,
     SalesOrderGetSerializer,
     PurchaseOrderSerializer,
+    PurchaseOrderGetSerializer,
     BillSerializer,
     ClientInvoiceSerializer,
     ClientInvoiceGetSerializer,
-    BillGetSerializer
+    BillGetSerializer,
+    InvoiceDataGetSerializer,
 )
 from .tasks import (
     import_invoice_for_new_vendor,
@@ -562,6 +564,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
                 hsn_or_sac = Vendor.objects.get(
                     vendor_id=invoice["vendor_id"]
                 ).hsn_or_sac
+
                 matching_bill = next(
                     (
                         bill
@@ -861,30 +864,6 @@ def get_bank_account_data(
         return Response({}, status=400)
     else:
         return Response({}, status=400)
-
-
-# @api_view(["GET"])
-# def update_vendor_id(request):
-#     access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-#     if access_token:
-#         headers = {"Authorization": f"Bearer {access_token}"}
-#         url = f"{base_url}/contacts?organization_id={env('ZOHO_ORGANIZATION_ID')}&contact_type=vendor"
-#         vendor_response = requests.get(url, headers=headers)
-#         if vendor_response.json()["message"] == "success":
-#             for vendor in vendor_response.json()["contacts"]:
-#                 if vendor["email"]:
-#                     try:
-#                         coach = Coach.objects.get(email=vendor["email"])
-#                         coach.vendor_id = vendor["contact_id"]
-#                         coach.save()
-#                     except Coach.DoesNotExist:
-#                         print(vendor["email"], "coach doesnt exist")
-#                         pass
-#             return Response(vendor_response.json())
-#         else:
-#             return Response({"error": "Failed to get vendors."}, status=400)
-#     else:
-#         return Response({"error": "Unauthorized	."}, status=400)
 
 
 @api_view(["GET"])
@@ -1225,9 +1204,16 @@ def get_all_vendors(request):
 )
 def get_all_purchase_orders(request):
     try:
-        all_purchase_orders = filter_purchase_order_data(
-            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
-        )
+        all_purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed)
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(
+        #     PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data
+        # )
         # fetch_purchase_orders(organization_id)
         return Response(all_purchase_orders, status=status.HTTP_200_OK)
     except Exception as e:
@@ -1239,9 +1225,16 @@ def get_all_purchase_orders(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_all_purchase_orders_for_pmo(request):
     try:
-        all_purchase_orders = filter_purchase_order_data(
-            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
-        )
+        all_purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed)
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(
+        #     PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data
+        # )
         # fetch_purchase_orders(organization_id)
         pmos_allowed = json.loads(env("PMOS_ALLOWED_TO_VIEW_ALL_INVOICES_AND_POS"))
         if not request.user.username in pmos_allowed:
@@ -1283,24 +1276,25 @@ def fetch_invoices(organization_id):
 
 
 def fetch_invoices_db(organization_id):
-    all_bills = BillGetSerializer(Bill.objects.all(), many=True).data
-    invoices = InvoiceData.objects.all()
-    invoices = filter_invoice_data(invoices)
-    invoice_serializer = InvoiceDataSerializer(invoices, many=True)
+    # all_bills = BillGetSerializer(Bill.objects.all(), many=True).data
+    invoices = InvoiceData.objects.filter(
+        Q(created_at__year__gte=2024) | Q(purchase_order_no__in=purchase_orders_allowed)
+    )
+    # invoices = filter_invoice_data(invoices)
+    invoice_serializer = InvoiceDataGetSerializer(invoices, many=True)
     all_invoices = []
     for invoice in invoice_serializer.data:
-        matching_bill = next(
-            (
-                bill
-                for bill in all_bills
-                if (
-                    bill.get(env("INVOICE_FIELD_NAME")) == invoice["invoice_number"]
-                    and bill.get("vendor_id") == invoice["vendor_id"]
-                )
-            ),
-            None,
+        bills = Bill.objects.filter(
+            vendor_id=invoice["vendor_id"],
+            custom_field_hash__cf_invoice=invoice["invoice_number"],
         )
-        all_invoices.append({**invoice, "bill": matching_bill})
+        matching_bill = bills.first()
+        all_invoices.append(
+            {
+                **invoice,
+                "bill": {"status": matching_bill.status} if matching_bill else None,
+            }
+        )
     return all_invoices
 
 
@@ -1313,6 +1307,25 @@ def get_all_invoices(request):
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
+def get_invoice(request, invoice_id):
+    try:
+        invoice = InvoiceData.objects.get(id=invoice_id)
+        invoice_serializer = InvoiceDataSerializer(invoice)
+        res = invoice_serializer.data
+        bills = Bill.objects.filter(
+            vendor_id=res["vendor_id"],
+            custom_field_hash__cf_invoice=res["invoice_number"],
+        )
+        matching_bill = bills.first()
+        res["bill"] = {"status": matching_bill.status} if matching_bill else None
+        return Response(res)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": ""}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["GET"])
@@ -1848,9 +1861,16 @@ def get_current_month_start_and_end_date():
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_po_number_to_create(request):
     try:
-        purchase_orders = filter_purchase_order_data(
-            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
-        )
+        purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed)
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(
+        #     PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data
+        # )
         # fetch_purchase_orders(organization_id)
         current_financial_year = get_current_financial_year()
         regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
@@ -2130,9 +2150,16 @@ def get_coach_wise_finances(request):
         coach_id = request.query_params.get("coach_id")
         facilitator_id = request.query_params.get("facilitator_id")
         all_invoices = fetch_invoices_db(organization_id)
-        all_purchase_orders = filter_purchase_order_data(
-            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
-        )
+        all_purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed)
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(
+        #     PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data
+        # )
         # Filter vendors who are coaches
         vendors = []
         if coach_id or facilitator_id:
@@ -2230,9 +2257,16 @@ def get_facilitator_wise_finances(request):
         coach_id = request.query_params.get("coach_id")
         facilitator_id = request.query_params.get("facilitator_id")
         all_invoices = fetch_invoices_db(organization_id)
-        all_purchase_orders = filter_purchase_order_data(
-            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
-        )
+        all_purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed)
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(
+        #     PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data
+        # )
         # fetch_purchase_orders(organization_id)
         # Filter vendors who are coaches
         vendors = []
@@ -2351,9 +2385,16 @@ def get_project_wise_finances(request):
     try:
         purchase_order_project_mapping = create_purchase_order_project_mapping()
         all_invoices = fetch_invoices_db(organization_id)
-        all_purchase_orders = filter_purchase_order_data(
-            PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data
-        )
+        all_purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed)
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(
+        #     PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data
+        # )
         # fetch_purchase_orders(organization_id)
         # Filter vendors who are coaches
         schedular_projects = SchedularProject.objects.all()
@@ -2998,7 +3039,7 @@ def create_sales_order(request):
                     "so_number": so_number,
                     "customer_name": customer_name,
                     "salesperson": salesperson_name,
-                    "project_type": "CTT"  if ctt else project_type,
+                    "project_type": "CTT" if ctt else project_type,
                 },
                 (
                     [
@@ -4021,7 +4062,7 @@ def sales_orders_with_due_invoices(request, sales_person_id):
 @permission_classes([IsAuthenticated])
 def get_line_items(request):
     current_date = datetime.now().date()
-    salesperson_id = request.query_params.get('salesperson_id')
+    salesperson_id = request.query_params.get("salesperson_id")
     line_items = SalesOrderLineItem.objects.filter(
         custom_field_hash__cf_due_date__isnull=False, is_invoiced=False
     )
@@ -4036,7 +4077,9 @@ def get_line_items(request):
             sales_order = SalesOrder.objects.filter(
                 so_line_items__line_item_id=item.line_item_id
             ).first()
-            if sales_order and (not salesperson_id or sales_order.salesperson_id == salesperson_id):
+            if sales_order and (
+                not salesperson_id or sales_order.salesperson_id == salesperson_id
+            ):
                 line_item = {
                     "sales_order_id": sales_order.salesorder_id,
                     "sales_order_number": sales_order.salesorder_number,

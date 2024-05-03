@@ -81,7 +81,7 @@ from .serializers import (
     SalesDepthOneSerializer,
     GoalDescriptionSerializer,
 )
-from zohoapi.serializers import VendorDepthOneSerializer, PurchaseOrderSerializer
+from zohoapi.serializers import VendorDepthOneSerializer, PurchaseOrderSerializer,PurchaseOrderGetSerializer
 from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
 from zohoapi.tasks import organization_id, get_access_token, base_url, filter_purchase_order_data
 from .permissions import IsInRoles
@@ -10047,7 +10047,14 @@ def get_coaches_in_project_is_vendor(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
         data = {}
-        purchase_orders = filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data) 
+        purchase_orders = PurchaseOrderGetSerializer(
+        PurchaseOrder.objects.filter(
+            Q(created_time__year__gte=2024)
+            | Q(purchaseorder_number__in=purchase_orders_allowed)
+        ),
+        many=True,
+    ).data 
+        # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data) 
         # fetch_purchase_orders(organization_id)
         for coach_status in project.coaches_status.all():
             is_vendor = coach_status.coach.user.roles.filter(name="vendor").exists()
