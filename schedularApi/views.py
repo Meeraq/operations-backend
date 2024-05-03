@@ -54,6 +54,7 @@ from api.models import (
     Facilitator,
     CoachStatus,
     Project,
+    Sales,
 )
 
 from .serializers import (
@@ -172,10 +173,26 @@ import environ
 import re
 from rest_framework.views import APIView
 from api.views import get_user_data
-from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping, SalesOrder, PurchaseOrder
-from zohoapi.views import fetch_purchase_orders, organization_id, fetch_sales_persons, filter_purchase_order_data
-from zohoapi.tasks import organization_id, fetch_sales_orders
-from zohoapi.serializers import SalesOrderSerializer, PurchaseOrderSerializer,SalesOrderGetSerializer
+from zohoapi.models import (
+    Vendor,
+    InvoiceData,
+    OrdersAndProjectMapping,
+    SalesOrder,
+    PurchaseOrder,
+)
+from zohoapi.views import (
+    fetch_purchase_orders,
+    organization_id,
+    fetch_sales_persons,
+    filter_purchase_order_data,
+)
+from zohoapi.tasks import organization_id, fetch_sales_orders, purchase_orders_allowed
+from zohoapi.serializers import (
+    SalesOrderSerializer,
+    PurchaseOrderSerializer,
+    SalesOrderGetSerializer,
+    PurchaseOrderGetSerializer,
+)
 from courses.views import calculate_nps
 from api.permissions import IsInRoles
 
@@ -943,7 +960,14 @@ def get_batch_calendar(request, batch_id):
         facilitator_serializer = FacilitatorSerializerIsVendor(facilitator, many=True)
         if fetch_po == "True":
             try:
-                purchase_orders =filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data)  
+                purchase_orders = PurchaseOrderGetSerializer(
+                    PurchaseOrder.objects.filter(
+                        Q(created_time__year__gte=2024)
+                        | Q(purchaseorder_number__in=purchase_orders_allowed)
+                    ),
+                    many=True,
+                ).data
+                # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data)
                 # fetch_purchase_orders(organization_id)
                 for facilitator_item in facilitator_serializer.data:
                     expense = Expense.objects.filter(
@@ -4594,7 +4618,14 @@ class GetAllBatchesCoachDetails(APIView):
             batches = SchedularBatch.objects.filter(project__id=project_id)
             all_coaches = {}
             all_facilitators = {}
-            purchase_orders =  filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data)  
+            purchase_orders = PurchaseOrderGetSerializer(
+                PurchaseOrder.objects.filter(
+                    Q(created_time__year__gte=2024)
+                    | Q(purchaseorder_number__in=purchase_orders_allowed)
+                ),
+                many=True,
+            ).data
+            # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data)
             # fetch_purchase_orders(organization_id)
             for batch in batches:
                 coaches_data = []
@@ -5920,7 +5951,14 @@ def get_facilitators_and_pricing_for_project(request, project_id):
         ).distinct()
         facilitators_pricing = FacilitatorPricing.objects.filter(project__id=project_id)
         facilitators_data = []
-        purchase_orders =  filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data)  
+        purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed)
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data)
         # fetch_purchase_orders(organization_id)
         for facilitator in facilitators:
             serializer = FacilitatorBasicDetailsSerializer(facilitator)
@@ -5975,7 +6013,14 @@ def get_coaches_and_pricing_for_project(request, project_id):
             schedularbatch__project__id=project_id
         ).distinct()
         coaches_data = []
-        purchase_orders = filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data)   
+        purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed)
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data)
         # fetch_purchase_orders(organization_id)
         for coach in coaches:
             coaches_pricing = CoachPricing.objects.filter(
@@ -6268,7 +6313,15 @@ def get_expense_for_facilitator(request, batch_or_project_id, usertype, user_id)
             if expense.purchase_order_id:
                 po_ids.append(expense.purchase_order_id)
         po_ids_str = ",".join(po_ids)
-        purchase_orders = filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.filter(purchaseorder_id__in=po_ids), many=True).data)  
+        purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed),
+                Q(purchaseorder_id__in=po_ids),
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.filter(purchaseorder_id__in=po_ids), many=True).data)
         # fetch_purchase_orders(
         #     organization_id, f"&purchaseorder_ids={po_ids_str}"
         # )
@@ -6462,7 +6515,14 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
     try:
         purchase_order_set = set()
         all_purchase_orders = []
-        purchase_orders = filter_purchase_order_data(PurchaseOrderSerializer(PurchaseOrder.objects.all(), many=True).data) 
+        purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed)
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data)
         # fetch_purchase_orders(organization_id)
 
         if project_type == "SEEQ":
@@ -6567,53 +6627,88 @@ def get_project_and_handover(request):
 
 def get_formatted_handovers(handovers):
     try:
-        sales_order_ids_list = []
-        for handover in handovers:
-            for sales_order_id in handover.sales_order_ids:
-                sales_order_ids_list.append(sales_order_id)
-        sales_order_ids_str = ",".join(map(str, sales_order_ids_list))
         serializer = HandoverDetailsSerializerWithOrganisationName(handovers, many=True)
-        # Fetch sales orders for the given sales order IDs
-        if sales_order_ids_str:
-            sales_orders = SalesOrderGetSerializer(SalesOrder.objects.all(),many=True).data
-            # fetch_sales_orders(
-            #     organization_id, f"&salesorder_ids={sales_order_ids_str}"
-            # )
-            if not sales_orders:
-                raise Exception("Failed to get sales orders.")
-            # Create a dictionary to map sales order ID to sales person ID
-            sales_order_to_sales_person = {
-                sales_order["salesorder_id"]: sales_order["salesperson_name"]
-                for sales_order in sales_orders
-            }
-            # Fetch sales persons based on sales person IDs from sales orders
-            sales_persons = fetch_sales_persons(organization_id)
-            if not sales_persons:
-                raise Exception(
-                    "Failed to get sales persons."
-                )  # Map sales persons to handovers
-            for handover in serializer.data:
-                sales_order_ids = handover["sales_order_ids"]
-                salespersons = []
-                added_salespersons = (
-                    set()
-                )  # Keep track of added salespersons for each handover
-                for sales_order_id in sales_order_ids:
-                    sales_person_name = sales_order_to_sales_person.get(sales_order_id)
-                    if sales_person_name:
-                        # Check if sales person has already been added for this handover
-                        if sales_person_name not in added_salespersons:
-                            for person in sales_persons:
-                                if person["salesperson_name"] == sales_person_name:
-                                    salespersons.append(person)
-                                    added_salespersons.add(
-                                        sales_person_name
-                                    )  # Add the sales person to the set of added salespersons
-                handover["salespersons"] = salespersons
+        for handover in serializer.data:
+            sales_order_ids = handover["sales_order_ids"]
+            salesorders = SalesOrder.objects.filter(sales_order_id__in=sales_order_ids)
+            salespersons = []
+            added_salespersons = (
+                set()
+            )  # Keep track of added salespersons for each handover
+            for salesorder in salesorders:
+                sales_person_name = salesorder.salesperson_name
+                if sales_person_name:
+                    # Check if sales person has already been added for this handover
+                    if sales_person_name not in added_salespersons:
+                        sales = Sales.objects.filter(
+                            sales_person_id=salesorder.salesperson_id
+                        ).first()
+                        salespersons.append(
+                            {
+                                "salesperson_id": salesorder.salesperson_id,
+                                "salesperson_name": salesorder.salesperson_name,
+                                "salesperson_email": sales.email if sales else None,
+                            }
+                        )
+                        added_salespersons.add(
+                            sales_person_name
+                        )  # Add the sales person to the set of added salespersons
+            handover["salespersons"] = salespersons
         return serializer.data
     except Exception as e:
         print(str(e))
         raise Exception("Failed to get formatted handovers")
+
+
+# def get_formatted_handovers(handovers):
+#     try:
+#         sales_order_ids_list = []
+#         for handover in handovers:
+#             for sales_order_id in handover.sales_order_ids:
+#                 sales_order_ids_list.append(sales_order_id)
+#         sales_order_ids_str = ",".join(map(str, sales_order_ids_list))
+#         serializer = HandoverDetailsSerializerWithOrganisationName(handovers, many=True)
+#         # Fetch sales orders for the given sales order IDs
+#         if sales_order_ids_str:
+#             sales_orders = SalesOrderGetSerializer(SalesOrder.objects.all(),many=True).data
+#             # fetch_sales_orders(
+#             #     organization_id, f"&salesorder_ids={sales_order_ids_str}"
+#             # )
+#             if not sales_orders:
+#                 raise Exception("Failed to get sales orders.")
+#             # Create a dictionary to map sales order ID to sales person ID
+#             sales_order_to_sales_person = {
+#                 sales_order["salesorder_id"]: sales_order["salesperson_name"]
+#                 for sales_order in sales_orders
+#             }
+#             # Fetch sales persons based on sales person IDs from sales orders
+#             sales_persons = fetch_sales_persons(organization_id)
+#             if not sales_persons:
+#                 raise Exception(
+#                     "Failed to get sales persons."
+#                 )  # Map sales persons to handovers
+#             for handover in serializer.data:
+#                 sales_order_ids = handover["sales_order_ids"]
+#                 salespersons = []
+#                 added_salespersons = (
+#                     set()
+#                 )  # Keep track of added salespersons for each handover
+#                 for sales_order_id in sales_order_ids:
+#                     sales_person_name = sales_order_to_sales_person.get(sales_order_id)
+#                     if sales_person_name:
+#                         # Check if sales person has already been added for this handover
+#                         if sales_person_name not in added_salespersons:
+#                             for person in sales_persons:
+#                                 if person["salesperson_name"] == sales_person_name:
+#                                     salespersons.append(person)
+#                                     added_salespersons.add(
+#                                         sales_person_name
+#                                     )  # Add the sales person to the set of added salespersons
+#                 handover["salespersons"] = salespersons
+#         return serializer.data
+#     except Exception as e:
+#         print(str(e))
+#         raise Exception("Failed to get formatted handovers")
 
 
 @api_view(["GET"])
@@ -6680,7 +6775,7 @@ def send_mail_to_coaches(request):
         temp1 = template.template_data
 
         for coach_id in coaches:
-            coach = Coach.objects.get(id = int(coach_id))
+            coach = Coach.objects.get(id=int(coach_id))
             mail = coach.email
             email_message_learner = render_to_string(
                 "default.html",

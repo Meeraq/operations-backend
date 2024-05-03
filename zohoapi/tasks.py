@@ -204,9 +204,6 @@ def filter_purchase_order_data(purchase_orders):
     try:
         filtered_purchase_orders = []
         for order in purchase_orders:
-            order["cf_invoice_approver_s_email"] = order.get(
-                "custom_field_hash", {}
-            ).get("cf_invoice_approver_s_email", "")
             purchaseorder_number = order.get("purchaseorder_number", "").strip()
             mapping_instance = get_all_so_of_po(
                 order.get("purchaseorder_id", "").strip()
