@@ -124,6 +124,7 @@ def schedule_request_expiry_for_session():
             project__project_type="COD",
             project__is_project_structure=False,
             status="requested",
+            project__is_session_expiry=True
         )
 
         for session in sessions:

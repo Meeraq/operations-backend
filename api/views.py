@@ -1525,12 +1525,14 @@ def create_project_cass(request):
             total_credits_in_hours = float(request.data["total_credits"])
             total_credits_in_minutes = total_credits_in_hours * 60
         if not request.data["is_project_structure"]:
-            if request.data["request_expiry_time"]:
-                duration_of_each_session = request.data["duration_of_each_session"]
-                request_expiry_time_in_hours = float(
-                    request.data["request_expiry_time"]
-                )
-                request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
+            duration_of_each_session = request.data["duration_of_each_session"]
+            if request.data["is_session_expiry"]:
+                if request.data["request_expiry_time"]:
+                    
+                    request_expiry_time_in_hours = float(
+                        request.data["request_expiry_time"]
+                    )
+                    request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
 
         try:
             project = Project(
@@ -1581,6 +1583,7 @@ def create_project_cass(request):
                 total_credits=total_credits_in_minutes,
                 duration_of_each_session=duration_of_each_session,
                 request_expiry_time=request_expiry_time_in_minutes,
+                is_session_expiry = request.data["is_session_expiry"],
             )
 
             project.save()
@@ -8109,9 +8112,10 @@ def edit_project_caas(request, project_id):
             project.duration_of_each_session = request.data.get(
                 "duration_of_each_session", project.duration_of_each_session
             )
-            request_expiry_time_in_hours = int(request.data["request_expiry_time"])
-            request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
-            project.request_expiry_time = request_expiry_time_in_minutes
+            if not project.is_project_structure and project.is_expiry_time : 
+                request_expiry_time_in_hours = int(request.data["request_expiry_time"])
+                request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
+                project.request_expiry_time = request_expiry_time_in_minutes
             if project.total_credits != request.data.get("total_credits"):
                 project.credit_history.append(request.data.get("total_credits"))
 

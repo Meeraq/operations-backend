@@ -440,6 +440,7 @@ class Project(models.Model):
         max_digits=10, decimal_places=2, blank=True, null=True
     )
     credit_history = models.JSONField(default=list, blank=True)
+    is_session_expiry = models.BooleanField(blank=True, default=False)
 
     class Meta:
         ordering = ["-created_at"]
