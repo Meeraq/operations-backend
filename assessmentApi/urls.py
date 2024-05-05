@@ -322,5 +322,4 @@ urlpatterns = [
         "download-question-wise-excel/<int:project_id>/",
         DownloadQuestionWiseExcelForProject.as_view(),
     ),
-    
 ]

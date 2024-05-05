@@ -703,7 +703,7 @@ class AssessmentStatusChange(APIView):
                     and assessment.status == "ongoing"
                     and not assessment.initial_reminder
                 ):
-                    send_assessment_invitation_mail.delay(assessment.id)
+                    # send_assessment_invitation_mail.delay(assessment.id)
                     assessment.initial_reminder = True
                     assessment.save()
                     # for hr in assessment.hr.all():
@@ -991,6 +991,7 @@ class QuestionsForAssessment(APIView):
                     "self_question": question.self_question,
                     "label": question.label,
                     "rating_type": question.rating_type,
+                    "response_type": question.response_type,
                 }
 
                 if competency_name in competency_questions:
@@ -1735,7 +1736,7 @@ class StartAssessmentDataForObserver(APIView):
 
 
 class GetObserversUniqueIds(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr","learner")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr", "learner")]
 
     def get(self, request, assessment_id):
         try:
@@ -3036,7 +3037,7 @@ class DownloadWordReport(APIView):
 
 
 class GetLearnersUniqueId(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr", "facilitator")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr", "facilitator")]
 
     def get(self, request, assessment_id):
         try:
@@ -4261,7 +4262,9 @@ class DownloadParticipantResponseStatusData(APIView):
                 observers_df = pd.DataFrame(response_data["Observers"])
                 excel_writer = BytesIO()
                 with pd.ExcelWriter(excel_writer, engine="openpyxl") as writer:
-                    participants_df.to_excel(writer, sheet_name="Participants", index=False)
+                    participants_df.to_excel(
+                        writer, sheet_name="Participants", index=False
+                    )
                     observers_df.to_excel(writer, sheet_name="Observers", index=False)
                 excel_writer.seek(0)
                 response = HttpResponse(
@@ -4286,8 +4289,9 @@ class DownloadParticipantResponseStatusData(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+
 class GetParticipantReleasedResults(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request, assessment_id):
         try:
@@ -4310,7 +4314,7 @@ class GetParticipantReleasedResults(APIView):
 
 
 class GetAllAssessments(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request):
         pmo = Pmo.objects.filter(email=request.user.username).first()
@@ -4366,7 +4370,10 @@ class GetAllAssessments(APIView):
 
 
 class GetOneAssessment(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr", "learner", "facilitator")]
+    permission_classes = [
+        IsAuthenticated,
+        IsInRoles("pmo", "hr", "learner", "facilitator"),
+    ]
 
     def get(self, request, assessment_id):
         assessment = get_object_or_404(Assessment, id=assessment_id)
