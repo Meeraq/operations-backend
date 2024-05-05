@@ -1624,9 +1624,10 @@ def create_project_cass(request):
             return Response({"error": "Failed to create project."}, status=400)
 
         if project.project_type == "COD" and not project.is_project_structure:
-            total_sessions = math.floor(
-                project.total_credits / project.duration_of_each_session
-            )
+            if project.duration_of_each_session != 0:
+                total_sessions = math.floor(
+                    project.total_credits / project.duration_of_each_session
+                )
 
             project.project_structure = [
                 {
