@@ -139,8 +139,25 @@ def participant_details(request):
                     custom_field_hash__cf_ctt_batch=batch_user.batch.name,
                 )
                 payment_status = None
+                total = 0
+                invoiced_amount = 0
+                paid_amount = 0
+                currency_code = None
+                all_invoices_paid = []
+                for invoice in sales_order.invoices:
+                    invoiced_amount += invoice["total"]
 
+                    if invoice["status"] == "paid":
+                        paid_amount += invoice["total"]
+                        all_invoices_paid.append(True)
+                    else:
+                        all_invoices_paid.append(False)
+                pending_amount = invoiced_amount - paid_amount
+        
                 for sales_order in salesorders:
+                    total += sales_order.total
+                    currency_code = sales_order.currency_code
+
                     if sales_order.invoiced_status != "invoiced":
                         if sales_order.invoiced_status == "partially_invoiced":
                             payment_status = "Partially Invoiced"
@@ -162,6 +179,12 @@ def participant_details(request):
                     "program": program_name,
                     "assignment_completion": assignment_completion,
                     "total_assignments_in_batch": total_assignments_in_batch,
+                    "program_start_date": batch_user.batch.start_date,
+                    "total": total,
+                    "invoiced_amount": invoiced_amount,
+                    "pending_amount": pending_amount,
+                    "paid_amount": paid_amount,
+                    "currency_code": currency_code,
                     "certificate_status": certificate_status,
                     "organisation": organization_name,
                     "payment_status": payment_status,
