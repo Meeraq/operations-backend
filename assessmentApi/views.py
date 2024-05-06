@@ -202,7 +202,7 @@ def create_learner(learner_name, learner_email):
                     profile = Profile.objects.get(user=user)
                     learner_role, created = Role.objects.get_or_create(name="learner")
                     profile.roles.add(learner_role)
-                    learner.name = learner_name.strip()
+                    learner.name = learner_name.strip().title()
                     learner.save()
                     return learner
                 else:
@@ -227,7 +227,7 @@ def create_learner(learner_name, learner_email):
             profile.save()
             learner = Learner.objects.create(
                 user=profile,
-                name=learner_name,
+                name=learner_name.strip().title(),
                 email=learner_email,
             )
             return learner

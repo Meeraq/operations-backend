@@ -94,14 +94,14 @@ def create_learner(learner_name, learner_email, learner_phone=None):
             if phone:
                 learner = Learner.objects.create(
                     user=profile,
-                    name=learner_name,
+                    name=learner_name.strip().title(),
                     email=learner_email,
                     phone=phone,
                 )
             else:
                 learner = Learner.objects.create(
                     user=profile,
-                    name=learner_name,
+                    name=learner_name.strip().title(),
                     email=learner_email,
                 )
 

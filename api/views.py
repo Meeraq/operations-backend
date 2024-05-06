@@ -1125,7 +1125,7 @@ def approve_coach(request):
             [coach.email],
             "Congratulations! Your Coach Registration is Approved",
             {
-                "name": f"{coach.first_name} {coach.last_name}",
+                "name": f"{coach.first_name.strip().title()} {coach.last_name.strip().title()}",
             },
             [],
         )
@@ -1152,7 +1152,7 @@ def reject_coach(request, coach_id):
             [coach.email],
             "Meeraq | Profile Rejected",
             {
-                "name": f"{coach.first_name}",
+                "name": f"{coach.first_name.strip().title()}",
             },
             [],
         )
@@ -1205,7 +1205,7 @@ def approve_facilitator(request):
             [coach.email],
             "Congratulations! Your Facilitator Registration is Approved",
             {
-                "name": f"{coach.first_name} {coach.last_name}",
+                "name": f"{coach.first_name.strip().title()} {coach.last_name.strip().title()}",
             },
             [],
         )
@@ -1300,7 +1300,7 @@ def update_coach_profile(request, id):
     )
     serializer = CoachSerializer(coach, data=request.data, partial=True)
 
-    name = coach.first_name + " " + coach.last_name
+    name = coach.first_name.strip().title() + " " + coach.last_name.strip().title()
     add_contact_in_wati("coach", name, coach.phone)
 
     if serializer.is_valid():
@@ -1616,7 +1616,7 @@ def create_learners(learners_data):
                     learner = Learner.objects.filter(user__user=user).first()
 
                     if learner:
-                        learner.name = learner_data.get("name").strip()
+                        learner.name = learner_data.get("name").strip().title()
                         learner.phone = learner_data.get("phone")
                         try:
                             if learner_data.get("area_of_expertise", ""):
@@ -1662,7 +1662,7 @@ def create_learners(learners_data):
 
                 learner = Learner.objects.create(
                     user=profile,
-                    name=learner_data.get("name"),
+                    name=learner_data.get("name").strip().title(),
                     email=email,
                     phone=learner_data.get("phone"),
                 )
@@ -1941,8 +1941,8 @@ def add_coach(request):
             coach_user = Coach.objects.create(
                 user=profile,
                 room_id=room_id,
-                first_name=first_name,
-                last_name=last_name,
+                first_name=first_name.strip().title(),
+                last_name=last_name.strip().title(),
                 email=email,
                 phone=phone,
                 phone_country_code=phone_country_code,
@@ -7316,8 +7316,8 @@ class AddRegisteredCoach(APIView):
                 # Create the Coach User using the Profile
                 coach_user = Coach.objects.create(
                     user=profile,
-                    first_name=first_name,
-                    last_name=last_name,
+                    first_name=first_name.strip().title(),
+                    last_name=last_name.strip().title(),
                     email=email,
                     phone=phone,
                     phone_country_code=phone_country_code,
@@ -7437,8 +7437,8 @@ class AddRegisteredFacilitator(APIView):
                 # Create the Facilitator User using the Profile
                 facilitator_user = Facilitator.objects.create(
                     user=profile,
-                    first_name=first_name,
-                    last_name=last_name,
+                    first_name=first_name.strip().title(),
+                    last_name=last_name.strip().title(),
                     email=email,
                     phone=phone,
                     phone_country_code=phone_country_code,
