@@ -530,5 +530,9 @@ urlpatterns = [
         "get-avaliable-credits-without-project-structure/<int:engagement_id>/",
         views.get_available_credits_without_project_structure,
     ),
+     path(
+        "get-available-credits-of-all-cod-projects/",
+        views.get_available_credits_of_all_cod_projects,
+    ),
     
 ]

@@ -11048,9 +11048,11 @@ def get_all_po_of_project(request, project_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner")])
 def get_all_to_be_booked_sessions_for_coachee(request, learner_id):
-    sessions = SessionRequestCaas.objects.filter(learner__id=learner_id).order_by(
-        "order"
-    )
+    sessions = SessionRequestCaas.objects.filter(
+        learner__id=learner_id,
+        status="pending",
+        engagement__coach__isnull=False,
+    ).order_by("order")
     serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
@@ -11226,6 +11228,31 @@ def get_available_credits_without_project_structure(request, engagement_id):
                 "needed_credits_present": needed_credits_present,
             }
         )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to retrieve data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_available_credits_of_all_cod_projects(request):
+    try:
+        projects = Project.objects.filter(project_type="COD")
+        all_project_credit = {}
+        for project in projects:
+
+            engagement = Engagement.objects.filter(project=project).first()
+            available_credits = get_available_credit_for_project(
+                engagement.project.id, "both"
+            )
+
+            all_project_credit[project.id] = available_credits
+
+        return Response(all_project_credit)
 
     except Exception as e:
         print(str(e))
