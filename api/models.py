@@ -44,12 +44,48 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
         print(f"Error occurred while sending emails: {str(e)}")
 
 
+def get_user_name(user):
+    try:
+        roles = user.profile.roles.all()
+        if not roles.exists():
+            return "User"
+        role = roles.first().name
+        if role == "pmo":
+            return user.profile.pmo.name
+        elif role == "coach":
+            return user.profile.coach.first_name + " " + user.profile.coach.last_name
+        elif role == "vendor":
+            return user.profile.vendor.name
+        elif role == "hr":
+            return user.profile.hr.first_name + " " + user.profile.hr.last_name
+        elif role == "learner":
+            return user.profile.learner.name
+        elif role == "superadmin":
+            return user.profile.superadmin.name
+        elif role == "facilitator":
+            return (
+                user.profile.facilitator.first_name
+                + " "
+                + user.profile.facilitator.last_name
+            )
+        elif role == "finance":
+            return user.profile.finance.name
+        elif role == "sales":
+            return user.profile.sales.name
+        elif role == "ctt_pmo":
+            return user.profile.cttpmo.name
+        else:
+            return "User"
+    except Exception as e:
+        print(str(e))
+        return "User"
+
+
 @receiver(reset_password_token_created)
 def password_reset_token_created(
     sender, instance, reset_password_token, *args, **kwargs
 ):
     app_name = instance.request.data.get("app_name", "")
-    print("app", app_name)
     user = reset_password_token.user
     email_plaintext_message = "{}?token={}".format(
         reverse("password_reset:reset-password-request"), reset_password_token.key
@@ -90,7 +126,7 @@ def password_reset_token_created(
             )
             if projects.exists():
                 return None
-        name = "User"
+        name = get_user_name(user)
         if app_name == "assessment":
             link = f"{env('ASSESSMENT_APP_URL')}/create-password/{reset_password_token.key}"
         elif app_name == "zoho":

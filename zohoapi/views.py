@@ -1292,7 +1292,14 @@ def fetch_invoices_db(organization_id):
         all_invoices.append(
             {
                 **invoice,
-                "bill": {"status": matching_bill.status} if matching_bill else None,
+                "bill": (
+                    {
+                        "status": matching_bill.status,
+                        "currency_symbol": matching_bill.currency_symbol,
+                    }
+                    if matching_bill
+                    else None
+                ),
             }
         )
     return all_invoices
@@ -2192,20 +2199,24 @@ def get_coach_wise_finances(request):
                 if invoice["bill"] and invoice["bill"]["status"] == "paid"
                 else Decimal(0)
             )
-
+            currency_symbol = (
+                invoice["bill"]["currency_symbol"]
+                if invoice["bill"]
+                else invoice["currency_symbol"]
+            )
             if vendor_id in vendor_invoice_amounts:
                 vendor_invoice_amounts[vendor_id]["invoiced_amount"] += invoiced_amount
                 vendor_invoice_amounts[vendor_id]["paid_amount"] += paid_amount
                 vendor_invoice_amounts[vendor_id]["currency_symbol"] = (
-                    invoice["currency_symbol"]
+                    currency_symbol
                     if not vendor_invoice_amounts[vendor_id]["currency_symbol"]
                     else vendor_invoice_amounts[vendor_id]["currency_symbol"]
                 )
             else:
                 vendor_invoice_amounts[vendor_id] = {
-                    "invoiced_amount": 00,
+                    "invoiced_amount": invoiced_amount,
                     "paid_amount": paid_amount,
-                    "currency_symbol": invoice["currency_symbol"],
+                    "currency_symbol": currency_symbol,
                     "currency_code": invoice.get("currency_code", ""),
                 }
 
@@ -2215,32 +2226,18 @@ def get_coach_wise_finances(request):
             vendor_id = vendor.vendor_id
             res.append(
                 {
-                    "id": vendor.id,
-                    "vendor_id": vendor_id,
-                    "vendor_name": vendor.name,
-                    "po_amount": vendor_po_amounts.get(vendor_id, Decimal(0)),
-                    "invoiced_amount": vendor_invoice_amounts.get(
-                        vendor_id, {"invoiced_amount": Decimal(0)}
-                    )["invoiced_amount"],
-                    "paid_amount": vendor_invoice_amounts.get(
-                        vendor_id, {"paid_amount": Decimal(0)}
-                    )["paid_amount"],
-                    "currency_symbol": (
-                        vendor_invoice_amounts[vendor_id]["currency_symbol"]
-                        if vendor_id in vendor_invoice_amounts
-                        else None
-                    ),
-                    "currency_code": (
-                        vendor_invoice_amounts[vendor_id]["currency_code"]
-                        if vendor_id in vendor_invoice_amounts
-                        else None
-                    ),
-                    "pending_amount": vendor_invoice_amounts.get(
-                        vendor_id, {"invoiced_amount": Decimal(0)}
-                    )["invoiced_amount"]
-                    - vendor_invoice_amounts.get(
-                        vendor_id, {"paid_amount": Decimal(0)}
-                    )["paid_amount"],
+                "id": vendor.id,
+                "vendor_id": vendor_id,
+                "vendor_name": vendor.name,
+                "po_amount": round(vendor_po_amounts.get(vendor_id, Decimal(0)), 2),
+                "invoiced_amount": round(vendor_invoice_amounts.get(vendor_id, {"invoiced_amount": Decimal(0)})["invoiced_amount"], 2),
+                "paid_amount": round(vendor_invoice_amounts.get(vendor_id, {"paid_amount": Decimal(0)})["paid_amount"], 2),
+                "currency_symbol": vendor_invoice_amounts[vendor_id]["currency_symbol"] if vendor_id in vendor_invoice_amounts else None,
+                "currency_code": vendor_invoice_amounts[vendor_id]["currency_code"] if vendor_id in vendor_invoice_amounts else None,
+                "pending_amount": round(
+                    vendor_invoice_amounts.get(vendor_id, {"invoiced_amount": Decimal(0)})["invoiced_amount"] -
+                    vendor_invoice_amounts.get(vendor_id, {"paid_amount": Decimal(0)})["paid_amount"], 2
+                ),
                 }
             )
         return Response(res)
@@ -2300,20 +2297,25 @@ def get_facilitator_wise_finances(request):
                 if invoice["bill"] and invoice["bill"]["status"] == "paid"
                 else Decimal(0)
             )
+            currency_symbol = (
+                invoice["bill"]["currency_symbol"]
+                if invoice["bill"]
+                else invoice["currency_symbol"]
+            )
 
             if vendor_id in vendor_invoice_amounts:
                 vendor_invoice_amounts[vendor_id]["invoiced_amount"] += invoiced_amount
                 vendor_invoice_amounts[vendor_id]["paid_amount"] += paid_amount
                 vendor_invoice_amounts[vendor_id]["currency_symbol"] = (
-                    invoice["currency_symbol"]
+                    currency_symbol
                     if not vendor_invoice_amounts[vendor_id]["currency_symbol"]
                     else vendor_invoice_amounts[vendor_id]["currency_symbol"]
                 )
             else:
                 vendor_invoice_amounts[vendor_id] = {
-                    "invoiced_amount": 00,
+                    "invoiced_amount": invoiced_amount,
                     "paid_amount": paid_amount,
-                    "currency_symbol": invoice["currency_symbol"],
+                    "currency_symbol": currency_symbol,
                     "currency_code": invoice.get("currency_code", ""),
                 }
 
@@ -2326,29 +2328,15 @@ def get_facilitator_wise_finances(request):
                     "id": vendor.id,
                     "vendor_id": vendor_id,
                     "vendor_name": vendor.name,
-                    "po_amount": vendor_po_amounts.get(vendor_id, Decimal(0)),
-                    "invoiced_amount": vendor_invoice_amounts.get(
-                        vendor_id, {"invoiced_amount": Decimal(0)}
-                    )["invoiced_amount"],
-                    "paid_amount": vendor_invoice_amounts.get(
-                        vendor_id, {"paid_amount": Decimal(0)}
-                    )["paid_amount"],
-                    "currency_symbol": (
-                        vendor_invoice_amounts[vendor_id]["currency_symbol"]
-                        if vendor_id in vendor_invoice_amounts
-                        else None
+                    "po_amount": round(vendor_po_amounts.get(vendor_id, Decimal(0)), 2),
+                    "invoiced_amount": round(vendor_invoice_amounts.get(vendor_id, {"invoiced_amount": Decimal(0)})["invoiced_amount"], 2),
+                    "paid_amount": round(vendor_invoice_amounts.get(vendor_id, {"paid_amount": Decimal(0)})["paid_amount"], 2),
+                    "currency_symbol": vendor_invoice_amounts[vendor_id]["currency_symbol"] if vendor_id in vendor_invoice_amounts else None,
+                    "currency_code": vendor_invoice_amounts[vendor_id]["currency_code"] if vendor_id in vendor_invoice_amounts else None,
+                    "pending_amount": round(
+                        vendor_invoice_amounts.get(vendor_id, {"invoiced_amount": Decimal(0)})["invoiced_amount"] -
+                        vendor_invoice_amounts.get(vendor_id, {"paid_amount": Decimal(0)})["paid_amount"], 2
                     ),
-                    "currency_code": (
-                        vendor_invoice_amounts[vendor_id]["currency_code"]
-                        if vendor_id in vendor_invoice_amounts
-                        else None
-                    ),
-                    "pending_amount": vendor_invoice_amounts.get(
-                        vendor_id, {"invoiced_amount": Decimal(0)}
-                    )["invoiced_amount"]
-                    - vendor_invoice_amounts.get(
-                        vendor_id, {"paid_amount": Decimal(0)}
-                    )["paid_amount"],
                 }
             )
         return Response(res)
