@@ -897,6 +897,22 @@ def credits_needed_for_an_engagement(engagement):
         return None
 
 
+def credits_needed_based_for_project_structure(project):
+    try:
+        total_duration = 0
+        for session in project.project_structure:
+            if session["billable"]:
+                total_duration += (
+                    session["session_duration"] * session["no_of_sessions"]
+                )
+
+        return total_duration
+
+    except Exception as e:
+        print(str(e))
+        return None
+
+
 SESSION_TYPE_VALUE = {
     "chemistry": "Chemistry",
     "tripartite": "Tripartite",
@@ -1528,7 +1544,7 @@ def create_project_cass(request):
             duration_of_each_session = request.data["duration_of_each_session"]
             if request.data["is_session_expiry"]:
                 if request.data["request_expiry_time"]:
-                    
+
                     request_expiry_time_in_hours = float(
                         request.data["request_expiry_time"]
                     )
@@ -1583,7 +1599,7 @@ def create_project_cass(request):
                 total_credits=total_credits_in_minutes,
                 duration_of_each_session=duration_of_each_session,
                 request_expiry_time=request_expiry_time_in_minutes,
-                is_session_expiry = request.data["is_session_expiry"],
+                is_session_expiry=request.data["is_session_expiry"],
             )
 
             project.save()
@@ -3603,7 +3619,9 @@ def add_learner_to_project(request):
         return Response({"error": "Project does not exist."}, status=404)
     try:
         learners = create_learners(request.data["learners"])
+
         for learner in learners:
+
             create_engagement(learner, project)
             try:
                 tasks = Task.objects.filter(task="add_coachee", caas_project=project)
@@ -8113,7 +8131,7 @@ def edit_project_caas(request, project_id):
             project.duration_of_each_session = request.data.get(
                 "duration_of_each_session", project.duration_of_each_session
             )
-            if not project.is_project_structure and project.is_expiry_time : 
+            if not project.is_project_structure and project.is_expiry_time:
                 request_expiry_time_in_hours = int(request.data["request_expiry_time"])
                 request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
                 project.request_expiry_time = request_expiry_time_in_minutes
@@ -11076,6 +11094,32 @@ def create_engagement_of_learner(request):
                 )
 
         try:
+            available_credits = get_available_credit_for_project(
+                engagement.project.id, "both"
+            )
+
+            total_durations = credits_needed_for_an_engagement(engagement)
+            needed_credits_present = True
+            if total_durations is not None and available_credits is not None:
+                needed_credits_present = (
+                    available_credits >= total_durations
+                    if total_durations != 0
+                    else False
+                )
+
+            if not needed_credits_present:
+                for hr in engagement.project.hr.all():
+                    send_mail_templates(
+                        "hr_emails/engagement_created_with_less_credit.html",
+                        [hr.email],
+                        "Meeraq | Insufficient Credits Remaining",
+                        {
+                            "name": hr.first_name.strip().title(),
+                            "learner_name": engagement.learner.name.strip().title(),
+                            "project_name": engagement.project.name.title(),
+                        },
+                        [],
+                    )
             create_task(
                 {
                     "task": "select_a_coach",
