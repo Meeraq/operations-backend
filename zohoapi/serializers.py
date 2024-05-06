@@ -171,9 +171,11 @@ class PurchaseOrderGetSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "cf_invoice_approver_s_email",
+            "purchaseorder_id",
             "purchaseorder_number",
             "date",
-            "created_time" "reference_number",
+            "created_time",
+            "reference_number",
             "status",
             "billed_status",
             "vendor_name",
