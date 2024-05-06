@@ -11,6 +11,9 @@ from zohoapi.serializers import PurchaseOrderSerializer, PurchaseOrderGetSeriali
 from .models import Engagement, SessionRequestCaas
 from django.utils import timezone
 from django.db.models import Q
+from datetime import datetime, timedelta
+from django_celery_beat.models import PeriodicTask, ClockedSchedule
+import uuid
 
 
 def get_start_and_end_of_current_month():
@@ -85,3 +88,71 @@ def creake_book_session_remind_coach_task_for_pmo_on_7th_of_month():
                     7,
                 )
     return None
+
+
+@shared_task
+def archive_request_if_expired(session_id):
+    try:
+        current_time = timezone.now()
+        session = SessionRequestCaas.objects.get(id=session_id)
+        if (
+            session.requested_at is not None
+            and session.project.request_expiry_time is not None
+        ):
+
+            expiry_time_minutes = round(session.project.request_expiry_time)
+
+            expiry_datetime = session.requested_at + timedelta(
+                minutes=expiry_time_minutes
+            )
+
+            if expiry_datetime.date() == current_time.date():
+                session.is_archive = True
+                session.save()
+
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def schedule_request_expiry_for_session():
+    try:
+
+        current_time = timezone.now()
+
+        sessions = SessionRequestCaas.objects.filter(
+            project__project_type="COD",
+            project__is_project_structure=False,
+            status="requested",
+            project__is_session_expiry=True
+        )
+
+        for session in sessions:
+
+            if (
+                session.requested_at is not None
+                and session.project.request_expiry_time is not None
+            ):
+
+                expiry_time_minutes = round(session.project.request_expiry_time)
+
+                expiry_datetime = session.requested_at + timedelta(
+                    minutes=expiry_time_minutes
+                )
+
+                if expiry_datetime.date() == current_time.date():
+
+                    clocked_schedule = ClockedSchedule.objects.create(
+                        clocked_time=expiry_datetime
+                    )
+                    periodic_task = PeriodicTask.objects.create(
+                        name=uuid.uuid1(),
+                        task="api.tasks.archive_request_if_expired",
+                        args=[session.id],
+                        clocked=clocked_schedule,
+                        one_off=True,
+                    )
+                    print(session)
+
+    except Exception as e:
+        print(str(e))

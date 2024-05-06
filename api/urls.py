@@ -32,8 +32,12 @@ urlpatterns = [
     path("pmos/", views.create_pmo),
     path("coaches/all/", views.get_coaches),
     path("coaches/approve/", views.approve_coach),
-    path('reject-coach/<int:coach_id>/', views.reject_coach, name='reject_coach'),
-    path('reject-facilitator/<int:facilitator_id>/', views.reject_facilitator, name='reject_facilitator'),
+    path("reject-coach/<int:coach_id>/", views.reject_coach, name="reject_coach"),
+    path(
+        "reject-facilitator/<int:facilitator_id>/",
+        views.reject_facilitator,
+        name="reject_facilitator",
+    ),
     path("facilitators/approve/", views.approve_facilitator),
     path(
         "password_reset/",
@@ -97,6 +101,10 @@ urlpatterns = [
     path(
         "get-chemistry-session-data/<int:project_id>/", views.get_chemistry_session_data
     ),
+    path(
+        "get-chemistry-session-data-for-engagement/<int:engagement_id>/",
+        views.get_chemistry_session_data_for_engagement,
+    ),
     path("mark_as_incomplete/", views.mark_as_incomplete),
     path("send_project_strure_to_hr/", views.send_project_strure_to_hr),
     path("send_reject_reason/", views.send_reject_reason),
@@ -127,10 +135,14 @@ urlpatterns = [
     path("session/reschedule-request/<str:session_id>/", views.request_reschedule),
     path("session/reschedule/", views.reschedule_session),
     path("projects/engagement/all/<int:project_id>/", views.get_engagement_in_projects),
-    path("hr/engagement/all/<int:user_id>/", views.get_engagements_of_hr),  
+    path("hr/engagement/all/<int:user_id>/", views.get_engagements_of_hr),
     path(
         "engagement/<int:project_id>/<int:learner_id>/",
         views.get_learner_engagement_of_project,
+    ),
+    path(
+        "engagement-detail/<int:engagement_id>/",
+        views.get_engagement_detail,
     ),
     path("engagement/learner/<int:learner_id>/", views.get_learners_engagement),
     path(
@@ -176,10 +188,19 @@ urlpatterns = [
         views.request_chemistry_session,
     ),
     path(
+        "session/request/chemistry/engagement/<int:engagement_id>/",
+        views.request_chemistry_session_for_engagement,
+    ),
+    path(
         "session/<int:project_id>/<int:learner_id>/",
         views.get_learner_sessions_in_project,
     ),
+    path(
+        "engagement-session/<int:engagement_id>/",
+        views.get_learner_sessions_in_project_from_engagement,
+    ),
     path("session/request/<int:session_id>/<int:coach_id>/", views.request_session),
+    path("session/request/without-project-structure/<int:engagement_id>/", views.request_session_without_project_structure),
     path("session/reschedule/<int:session_id>/", views.reschedule_session_of_coachee),
     path("sessions/edit/<int:session_id>/", views.edit_session_availability),
     path("goals/", views.create_goal),
@@ -415,8 +436,7 @@ urlpatterns = [
     #     views.delete_pmo,
     # ),
     path("edit-pmo/", views.edit_pmo),
-        path("ctt-pmo/edit/<int:ctt_pmo_id>/", views.edit_ctt_pmo),
-
+    path("ctt-pmo/edit/<int:ctt_pmo_id>/", views.edit_ctt_pmo),
     path(
         "get-coaches-in-project-is-vendor/<int:project_id>/",
         views.get_coaches_in_project_is_vendor,
@@ -446,7 +466,7 @@ urlpatterns = [
         "get-table-hide-columns/<str:table_name>/",
         views.get_table_hide_columns,
     ),
-     path(
+    path(
         "edit-remark/",
         views.edit_remark,
     ),
@@ -494,4 +514,25 @@ urlpatterns = [
         "get-engagement-of-a-coachee/<int:learner_id>/",
         views.get_engagement_of_a_coachee,
     ),
+    path(
+        "create-new-engagement/",
+        views.create_engagement_of_learner,
+    ),
+    path(
+        "get-avaliable-credits/<int:engagement_id>/",
+        views.get_available_credits,
+    ),
+    path(
+        "get-avaliable-credits-of-project/<int:project_id>/",
+        views.get_available_credit_of_project,
+    ),
+    path(
+        "get-avaliable-credits-without-project-structure/<int:engagement_id>/",
+        views.get_available_credits_without_project_structure,
+    ),
+     path(
+        "get-available-credits-of-all-cod-projects/",
+        views.get_available_credits_of_all_cod_projects,
+    ),
+    
 ]
