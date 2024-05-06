@@ -1599,7 +1599,7 @@ def create_project_cass(request):
                 total_credits=total_credits_in_minutes,
                 duration_of_each_session=duration_of_each_session,
                 request_expiry_time=request_expiry_time_in_minutes,
-                is_session_expiry=request.data["is_session_expiry"],
+                is_session_expiry=False if request.data["is_project_structure"] else request.data["is_session_expiry"],
             )
 
             project.save()
