@@ -218,10 +218,16 @@ class HandoverDetailsSerializer(serializers.ModelSerializer):
 
 class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer):
     organisation_name = serializers.SerializerMethodField()
+    pmo_name = serializers.SerializerMethodField()
 
     def get_organisation_name(self, obj):
         if obj.organisation:
             return obj.organisation.name
+        return None
+    
+    def get_pmo_name(self, obj):
+        if obj.pmo:
+            return obj.pmo.name
         return None
 
     class Meta:

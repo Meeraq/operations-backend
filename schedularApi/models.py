@@ -323,6 +323,7 @@ class HandoverDetails(models.Model):
     )
     sales = models.ForeignKey(Sales, on_delete=models.SET_NULL, blank=True, null=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
+    pmo = models.ForeignKey(Pmo, null=True, on_delete=models.SET_NULL)
     hr = models.ManyToManyField(HR, blank=True)
     project_type = models.CharField(
         max_length=255, choices=PROJECT_TYPE_CHOICES, blank=True, null=True
@@ -361,7 +362,6 @@ class HandoverDetails(models.Model):
     is_accepted = models.BooleanField(default=False, blank=True)
     gm_sheet = models.FileField(upload_to="gm_sheets/", blank=True, null=True)
     proposals = models.FileField(upload_to="proposals/", blank=True, null=True)
-
     class Meta:
         verbose_name = "Handover Detail"
         verbose_name_plural = "Handover Details"
