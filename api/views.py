@@ -8434,7 +8434,7 @@ def create_project_contract(request):
 
 
 class ProjectContractAPIView(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo", "learner")]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")]
 
     def get(self, request, format=None):
         contracts = ProjectContract.objects.all()
