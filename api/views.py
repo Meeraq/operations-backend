@@ -1537,7 +1537,7 @@ def create_project_cass(request):
         total_credits_in_minutes = 0
         request_expiry_time_in_minutes = 0
         duration_of_each_session = 0
-        if request.data["total_credits"]:
+        if "total_credits" in request.data and request.data["total_credits"]:
             total_credits_in_hours = float(request.data["total_credits"])
             total_credits_in_minutes = total_credits_in_hours * 60
         if not request.data["is_project_structure"]:
