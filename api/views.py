@@ -1882,9 +1882,9 @@ def add_coach(request):
     education_pic = request.data.get("education_pic", None)
     educational_qualification = json.loads(request.data["educational_qualification"])
     education_upload_file = request.data.get("education_upload_file", None)
-    is_coach = request.data.get("is_coach", False)
-    is_mentor = request.data.get("is_mentor", False)
-    is_consultant = request.data.get("is_consultant", False)
+    is_coach = json.loads(request.data.get("is_coach", False))
+    is_mentor = json.loads(request.data.get("is_mentor", False))
+    is_consultant = json.loads(request.data.get("is_consultant", False))
 
     # Check if required data is provided
     if not all(
