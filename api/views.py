@@ -1872,6 +1872,7 @@ def add_project_update(request, project_id):
     return Response(serializer.errors, status=400)
 
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "pmo")])
 def get_projects_of_learner(request, learner_id):
@@ -8136,10 +8137,14 @@ def edit_project_caas(request, project_id):
             total_credits_in_hours = int(request.data.get("total_credits"))
             total_credits_in_minutes = total_credits_in_hours * 60
             project.total_credits = total_credits_in_minutes
-            project.duration_of_each_session = request.data.get(
-                "duration_of_each_session", project.duration_of_each_session
-            )
-            if not project.is_project_structure and project.is_expiry_time:
+            if not project.is_project_structure:
+                project.duration_of_each_session = request.data.get(
+                    "duration_of_each_session", project.duration_of_each_session
+                )
+            if not project.is_project_structure and request.data["is_session_expiry"]:
+                project.is_session_expiry = request.data.get(
+                    "is_session_expiry", project.is_session_expiry
+                )
                 request_expiry_time_in_hours = int(request.data["request_expiry_time"])
                 request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
                 project.request_expiry_time = request_expiry_time_in_minutes
