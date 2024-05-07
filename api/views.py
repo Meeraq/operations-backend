@@ -1938,6 +1938,17 @@ def get_ongoing_projects_of_hr(request, hr_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("hr")])
+def get_schedular_projects_of_hr(request, hr_id):
+
+    schedular_projects = SchedularProject.objects.filter(hr__id=hr_id)
+    serializer = SchedularProjectSerializer(
+        schedular_projects, many=True
+    )
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
 @permission_classes(
     [IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr", "sales")]
 )

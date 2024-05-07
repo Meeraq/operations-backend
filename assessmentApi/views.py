@@ -1735,7 +1735,7 @@ class StartAssessmentDataForObserver(APIView):
 
 
 class GetObserversUniqueIds(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr","learner")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr", "learner")]
 
     def get(self, request, assessment_id):
         try:
@@ -3036,7 +3036,7 @@ class DownloadWordReport(APIView):
 
 
 class GetLearnersUniqueId(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr", "facilitator")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr", "facilitator")]
 
     def get(self, request, assessment_id):
         try:
@@ -4261,7 +4261,9 @@ class DownloadParticipantResponseStatusData(APIView):
                 observers_df = pd.DataFrame(response_data["Observers"])
                 excel_writer = BytesIO()
                 with pd.ExcelWriter(excel_writer, engine="openpyxl") as writer:
-                    participants_df.to_excel(writer, sheet_name="Participants", index=False)
+                    participants_df.to_excel(
+                        writer, sheet_name="Participants", index=False
+                    )
                     observers_df.to_excel(writer, sheet_name="Observers", index=False)
                 excel_writer.seek(0)
                 response = HttpResponse(
@@ -4286,8 +4288,9 @@ class DownloadParticipantResponseStatusData(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+
 class GetParticipantReleasedResults(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request, assessment_id):
         try:
@@ -4310,11 +4313,17 @@ class GetParticipantReleasedResults(APIView):
 
 
 class GetAllAssessments(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","hr")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
 
     def get(self, request):
         pmo = Pmo.objects.filter(email=request.user.username).first()
-        if pmo and pmo.sub_role == "junior_pmo":
+        hr_id = request.query_params.get("hr")
+        assessments = []
+        if hr_id:
+            assessments = Assessment.objects.filter(
+                Q(hr__id=int(hr_id)), Q(status="ongoing") | Q(status="completed")
+            )
+        elif pmo and pmo.sub_role == "junior_pmo":
             assessments = Assessment.objects.filter(
                 assessment_modal__lesson__course__batch__project__junior_pmo=pmo
             )
@@ -4366,7 +4375,10 @@ class GetAllAssessments(APIView):
 
 
 class GetOneAssessment(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr", "learner", "facilitator")]
+    permission_classes = [
+        IsAuthenticated,
+        IsInRoles("pmo", "hr", "learner", "facilitator"),
+    ]
 
     def get(self, request, assessment_id):
         assessment = get_object_or_404(Assessment, id=assessment_id)
@@ -4405,6 +4417,7 @@ class GetAssessmentsOfHr(APIView):
                 "total_responses_count": total_responses_count,
                 "created_at": assessment.created_at,
             }
+
             assessment_list.append(assessment_data)
 
         return Response(assessment_list)

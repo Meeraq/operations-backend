@@ -539,4 +539,9 @@ urlpatterns = [
         "get-available-credits-of-all-cod-projects/",
         views.get_available_credits_of_all_cod_projects,
     ),
+    path(
+        "get-schedular-projects-of-hr/<int:hr_id>/",
+        views.get_schedular_projects_of_hr,
+    ),
+    
 ]
