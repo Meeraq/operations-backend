@@ -91,7 +91,8 @@ from zohoapi.tasks import (
     organization_id,
     get_access_token,
     base_url,
-    filter_purchase_order_data, purchase_orders_allowed,
+    filter_purchase_order_data,
+    purchase_orders_allowed,
     purchase_orders_allowed,
 )
 from .permissions import IsInRoles
@@ -1599,7 +1600,11 @@ def create_project_cass(request):
                 total_credits=total_credits_in_minutes,
                 duration_of_each_session=duration_of_each_session,
                 request_expiry_time=request_expiry_time_in_minutes,
-                is_session_expiry=False if request.data["is_project_structure"] else request.data["is_session_expiry"],
+                is_session_expiry=(
+                    False
+                    if request.data["is_project_structure"]
+                    else request.data["is_session_expiry"]
+                ),
             )
 
             project.save()
@@ -4767,12 +4772,13 @@ def get_session_requests_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
-            Q(confirmed_availability=None) & ~Q(status="pending")
+            Q(confirmed_availability=None) & ~Q(status="pending") & ~Q(status="expired")
         )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
             Q(confirmed_availability=None)
             & Q(learner__id=user_id)
+            & ~Q(status="expired")
             & ~Q(session_type="chemistry")
             & ~Q(status="pending")
         )
@@ -4796,7 +4802,7 @@ def get_session_requests_of_user(request, user_type, user_id):
         if project_id:
             session_requests = SessionRequestCaas.objects.filter(
                 Q(confirmed_availability=None)
-                & Q(is_archive=False)
+                & ~Q(status="expired")
                 & Q(project__id=int(project_id))
                 & ~Q(status="pending")
                 & (
@@ -4819,7 +4825,7 @@ def get_session_requests_of_user(request, user_type, user_id):
 
             session_requests = SessionRequestCaas.objects.filter(
                 Q(confirmed_availability=None)
-                & Q(is_archive=False)
+                & ~Q(status="expired")
                 & ~Q(status="pending")
                 & (
                     Q(coach__id=user_id)
@@ -4841,6 +4847,7 @@ def get_session_requests_of_user(request, user_type, user_id):
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
             Q(confirmed_availability=None)
+            & ~Q(status="expired")
             & Q(project__hr__id=user_id)
             & ~Q(status="pending")
         )
@@ -5583,6 +5590,7 @@ def edit_session_availability(request, session_id):
         if session.is_booked:
             return Response({"message": "Session edit failed."}, status=401)
         session.availibility.set(time_arr)
+        session.status = "requested"
         session.save()
         if existing_calendar_invite:
             existing_calendar_invite.caas_session = session
