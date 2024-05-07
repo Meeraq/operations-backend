@@ -107,7 +107,7 @@ def archive_request_if_expired(session_id):
             )
 
             if expiry_datetime.date() == current_time.date():
-                session.is_archive = True
+                session.status = "expired"
                 session.save()
 
     except Exception as e:
