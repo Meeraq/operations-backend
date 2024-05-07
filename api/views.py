@@ -1211,7 +1211,7 @@ def reject_coach(request, coach_id):
     try:
         with transaction.atomic():
             coach = Coach.objects.get(id=coach_id)
-            
+
             update_data = {
                 "pmo": request.data.get("pmo", ""),
                 "coach": coach.id,
@@ -10785,14 +10785,18 @@ def get_facilitator_summary_data(request, facilitator_id):
 @permission_classes([IsAuthenticated])
 def hide_columns(request):
     try:
+        user_id = request.data.get("user_id")
         hidden_columns = request.data.get("hidden_columns")
         table_name = request.data.get("table_name")
+
+        user = User.objects.get(id=user_id)
+
         table_hidden_column, created = TableHiddenColumn.objects.get_or_create(
-            table_name=table_name
+            table_name=table_name, user=user
         )
         table_hidden_column.hidden_columns = hidden_columns
         table_hidden_column.save()
-        return Response(status=200)
+        return Response(table_hidden_column.hidden_columns)
 
     except Exception as e:
         print(str(e))
@@ -10804,10 +10808,12 @@ def hide_columns(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_table_hide_columns(request, table_name):
+def get_table_hide_columns(request, table_name, user_id):
     try:
 
-        table_hidden_column = TableHiddenColumn.objects.get(table_name=table_name)
+        table_hidden_column = TableHiddenColumn.objects.get(
+            table_name=table_name, user__id=user_id
+        )
 
         return Response(table_hidden_column.hidden_columns)
 

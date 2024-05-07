@@ -1015,7 +1015,7 @@ class Task(models.Model):
 
 
 class TableHiddenColumn(models.Model):
-
+    user = models.ForeignKey(User, on_delete=models.CASCADE,blank=True,null=True)
     table_name = models.CharField(max_length=225, blank=True)
     hidden_columns = models.JSONField(default=list, blank=True)
     created_at = models.DateField(auto_now_add=True)

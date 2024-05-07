@@ -468,7 +468,7 @@ urlpatterns = [
         views.hide_columns,
     ),
     path(
-        "get-table-hide-columns/<str:table_name>/",
+        "get-table-hide-columns/<str:table_name>/<int:user_id>/",
         views.get_table_hide_columns,
     ),
     path(
