@@ -109,7 +109,7 @@ import environ
 import uuid
 import logging
 from rest_framework.permissions import AllowAny, IsAuthenticated
-
+from django.http import JsonResponse
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -3619,6 +3619,7 @@ def duplicate_nudge(request, nudge_id, batch_id):
             order=order,
             batch=batch,
             is_sent=False,  # Assuming the duplicated nudge is not sent yet
+            unique_id=str(uuid.uuid4())
         )
         return Response({"message": "Nudge duplicated successfully."})
     except Nudge.DoesNotExist:
@@ -4092,3 +4093,42 @@ def update_nudge_status(request, nudge_id):
     nudge.save()
     nudge_serializer = NudgeSerializer(nudge)
     return Response(nudge_serializer.data)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
+def get_all_nudges_for_that_learner(request, learner_id):
+    try:
+        nudges = Nudge.objects.filter(batch__learners__id=learner_id)
+        serializer = NudgeSerializer(nudges, many=True)
+        return Response({"nudges": serializer.data})
+    except Nudge.DoesNotExist:
+        return JsonResponse({'error': 'No nudges found for the specified learner'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_nudge_data(request, nudge_id):
+    try:
+        nudge = Nudge.objects.get(unique_id=nudge_id)
+        serializer = NudgeSerializer(nudge)
+        return Response({"nudge": serializer.data})
+    except Nudge.DoesNotExist:
+        return JsonResponse({'error': 'Nudge not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+    
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_completion_nudge_status(request, nudge_id):
+    try:
+        nudge = Nudge.objects.get(pk=nudge_id)
+    except Nudge.DoesNotExist:
+        return Response({"error": "Nudge does not exist"}, status=status.HTTP_404_NOT_FOUND)
+    learner_id = request.data.get('learner_id',None)
+    if learner_id:
+        existing_learner_ids = set(nudge.learner_ids)
+        existing_learner_ids.add(int(learner_id))
+        nudge.learner_ids = list(existing_learner_ids)
+    nudge.save()
+    return Response({"message": f"Nudge {nudge_id} completion status updated successfully"}, status=status.HTTP_200_OK)

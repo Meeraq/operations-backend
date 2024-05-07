@@ -409,4 +409,16 @@ urlpatterns = [
         "nudges/switch/<int:nudge_id>/",
         views.update_nudge_status,
     ),
+    path(
+        "get-all-nudges-for-that-learner/<int:learner_id>/",
+        views.get_all_nudges_for_that_learner,
+    ),
+    path(
+        "get-nudge-data/<str:nudge_id>/",
+        views.get_nudge_data,
+    ),
+    path(
+        "update-completion-nudge-status/<int:nudge_id>/",
+        views.update_completion_nudge_status,
+    ),
 ]

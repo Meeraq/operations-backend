@@ -2585,3 +2585,48 @@ def send_live_session_whatsapp_reminder_same_day_morning_for_facilitator():
     except Exception as e:
         print(str(e))
         pass
+
+
+@shared_task
+def send_nudge_reminder_on_trigger_date_at_6pm():
+    print("hello")
+    today = datetime.now().date()
+    print("to",today)
+    nudges = Nudge.objects.filter(trigger_date=today)
+    print("nudges",nudges)
+    for nudge in nudges:
+        learners = nudge.batch.learners.all()
+        for learner in learners:
+            print("learner",learner)
+            if learner.id not in nudge.learner_ids:
+                nudge_id=nudge.unique_id
+                send_whatsapp_message_template(
+                    learner.phone,
+                    {
+                        "broadcast_name": "send_nudge_reminder_on_trigger_date_at_6pm",
+                        "parameters": [
+                            {
+                                "name": "learner_name",
+                                "value": learner.name,
+                            },
+                            {
+                                "name": "nudge_name",
+                                "value": nudge.name,
+                            },
+                            {
+                                "name": "nudge_id",
+                                "value": nudge_id,
+                            },
+                        ],
+                        "template_name": "nudge_reminder_at6",
+                    },
+                )
+                # send_mail_templates(
+                #     "/pmo_approves_profile.html",
+                #     [learner.email],
+                #     "Congratulations! Your Facilitator Registration is Approved",
+                #     {
+                #         "name": f"{coach.first_name} {coach.last_name}",
+                #     },
+                #     [],
+                # )
