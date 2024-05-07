@@ -3053,39 +3053,40 @@ def create_sales_order(request):
                 ctt = True
             else:
                 ctt = False
-            send_mail_templates(
-                "so_emails/sales_order_mail.html",
-                (
-                    ["finance@coachtotransformation.com"]
-                    if ctt
-                    else [
-                        "finance@coachtotransformation.com",
-                        "madhuri@coachtotransformation.com",
-                        "nisha@coachtotransformation.com",
-                        "pmotraining@meeraq.com",
-                        "pmocoaching@meeraq.com",
-                    ]
-                ),
-                ["New Sales Order Created"],
-                {
-                    "so_number": so_number,
-                    "customer_name": customer_name,
-                    "salesperson": salesperson_name,
-                    "project_type": "CTT" if ctt else project_type,
-                },
-                (
-                    [
-                        "rajat@coachtotransformation.com",
-                        "Sujata@coachtotransformation.com",
-                        "arvind@coachtotransformation.com",
-                    ]
-                    if ctt
-                    else [
-                        "rajat@coachtotransformation.com",
-                        "Sujata@coachtotransformation.com",
-                    ]
-                ),
-            )
+            if env("ENVIRONMENT") == "PRODUCTION":
+                send_mail_templates(
+                    "so_emails/sales_order_mail.html",
+                    (
+                        ["finance@coachtotransformation.com"]
+                        if ctt
+                        else [
+                            "finance@coachtotransformation.com",
+                            "madhuri@coachtotransformation.com",
+                            "nisha@coachtotransformation.com",
+                            "pmotraining@meeraq.com",
+                            "pmocoaching@meeraq.com",
+                        ]
+                    ),
+                    ["New Sales Order Created"],
+                    {
+                        "so_number": so_number,
+                        "customer_name": customer_name,
+                        "salesperson": salesperson_name,
+                        "project_type": "CTT" if ctt else project_type,
+                    },
+                    (
+                        [
+                            "rajat@coachtotransformation.com",
+                            "Sujata@coachtotransformation.com",
+                            "arvind@coachtotransformation.com",
+                        ]
+                        if ctt
+                        else [
+                            "rajat@coachtotransformation.com",
+                            "Sujata@coachtotransformation.com",
+                        ]
+                    ),
+                )
             if status == "open":
                 line_items = salesorder_created["line_items"]
                 for line_item in line_items:
