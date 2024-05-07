@@ -2119,7 +2119,10 @@ def send_tomorrow_action_items_data():
                         else None
                     ),
                     "response_status": f"{total_responses_count} / {assessment.participants_observers.count()}",
-                    "reminder": "On" if assessment.automated_reminder else "Off",
+                    "email_reminder": "On" if assessment.email_reminder else "Off",
+                    "whatsapp_reminder": (
+                        "On" if assessment.whatsapp_reminder else "Off"
+                    ),
                 }
                 projects_data[project.name]["assessments"].append(temp)
             courses = Course.objects.filter(batch__project=project)
@@ -2166,7 +2169,10 @@ def send_tomorrow_action_items_data():
                 temp = {
                     "name": assessment.name,
                     "response_status": f"{total_responses_count} / {assessment.participants_observers.count()}",
-                    "reminder": "On" if assessment.automated_reminder else "Off",
+                    "email_reminder": "On" if assessment.email_reminder else "Off",
+                    "whatsapp_reminder": (
+                        "On" if assessment.whatsapp_reminder else "Off"
+                    ),
                     "type": assessment.assessment_type,
                 }
                 assessment_data.append(temp)

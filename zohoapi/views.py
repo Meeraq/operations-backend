@@ -1241,9 +1241,7 @@ def get_all_purchase_orders_for_pmo(request):
             all_purchase_orders = [
                 purchase_order
                 for purchase_order in all_purchase_orders
-                if "custom_field_hash" in purchase_order
-                and "cf_invoice_approver_s_email" in purchase_order["custom_field_hash"]
-                and purchase_order["cf_invoice_approver_s_email"].strip().lower()
+                if purchase_order["cf_invoice_approver_s_email"].strip().lower()
                 == request.user.username.strip().lower()
             ]
         # filter based on the conditions
@@ -2226,18 +2224,41 @@ def get_coach_wise_finances(request):
             vendor_id = vendor.vendor_id
             res.append(
                 {
-                "id": vendor.id,
-                "vendor_id": vendor_id,
-                "vendor_name": vendor.name,
-                "po_amount": round(vendor_po_amounts.get(vendor_id, Decimal(0)), 2),
-                "invoiced_amount": round(vendor_invoice_amounts.get(vendor_id, {"invoiced_amount": Decimal(0)})["invoiced_amount"], 2),
-                "paid_amount": round(vendor_invoice_amounts.get(vendor_id, {"paid_amount": Decimal(0)})["paid_amount"], 2),
-                "currency_symbol": vendor_invoice_amounts[vendor_id]["currency_symbol"] if vendor_id in vendor_invoice_amounts else None,
-                "currency_code": vendor_invoice_amounts[vendor_id]["currency_code"] if vendor_id in vendor_invoice_amounts else None,
-                "pending_amount": round(
-                    vendor_invoice_amounts.get(vendor_id, {"invoiced_amount": Decimal(0)})["invoiced_amount"] -
-                    vendor_invoice_amounts.get(vendor_id, {"paid_amount": Decimal(0)})["paid_amount"], 2
-                ),
+                    "id": vendor.id,
+                    "vendor_id": vendor_id,
+                    "vendor_name": vendor.name,
+                    "po_amount": round(vendor_po_amounts.get(vendor_id, Decimal(0)), 2),
+                    "invoiced_amount": round(
+                        vendor_invoice_amounts.get(
+                            vendor_id, {"invoiced_amount": Decimal(0)}
+                        )["invoiced_amount"],
+                        2,
+                    ),
+                    "paid_amount": round(
+                        vendor_invoice_amounts.get(
+                            vendor_id, {"paid_amount": Decimal(0)}
+                        )["paid_amount"],
+                        2,
+                    ),
+                    "currency_symbol": (
+                        vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                        if vendor_id in vendor_invoice_amounts
+                        else None
+                    ),
+                    "currency_code": (
+                        vendor_invoice_amounts[vendor_id]["currency_code"]
+                        if vendor_id in vendor_invoice_amounts
+                        else None
+                    ),
+                    "pending_amount": round(
+                        vendor_invoice_amounts.get(
+                            vendor_id, {"invoiced_amount": Decimal(0)}
+                        )["invoiced_amount"]
+                        - vendor_invoice_amounts.get(
+                            vendor_id, {"paid_amount": Decimal(0)}
+                        )["paid_amount"],
+                        2,
+                    ),
                 }
             )
         return Response(res)
@@ -2329,13 +2350,36 @@ def get_facilitator_wise_finances(request):
                     "vendor_id": vendor_id,
                     "vendor_name": vendor.name,
                     "po_amount": round(vendor_po_amounts.get(vendor_id, Decimal(0)), 2),
-                    "invoiced_amount": round(vendor_invoice_amounts.get(vendor_id, {"invoiced_amount": Decimal(0)})["invoiced_amount"], 2),
-                    "paid_amount": round(vendor_invoice_amounts.get(vendor_id, {"paid_amount": Decimal(0)})["paid_amount"], 2),
-                    "currency_symbol": vendor_invoice_amounts[vendor_id]["currency_symbol"] if vendor_id in vendor_invoice_amounts else None,
-                    "currency_code": vendor_invoice_amounts[vendor_id]["currency_code"] if vendor_id in vendor_invoice_amounts else None,
+                    "invoiced_amount": round(
+                        vendor_invoice_amounts.get(
+                            vendor_id, {"invoiced_amount": Decimal(0)}
+                        )["invoiced_amount"],
+                        2,
+                    ),
+                    "paid_amount": round(
+                        vendor_invoice_amounts.get(
+                            vendor_id, {"paid_amount": Decimal(0)}
+                        )["paid_amount"],
+                        2,
+                    ),
+                    "currency_symbol": (
+                        vendor_invoice_amounts[vendor_id]["currency_symbol"]
+                        if vendor_id in vendor_invoice_amounts
+                        else None
+                    ),
+                    "currency_code": (
+                        vendor_invoice_amounts[vendor_id]["currency_code"]
+                        if vendor_id in vendor_invoice_amounts
+                        else None
+                    ),
                     "pending_amount": round(
-                        vendor_invoice_amounts.get(vendor_id, {"invoiced_amount": Decimal(0)})["invoiced_amount"] -
-                        vendor_invoice_amounts.get(vendor_id, {"paid_amount": Decimal(0)})["paid_amount"], 2
+                        vendor_invoice_amounts.get(
+                            vendor_id, {"invoiced_amount": Decimal(0)}
+                        )["invoiced_amount"]
+                        - vendor_invoice_amounts.get(
+                            vendor_id, {"paid_amount": Decimal(0)}
+                        )["paid_amount"],
+                        2,
                     ),
                 }
             )
@@ -3009,18 +3053,23 @@ def create_sales_order(request):
                 ctt = True
             else:
                 ctt = False
+
             send_mail_templates(
                 "so_emails/sales_order_mail.html",
                 (
-                    ["finance@coachtotransformation.com"]
-                    if ctt
-                    else [
-                        "finance@coachtotransformation.com",
-                        "madhuri@coachtotransformation.com",
-                        "nisha@coachtotransformation.com",
-                        "pmotraining@meeraq.com",
-                        "pmocoaching@meeraq.com",
-                    ]
+                    (
+                        ["finance@coachtotransformation.com"]
+                        if ctt
+                        else [
+                            "finance@coachtotransformation.com",
+                            "madhuri@coachtotransformation.com",
+                            "nisha@coachtotransformation.com",
+                            "pmotraining@meeraq.com",
+                            "pmocoaching@meeraq.com",
+                        ]
+                    )
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["naveen@meeraq.com"]
                 ),
                 ["New Sales Order Created"],
                 {
@@ -3030,16 +3079,20 @@ def create_sales_order(request):
                     "project_type": "CTT" if ctt else project_type,
                 },
                 (
-                    [
-                        "rajat@coachtotransformation.com",
-                        "Sujata@coachtotransformation.com",
-                        "arvind@coachtotransformation.com",
-                    ]
-                    if ctt
-                    else [
-                        "rajat@coachtotransformation.com",
-                        "Sujata@coachtotransformation.com",
-                    ]
+                    (
+                        [
+                            "rajat@coachtotransformation.com",
+                            "Sujata@coachtotransformation.com",
+                            "arvind@coachtotransformation.com",
+                        ]
+                        if ctt
+                        else [
+                            "rajat@coachtotransformation.com",
+                            "Sujata@coachtotransformation.com",
+                        ]
+                    )
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["shashank@meeraq.com"]
                 ),
             )
             if status == "open":
