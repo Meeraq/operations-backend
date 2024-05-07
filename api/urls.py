@@ -46,6 +46,8 @@ urlpatterns = [
     path("projects/ongoing/", views.get_ongoing_projects),
     path("projects/<int:project_id>/updates/", views.get_project_updates),
     path("projects/<int:project_id>/updates/create/", views.add_project_update),
+    path("coach/<int:coach_id>/updates/", views.get_coach_updates),
+    path("coach/<int:coach_id>/updates/create/", views.add_coach_update),
     path("projects/learner/<int:learner_id>/", views.get_projects_of_learner),
     path("management-token/", views.get_management_token),
     path(
@@ -200,7 +202,10 @@ urlpatterns = [
         views.get_learner_sessions_in_project_from_engagement,
     ),
     path("session/request/<int:session_id>/<int:coach_id>/", views.request_session),
-    path("session/request/without-project-structure/<int:engagement_id>/", views.request_session_without_project_structure),
+    path(
+        "session/request/without-project-structure/<int:engagement_id>/",
+        views.request_session_without_project_structure,
+    ),
     path("session/reschedule/<int:session_id>/", views.reschedule_session_of_coachee),
     path("sessions/edit/<int:session_id>/", views.edit_session_availability),
     path("goals/", views.create_goal),
@@ -530,9 +535,8 @@ urlpatterns = [
         "get-avaliable-credits-without-project-structure/<int:engagement_id>/",
         views.get_available_credits_without_project_structure,
     ),
-     path(
+    path(
         "get-available-credits-of-all-cod-projects/",
         views.get_available_credits_of_all_cod_projects,
     ),
-    
 ]

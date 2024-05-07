@@ -1209,23 +1209,31 @@ def approve_coach(request):
 @permission_classes([AllowAny])
 def reject_coach(request, coach_id):
     try:
+        with transaction.atomic():
+            coach = Coach.objects.get(id=coach_id)
+            
+            update_data = {
+                "pmo": request.data.get("pmo", ""),
+                "coach": coach.id,
+                "message": request.data.get("message", ""),
+            }
 
-        coach = Coach.objects.get(id=coach_id)
-
-        coach.is_rejected = True
-        coach.save()
-
-        send_mail_templates(
-            "coach_templates/coach_is_rejected.html",
-            [coach.email],
-            "Meeraq | Profile Rejected",
-            {
-                "name": f"{coach.first_name.strip().title()}",
-            },
-            [],
-        )
-
-        return Response({"message": "Coach rejected successfully!"}, status=200)
+            serializer = UpdateSerializer(data=update_data)
+            if serializer.is_valid():
+                serializer.save()
+                coach.is_rejected = True
+                coach.save()
+                send_mail_templates(
+                    "coach_templates/coach_is_rejected.html",
+                    [coach.email],
+                    "Meeraq | Profile Rejected",
+                    {
+                        "name": f"{coach.first_name.strip().title()}",
+                    },
+                    [],
+                )
+                return Response({"message": "Coach rejected successfully!"}, status=200)
+            return Response(serializer.errors, status=500)
     except Exception as e:
         print(str(e))
 
@@ -1848,6 +1856,14 @@ def get_project_updates(request, project_id):
     return Response(serializer.data)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def get_coach_updates(request, coach_id):
+    updates = Update.objects.filter(coach__id=coach_id).order_by("-created_at")
+    serializer = UpdateDepthOneSerializer(updates, many=True)
+    return Response(serializer.data)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_project_update(request, project_id):
@@ -1871,6 +1887,28 @@ def add_project_update(request, project_id):
         )
     return Response(serializer.errors, status=400)
 
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def add_coach_update(request, coach_id):
+    try:
+        coach = Coach.objects.get(id=coach_id)
+
+        update_data = {
+            "pmo": request.data.get("pmo", ""),
+            "coach": coach.id,
+            "message": request.data.get("message", ""),
+        }
+        serializer = UpdateSerializer(data=update_data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Update added to coach successfully!"}, status=201
+            )
+        return Response(serializer.errors, status=500)
+    except Exception as e:
+        print(e)
+        return Response({"error": "Failed to add update"}, status=500)
 
 
 @api_view(["GET"])
