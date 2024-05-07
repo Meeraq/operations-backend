@@ -94,6 +94,7 @@ def batch_details(request):
         ]
 
         batch_data = {
+            "id": batch.id,
             "index": index,
             "batch_name": batch.name,
             "program_name": batch.program.name,
@@ -304,6 +305,7 @@ def sales_persons_finances(request):
         if not batch:
             continue
         salesperson = order.salesperson_name
+        salesperson_id = order.salesperson_id
         # amount = order["total"]
         if batch in l1_batches:
             salesperson_totals[salesperson]["l1"] += 1
@@ -326,7 +328,7 @@ def sales_persons_finances(request):
             salesperson_totals[salesperson]["yearly"] += 1
 
     res_list = [
-        {"index": index, "salesperson": salesperson, **totals}
+        {"id": salesperson_id, "index": index, "salesperson": salesperson, **totals}
         for index, (salesperson, totals) in enumerate(
             salesperson_totals.items(), start=1
         )
@@ -550,3 +552,88 @@ def get_all_client_invoice_of_participant_for_batch(request, participant_id, bat
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_participants_of_that_batch(request, batch_id):
+    try:
+        print("hellsasa")
+        print("batch_id", batch_id)
+        batch_users = BatchUsers.objects.using("ctt").filter(batch_id=batch_id)
+        print("hell", batch_users)
+        data = []
+        index = 1
+        for batch_user in batch_users:
+            batch_name = batch_user.batch.name
+            batch_start_date = batch_user.batch.start_date
+            program_name = batch_user.batch.program.name
+            assignment_completion = (
+                UserAssignments.objects.using("ctt")
+                .filter(user=batch_user.user, assignment__batch=batch_user.batch)
+                .count()
+            )
+            total_assignments_in_batch = (
+                Assignments.objects.using("ctt").filter(batch=batch_user.batch).count()
+            )
+            certificate_status = (
+                "released" if batch_user.certificate else "not released"
+            )
+            organization_name = batch_user.user.current_organisation_name
+            salesorders = SalesOrder.objects.filter(
+                zoho_customer__email=batch_user.user.email,
+                custom_field_hash__cf_ctt_batch=batch_user.batch.name,
+            )
+            payment_status = None
+
+            for sales_order in salesorders:
+                if sales_order.invoiced_status != "invoiced":
+                    if sales_order.invoiced_status == "partially_invoiced":
+                        payment_status = "Partially Invoiced"
+                        break
+                    elif sales_order.invoiced_status == "not_invoiced":
+                        payment_status = "Not Invoiced"
+                        break
+                else:
+                    payment_status = "Invoiced"
+
+            user_data = {
+                "index": index,
+                "name": f"{batch_user.user.first_name} {batch_user.user.last_name}",
+                "email": batch_user.user.email,
+                "phone_number": batch_user.user.phone,
+                "batch": batch_name,
+                "program": program_name,
+                "assignment_completion": assignment_completion,
+                "total_assignments_in_batch": total_assignments_in_batch,
+                "certificate_status": certificate_status,
+                "organisation": organization_name,
+                "payment_status": payment_status,
+            }
+
+            index += 1
+            data.append(user_data)
+        return Response(data)
+    except BatchUsers.DoesNotExist:
+        return Response(
+            {"message": "Batch users not found for the given batch ID"}, status=404
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_ctt_salesperson_individual(request, salesperson_id):
+    try:
+        response = []
+        salesorders = SalesOrder.objects.filter(salesperson_id=salesperson_id)
+        for salesorder in salesorders:
+            participant_name = salesorder.customer_name
+            sos = salesorder.so_line_items.all()  # Retrieve related SalesOrderLineItem objects
+            temp = []
+            for so in sos:
+                temp.append(so.salesorder_number)
+            response.append({"participant_name": participant_name, "salesorder_items": temp})
+        return Response(response)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
