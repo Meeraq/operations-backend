@@ -420,7 +420,7 @@ class Project(models.Model):
     name = models.CharField(max_length=100, unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type = models.CharField(
-        max_length=50, choices=project_type_choice, default="cod"
+        max_length=50, choices=project_type_choice, default="CAAS"
     )
     start_date = models.DateField(auto_now_add=True)
     end_date = models.DateField(blank=True, null=True)
