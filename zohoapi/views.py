@@ -3053,9 +3053,10 @@ def create_sales_order(request):
                 ctt = True
             else:
                 ctt = False
-            if env("ENVIRONMENT") == "PRODUCTION":
-                send_mail_templates(
-                    "so_emails/sales_order_mail.html",
+
+            send_mail_templates(
+                "so_emails/sales_order_mail.html",
+                (
                     (
                         ["finance@coachtotransformation.com"]
                         if ctt
@@ -3066,14 +3067,18 @@ def create_sales_order(request):
                             "pmotraining@meeraq.com",
                             "pmocoaching@meeraq.com",
                         ]
-                    ),
-                    ["New Sales Order Created"],
-                    {
-                        "so_number": so_number,
-                        "customer_name": customer_name,
-                        "salesperson": salesperson_name,
-                        "project_type": "CTT" if ctt else project_type,
-                    },
+                    )
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["naveen@meeraq.com"]
+                ),
+                ["New Sales Order Created"],
+                {
+                    "so_number": so_number,
+                    "customer_name": customer_name,
+                    "salesperson": salesperson_name,
+                    "project_type": "CTT" if ctt else project_type,
+                },
+                (
                     (
                         [
                             "rajat@coachtotransformation.com",
@@ -3085,8 +3090,11 @@ def create_sales_order(request):
                             "rajat@coachtotransformation.com",
                             "Sujata@coachtotransformation.com",
                         ]
-                    ),
-                )
+                    )
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["shashank@meeraq.com"]
+                ),
+            )
             if status == "open":
                 line_items = salesorder_created["line_items"]
                 for line_item in line_items:
