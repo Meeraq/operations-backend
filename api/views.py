@@ -72,13 +72,29 @@ from .serializers import (
     FacilitatorSerializer,
     APILogSerializer,
     PmoSerializerAll,
+    CTTPmoSerializer,
+    CTTPmoDepthOneSerializer,
     TaskSerializer,
     ProjectDepthTwoSerializerArchiveCheck,
     CustomUserSerializer,
+    SalesSerializer,
+    SalesDepthOneSerializer,
+    GoalDescriptionSerializer,
 )
-from zohoapi.serializers import VendorDepthOneSerializer
+from zohoapi.serializers import (
+    VendorDepthOneSerializer,
+    PurchaseOrderSerializer,
+    PurchaseOrderGetSerializer,
+)
 from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
-from zohoapi.tasks import organization_id
+from zohoapi.tasks import (
+    organization_id,
+    get_access_token,
+    base_url,
+    filter_purchase_order_data,
+    purchase_orders_allowed,
+    purchase_orders_allowed,
+)
 from .permissions import IsInRoles
 from rest_framework import generics
 from django.utils.crypto import get_random_string
@@ -86,6 +102,7 @@ import jwt
 import jwt
 import uuid
 import pytz
+import math
 from django.db.models import IntegerField
 from django.db.models.functions import Cast
 from rest_framework.exceptions import AuthenticationFailed
@@ -99,6 +116,7 @@ from django.forms.models import model_to_dict
 from .models import (
     Profile,
     Pmo,
+    CTTPmo,
     Coach,
     OTP,
     Project,
@@ -140,6 +158,8 @@ from .models import (
     SuperAdmin,
     Task,
     Finance,
+    Sales,
+    TableHiddenColumn,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -151,7 +171,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 import json
 import string
 import random
-from django.db.models import Q, Min
+from django.db.models import Q, Min, F, Exists, OuterRef
 from collections import defaultdict
 from django.db.models import Avg
 from rest_framework import status
@@ -170,16 +190,18 @@ from schedularApi.models import (
     SchedularBatch,
     SchedularSessions,
     CalendarInvites,
+    CoachingSession,
+    LiveSession,
+    HandoverDetails,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
 )
-
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-from zohoapi.models import Vendor, InvoiceData
-from courses.models import CourseEnrollment
+from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping, PurchaseOrder
+from courses.models import CourseEnrollment, CoachingSessionsFeedbackResponse, Answer
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
 import pdfkit
@@ -211,6 +233,46 @@ def get_current_date_timestamps():
         int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
     )
     return start_timestamp, end_timestamp
+
+
+def calculate_nps(ratings):
+    promoters = sum(rating >= 9 for rating in ratings)
+    detractors = sum(rating <= 6 for rating in ratings)
+    nps = ((promoters - detractors) / len(ratings)) * 100
+    return nps
+
+
+def calculate_nps_from_answers(answers):
+    ratings = [answer.rating for answer in answers]
+    if ratings:
+        return calculate_nps(ratings)
+    return None
+
+
+def add_contact_in_wati(user_type, name, phone):
+    try:
+        wati_api_endpoint = env("WATI_API_ENDPOINT")
+        wati_authorization = env("WATI_AUTHORIZATION")
+        wati_api_url = f"{wati_api_endpoint}/api/v1/addContact/{phone}"
+        headers = {
+            "content-type": "text/json",
+            "Authorization": wati_authorization,
+        }
+        payload = {
+            "customParams": [
+                {
+                    "name": "user_type",
+                    "value": user_type,
+                },
+            ],
+            "name": name,
+        }
+        response = requests.post(wati_api_url, headers=headers, json=payload)
+        response.raise_for_status()  # Raise an HTTPError for bad responses
+        print(response.json())
+        return response.json()
+    except Exception as e:
+        pass
 
 
 def create_send_email(user_email, file_name):
@@ -733,6 +795,125 @@ def get_trimmed_emails(emails):
     return res
 
 
+def add_so_to_project(project_type, project_id, sales_order_ids):
+    if project_type == "CAAS":
+        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+            project=project_id
+        )
+        project = Project.objects.get(id=project_id)
+        schedular_project = None
+    elif project_type == "SEEQ":
+        orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+            schedular_project=project_id
+        )
+        schedular_project = SchedularProject.objects.get(id=project_id)
+        project = None
+
+    if not orders_and_project_mapping.exists():
+        for id in sales_order_ids:
+            orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
+                sales_order_ids__contains=id
+            )
+            if orders_and_project_mapping.exists():
+                mapping = orders_and_project_mapping.first()
+                if project_type == "CAAS":
+                    if mapping.schedular_project:
+                        raise Exception(
+                            f"SO already exist in Schedular Project: {mapping.schedular_project.name}"
+                        )
+                    if mapping.project and mapping.project.id != project.id:
+                        raise Exception(
+                            f"SO already exist in project: {mapping.project.name}"
+                        )
+
+                if project_type == "SEEQ":
+                    if mapping.project:
+                        raise Exception(
+                            f"SO already exist in Coaching Project: {mapping.project.name}"
+                        )
+                    if (
+                        mapping.schedular_project
+                        and mapping.schedular_project.id != schedular_project.id
+                    ):
+                        raise Exception(
+                            f"SO already exist in project: {mapping.schedular_project.name}"
+                        )
+                break
+    if orders_and_project_mapping.exists():
+        mapping = orders_and_project_mapping.first()
+        existing_sales_order_ids = mapping.sales_order_ids
+        set_of_sales_order_ids = set(existing_sales_order_ids)
+        for id in sales_order_ids:
+            set_of_sales_order_ids.add(id)
+        final_list_of_sales_order_ids = list(set_of_sales_order_ids)
+        mapping.sales_order_ids = final_list_of_sales_order_ids
+        mapping.project = project
+        mapping.schedular_project = schedular_project
+        mapping.save()
+    else:
+        OrdersAndProjectMapping.objects.create(
+            project=project,
+            sales_order_ids=sales_order_ids,
+            schedular_project=schedular_project,
+        )
+
+
+def get_available_credit_for_project(project_id, status):
+    try:
+        project = Project.objects.get(id=int(project_id))
+        filters = Q(project=project)
+
+        if status == "both":
+            filters &= Q(status__in=["booked", "completed"])
+        else:
+            filters &= Q(status=status)
+
+        total_durations = (
+            SessionRequestCaas.objects.filter(filters).aggregate(
+                total_duration=Sum("session_duration")
+            )["total_duration"]
+            or 0
+        )
+
+        return project.total_credits - total_durations
+
+    except Exception as e:
+        print(str(e))
+        return None
+
+
+def credits_needed_for_an_engagement(engagement):
+    try:
+        total_durations = (
+            SessionRequestCaas.objects.filter(engagement=engagement).aggregate(
+                total_duration=Sum("session_duration")
+            )["total_duration"]
+            or 0
+        )
+
+        return total_durations
+
+    except Exception as e:
+        print(str(e))
+        return None
+
+
+def credits_needed_based_for_project_structure(project):
+    try:
+        total_duration = 0
+        for session in project.project_structure:
+            if session["billable"]:
+                total_duration += (
+                    session["session_duration"] * session["no_of_sessions"]
+                )
+
+        return total_duration
+
+    except Exception as e:
+        print(str(e))
+        return None
+
+
 SESSION_TYPE_VALUE = {
     "chemistry": "Chemistry",
     "tripartite": "Tripartite",
@@ -769,32 +950,6 @@ SESSIONS_WITH_STAKEHOLDERS = [
     "stakeholder_without_coach",
     "stakeholder_interview",
 ]
-
-
-def add_contact_in_wati(user_type, name, phone):
-    try:
-        wati_api_endpoint = env("WATI_API_ENDPOINT")
-        wati_authorization = env("WATI_AUTHORIZATION")
-        wati_api_url = f"{wati_api_endpoint}/api/v1/addContact/{phone}"
-        headers = {
-            "content-type": "text/json",
-            "Authorization": wati_authorization,
-        }
-        payload = {
-            "customParams": [
-                {
-                    "name": "user_type",
-                    "value": user_type,
-                },
-            ],
-            "name": name,
-        }
-        response = requests.post(wati_api_url, headers=headers, json=payload)
-        response.raise_for_status()  # Raise an HTTPError for bad responses
-        print(response.json())
-        return response.json()
-    except Exception as e:
-        pass
 
 
 def get_booked_session_of_user_confirmed_avalibility(user_type, user_id, date):
@@ -864,23 +1019,23 @@ def create_task(task_details, number_of_days):
         return None
 
 
-@api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
-def create_pmo(request):
-    # Get data from request
-    name = request.data.get("name")
-    email = request.data.get("email", "").strip().lower()
-    phone = request.data.get("phone")
-    username = email  # username and email are the same
-    password = request.data.get("password")
-    sub_role = request.data.get("sub_role")
-    room_id = generate_room_id(email)
-
-    # Check if required data is provided
-    if not all([name, email, phone, username, password, room_id]):
-        return Response({"error": "All required fields must be provided."}, status=400)
-
+def add_new_pmo(data):
     try:
+
+        name = data.get("name")
+        email = data.get("email", "").strip().lower()
+        phone = data.get("phone")
+        username = email  # username and email are the same
+        password = data.get("password")
+        sub_role = data.get("sub_role")
+        room_id = generate_room_id(email)
+
+        # Check if required data is provided
+        if not all([name, email, phone, username, password, room_id]):
+            return Response(
+                {"error": "All required fields must be provided."}, status=400
+            )
+
         with transaction.atomic():
             # Check if the user already exists
             user = User.objects.filter(email=email).first()
@@ -911,17 +1066,32 @@ def create_pmo(request):
             )
 
             name = pmo_user.name
-            add_contact_in_wati("pmo", name, pmo_user.phone)
+            if pmo_user.phone:
+                add_contact_in_wati("pmo", name, pmo_user.phone)
 
             # Return success response without room_id
-            return Response({"message": "PMO added successfully."}, status=201)
-
-    except IntegrityError as e:
-        return Response({"error": "User with this email already exists."}, status=400)
+            return True
 
     except Exception as e:
-        # Return error response if any exception occurs
-        return Response({"error": str(e)}, status=500)
+        print(str(e))
+        return False
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
+def create_pmo(request):
+    try:
+
+        data = request.data
+        added = add_new_pmo(data=data)
+
+        if added:
+            return Response({"message": "PMO added successfully."}, status=201)
+        else:
+            return Response({"error": "Failed to add pmo"}, status=500)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to add pmo"}, status=500)
 
 
 @api_view(["PUT"])
@@ -931,7 +1101,6 @@ def edit_pmo(request):
     name = request.data.get("name")
     email = request.data.get("email", "").strip().lower()
     phone = request.data.get("phone")
-
     sub_role = request.data.get("sub_role")
     pmo_email = request.data.get("pmo_email", "").strip().lower()
     try:
@@ -963,16 +1132,52 @@ def edit_pmo(request):
 
 
 @api_view(["PUT"])
+@permission_classes([AllowAny, IsInRoles("superadmin")])
+def edit_ctt_pmo(request, ctt_pmo_id):
+    name = request.data.get("name")
+    email = request.data.get("email", "").strip().lower()
+    phone = request.data.get("phone")
+    ctt_pmo = CTTPmo.objects.get(id=ctt_pmo_id)
+
+    try:
+        with transaction.atomic():
+            existing_user = (
+                User.objects.filter(username=email)
+                .exclude(username=ctt_pmo.user.user.username)
+                .first()
+            )
+            if existing_user:
+                return Response(
+                    {"error": "User with this email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            ctt_pmo.user.user.username = email
+            ctt_pmo.user.user.email = email
+            ctt_pmo.user.user.save()
+            ctt_pmo.email = email
+            ctt_pmo.name = name
+            ctt_pmo.phone = phone
+            ctt_pmo.save()
+            if ctt_pmo.phone:
+                add_contact_in_wati("pmo", ctt_pmo.name, ctt_pmo.phone)
+
+            return Response({"message": "CTT PMO updated successfully."}, status=201)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update CTT PMO."}, status=500)
+
+
+@api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def approve_coach(request):
     try:
-        # Get the Coach object
+
         unapproved_coach = request.data["coach"]
         room_id = request.data["room_id"]
         coach = Coach.objects.get(id=unapproved_coach["id"])
 
-        # Change the is_approved field to True
         coach.is_approved = True
+        coach.is_rejected = False
         coach.active_inactive = True
         coach.room_id = room_id
         coach.save()
@@ -982,26 +1187,66 @@ def approve_coach(request):
         message = f"Congratulations ! Your profile has been approved. You will be notified for projects that match your profile. Thank You !"
 
         create_notification(coach.user.user, path, message)
-        # Return success response
-        # Send approval email to the coach
+
         send_mail_templates(
             "coach_templates/pmo_approves_profile.html",
             [coach.email],
             "Congratulations! Your Coach Registration is Approved",
             {
-                "name": f"{coach.first_name} {coach.last_name}",
+                "name": f"{coach.first_name.strip().title()} {coach.last_name.strip().title()}",
             },
             [],
         )
         return Response({"message": "Coach approved successfully."}, status=200)
 
-    except Coach.DoesNotExist:
-        # Return error response if Coach with the provided ID does not exist
-        return Response({"error": "Coach does not exist."}, status=404)
+    except Exception as e:
+        print(str(e))
+
+        return Response({"error": "Failed to approve coach."}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny])
+def reject_coach(request, coach_id):
+    try:
+
+        coach = Coach.objects.get(id=coach_id)
+
+        coach.is_rejected = True
+        coach.save()
+
+        send_mail_templates(
+            "coach_templates/coach_is_rejected.html",
+            [coach.email],
+            "Meeraq | Profile Rejected",
+            {
+                "name": f"{coach.first_name.strip().title()}",
+            },
+            [],
+        )
+
+        return Response({"message": "Coach rejected successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+
+        return Response({"error": "Failed to reject coach."}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny])
+def reject_facilitator(request, facilitator_id):
+    try:
+
+        facilitator = Facilitator.objects.get(id=facilitator_id)
+
+        facilitator.is_rejected = True
+        facilitator.save()
+
+        return Response({"message": "Facilitator rejected successfully!"}, status=200)
 
     except Exception as e:
-        # Return error response if any other exception occurs
-        return Response({"error": str(e)}, status=500)
+        print(str(e))
+        return Response({"error": "Failed to reject facilitator."}, status=500)
 
 
 @api_view(["PUT"])
@@ -1028,7 +1273,7 @@ def approve_facilitator(request):
             [coach.email],
             "Congratulations! Your Facilitator Registration is Approved",
             {
-                "name": f"{coach.first_name} {coach.last_name}",
+                "name": f"{coach.first_name.strip().title()} {coach.last_name.strip().title()}",
             },
             [],
         )
@@ -1051,43 +1296,64 @@ def update_coach_profile(request, id):
     except Coach.DoesNotExist:
         return Response(status=404)
 
+    remove_education_upload_file = request.data.get(
+        "remove_education_upload_file", False
+    )
+
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
     new_email = request.data.get("email", "").strip().lower()
     #  other user exists with the new email
-    if (
-        new_email
-        and User.objects.filter(username=new_email).exclude(id=user.id).exists()
-    ):
-        return Response(
-            {"error": "Email already exists. Please choose a different email."},
-            status=400,
-        )
+    if new_email and new_email != user.email:
+        if (
+            new_email
+            and User.objects.filter(username=new_email).exclude(id=user.id).exists()
+        ):
+            existing_user_with_same_email = (
+                User.objects.filter(username=new_email).exclude(id=user.id).first()
+            )
+            current_user_profile = user.profile
+            existing_profile_with_same_email = existing_user_with_same_email.profile
+            # coach exists with the new email
+            if existing_profile_with_same_email.roles.filter(name="coach").exists():
+                return Response(
+                    {"error": "Coach with the same email already exists."},
+                    status=400,
+                )
+            # another user exists with the new email
+            else:
+                coach_role, created = Role.objects.get_or_create(name="coach")
+                existing_profile_with_same_email.roles.add(coach_role)
+                coach.email = new_email
+                current_user_profile.roles.remove(coach_role)
+                coach.save()
+                current_user_profile.save()
+                existing_profile_with_same_email.save()
 
-    # no other user exists with the new email
-    elif new_email and new_email != user.email:
-        user.email = new_email
-        user.username = new_email
-        user.save()
-        # updating emails in all user's
-        for role in user.profile.roles.all():
-            if role.name == "pmo":
-                pmo = Pmo.objects.get(user=user.profile)
-                pmo.email = new_email
-                pmo.save()
-            if role.name == "hr":
-                hr = HR.objects.get(user=user.profile)
-                hr.email = new_email
-                hr.save()
-            if role.name == "learner":
-                learner = Learner.objects.get(user=user.profile)
-                learner.email = new_email
-                learner.save()
-            if role.name == "vendor":
-                vendor = Vendor.objects.get(user=user.profile)
-                vendor.email = new_email
-                vendor.save()
+        # no other user exists with the new email
+        else:
+            user.email = new_email
+            user.username = new_email
+            user.save()
+            # updating emails in all user's
+            for role in user.profile.roles.all():
+                if role.name == "pmo":
+                    pmo = Pmo.objects.get(user=user.profile)
+                    pmo.email = new_email
+                    pmo.save()
+                if role.name == "hr":
+                    hr = HR.objects.get(user=user.profile)
+                    hr.email = new_email
+                    hr.save()
+                if role.name == "learner":
+                    learner = Learner.objects.get(user=user.profile)
+                    learner.email = new_email
+                    learner.save()
+                if role.name == "vendor":
+                    vendor = Vendor.objects.get(user=user.profile)
+                    vendor.email = new_email
+                    vendor.save()
 
     if internal_coach and not organization_of_coach:
         return Response(
@@ -1102,11 +1368,14 @@ def update_coach_profile(request, id):
     )
     serializer = CoachSerializer(coach, data=request.data, partial=True)
 
-    name = coach.first_name + " " + coach.last_name
+    name = coach.first_name.strip().title() + " " + coach.last_name.strip().title()
     add_contact_in_wati("coach", name, coach.phone)
 
     if serializer.is_valid():
-        serializer.save()
+        coach_instance = serializer.save()
+        if remove_education_upload_file:
+            coach_instance.education_upload_file = None
+            coach_instance.save()
         depth_serializer = CoachDepthOneSerializer(coach)
         is_caas_allowed = Project.objects.filter(
             coaches_status__coach=user.profile.coach
@@ -1150,6 +1419,10 @@ def get_user_for_active_inactive(role, email):
             user = Facilitator.objects.get(email=email)
         if role == "finance":
             user = Finance.objects.get(email=email)
+        if role == "sales":
+            user = Sales.objects.get(email=email)
+        if role == "ctt_pmo":
+            user = CTTPmo.objects.get(email=email)
         return user
     except Exception as e:
         print(str(e))
@@ -1245,141 +1518,204 @@ def get_management_token(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@transaction.atomic
 def create_project_cass(request):
-    organisation = Organisation.objects.filter(
-        id=request.data["organisation_name"]
-    ).first()
-    junior_pmo = None
-    if "junior_pmo" in request.data:
-        junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
+    with transaction.atomic():
+        organisation = Organisation.objects.filter(
+            id=request.data["organisation_name"]
+        ).first()
+        junior_pmo = None
+        if "junior_pmo" in request.data:
+            junior_pmo = Pmo.objects.filter(id=request.data["junior_pmo"]).first()
 
-    if not organisation:
-        organisation = Organisation(
-            name=request.data["organisation_name"], image_url=request.data["image_url"]
-        )
-    organisation.save()
-    desc = request.data["project_description"]
-    try:
-        project = Project(
-            # print(organisation.name, organisation.image_url, "details of org")
-            name=request.data["project_name"],
-            organisation=organisation,
-            approx_coachee=request.data["approx_coachee"],
-            frequency_of_session=request.data["frequency_of_session"],
-            # currency=request.data["currency"],
-            # price_per_hour=request.data["price_per_hour"],
-            # coach_fees_per_hour=request.data["coach_fees_per_hour"],
-            project_type="CAAS",
-            interview_allowed=request.data["interview_allowed"],
-            # chemistry_allowed= request.data['chemistry_allowed'],
-            specific_coach=request.data["specific_coach"],
-            empanelment=request.data["empanelment"],
-            end_date=datetime.now() + timedelta(days=365),
-            tentative_start_date=request.data["tentative_start_date"],
-            mode=request.data["mode"],
-            sold=request.data["sold"],
-            project_description=desc,
-            # updated_to_sold= request.data['updated_to_sold'],
-            location=json.loads(request.data["location"]),
-            enable_emails_to_hr_and_coachee=request.data.get(
-                "enable_emails_to_hr_and_coachee", True
-            ),
-            steps=dict(
-                project_structure={"status": "pending"},
-                coach_list={"status": "pending"},
-                coach_consent={"status": "pending"},
-                coach_list_to_hr={"status": "pending"},
-                interviews={"status": "pending"},
-                add_learners={"status": "pending"},
-                coach_approval={"status": "pending"},
-                chemistry_session={"status": "pending"},
-                coach_selected={"status": "pending"},
-                final_coaches={"status": "pending"},
-                project_live="pending",
-            ),
-            status="presales",
-            masked_coach_profile=request.data["masked_coach_profile"],
-            email_reminder=request.data["email_reminder"],
-            whatsapp_reminder=request.data["whatsapp_reminder"],
-            junior_pmo=junior_pmo,
-            calendar_invites=request.data["calendar_invites"],
-            finance=request.data["finance"],
-        )
+        if not organisation:
+            organisation = Organisation(
+                name=request.data["organisation_name"],
+                image_url=request.data["image_url"],
+            )
+        organisation.save()
+        desc = request.data["project_description"]
+        total_credits_in_minutes = 0
+        request_expiry_time_in_minutes = 0
+        duration_of_each_session = 0
+        if "total_credits" in request.data and request.data["total_credits"]:
+            total_credits_in_hours = float(request.data["total_credits"])
+            total_credits_in_minutes = total_credits_in_hours * 60
+        if not request.data["is_project_structure"]:
+            duration_of_each_session = request.data["duration_of_each_session"]
+            if request.data["is_session_expiry"]:
+                if request.data["request_expiry_time"]:
 
-        project.save()
+                    request_expiry_time_in_hours = float(
+                        request.data["request_expiry_time"]
+                    )
+                    request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
 
         try:
-            userId = request.data.get("user_id")
-            user_who_created = User.objects.get(id=userId)
-            project = project
-            timestamp = timezone.now()
-
-            createProject = CreateProjectActivity.objects.create(
-                user_who_created=user_who_created, project=project, timestamp=timestamp
+            project = Project(
+                # print(organisation.name, organisation.image_url, "details of org")
+                name=request.data["project_name"],
+                organisation=organisation,
+                approx_coachee=request.data["approx_coachee"],
+                frequency_of_session=request.data["frequency_of_session"],
+                # currency=request.data["currency"],
+                # price_per_hour=request.data["price_per_hour"],
+                # coach_fees_per_hour=request.data["coach_fees_per_hour"],
+                project_type=request.data["project_type"],
+                interview_allowed=request.data["interview_allowed"],
+                # chemistry_allowed= request.data['chemistry_allowed'],
+                specific_coach=request.data["specific_coach"],
+                empanelment=request.data["empanelment"],
+                end_date=datetime.now() + timedelta(days=365),
+                tentative_start_date=request.data["tentative_start_date"],
+                mode=request.data["mode"],
+                sold=request.data["sold"],
+                project_description=desc,
+                # updated_to_sold= request.data['updated_to_sold'],
+                location=json.loads(request.data["location"]),
+                enable_emails_to_hr_and_coachee=request.data.get(
+                    "enable_emails_to_hr_and_coachee", True
+                ),
+                steps=dict(
+                    project_structure={"status": "pending"},
+                    coach_list={"status": "pending"},
+                    coach_consent={"status": "pending"},
+                    coach_list_to_hr={"status": "pending"},
+                    interviews={"status": "pending"},
+                    add_learners={"status": "pending"},
+                    coach_approval={"status": "pending"},
+                    chemistry_session={"status": "pending"},
+                    coach_selected={"status": "pending"},
+                    final_coaches={"status": "pending"},
+                    project_live="pending",
+                ),
+                status="presales",
+                masked_coach_profile=request.data["masked_coach_profile"],
+                email_reminder=request.data["email_reminder"],
+                whatsapp_reminder=request.data["whatsapp_reminder"],
+                junior_pmo=junior_pmo,
+                calendar_invites=request.data["calendar_invites"],
+                finance=request.data["finance"],
+                is_project_structure=request.data["is_project_structure"],
+                total_credits=total_credits_in_minutes,
+                duration_of_each_session=duration_of_each_session,
+                request_expiry_time=request_expiry_time_in_minutes,
+                is_session_expiry=(
+                    False
+                    if request.data["is_project_structure"]
+                    else request.data["is_session_expiry"]
+                ),
             )
 
-            createProject.save()
+            project.save()
+
+            try:
+                userId = request.data.get("user_id")
+                user_who_created = User.objects.get(id=userId)
+                timestamp = timezone.now()
+                createProject = CreateProjectActivity.objects.create(
+                    user_who_created=user_who_created,
+                    project=project,
+                    timestamp=timestamp,
+                )
+                createProject.save()
+            except Exception as e:
+                pass
+
+            handover_id = request.data.get("handover")
+            if handover_id:
+                handover = HandoverDetails.objects.get(id=handover_id)
+                handover.caas_project = project
+                handover.save()
+                project.project_structure = handover.project_structure
+                project.save()
+                add_so_to_project("CAAS", project.id, handover.sales_order_ids)
+            else:
+                sales_order_ids = request.data["sales_order_ids"]
+                if sales_order_ids:
+                    add_so_to_project("CAAS", project.id, sales_order_ids)
+
+        except IntegrityError as e:
+            print(str(e))
+            return Response(
+                {"error": "Project with this name already exists"}, status=400
+            )
         except Exception as e:
-            pass
+            print(str(e))
+            return Response({"error": "Failed to create project."}, status=400)
 
-    except IntegrityError as e:
-        print(str(e))
-        return Response({"error": "Project with this name already exists"}, status=400)
-    except Exception as e:
-        print(str(e))
-        return Response({"error": "Failed to create project."}, status=400)
+        if project.project_type == "COD" and not project.is_project_structure:
+            if project.duration_of_each_session != 0:
+                total_sessions = math.floor(
+                    project.total_credits / project.duration_of_each_session
+                )
 
-    for hr in request.data["hr"]:
-        single_hr = HR.objects.get(id=hr)
-        project.hr.add(single_hr)
+            project.project_structure = [
+                {
+                    "f2f": False,
+                    "index": 0,
+                    "price": "100",
+                    "billable": True,
+                    "coach_price": "100",
+                    "session_type": "coaching_session",
+                    "no_of_sessions": total_sessions,
+                    "session_duration": f"{project.duration_of_each_session}",
+                }
+            ]
+            project.steps["project_structure"]["status"] = "complete"
+            project.save()
 
-    # create tasks for the pmo
-    try:
-        print("creating tasks here")
-        create_task(
-            {
-                "task": "add_project_structure",
-                "caas_project": project.id,
-                "priority": "high",
-                "status": "pending",
-                "remarks": [],
-            },
-            30,
+        for hr in request.data["hr"]:
+            single_hr = HR.objects.get(id=hr)
+            project.hr.add(single_hr)
+
+        # create tasks for the pmo
+        try:
+            print("creating tasks here")
+            create_task(
+                {
+                    "task": "add_project_structure",
+                    "caas_project": project.id,
+                    "priority": "high",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                30,
+            )
+            create_task(
+                {
+                    "task": "add_coach",
+                    "caas_project": project.id,
+                    "priority": "high",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                7,
+            )
+            create_task(
+                {
+                    "task": "add_coach_contract",
+                    "caas_project": project.id,
+                    "priority": "high",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                1,
+            )
+        except Exception as e:
+            print("Error", str(e))
+
+        try:
+            path = f"/projects/caas/progress/{project.id}"
+            message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
+            for hr_member in project.hr.all():
+                create_notification(hr_member.user.user, path, message)
+        except Exception as e:
+            print(f"Error occurred while creating notification: {str(e)}")
+        return Response(
+            {"message": "Project created successfully", "project_id": project.id},
+            status=200,
         )
-        create_task(
-            {
-                "task": "add_coach",
-                "caas_project": project.id,
-                "priority": "high",
-                "status": "pending",
-                "remarks": [],
-            },
-            7,
-        )
-        create_task(
-            {
-                "task": "add_coach_contract",
-                "caas_project": project.id,
-                "priority": "high",
-                "status": "pending",
-                "remarks": [],
-            },
-            1,
-        )
-    except Exception as e:
-        print("Error", str(e))
-
-    try:
-        path = f"/projects/caas/progress/{project.id}"
-        message = f"A new project - {project.name} has been created for the organisation - {project.organisation.name}"
-        for hr_member in project.hr.all():
-            create_notification(hr_member.user.user, path, message)
-    except Exception as e:
-        print(f"Error occurred while creating notification: {str(e)}")
-    return Response(
-        {"message": "Project created successfully", "project_id": project.id},
-        status=200,
-    )
 
 
 def create_learners(learners_data):
@@ -1400,7 +1736,7 @@ def create_learners(learners_data):
                     learner = Learner.objects.filter(user__user=user).first()
 
                     if learner:
-                        learner.name = learner_data.get("name").strip()
+                        learner.name = learner_data.get("name").strip().title()
                         learner.phone = learner_data.get("phone")
                         try:
                             if learner_data.get("area_of_expertise", ""):
@@ -1446,7 +1782,7 @@ def create_learners(learners_data):
 
                 learner = Learner.objects.create(
                     user=profile,
-                    name=learner_data.get("name"),
+                    name=learner_data.get("name").strip().title(),
                     email=email,
                     phone=learner_data.get("phone"),
                 )
@@ -1468,7 +1804,7 @@ def create_learners(learners_data):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
 def get_ongoing_projects(request):
     try:
         pmo_id = request.query_params.get("pmo")
@@ -1486,6 +1822,7 @@ def get_ongoing_projects(request):
                 output_field=BooleanField(),
             )
         )
+        projects = projects.distinct()
 
         serializer = ProjectDepthTwoSerializerArchiveCheck(projects, many=True)
         for project_data in serializer.data:
@@ -1535,6 +1872,7 @@ def add_project_update(request, project_id):
     return Response(serializer.errors, status=400)
 
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "pmo")])
 def get_projects_of_learner(request, learner_id):
@@ -1562,7 +1900,9 @@ def get_ongoing_projects_of_hr(request, hr_id):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr", "sales")]
+)
 def get_hr(request):
     try:
         # Get all the Coach objects
@@ -1665,6 +2005,9 @@ def add_coach(request):
     education_pic = request.data.get("education_pic", None)
     educational_qualification = json.loads(request.data["educational_qualification"])
     education_upload_file = request.data.get("education_upload_file", None)
+    is_coach = json.loads(request.data.get("is_coach", False))
+    is_mentor = json.loads(request.data.get("is_mentor", False))
+    is_consultant = json.loads(request.data.get("is_consultant", False))
 
     # Check if required data is provided
     if not all(
@@ -1678,6 +2021,8 @@ def add_coach(request):
             level,
             username,
             room_id,
+            corporate_experience,
+            coaching_experience,
         ]
     ):
         return Response({"error": "All required fields must be provided."}, status=400)
@@ -1718,8 +2063,8 @@ def add_coach(request):
             coach_user = Coach.objects.create(
                 user=profile,
                 room_id=room_id,
-                first_name=first_name,
-                last_name=last_name,
+                first_name=first_name.strip().title(),
+                last_name=last_name.strip().title(),
                 email=email,
                 phone=phone,
                 phone_country_code=phone_country_code,
@@ -1754,6 +2099,9 @@ def add_coach(request):
                 education_pic=education_pic,
                 educational_qualification=educational_qualification,
                 education_upload_file=education_upload_file,
+                is_coach=is_coach,
+                is_mentor=is_mentor,
+                is_consultant=is_consultant,
             )
 
             # Approve coach
@@ -1938,7 +2286,10 @@ def get_user_data(user):
     user_profile_role = user.profile.roles.all().exclude(name="vendor").first().name
     roles = []
     for role in user.profile.roles.all():
-        roles.append(role.name)
+        user_data = get_user_for_active_inactive(role.name, user.profile.user.username)
+        if user_data and user_data.active_inactive:
+            roles.append(role.name)
+
     if user_profile_role == "coach":
         if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
@@ -2011,6 +2362,14 @@ def get_user_data(user):
             "is_seeq_allowed": is_seeq_allowed,
             "user": {**serializer.data["user"], "type": user_profile_role},
         }
+    elif user_profile_role == "sales":
+        if not user.profile.sales.active_inactive:
+            return None
+        serializer = SalesDepthOneSerializer(user.profile.sales)
+    elif user_profile_role == "ctt_pmo":
+        if not user.profile.cttpmo.active_inactive:
+            return None
+        serializer = CTTPmoSerializer(user.profile.cttpmo)
     else:
         return None
     return {
@@ -2452,14 +2811,21 @@ def send_consent(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach")])
-def get_project_details(request, project_id):
+@permission_classes(
+    [IsAuthenticated, IsInRoles("learner", "pmo", "hr", "coach", "sales", "finance")]
+)
+def get_project_details(request, project_type, project_id):
     try:
-        project = Project.objects.get(id=project_id)
-        serializer = ProjectDepthTwoSerializer(project)
+        if project_type == "caas":
+            project = Project.objects.get(id=project_id)
+            serializer = ProjectDepthTwoSerializer(project)
+        else:
+            project = SchedularProject.objects.get(id=project_id)
+            serializer = SchedularProjectSerializer(project)
         return Response(serializer.data)
-    except Project.DoesNotExist:
-        return Response({"message": "Project does not exist"}, status=400)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=400)
 
 
 # Filter API for Coaches
@@ -2684,6 +3050,18 @@ def get_chemistry_session_data(request, project_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
+def get_chemistry_session_data_for_engagement(request, engagement_id):
+    print(engagement_id)
+    sessions = SessionRequestCaas.objects.filter(
+        engagement__id=engagement_id, session_type="chemistry"
+    ).exclude(status="pending")
+    print(sessions)
+    serializer = SessionRequestCaasDepthTwoSerializer(sessions, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")])
 def get_session_requests_of_hr(request, hr_id):
     sessions = SessionRequestCaas.objects.filter(hr__id=hr_id).all()
     serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
@@ -2715,11 +3093,14 @@ def get_upcoming_booked_session_of_coach(request, coach_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "learner", "hr")])
+@transaction.atomic
 def book_session_caas(request):
     session_request = SessionRequestCaas.objects.get(
         id=request.data.get("session_request")
     )
-
+    coach = Coach.objects.get(id=request.data["coach"])
+    session_request.coach = coach
+    session_request.save()
     existing_calendar_invite = CalendarInvites.objects.filter(
         caas_session=session_request
     ).first()
@@ -3244,10 +3625,12 @@ def add_learner_to_project(request):
         return Response({"error": "Project does not exist."}, status=404)
     try:
         learners = create_learners(request.data["learners"])
+
         for learner in learners:
+
             create_engagement(learner, project)
             try:
-                tasks = Task.objects.filter(task="add_coachee", project=project)
+                tasks = Task.objects.filter(task="add_coachee", caas_project=project)
                 tasks.update(status="completed")
             except Exception as e:
                 print(str(e))
@@ -3348,33 +3731,41 @@ def create_engagement(learner, project):
         engagemenet_project_structure = transform_project_structure(
             project.project_structure
         )
-        for index, session in enumerate(engagemenet_project_structure):
-            session_data = SessionRequestCaas.objects.create(
-                learner=learner,
-                project=project,
-                session_duration=session["session_duration"],
-                session_number=session["session_number"],
-                session_type=session["session_type"],
-                billable_session_number=session["billable_session_number"],
-                status="pending",
-                order=index + 1,
-            )
-        engagement = Engagement(learner=learner, project=project, status="active")
+        engagement = Engagement(
+            learner=learner,
+            project=project,
+            status="active",
+            type="caas" if project.is_project_structure else "cod",
+        )
         engagement.save()
-        #  create task
-        try:
-            create_task(
-                {
-                    "task": "select_a_coach",
-                    "engagement": engagement.id,
-                    "priority": "high",
-                    "status": "pending",
-                    "remarks": [],
-                },
-                30,
-            )
-        except Exception as e:
-            print(str(e))
+        if project.is_project_structure:
+            for index, session in enumerate(engagemenet_project_structure):
+                session_data = SessionRequestCaas.objects.create(
+                    learner=learner,
+                    project=project,
+                    session_duration=session["session_duration"],
+                    session_number=session["session_number"],
+                    session_type=session["session_type"],
+                    billable_session_number=session["billable_session_number"],
+                    status="pending",
+                    order=index + 1,
+                    engagement=engagement,
+                )
+
+            #  create task
+            try:
+                create_task(
+                    {
+                        "task": "select_a_coach",
+                        "engagement": engagement.id,
+                        "priority": "high",
+                        "status": "pending",
+                        "remarks": [],
+                    },
+                    30,
+                )
+            except Exception as e:
+                print(str(e))
         return engagement
     return existing_engagement
 
@@ -3386,11 +3777,14 @@ def accept_coach_caas_learner(request):
         project = Project.objects.get(id=request.data.get("project_id", ""))
     except Project.DoesNotExist:
         return Response({"message": "Project does not exist"}, status=400)
-    cnt = len(
-        project.coaches_status.filter(
-            learner_id__contains=request.data.get("learner_id")
+    cnt = 0
+    if not project.project_type == "COD":
+        cnt = len(
+            project.coaches_status.filter(
+                learner_id__contains=request.data.get("learner_id")
+            )
         )
-    )
+
     if cnt == 0:
         for coach in project.coaches_status.filter(
             coach__id=request.data.get("coach_id")
@@ -3399,7 +3793,9 @@ def accept_coach_caas_learner(request):
             if request.data.get("status") == "select":
                 learner = Learner.objects.get(id=request.data.get("learner_id"))
                 engagement = Engagement.objects.get(
-                    learner__id=request.data.get("learner_id"), project__id=project.id
+                    learner__id=request.data.get("learner_id"),
+                    project__id=project.id,
+                    status="active",
                 )
                 engagement.coach = coach.coach
                 engagement.save()
@@ -3531,7 +3927,12 @@ def send_project_strure_to_hr(request):
             create_notification(hr_user.user.user, path, message)
     except Exception as e:
         print(f"Error occurred while creating notification: {str(e)}")
-    return Response({"message": "Sent to HR."}, status=200)
+    return Response(
+        {
+            "message": "Project Strcuture is Shared with HR and added to the Project successfully."
+        },
+        status=200,
+    )
 
 
 @api_view(["POST"])
@@ -4192,13 +4593,11 @@ def get_engagement_in_projects(request, project_id):
     for engagement in engagements:
         completed_sessions_count = SessionRequestCaas.objects.filter(
             status="completed",
-            project__id=engagement.project.id,
-            learner__id=engagement.learner.id,
+            engagement=engagement,
         ).count()
 
         total_sessions_count = SessionRequestCaas.objects.filter(
-            project__id=engagement.project.id,
-            learner__id=engagement.learner.id,
+            engagement=engagement,
             is_archive=False,
         ).count()
 
@@ -4313,11 +4712,45 @@ def get_learner_engagement_of_project(request, project_id, learner_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_engagement_detail(request, engagement_id):
+    engagement = Engagement.objects.get(id=engagement_id)
+    serializer = EngagementDepthOneSerializer(engagement)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def get_learners_engagement(request, learner_id):
     engagements = Engagement.objects.filter(learner__id=learner_id)
     serializer = EngagementDepthOneSerializer(engagements, many=True)
     return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coaches_of_learner(request, learner_id):
+    engagements = Engagement.objects.filter(learner__id=learner_id)
+    data = []
+
+    for engagement in engagements:
+        if engagement.coach:
+            coach_name = f"{engagement.coach.first_name} {engagement.coach.last_name}"
+            project_name = engagement.project.name
+            profile_pic_url = None  # Default to None
+            if engagement.coach.profile_pic:
+                coach_serializer = CoachSerializer(engagement.coach)
+            data.append(
+                {
+                    "coach": engagement.coach.id,
+                    "project": engagement.project.id,
+                    "coach_name": coach_name,
+                    "project_name": project_name,
+                    "profile_pic": coach_serializer.data["profile_pic"],
+                }
+            )
+
+    return Response(data, status=200)
 
 
 @api_view(["POST"])
@@ -4340,22 +4773,82 @@ def get_session_requests_of_user(request, user_type, user_id):
     session_requests = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
-            Q(confirmed_availability=None) & ~Q(status="pending")
+            Q(confirmed_availability=None) & ~Q(status="pending") & ~Q(status="expired")
         )
     if user_type == "learner":
         session_requests = SessionRequestCaas.objects.filter(
             Q(confirmed_availability=None)
             & Q(learner__id=user_id)
+            & ~Q(status="expired")
             & ~Q(session_type="chemistry")
             & ~Q(status="pending")
         )
     if user_type == "coach":
-        session_requests = SessionRequestCaas.objects.filter(
-            Q(confirmed_availability=None) & Q(coach__id=user_id) & ~Q(status="pending")
-        )
+        # session_requests = SessionRequestCaas.objects.filter(
+        #     Q(confirmed_availability=None)
+        #     & (Q(coach__id=user_id) | Q(coach__isnull=True))
+        #     & ~Q(status="pending")
+        #     & Q(project__coaches_status__coach__id=user_id)
+        # # )
+        # session_requests = []
+        # for session in SessionRequestCaas.objects.all():
+        #     if not session.confirmed_availability and not session.status == "pending":
+        #         if session.coach and session.coach.id == user_id:
+        #             session_requests.append(session)
+        #         # is contract approved
+        #         # is selected and confirmed, and coach is in the project
+        #         elif session.engagement and session.engagement.type=="cod" and CoachContract.objects.filter(project=session.project, coach__id=user_id, status="approved").exists() and  session.project.coaches_status.filter(coach__id = user_id , status__hr__status="select").exists():
+        #             session_requests.append(session)
+        project_id = request.query_params.get("project")
+        if project_id:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(confirmed_availability=None)
+                & ~Q(status="expired")
+                & Q(project__id=int(project_id))
+                & ~Q(status="pending")
+                & (
+                    Q(coach__id=user_id)
+                    | (
+                        Q(project__engagement__type="cod")
+                        & Q(project__coaches_status__coach__id=user_id)
+                        & Q(project__coaches_status__status__hr__status="select")
+                        & Exists(
+                            CoachContract.objects.filter(
+                                project_id=OuterRef("project_id"),
+                                coach_id=user_id,
+                                status="approved",
+                            )
+                        )
+                    )
+                )
+            ).distinct()
+        else:
+
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(confirmed_availability=None)
+                & ~Q(status="expired")
+                & ~Q(status="pending")
+                & (
+                    Q(coach__id=user_id)
+                    | (
+                        Q(project__engagement__type="cod")
+                        & Q(project__coaches_status__coach__id=user_id)
+                        & Q(project__coaches_status__status__hr__status="select")
+                        & Exists(
+                            CoachContract.objects.filter(
+                                project_id=OuterRef("project_id"),
+                                coach_id=user_id,
+                                status="approved",
+                            )
+                        )
+                    )
+                )
+            ).distinct()
+
     if user_type == "hr":
         session_requests = SessionRequestCaas.objects.filter(
             Q(confirmed_availability=None)
+            & ~Q(status="expired")
             & Q(project__hr__id=user_id)
             & ~Q(status="pending")
         )
@@ -4364,6 +4857,7 @@ def get_session_requests_of_user(request, user_type, user_id):
             Engagement.objects.filter(
                 project=OuterRef("project"),
                 learner=OuterRef("learner"),
+                status="active",
             ).values("status")[:1]
         )
     )
@@ -4396,7 +4890,9 @@ def get_session_pending_of_user(request, user_type, user_id):
     res = []
     for session in serializer.data:
         engagement = Engagement.objects.filter(
-            learner__id=session["learner"]["id"], project__id=session["project"]["id"]
+            learner__id=session["learner"]["id"],
+            project__id=session["project"]["id"],
+            status="active",
         )
         if len(engagement) > 0 and engagement[0].coach:
             coach_serializer = CoachSerializer(engagement[0].coach)
@@ -4432,7 +4928,9 @@ def get_all_sessions_of_user(request, user_type, user_id):
     res = []
     for session in sessions_serializer.data:
         engagement = Engagement.objects.filter(
-            learner__id=session["learner"]["id"], project__id=session["project"]["id"]
+            learner__id=session["learner"]["id"],
+            project__id=session["project"]["id"],
+            status="active",
         )
         if len(engagement) > 0 and engagement[0].coach:
             coach_serializer = CoachSerializer(engagement[0].coach)
@@ -4475,15 +4973,21 @@ def get_all_sessions_of_user_for_pmo(request, user_type, user_id):
             is_archive=False,
             project__hr__id=user_id,
         )
-        schedular_sessions = SchedularSessions.objects.all()
+        schedular_sessions = SchedularSessions.objects.filter(
+            coaching_session__batch__project__hr__id=user_id
+        )
     res = []
     for session_request in session_requests:
         project_name = session_request.project.name
         project = ProjectSerializer(session_request.project).data
-        project_type = "caas"
+        project_type = (
+            "caas" if session_request.project.project_type == "CAAS" else "COD"
+        )
         organisation = session_request.project.organisation.name
         engagement = Engagement.objects.filter(
-            learner_id=session_request.learner.id, project_id=session_request.project.id
+            learner_id=session_request.learner.id,
+            project_id=session_request.project.id,
+            status="active",
         )
         if len(engagement) > 0 and engagement[0].coach:
             coach_name = (
@@ -4644,6 +5148,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
             Engagement.objects.filter(
                 project=OuterRef("project"),
                 learner=OuterRef("learner"),
+                status="active",
             ).values("status")[:1]
         )
     )
@@ -4661,6 +5166,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     current_time_seeq = timezone.now()
     timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
     avaliable_sessions = []
+
     if user_type == "pmo":
         pmo = Pmo.objects.get(id=user_id)
         if pmo.sub_role == "manager":
@@ -4703,16 +5209,33 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             availibility__end_time__gt=timestamp_milliseconds
         )
     if user_type == "coach":
-        session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__gt=current_time),
-            Q(coach__id=user_id),
-            Q(is_archive=False),
-            ~Q(status="completed"),
-        )
-        schedular_sessions = SchedularSessions.objects.filter(
-            availibility__coach__id=user_id
-        )
+        project_id = request.query_params.get("project")
+        if project_id:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__gt=current_time),
+                Q(coach__id=user_id),
+                Q(is_archive=False),
+                ~Q(status="completed"),
+                Q(project__id=int(project_id)),
+            )
+
+            schedular_sessions = SchedularSessions.objects.filter(
+                availibility__coach__id=user_id,
+                coaching_session__batch__project__id=int(project_id),
+            )
+        else:
+
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__gt=current_time),
+                Q(coach__id=user_id),
+                Q(is_archive=False),
+                ~Q(status="completed"),
+            )
+            schedular_sessions = SchedularSessions.objects.filter(
+                availibility__coach__id=user_id
+            )
         avaliable_sessions = schedular_sessions.filter(
             availibility__end_time__gt=timestamp_milliseconds
         )
@@ -4736,6 +5259,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             Engagement.objects.filter(
                 project=OuterRef("project"),
                 learner=OuterRef("learner"),
+                status="active",
             ).values("status")[:1]
         ),
         is_seeq_project=Value(False, output_field=BooleanField()),
@@ -4845,6 +5369,7 @@ def get_past_sessions_of_user(request, user_type, user_id):
             Engagement.objects.filter(
                 project=OuterRef("project"),
                 learner=OuterRef("learner"),
+                status="active",
             ).values("status")[:1]
         )
     )
@@ -4904,16 +5429,32 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             availibility__end_time__lt=timestamp_milliseconds
         )
     if user_type == "coach":
-        session_requests = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__lt=current_time)
-            | Q(status="completed"),
-            Q(coach__id=user_id),
-            Q(is_archive=False),
-        )
-        schedular_sessions = SchedularSessions.objects.filter(
-            availibility__coach__id=user_id
-        )
+        project_id = request.query_params.get("project")
+
+        if project_id:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__lt=current_time)
+                | Q(status="completed"),
+                Q(coach__id=user_id),
+                Q(is_archive=False),
+                Q(project__id=int(project_id)),
+            )
+            schedular_sessions = SchedularSessions.objects.filter(
+                availibility__coach__id=user_id,
+                coaching_session__batch__project__id=int(project_id),
+            )
+        else:
+            session_requests = SessionRequestCaas.objects.filter(
+                Q(is_booked=True),
+                Q(confirmed_availability__end_time__lt=current_time)
+                | Q(status="completed"),
+                Q(coach__id=user_id),
+                Q(is_archive=False),
+            )
+            schedular_sessions = SchedularSessions.objects.filter(
+                availibility__coach__id=user_id
+            )
         avaliable_sessions = schedular_sessions.filter(
             availibility__end_time__lt=timestamp_milliseconds
         )
@@ -4937,6 +5478,7 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             Engagement.objects.filter(
                 project=OuterRef("project"),
                 learner=OuterRef("learner"),
+                status="active",
             ).values("status")[:1]
         ),
         is_seeq_project=Value(False, output_field=BooleanField()),
@@ -5012,7 +5554,9 @@ def edit_session_status(request, session_id):
     session_request.save()
     try:
         engagement = Engagement.objects.get(
-            learner=session_request.learner, project=session_request.project
+            learner=session_request.learner,
+            project=session_request.project,
+            status="active",
         )
         if session_request.session_type == "goal_setting":
             tasks = Task.objects.filter(task="add_goal", engagement=engagement)
@@ -5047,6 +5591,7 @@ def edit_session_availability(request, session_id):
         if session.is_booked:
             return Response({"message": "Session edit failed."}, status=401)
         session.availibility.set(time_arr)
+        session.status = "requested"
         session.save()
         if existing_calendar_invite:
             existing_calendar_invite.caas_session = session
@@ -5154,6 +5699,20 @@ def get_learner_of_user_optimized(request, user_type, user_id):
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "hr")])
+def get_coachee_of_coach(request):
+    try:
+        engagements = Engagement.objects.filter(
+            coach__user__user__id=request.user.id
+        ).distinct()
+        serializer = EngagementDepthOneSerializer(engagements, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "learner", "hr")])
 def get_learner_course_enrolled_of_user_optimized(request, user_type, user_id):
     try:
@@ -5231,7 +5790,7 @@ def get_project_organisation_learner_of_user_optimized(request, user_type, user_
                 project_dict = {
                     "project_id": project.id,
                     "name": project.name,
-                    "type": "CAAS",
+                    "type": "CAAS" if project.project_type == "CAAS" else "COD",
                 }
 
                 learner_dict_organisation[learner.id].add(project.organisation.name)
@@ -5290,6 +5849,7 @@ def request_chemistry_session(request, project_id, learner_id):
         coach = Coach.objects.get(id=request.data["coach_id"])
         time_arr = create_time_arr(request.data["availibility"])
         session_to_update = session[0]
+        print("****************************", session_to_update.id, session_to_update)
         session_to_update.availibility.set(time_arr)
         session_to_update.coach = coach
         session_to_update.status = "requested"
@@ -5317,12 +5877,70 @@ def request_chemistry_session(request, project_id, learner_id):
     return Response({"message": "Session requested successfully"}, status=200)
 
 
+# updating the availability and coach in the first pending chemistry available for learner
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("learner", "hr", "pmo")])
+def request_chemistry_session_for_engagement(request, engagement_id):
+    with transaction.atomic():
+        engagement = Engagement.objects.get(id=engagement_id)
+        session = SessionRequestCaas.objects.filter(
+            engagement=engagement,
+            session_type="chemistry",
+            status="pending",
+        )
+
+        if len(session) == 0:
+            return Response({"error": "Max sessions exceeded."}, status=400)
+        else:
+            coach = Coach.objects.get(id=request.data["coach_id"])
+            time_arr = create_time_arr(request.data["availibility"])
+            session_to_update = session[0]
+            print(
+                "****************************", session_to_update.id, session_to_update
+            )
+            session_to_update.availibility.set(time_arr)
+            session_to_update.coach = coach
+            session_to_update.status = "requested"
+            session_to_update.save()
+            path_for_coach = f"/sessions"
+            slot_message = get_slot_message(request.data["availibility"])
+            message_for_coach = f"Coachee has requested {slot_message} for Chemistry session for the Project - {session_to_update.project.name}. Please book one of the requested slots now"
+            create_notification(coach.user.user, path_for_coach, message_for_coach)
+
+            project = Project.objects.get(id=engagement.project.id)
+            time_of_request = timezone.now()
+            coachee = Learner.objects.get(id=engagement.project.id)
+            session_name = "chemistry"
+
+            session_request = SessionRequestedActivity.objects.create(
+                project=project,
+                time_of_request=time_of_request,
+                coach=coach,
+                coachee=coachee,
+                session_name=session_name,
+            )
+
+        session_request.save()
+
+        return Response({"message": "Session requested successfully"}, status=200)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "hr", "coach")])
 def get_learner_sessions_in_project(request, project_id, learner_id):
     sessions = SessionRequestCaas.objects.filter(
         project__id=project_id, learner__id=learner_id
     ).order_by("order")
+    serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "hr", "coach")])
+def get_learner_sessions_in_project_from_engagement(request, engagement_id):
+    sessions = SessionRequestCaas.objects.filter(engagement__id=engagement_id).order_by(
+        "order"
+    )
     serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
     return Response(serializer.data, status=200)
 
@@ -5354,6 +5972,47 @@ def request_session(request, session_id, coach_id):
     session_request.save()
 
     return Response({"message": "Session requested successfully"}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
+def request_session_without_project_structure(request, engagement_id):
+    try:
+        with transaction.atomic():
+            engagement = Engagement.objects.get(id=engagement_id)
+
+            sessions = SessionRequestCaas.objects.filter(
+                engagement=engagement
+            ).order_by("order")
+
+            max_order = sessions.aggregate(Max("order"))["order__max"]
+
+            if max_order is None:
+                max_order = 0
+
+            session_data = SessionRequestCaas.objects.create(
+                learner=engagement.learner,
+                project=engagement.project,
+                session_duration=engagement.project.duration_of_each_session,
+                session_number=max_order + 1,
+                session_type="coaching_session",
+                billable_session_number=max_order + 1,
+                status="requested",
+                order=max_order + 1,
+                engagement=engagement,
+                requested_at=timezone.now(),
+            )
+
+            time_arr = create_time_arr(request.data["availibility"])
+            session_data.availibility.set(time_arr)
+
+            session_data.save()
+
+            return Response({"message": "Session requested successfully"}, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to create request."}, status=500)
 
 
 @api_view(["POST"])
@@ -5494,7 +6153,13 @@ def create_competency(request):
                 tasks.update(status="completed")
             except Exception as e:
                 print(str(e))
-            return Response({"message": "Competency added successfully"}, status=201)
+            return Response(
+                {
+                    "message": "Competency added successfully",
+                    "competency": serializer.data,
+                },
+                status=201,
+            )
         return Response(serializer.errors, status=400)
     else:
         return Response(
@@ -5749,10 +6414,10 @@ def get_current_session(request, user_type, room_id, user_id):
     five_minutes_in_milliseconds = 300000
     current_time = int(timezone.now().timestamp() * 1000)
     five_minutes_plus_current_time = current_time + five_minutes_in_milliseconds
-    sessions = None
-    session_modal = "CAAS"
+    caas_sessions = None
+    seeq_sessions = None
     if user_type == "coach":
-        sessions = SessionRequestCaas.objects.filter(
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(coach__id=user_id),
@@ -5761,17 +6426,15 @@ def get_current_session(request, user_type, room_id, user_id):
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-        if sessions.count() == 0:
-            coach = Coach.objects.get(id=user_id)
-            sessions = SchedularSessions.objects.filter(
-                availibility__end_time__gt=current_time,
-                availibility__coach__email=coach.email,
-                availibility__coach__room_id=room_id,
-            ).order_by("availibility__start_time")
-            session_modal = "SEEQ"
+        coach = Coach.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            availibility__coach__email=coach.email,
+            availibility__coach__room_id=room_id,
+        ).order_by("availibility__start_time")
 
     elif user_type == "learner":
-        sessions = SessionRequestCaas.objects.filter(
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
             Q(learner__id=user_id),
@@ -5780,62 +6443,154 @@ def get_current_session(request, user_type, room_id, user_id):
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-        if sessions.count() == 0:
-            learner = Learner.objects.get(id=user_id)
-            sessions = SchedularSessions.objects.filter(
-                availibility__end_time__gt=current_time,
-                learner__email=learner.email,
-                availibility__coach__room_id=room_id,
-            ).order_by("availibility__start_time")
-            session_modal = "SEEQ"
+        learner = Learner.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            learner__email=learner.email,
+            availibility__coach__room_id=room_id,
+        ).order_by("availibility__start_time")
 
-    elif user_type == "hr":
-        sessions = SessionRequestCaas.objects.filter(
+    elif user_type in ["hr", "pmo"]:
+
+        caas_sessions = SessionRequestCaas.objects.filter(
             Q(is_booked=True),
             Q(confirmed_availability__end_time__gt=current_time),
-            Q(hr__id=user_id),
+            Q(hr__id=user_id) if user_type == "hr" else Q(pmo__id=user_id),
             (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
             Q(is_archive=False),
             ~Q(status="completed"),
         ).order_by("confirmed_availability__start_time")
 
-    elif user_type == "pmo":
-        sessions = SessionRequestCaas.objects.filter(
-            Q(is_booked=True),
-            Q(confirmed_availability__end_time__gt=current_time),
-            Q(pmo__id=user_id),
-            (Q(coach__room_id=room_id) | Q(pmo__room_id=room_id)),
-            Q(is_archive=False),
-            ~Q(status="completed"),
-        ).order_by("confirmed_availability__start_time")
-
-    if not sessions:
+    if not seeq_sessions and not caas_sessions:
         return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
-    # Get the upcoming next session and current session
-    upcoming_session = sessions.first()
-    if session_modal == "CAAS" and upcoming_session:
-        session_details = {
-            "session_id": upcoming_session.id,
-            "type": "CAAS",
-            "start_time": upcoming_session.confirmed_availability.start_time,
-            "end_time": upcoming_session.confirmed_availability.end_time,
-        }
-    elif session_modal == "SEEQ" and upcoming_session:
-        session_details = {
-            "session_id": upcoming_session.id,
-            "type": "SEEQ",
-            "start_time": upcoming_session.availibility.start_time,
-            "end_time": upcoming_session.availibility.end_time,
-        }
+    nearest_session = None
+    if caas_sessions:
+        nearest_session = caas_sessions.first()
+    if seeq_sessions:
+        if nearest_session:
+            if (
+                seeq_sessions.first().availibility.start_time
+                < nearest_session.confirmed_availability.start_time
+            ):
+                nearest_session = seeq_sessions.first()
+        else:
+            nearest_session = seeq_sessions.first()
 
-    # You can customize the response data based on your requirements
-    response_data = {
-        "message": "success",
-        "upcoming_session": session_details if upcoming_session else None,
-    }
+    if nearest_session:
+        session_details = {
+            "session_id": nearest_session.id,
+            "type": (
+                "CAAS" if isinstance(nearest_session, SessionRequestCaas) else "SEEQ"
+            ),
+            "start_time": (
+                nearest_session.confirmed_availability.start_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.start_time
+            ),
+            "end_time": (
+                nearest_session.confirmed_availability.end_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.end_time
+            ),
+        }
+        response_data = {
+            "message": "success",
+            "upcoming_session": session_details,
+        }
+        return Response(response_data, status=200)
+    else:
+        return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
-    return Response(response_data, status=200)
+
+@api_view(["GET"])
+@permission_classes(
+    [IsAuthenticated, IsInRoles("coach", "learner", "pmo", "hr", "facilitator")]
+)
+def get_current_session_for_coach(request, user_type, user_id):
+    current_time = int(timezone.now().timestamp() * 1000)
+    caas_sessions = None
+    seeq_sessions = None
+    if user_type == "coach":
+
+        coach = Coach.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            availibility__coach__email=coach.email,
+        ).order_by("availibility__start_time")
+    current_time = int(timezone.now().timestamp() * 1000)
+    caas_sessions = None
+    seeq_sessions = None
+    if user_type == "coach":
+        caas_sessions = SessionRequestCaas.objects.filter(
+            Q(is_booked=True),
+            Q(confirmed_availability__end_time__gt=current_time),
+            Q(coach__id=user_id),
+            Q(is_archive=False),
+            ~Q(status="completed"),
+        ).order_by("confirmed_availability__start_time")
+
+        coach = Coach.objects.get(id=user_id)
+        seeq_sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            availibility__coach__email=coach.email,
+        ).order_by("availibility__start_time")
+    if not seeq_sessions and not caas_sessions:
+        return Response({"error": "You don't have any upcoming sessions."}, status=404)
+
+    nearest_session = None
+    if caas_sessions:
+        nearest_session = caas_sessions.first()
+    if seeq_sessions:
+        print("seeq", seeq_sessions)
+        if nearest_session:
+            if (
+                seeq_sessions.first().availibility.start_time
+                < nearest_session.confirmed_availability.start_time
+            ):
+                nearest_session = seeq_sessions.first()
+        else:
+            nearest_session = seeq_sessions.first()
+
+    if nearest_session:
+        session_details = {
+            "session_id": nearest_session.id,
+            "type": (
+                "CAAS" if isinstance(nearest_session, SessionRequestCaas) else "SEEQ"
+            ),
+            "start_time": (
+                nearest_session.confirmed_availability.start_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.start_time
+            ),
+            "end_time": (
+                nearest_session.confirmed_availability.end_time
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.end_time
+            ),
+            "project_name": (
+                nearest_session.project.name
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.coaching_session.batch.project.name
+            ),
+            "session_name": (
+                f"{nearest_session.session_type}"
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.coaching_session.session_type
+            ),
+            "room_id": (
+                nearest_session.coach.room_id
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.availibility.coach.room_id
+            ),
+        }
+        response_data = {
+            "message": "success",
+            "upcoming_session": session_details,
+        }
+        return Response(response_data, status=200)
+    else:
+        return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
 
 @api_view(["POST"])
@@ -5908,7 +6663,7 @@ def schedule_session_directly(request, session_id):
 
         if session.session_type == "stakeholder_interview":
             engagement = Engagement.objects.get(
-                learner=session.learner, project=session.project
+                learner=session.learner, project=session.project, status="active"
             )
             session.coach = engagement.coach
             session.hr = session.project.hr.first()
@@ -6930,8 +7685,8 @@ class AddRegisteredCoach(APIView):
                 # Create the Coach User using the Profile
                 coach_user = Coach.objects.create(
                     user=profile,
-                    first_name=first_name,
-                    last_name=last_name,
+                    first_name=first_name.strip().title(),
+                    last_name=last_name.strip().title(),
                     email=email,
                     phone=phone,
                     phone_country_code=phone_country_code,
@@ -7051,8 +7806,8 @@ class AddRegisteredFacilitator(APIView):
                 # Create the Facilitator User using the Profile
                 facilitator_user = Facilitator.objects.create(
                     user=profile,
-                    first_name=first_name,
-                    last_name=last_name,
+                    first_name=first_name.strip().title(),
+                    last_name=last_name.strip().title(),
                     email=email,
                     phone=phone,
                     phone_country_code=phone_country_code,
@@ -7374,6 +8129,28 @@ def edit_project_caas(request, project_id):
         project.calendar_invites = request.data.get(
             "calendar_invites", project.calendar_invites
         )
+
+        if project.project_type == "COD":
+            project.is_project_structure = request.data.get(
+                "is_project_structure", project.is_project_structure
+            )
+            total_credits_in_hours = int(request.data.get("total_credits"))
+            total_credits_in_minutes = total_credits_in_hours * 60
+            project.total_credits = total_credits_in_minutes
+            if not project.is_project_structure:
+                project.duration_of_each_session = request.data.get(
+                    "duration_of_each_session", project.duration_of_each_session
+                )
+            if not project.is_project_structure and request.data["is_session_expiry"]:
+                project.is_session_expiry = request.data.get(
+                    "is_session_expiry", project.is_session_expiry
+                )
+                request_expiry_time_in_hours = int(request.data["request_expiry_time"])
+                request_expiry_time_in_minutes = request_expiry_time_in_hours * 60
+                project.request_expiry_time = request_expiry_time_in_minutes
+            if project.total_credits != request.data.get("total_credits"):
+                project.credit_history.append(request.data.get("total_credits"))
+
         project.finance = request.data.get("finance", project.finance)
         project.junior_pmo = junior_pmo
 
@@ -7897,49 +8674,61 @@ class StandardizedFieldRequestAcceptReject(APIView):
         request_id = request.data.get("request_id")
 
         try:
-            request_instance = StandardizedFieldRequest.objects.get(id=request_id)
-            field_name = request_instance.standardized_field_name.field
-            value = request_instance.value
+            with transaction.atomic():
+                request_instance = StandardizedFieldRequest.objects.get(id=request_id)
+                field_name = request_instance.standardized_field_name.field
+                value = request_instance.value
 
-            standardized_field, created = StandardizedField.objects.get_or_create(
-                field=field_name
-            )
-            if status == "accepted":
-                request_instance.status = status
-                request_instance.save()
+                standardized_field, created = StandardizedField.objects.get_or_create(
+                    field=field_name
+                )
+                if status == "accepted":
+                    request_instance.status = status
+                    request_instance.save()
 
-                # if value not in standardized_field.values:
-                #     standardized_field.values.append(value)
-                #     standardized_field.save()
-                # else:
-                #     return Response({"error": "Value already present."}, status=404)
-                return Response({"message": f"Request {status}"}, status=200)
-            else:
-                request_instance.status = status
-                request_instance.save()
+                    # if value not in standardized_field.values:
+                    #     standardized_field.values.append(value)
+                    #     standardized_field.save()
+                    # else:
+                    #     return Response({"error": "Value already present."}, status=404)
+                    return Response({"message": f"Request {status}"}, status=200)
+                else:
+                    request_instance.status = status
+                    request_instance.save()
 
-                if value in standardized_field.values:
-                    standardized_field.values.remove(value)
-                    standardized_field.save()
+                    if value in standardized_field.values:
+                        standardized_field.values.remove(value)
+                        standardized_field.save()
 
-                for model_name, fields in models_to_update.items():
-                    model_class = globals()[model_name]
-                    instances = model_class.objects.all()
+                    for model_name, fields in models_to_update.items():
+                        model_class = globals()[model_name]
+                        instances = model_class.objects.all()
 
-                    for instance in instances:
-                        for field in fields:
-                            field_value = getattr(instance, field, None)
-                            if field_value is not None:
-                                if (
-                                    isinstance(field_value, list)
-                                    and value in field_value
-                                ):
-                                    field_value.remove(value)
-                                    instance.save()
-
-                return Response({"message": f"Request {status}"}, status=200)
-        except StandardizedFieldRequest.DoesNotExist:
-            return Response({"error": f"Request not found."}, status=404)
+                        for instance in instances:
+                            for field in fields:
+                                field_value = getattr(instance, field, None)
+                                if field_value is not None:
+                                    if (
+                                        isinstance(field_value, list)
+                                        and value in field_value
+                                    ):
+                                        field_value.remove(value)
+                                        instance.save()
+                    send_mail_templates(
+                        "coach_templates/reject_feild_item_request.html",
+                        [request_instance.coach.email],
+                        "Meeraq | Field Rejected",
+                        {
+                            "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
+                            "value": value,
+                            "feild": field_name.replace(" ", "_").title(),
+                        },
+                        [],
+                    )
+                    return Response({"message": f"Request {status}"}, status=200)
+        except Exception as e:
+            print(str(e))
+            return Response({"error": f"Failed to perform operation."}, status=500)
 
 
 class StandardFieldDeleteValue(APIView):
@@ -8036,7 +8825,7 @@ def create_project_contract(request):
 
 
 class ProjectContractAPIView(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo", "learner")]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo", "learner", "hr")]
 
     def get(self, request, format=None):
         contracts = ProjectContract.objects.all()
@@ -8045,7 +8834,7 @@ class ProjectContractAPIView(APIView):
 
 
 class ProjectContractDetailView(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("coach", "pmo", "hr")]
 
     def get(self, request, project_id, format=None):
         print(project_id)
@@ -8377,7 +9166,9 @@ def change_user_role(request, user_id):
         return Response({"error": "User role not found."}, status=400)
     roles = []
     for role in user.profile.roles.all():
-        roles.append(role.name)
+        user_data = get_user_for_active_inactive(role.name, user.profile.user.username)
+        if user_data and user_data.active_inactive:
+            roles.append(role.name)
     if user_profile_role == "coach":
         if user.profile.coach.active_inactive or not user.profile.coach.is_approved:
             serializer = CoachDepthOneSerializer(user.profile.coach)
@@ -8412,7 +9203,6 @@ def change_user_role(request, user_id):
         if not user.profile.finance.active_inactive:
             return None
         serializer = FinanceDepthOneSerializer(user.profile.finance)
- 
     elif user_profile_role == "facilitator":
         if not user.profile.facilitator.active_inactive:
             return None
@@ -8469,6 +9259,14 @@ def change_user_role(request, user_id):
         if not user.profile.hr.active_inactive:
             return None
         serializer = HrDepthOneSerializer(user.profile.hr)
+    elif user_profile_role == "sales":
+        if not user.profile.sales.active_inactive:
+            return None
+        serializer = SalesDepthOneSerializer(user.profile.sales)
+    elif user_profile_role == "ctt_pmo":
+        if not user.profile.cttpmo.active_inactive:
+            return None
+        serializer = CTTPmoDepthOneSerializer(user.profile.cttpmo)
     else:
         return Response({"error": "Unknown user role."}, status=400)
     return Response(
@@ -8956,6 +9754,59 @@ def get_junior_pmo(request, user_id):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin", "pmo")])
+def add_ctt_pmo(request):
+    try:
+        with transaction.atomic():
+            data = request.data
+            ctt_pmo_serializer = CTTPmoSerializer(data=data)
+            if ctt_pmo_serializer.is_valid():
+                name = data.get("name")
+                email = data.get("email", "").strip().lower()
+                phone = data.get("phone")
+
+                if not (name and phone and email):
+                    return Response(
+                        {"error": "Name and phone are mandatory fields."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    user = User.objects.create_user(
+                        username=email,
+                        email=email,
+                        password=User.objects.make_random_password(),
+                    )
+
+                    profile = Profile.objects.create(user=user)
+                else:
+                    profile = Profile.objects.get(user=user)
+                ctt_pmo_role, created = Role.objects.get_or_create(name="ctt_pmo")
+                profile.roles.add(ctt_pmo_role)
+                profile.save()
+                ctt_pmo_serializer.save(user=profile)
+                return Response(ctt_pmo_serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(
+                    ctt_pmo_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin", "pmo")])
+def get_ctt_pmos(request):
+    try:
+        ctt_pmos = CTTPmo.objects.all()
+        serializer = CTTPmoSerializer(ctt_pmos, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 PATH_ACTIVITY_MAPPING = {
     "/api/login/": "Login",  # for all
     "/api/send_list_to_hr/": "Send profile to HR",  # Pmo
@@ -9407,6 +10258,94 @@ def add_remark_to_task(request):
     )
 
 
+def get_formatted_tasks(tasks):
+    try:
+        task_details = []
+        for task in tasks:
+            # Extract the latest remark message or set it to None if remarks are empty
+            latest_remark = task.remarks[-1]["message"] if task.remarks else None
+
+            # Determine the coach name associated with the task
+            coach_name = (
+                task.coach.__str__()
+                if task.coach
+                else (
+                    task.engagement.coach.__str__()
+                    if task.engagement and task.engagement.coach
+                    else (
+                        task.goal.engagement.coach.__str__()
+                        if task.goal and task.goal.engagement.coach
+                        else (
+                            task.session_caas.coach.__str__()
+                            if task.session_caas and task.session_caas.coach
+                            else ""
+                        )
+                    )
+                )
+            )
+            learner_name = (
+                task.engagement.learner.name
+                if task.engagement
+                else (
+                    task.goal.engagement.learner.name
+                    if task.goal
+                    else (
+                        task.session_caas.learner.name
+                        if task.session_caas and task.session_caas.learner
+                        else ""
+                    )
+                )
+            )
+            session_name = (
+                SESSION_TYPE_VALUE[task.session_caas.session_type]
+                if task.session_caas
+                else ""
+            )
+            # Retrieve vendor name associated with the task, handling exceptions gracefully
+            vendor_name = None
+            if task.vendor_user:
+                try:
+                    vendor = Vendor.objects.get(user__user=task.vendor_user)
+                    vendor_name = vendor.name
+                except Vendor.DoesNotExist:
+                    pass
+
+            # Determine the project name associated with the task
+            project_name = (
+                task.caas_project.name
+                if task.caas_project
+                else (
+                    task.session_caas.project.name
+                    if task.session_caas
+                    else (
+                        task.engagement.project.name
+                        if task.engagement
+                        else task.goal.engagement.project.name if task.goal else ""
+                    )
+                )
+            )
+
+            # Serialize task data
+            serialized_data = TaskSerializer(task).data
+
+            # Append task details to the list
+            task_details.append(
+                {
+                    **serialized_data,
+                    "learner_name": learner_name,
+                    "project_name": project_name,
+                    "latest_remark": latest_remark,
+                    "coach_name": coach_name,
+                    "vendor_name": vendor_name,
+                    "session_name": session_name,
+                }
+            )
+        return task_details
+    except Exception as e:
+        print(str(e))
+        return None
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_tasks(request):
@@ -9423,86 +10362,49 @@ def get_tasks(request):
             | Q(goal__engagement__project__junior_pmo=junior_pmo_id)
         )
 
-    # Iterate through each task
-    for task in tasks:
-        # Extract the latest remark message or set it to None if remarks are empty
-        latest_remark = task.remarks[-1]["message"] if task.remarks else None
+    task_details = get_formatted_tasks(tasks)
 
-        # Determine the coach name associated with the task
-        coach_name = (
-            task.coach.__str__()
-            if task.coach
-            else (
-                task.engagement.coach.__str__()
-                if task.engagement and task.engagement.coach
-                else (
-                    task.goal.engagement.coach.__str__()
-                    if task.goal and task.goal.engagement.coach
-                    else (
-                        task.session_caas.coach.__str__()
-                        if task.session_caas and task.session_caas.coach
-                        else ""
-                    )
-                )
-            )
-        )
-        learner_name = (
-            task.engagement.learner.name
-            if task.engagement
-            else (
-                task.goal.engagement.learner.name
-                if task.goal
-                else (
-                    task.session_caas.learner.name
-                    if task.session_caas and task.session_caas.learner
-                    else ""
-                )
-            )
-        )
-        session_name = (
-            SESSION_TYPE_VALUE[task.session_caas.session_type]
-            if task.session_caas
-            else ""
-        )
-        # Retrieve vendor name associated with the task, handling exceptions gracefully
-        vendor_name = None
-        if task.vendor_user:
-            try:
-                vendor = Vendor.objects.get(user__user=task.vendor_user)
-                vendor_name = vendor.name
-            except Vendor.DoesNotExist:
-                pass
+    return Response(task_details)
 
-        # Determine the project name associated with the task
-        project_name = (
-            task.caas_project.name
-            if task.caas_project
-            else (
-                task.session_caas.project.name
-                if task.session_caas
-                else (
-                    task.engagement.project.name
-                    if task.engagement
-                    else task.goal.engagement.project.name if task.goal else ""
-                )
-            )
-        )
 
-        # Serialize task data
-        serialized_data = TaskSerializer(task).data
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("coach")])
+def get_coach_tasks(request):
 
-        # Append task details to the list
-        task_details.append(
-            {
-                **serialized_data,
-                "learner_name": learner_name,
-                "project_name": project_name,
-                "latest_remark": latest_remark,
-                "coach_name": coach_name,
-                "vendor_name": vendor_name,
-                "session_name": session_name,
-            }
-        )
+    coach_id = request.query_params.get("coach_id")
+
+    coach = Coach.objects.get(id=int(coach_id))
+
+    tasks = Task.objects.filter(
+        Q(coach=coach)
+        | Q(engagement__coach=coach)
+        | Q(goal__engagement__coach=coach)
+        | Q(session_caas__coach=coach),
+        Q(trigger_date__lte=timezone.now()),
+    )
+
+    task_details = get_formatted_tasks(tasks)
+
+    return Response(task_details)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
+def get_learner_tasks(request):
+
+    learenr_id = request.query_params.get("learenr_id")
+
+    learner = Learner.objects.get(id=int(learenr_id))
+
+    tasks = Task.objects.filter(
+        Q(engagement__learner=learner)
+        | Q(goal__engagement__learner=learner)
+        | Q(session_caas__learner=learner),
+        Q(trigger_date__lte=timezone.now()),
+    )
+
+    task_details = get_formatted_tasks(tasks)
+
     return Response(task_details)
 
 
@@ -9536,7 +10438,15 @@ def get_coaches_in_project_is_vendor(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
         data = {}
-        purchase_orders = fetch_purchase_orders(organization_id)
+        purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed)
+            ),
+            many=True,
+        ).data
+        # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data)
+        # fetch_purchase_orders(organization_id)
         for coach_status in project.coaches_status.all():
             is_vendor = coach_status.coach.user.roles.filter(name="vendor").exists()
             vendor_id = None
@@ -9638,5 +10548,728 @@ def change_user_password(request):
                 return Response({"error": "Failed to reset password!"}, status=500)
     except Exception as e:
         print(str(e))
-        return Response({"error": "Failed to reset password!"}, status=500)
 
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_sales_user(request):
+    name = request.data.get("name")
+    email = request.data.get("email", "").strip().lower()
+    phone = request.data.get("phone")
+    business = request.data.get("business", "")
+    sales_person_id = request.data.get("sales_person_id", "").strip()
+    username = email  # username and email are the same
+    # Check if required data is provided
+    if not all([name, email, phone, username, sales_person_id]):
+        return Response(
+            {"error": "All required fields must be provided."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    existing_sales_user = Sales.objects.filter(sales_person_id=sales_person_id)
+    if existing_sales_user.exists():
+        return Response(
+            {"error": "Selected zoho sales person already exists."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        with transaction.atomic():
+            # Check if the user already exists
+            user = User.objects.filter(email=email).first()
+
+            if not user:
+                # If the user does not exist, create a new user
+                user = User.objects.create_user(username=username, email=email)
+                temp_password = "".join(
+                    random.choices(
+                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
+                        k=8,
+                    )
+                )
+                user.set_password(temp_password)
+                user.save()
+                profile = Profile.objects.create(user=user)
+
+            else:
+                profile = Profile.objects.get(user=user)
+
+            # Create or get the "pmo" role
+            sales_role, created = Role.objects.get_or_create(name="sales")
+            profile.roles.add(sales_role)
+            profile.save()
+
+            # Create the PMO User using the Profile
+            sales_user = Sales.objects.create(
+                user=profile,
+                name=name,
+                email=email,
+                phone=phone,
+                sales_person_id=sales_person_id,
+                business=business,
+            )
+
+            name = sales_user.name
+            add_contact_in_wati("sales", name, sales_user.phone)
+
+            # Return success response without room_id
+            return Response({"message": "Sales User added successfully."}, status=201)
+
+    except IntegrityError as e:
+        return Response({"error": "User with this email already exists."}, status=400)
+
+    except Exception as e:
+        # Return error response if any exception occurs
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sales_user(request):
+    try:
+        sales_user = Sales.objects.all()
+        serializer = SalesSerializer(sales_user, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Error fetching Sales user: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+def get_coach_overall_rating(coach_id):
+    try:
+        coach_feedback_responses = CoachingSessionsFeedbackResponse.objects.filter(
+            Q(caas_session__coach_id=coach_id)
+            | Q(schedular_session__availibility__coach_id=coach_id)
+        )
+
+        overall_rating = coach_feedback_responses.aggregate(
+            avg_rating=Avg(
+                "answers__rating", filter=Q(answers__question__type="rating_1_to_5")
+            )
+        )["avg_rating"]
+
+        return overall_rating if overall_rating is not None else 0
+    except Exception as e:
+        print(str(e))
+        return 0
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_summary_data(request, coach_id):
+    try:
+        coach = Coach.objects.get(id=coach_id)
+
+        coach_status_count = CoachStatus.objects.filter(coach=coach).count()
+
+        coach_batches = SchedularBatch.objects.filter(coaches=coach)
+        distinct_project_count = coach_batches.values("project").distinct().count()
+
+        total_coaching_session = SchedularSessions.objects.filter(
+            availibility__coach=coach,
+        ).count()
+
+        laser_coaching_sessions = SchedularSessions.objects.filter(
+            availibility__coach=coach,
+            coaching_session__session_type="laser_coaching_session",
+        ).count()
+
+        total_mentoring_sessions = SchedularSessions.objects.filter(
+            availibility__coach=coach,
+            coaching_session__session_type="mentoring_session",
+        ).count()
+
+        pending_schedular_session = SchedularSessions.objects.filter(
+            availibility__coach=coach, status="pending"
+        ).count()
+
+        return Response(
+            {
+                "last_login": coach.user.user.last_login,
+                "coaching_projects": coach_status_count,
+                "training_projects": distinct_project_count,
+                "coach_rating": get_coach_overall_rating(coach.id),
+                "total_coaching_session": total_coaching_session,
+                "laser_coaching_sessions": laser_coaching_sessions,
+                "pending_session": pending_schedular_session,
+                "total_mentoring_sessions": total_mentoring_sessions,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_facilitator_summary_data(request, facilitator_id):
+    try:
+        facilitator = Facilitator.objects.get(id=facilitator_id)
+
+        live_sessions = LiveSession.objects.filter(facilitator=facilitator)
+        distinct_project_count = (
+            live_sessions.values("batch__project").distinct().count()
+        )
+
+        overall_answer = Answer.objects.filter(
+            question__type="rating_0_to_10",
+            question__feedbacklesson__live_session__facilitator__id=facilitator_id,
+        )
+
+        overall_nps = calculate_nps_from_answers(overall_answer)
+
+        return Response(
+            {
+                "last_login": facilitator.user.user.last_login,
+                "training_projects": distinct_project_count,
+                "overall_nps": overall_nps,
+                "live_sessions": live_sessions.count(),
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def hide_columns(request):
+    try:
+        hidden_columns = request.data.get("hidden_columns")
+        table_name = request.data.get("table_name")
+        table_hidden_column, created = TableHiddenColumn.objects.get_or_create(
+            table_name=table_name
+        )
+        table_hidden_column.hidden_columns = hidden_columns
+        table_hidden_column.save()
+        return Response(status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to hide column"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_table_hide_columns(request, table_name):
+    try:
+
+        table_hidden_column = TableHiddenColumn.objects.get(table_name=table_name)
+
+        return Response(table_hidden_column.hidden_columns)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def edit_remark(request):
+    try:
+        coach_id = request.data.get("coach_id")
+        remark = request.data.get("remark")
+        coach = Coach.objects.get(id=int(coach_id))
+        coach.remark = remark
+        coach.save()
+        return Response({"message": f"Remark updated successfully!"}, status=200)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to update remark"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_goals(request):
+    try:
+        goals = Goal.objects.all()
+        serializer = GoalDescriptionSerializer(goals, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_goal_without_enagagement(request):
+    try:
+        goal_name = request.data.get("name")
+        description = request.data.get("description")
+        goal = Goal.objects.create(name=goal_name, description=description)
+
+        return Response({"message": "Goal created sucessfully!"})
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to create goal"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_new_user(request):
+    try:
+        with transaction.atomic():
+            data = request.data
+            print(request.data)
+            name = data.get("name", None)
+            email = data.get("email", "").strip().lower()
+            roles = data.get("role", None)
+            sub_role = data.get("sub_role", "")
+            phone = data.get("phone", "")
+            password = str(uuid.uuid4())
+
+            if not email or not name or not roles:
+                return Response(
+                    {"error": "Please fill all the required feilds."}, status=500
+                )
+
+            if "pmo" in roles:
+
+                add_new_pmo(
+                    {
+                        "name": name,
+                        "email": email,
+                        "phone": phone,
+                        "password": password,
+                        "sub_role": sub_role,
+                    }
+                )
+            # if "sales" in roles:
+            #     add_new_sales_user({})
+
+            if "finance" in roles:
+
+                # Check if the user already exists
+                user = User.objects.filter(email=email).first()
+
+                if not user:
+                    # If the user does not exist, create a new user
+                    user = User.objects.create_user(
+                        username=email, password=password, email=email
+                    )
+                    profile = Profile.objects.create(user=user)
+
+                else:
+                    profile = Profile.objects.get(user=user)
+
+                # Create or get the "finance" role
+                finance_role, created = Role.objects.get_or_create(name="finance")
+                profile.roles.add(finance_role)
+                profile.save()
+
+                # Create the finance User using the Profile
+                finance_user = Finance.objects.create(
+                    user=profile,
+                    name=name,
+                    email=email,
+                )
+
+            if "sales" in roles:
+
+                # Check if the user already exists
+                user = User.objects.filter(email=email).first()
+
+                if not user:
+                    # If the user does not exist, create a new user
+                    user = User.objects.create_user(
+                        username=email, password=password, email=email
+                    )
+                    profile = Profile.objects.create(user=user)
+
+                else:
+                    profile = Profile.objects.get(user=user)
+
+                # Create or get the "sales" role
+                sales_role, created = Role.objects.get_or_create(name="sales")
+                profile.roles.add(sales_role)
+                profile.save()
+
+                # Create the sales User using the Profile
+                sales_user = Sales.objects.create(
+                    user=profile,
+                    name=name,
+                    email=email,
+                )
+
+        return Response({"message": "User added sucessfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to add user!"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_competency_of_goal(request, goal_id):
+    try:
+        competency = Competency.objects.filter(goal__id=goal_id)
+        serializer = CompetencySerializer(competency, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_competency_for_goal(request, goal_id):
+    try:
+        name = request.data.get("name")
+
+        goal = Goal.objects.get(id=goal_id)
+        competency = Competency.objects.create(goal=goal, name=name)
+        return Response({"message": "Competency created sucessfully!"})
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to create competency"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_goal_detail(request, goal_id):
+    try:
+        goal = Goal.objects.get(id=goal_id)
+        serializer = GoalDescriptionSerializer(goal)
+        return Response(serializer.data)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to create competency"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_competency_action_items(request, comp_id):
+    try:
+        action_items = ActionItem.objects.filter(competency__id=comp_id)
+        serializer = ActionItemSerializer(action_items, many=True)
+        return Response(serializer.data)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_pmo_goal(request):
+    try:
+        goal_name = request.data.get("name")
+        description = request.data.get("description")
+        goal_id = request.data.get("goal_id")
+        goal = Goal.objects.get(id=goal_id)
+        goal.name = goal_name
+        goal.description = description
+        goal.save()
+
+        return Response({"message": "Goal updated sucessfully!"})
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to update goal"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_competency(request):
+    try:
+        competency = Competency.objects.all()
+        serializer = CompetencySerializer(competency, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_po_of_project(request, project_id):
+    try:
+        po_ids = set()
+        project = Project.objects.get(id=project_id)
+        for coach_status in project.coaches_status:
+            if coach_status.purchase_order_id:
+                po_ids.add(coach_status.purchase_order_id)
+        purchase_orders = []
+        for po_id in po_ids:
+            access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+            if not access_token:
+                raise Exception(
+                    "Access token not found. Please generate an access token first."
+                )
+            api_url = (
+                f"{base_url}/purchaseorders/{po_id}?organization_id={organization_id}"
+            )
+            auth_header = {"Authorization": f"Bearer {access_token}"}
+            response = requests.put(api_url, headers=auth_header, data=request.data)
+            if response.status_code == 200:
+                purchase_orders.append(response.json())
+
+        return Response(purchase_orders)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner")])
+def get_all_to_be_booked_sessions_for_coachee(request, learner_id):
+    sessions = SessionRequestCaas.objects.filter(
+        learner__id=learner_id,
+        status="pending",
+        engagement__coach__isnull=False,
+    ).order_by("order")
+    serializer = SessionRequestCaasDepthOneSerializer(sessions, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_engagement_of_a_coachee(request, learner_id):
+    engagement = Engagement.objects.get(learner__id=learner_id)
+    serializer = EngagementDepthOneSerializer(engagement)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_engagement_of_learner(request):
+    try:
+        with transaction.atomic():
+
+            engagement_id = request.data.get("engagement_id")
+
+            engagement = Engagement.objects.get(id=engagement_id)
+
+            engagemenet_project_structure = transform_project_structure(
+                engagement.project.project_structure
+            )
+            new_engagement = Engagement(
+                learner=engagement.learner, project=engagement.project, status="active"
+            )
+            new_engagement.save()
+            for index, session in enumerate(engagemenet_project_structure):
+                session_data = SessionRequestCaas.objects.create(
+                    learner=engagement.learner,
+                    project=engagement.project,
+                    session_duration=session["session_duration"],
+                    session_number=session["session_number"],
+                    session_type=session["session_type"],
+                    billable_session_number=session["billable_session_number"],
+                    status="pending",
+                    order=index + 1,
+                    engagement=new_engagement,
+                )
+
+        try:
+            available_credits = get_available_credit_for_project(
+                engagement.project.id, "both"
+            )
+
+            total_durations = credits_needed_for_an_engagement(engagement)
+            needed_credits_present = True
+            if total_durations is not None and available_credits is not None:
+                needed_credits_present = (
+                    available_credits >= total_durations
+                    if total_durations != 0
+                    else False
+                )
+
+            if not needed_credits_present:
+                for hr in engagement.project.hr.all():
+                    send_mail_templates(
+                        "hr_emails/engagement_created_with_less_credit.html",
+                        [hr.email],
+                        "Meeraq | Insufficient Credits Remaining",
+                        {
+                            "name": hr.first_name.strip().title(),
+                            "learner_name": engagement.learner.name.strip().title(),
+                            "project_name": engagement.project.name.title(),
+                        },
+                        [],
+                    )
+            create_task(
+                {
+                    "task": "select_a_coach",
+                    "engagement": engagement.id,
+                    "priority": "high",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                30,
+            )
+        except Exception as e:
+            print(str(e))
+
+        return Response(
+            {"message": f"Engagement created successfully."},
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_available_credits(request, engagement_id):
+    try:
+        engagement = Engagement.objects.get(id=engagement_id)
+        available_credits = get_available_credit_for_project(
+            engagement.project.id, "both"
+        )
+
+        total_durations = credits_needed_for_an_engagement(engagement)
+
+        if total_durations is not None and available_credits is not None:
+            needed_credits_present = (
+                available_credits >= total_durations if total_durations != 0 else False
+            )
+        else:
+            needed_credits_present = False
+
+        return Response(
+            {
+                "available_credits": available_credits,
+                "total_durations": total_durations,
+                "needed_credits_present": needed_credits_present,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to retrieve data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_available_credit_of_project(request, project_id):
+    try:
+
+        available_credits = get_available_credit_for_project(project_id, "both")
+
+        return Response(
+            {
+                "available_credits": available_credits,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to retrieve data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_available_credits_without_project_structure(request, engagement_id):
+    try:
+        engagement = Engagement.objects.get(id=engagement_id)
+        available_credits = get_available_credit_for_project(
+            engagement.project.id, "both"
+        )
+
+        total_durations = engagement.project.duration_of_each_session
+
+        if total_durations is not None and available_credits is not None:
+            needed_credits_present = (
+                available_credits >= total_durations if total_durations != 0 else False
+            )
+        else:
+            needed_credits_present = False
+
+        return Response(
+            {
+                "available_credits": available_credits,
+                "total_durations": total_durations,
+                "needed_credits_present": needed_credits_present,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to retrieve data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_available_credits_of_all_cod_projects(request):
+    try:
+        projects = Project.objects.filter(project_type="COD")
+        all_project_credit = {}
+        for project in projects:
+
+            engagement = Engagement.objects.filter(project=project).first()
+            available_credits = get_available_credit_for_project(
+                engagement.project.id, "both"
+            )
+
+            all_project_credit[project.id] = available_credits
+
+        return Response(all_project_credit)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to retrieve data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

@@ -410,6 +410,10 @@ urlpatterns = [
         views.update_nudge_status,
     ),
     path(
+        "delete-nudge/<int:nudge_id>/",
+        views.delete_nudge,
+    ),
+    path(
         "get-all-nudges-for-that-learner/<int:learner_id>/",
         views.get_all_nudges_for_that_learner,
     ),

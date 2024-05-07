@@ -42,6 +42,9 @@ from .models import (
     Facilitator,
     Finance,
     Task,
+    Sales,
+    TableHiddenColumn,
+    CTTPmo,
 )
 
 # Register your models here.
@@ -88,3 +91,6 @@ admin.site.register(APILog)
 admin.site.register(SuperAdmin)
 admin.site.register(Finance)
 admin.site.register(Task)
+admin.site.register(Sales)
+admin.site.register(TableHiddenColumn)
+admin.site.register(CTTPmo)
