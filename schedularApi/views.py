@@ -6578,7 +6578,7 @@ def get_project_and_handover(request):
                 handover_details = HandoverDetails.objects.filter(
                     schedular_project=project
                 )
-            elif project_type == "caas":
+            elif project_type == "CAAS" or project_type == "COD":
                 project = Project.objects.get(id=project_id)
                 project_serializer = ProjectSerializer(project)
                 handover_details = HandoverDetails.objects.filter(caas_project=project)

@@ -292,7 +292,7 @@ class Expense(models.Model):
 
 
 class HandoverDetails(models.Model):
-    PROJECT_TYPE_CHOICES = [("caas", "CAAS"), ("skill_training", "Skill Training")]
+    PROJECT_TYPE_CHOICES = [("caas", "CAAS"), ("skill_training", "Skill Training"),("COD", "COD"),]
     DELIVERY_MODE_CHOICES = [
         ("online", "Online"),
         ("hybrid", "Hybrid"),
