@@ -1188,7 +1188,7 @@ def update_live_session(request, live_session_id):
 
                 current_time = timezone.now()
                 days_difference = (update_live_session.date_time - current_time).days
-                
+
                 if update_live_session.date_time > current_time:
                     # delete existing task and create new task based on date
                     update_status_tasks = Task.objects.filter(
@@ -3314,20 +3314,22 @@ def send_live_session_link(request):
         )
         if live_session.batch.project.status == "ongoing":
             email_contents.append(
-               {"file_name": "send_live_session_link.html",
-                 "user_email" : learner.email,
-                 "email_subject": "Meeraq - Live Session",
-                 "content" :{
-                    "participant_name": learner.name,
-                    "live_session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
-                    "project_name": live_session.batch.project.name,
-                    "description": (
-                        live_session.description if live_session.description else ""
-                    ),
-                    "meeting_link": live_session.meeting_link,
-                    "is_not_in_person_session": is_not_in_person_session,
-                },
-                 "bcc_emails": []}
+                {
+                    "file_name": "send_live_session_link.html",
+                    "user_email": learner.email,
+                    "email_subject": "Meeraq - Live Session",
+                    "content": {
+                        "participant_name": learner.name,
+                        "live_session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                        "project_name": live_session.batch.project.name,
+                        "description": (
+                            live_session.description if live_session.description else ""
+                        ),
+                        "meeting_link": live_session.meeting_link,
+                        "is_not_in_person_session": is_not_in_person_session,
+                    },
+                    "bcc_emails": [],
+                }
             )
     send_emails_in_bulk.delay(email_contents)
     return Response({"message": "Emails sent successfully"})
@@ -6378,7 +6380,7 @@ def create_expense(request):
             date_of_expense = request.data.get("date_of_expense")
             live_session = request.data.get("live_session")
             session = request.data.get("session")
-            coach =  request.data.get("coach")
+            coach = request.data.get("coach")
             batch = request.data.get("batch")
             facilitator = request.data.get("facilitator")
             file = request.data.get("file")
@@ -6394,19 +6396,27 @@ def create_expense(request):
                     {"error": "Failed to create expense."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
+            email_name = None
+            expense_name = None
+            project_name = None
+
             if name and date_of_expense and description and amount:
                 if session:
                     session = SessionRequestCaas.objects.get(id=int(session))
-                    coach = Coach.objects.get(id =int(coach) )
+                    coach = Coach.objects.get(id=int(coach))
                     expense = Expense.objects.create(
                         name=name,
                         description=description,
                         date_of_expense=date_of_expense,
                         session=session,
-                        coach =coach,
+                        coach=coach,
                         file=file,
                         amount=amount,
                     )
+                    email_name = f"{coach.first_name} {coach.last_name}"
+                    expense_name = expense.name
+                    project_name = session.project.name
+
                 else:
 
                     facilitator = Facilitator.objects.get(id=int(facilitator))
@@ -6426,9 +6436,9 @@ def create_expense(request):
                         amount=amount,
                     )
 
-                facilitator_name = f"{facilitator.first_name} {facilitator.last_name}"
-                expense_name = expense.name
-                project_name = expense.batch.project.name
+                    email_name = f"{facilitator.first_name} {facilitator.last_name}"
+                    expense_name = expense.name
+                    project_name = expense.batch.project.name
 
                 try:
                     emails = [
@@ -6443,9 +6453,9 @@ def create_expense(request):
                     send_mail_templates(
                         "expenses/expenses_emails.html",
                         emails,
-                        "Verification Required: Facilitators Expenses",
+                        "Verification Required: Coaches Expenses" if session else   "Verification Required: Facilitators Expenses",
                         {
-                            "facilitator_name": facilitator_name,
+                            "facilitator_name": email_name,
                             "expense_name": expense_name,
                             "project_name": project_name,
                             "description": expense.description,
@@ -6459,18 +6469,22 @@ def create_expense(request):
                     for email in email_array:
                         pmo = Pmo.objects.filter(email=email.strip().lower()).first()
                         send_mail_templates(
-                            "pmo_emails/expense_added_by_facilitator.html",
+                            (
+                                "pmo_emails/expense_added_by_coach.html"
+                                if session
+                                else "pmo_emails/expense_added_by_facilitator.html"
+                            ),
                             [email],
                             "Meeraq | Expense Upload Notification",
                             {
                                 "name": pmo.name if pmo else "User",
-                                "project_name": batch.project.name,
-                                "facilitator_name": facilitator.first_name
-                                + " "
-                                + facilitator.last_name,
+                                "project_name": project_name,
+                                "facilitator_name": email_name,
                                 "description": expense.description,
                                 "amount": expense.amount,
-                                "date_of_expense": expense.created_at.strftime("%d/%m/%Y"),
+                                "date_of_expense": expense.created_at.strftime(
+                                    "%d/%m/%Y"
+                                ),
                             },
                             [],
                         )
@@ -6479,8 +6493,8 @@ def create_expense(request):
                     print(str(e))
 
                 return Response(
-                        {"message": "Expense created successfully!"}, status=201
-                    )
+                    {"message": "Expense created successfully!"}, status=201
+                )
             else:
                 return Response(
                     {"error": "Fill in all the required feild"},
