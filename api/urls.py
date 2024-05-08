@@ -46,6 +46,8 @@ urlpatterns = [
     path("projects/ongoing/", views.get_ongoing_projects),
     path("projects/<int:project_id>/updates/", views.get_project_updates),
     path("projects/<int:project_id>/updates/create/", views.add_project_update),
+    path("coach/<int:coach_id>/updates/", views.get_coach_updates),
+    path("coach/<int:coach_id>/updates/create/", views.add_coach_update),
     path("projects/learner/<int:learner_id>/", views.get_projects_of_learner),
     path("management-token/", views.get_management_token),
     path(
@@ -200,7 +202,10 @@ urlpatterns = [
         views.get_learner_sessions_in_project_from_engagement,
     ),
     path("session/request/<int:session_id>/<int:coach_id>/", views.request_session),
-    path("session/request/without-project-structure/<int:engagement_id>/", views.request_session_without_project_structure),
+    path(
+        "session/request/without-project-structure/<int:engagement_id>/",
+        views.request_session_without_project_structure,
+    ),
     path("session/reschedule/<int:session_id>/", views.reschedule_session_of_coachee),
     path("sessions/edit/<int:session_id>/", views.edit_session_availability),
     path("goals/", views.create_goal),
@@ -443,6 +448,7 @@ urlpatterns = [
     ),
     path("update-user-roles/", UpdateUserRoles.as_view()),
     path("tasks/", views.get_tasks),
+    path("tasks/skill-training/", views.get_skill_training_tasks),
     path("coach/tasks/", views.get_coach_tasks),
     path("learner/tasks/", views.get_learner_tasks),
     path("tasks/add-remark/", views.add_remark_to_task),
@@ -458,12 +464,20 @@ urlpatterns = [
         "get-facilitator-summary-data/<int:facilitator_id>/",
         views.get_facilitator_summary_data,
     ),
+     path(
+        "expenses/<int:project_id>/<int:coach_id>/",
+        views.get_expenses_for_coaching_project,
+    ),
+      path(
+        "get-coach-with-vendor-id-in-project/<int:project_id>/",
+        views.get_coach_with_vendor_id_in_project,
+    ),
     path(
         "hide-columns/",
         views.hide_columns,
     ),
     path(
-        "get-table-hide-columns/<str:table_name>/",
+        "get-table-hide-columns/<str:table_name>/<int:user_id>/",
         views.get_table_hide_columns,
     ),
     path(
@@ -514,6 +528,9 @@ urlpatterns = [
         "get-engagement-of-a-coachee/<int:learner_id>/",
         views.get_engagement_of_a_coachee,
     ),
+    path("leaders/", views.get_leaders),
+    path("leaders/create/", views.add_leader),
+    path("leaders/edit/<int:leader_id>/", views.edit_leader),
     path(
         "create-new-engagement/",
         views.create_engagement_of_learner,
@@ -530,9 +547,13 @@ urlpatterns = [
         "get-avaliable-credits-without-project-structure/<int:engagement_id>/",
         views.get_available_credits_without_project_structure,
     ),
-     path(
+    path(
         "get-available-credits-of-all-cod-projects/",
         views.get_available_credits_of_all_cod_projects,
+    ),
+    path(
+        "get-schedular-projects-of-hr/<int:hr_id>/",
+        views.get_schedular_projects_of_hr,
     ),
     
 ]

@@ -204,6 +204,11 @@ urlpatterns = [
         views.expense_purchase_order_create,
     ),
     path(
+        "expense-coaching-purchase-order/create/<int:project_id>/<int:coach_id>/",
+        views.expense_coaching_purchase_order_create,
+    ),
+    
+    path(
         "expense-purchase-order/update/<int:facilitator_id>/<int:batch_or_project_id>/",
         views.expense_purchase_order_update,
     ),
