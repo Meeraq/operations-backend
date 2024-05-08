@@ -32,6 +32,12 @@ urlpatterns = [
     path("pmos/", views.create_pmo),
     path("coaches/all/", views.get_coaches),
     path("coaches/approve/", views.approve_coach),
+    path("reject-coach/<int:coach_id>/", views.reject_coach, name="reject_coach"),
+    path(
+        "reject-facilitator/<int:facilitator_id>/",
+        views.reject_facilitator,
+        name="reject_facilitator",
+    ),
     path("facilitators/approve/", views.approve_facilitator),
     path(
         "password_reset/",
@@ -64,7 +70,7 @@ urlpatterns = [
     path("create-project-cass/", views.create_project_cass),
     path("add_project_structure/", views.add_project_struture),
     path("send_consent/", views.send_consent),
-    path("project/caas/<int:project_id>/", views.get_project_details),
+    path("project/<str:project_type>/<int:project_id>/", views.get_project_details),
     path("receive_coach_consent/", views.receive_coach_consent),
     path(
         "coach/update_project_structure_consent/",
@@ -94,6 +100,10 @@ urlpatterns = [
     path("projects/learners/add/", views.add_learner_to_project),
     path(
         "get-chemistry-session-data/<int:project_id>/", views.get_chemistry_session_data
+    ),
+    path(
+        "get-chemistry-session-data-for-engagement/<int:engagement_id>/",
+        views.get_chemistry_session_data_for_engagement,
     ),
     path("mark_as_incomplete/", views.mark_as_incomplete),
     path("send_project_strure_to_hr/", views.send_project_strure_to_hr),
@@ -130,7 +140,15 @@ urlpatterns = [
         "engagement/<int:project_id>/<int:learner_id>/",
         views.get_learner_engagement_of_project,
     ),
+    path(
+        "engagement-detail/<int:engagement_id>/",
+        views.get_engagement_detail,
+    ),
     path("engagement/learner/<int:learner_id>/", views.get_learners_engagement),
+    path(
+        "coaches-of-learner/<int:learner_id>/",
+        views.get_coaches_of_learner,
+    ),
     path("sessions/create/<int:learner_id>/", views.create_session_request_by_learner),
     path(
         "sessions/requested/<str:user_type>/<int:user_id>/",
@@ -170,10 +188,19 @@ urlpatterns = [
         views.request_chemistry_session,
     ),
     path(
+        "session/request/chemistry/engagement/<int:engagement_id>/",
+        views.request_chemistry_session_for_engagement,
+    ),
+    path(
         "session/<int:project_id>/<int:learner_id>/",
         views.get_learner_sessions_in_project,
     ),
+    path(
+        "engagement-session/<int:engagement_id>/",
+        views.get_learner_sessions_in_project_from_engagement,
+    ),
     path("session/request/<int:session_id>/<int:coach_id>/", views.request_session),
+    path("session/request/without-project-structure/<int:engagement_id>/", views.request_session_without_project_structure),
     path("session/reschedule/<int:session_id>/", views.reschedule_session_of_coachee),
     path("sessions/edit/<int:session_id>/", views.edit_session_availability),
     path("goals/", views.create_goal),
@@ -225,6 +252,10 @@ urlpatterns = [
     path(
         "current-session/<str:user_type>/<str:room_id>/<int:user_id>/",
         views.get_current_session,
+    ),
+    path(
+        "current-session-for-coach/<str:user_type>/<int:user_id>/",
+        views.get_current_session_for_coach,
     ),
     path(
         "current-session/stakeholder/<str:room_id>/",
@@ -347,9 +378,15 @@ urlpatterns = [
     path("add/pmo/", views.add_pmo),
     path("get/all/pmo/", views.get_pmo, name="get_pmo"),
     path("get/junior/pmo/<int:user_id>/", views.get_junior_pmo),
+    path("ctt-pmos/", views.get_ctt_pmos),
+    path("ctt-pmos/create/", views.add_ctt_pmo),
     path(
         "get-learner-of-user-optimized/<str:user_type>/<int:user_id>/",
         views.get_learner_of_user_optimized,
+    ),
+    path(
+        "get-coachee-of-coach/",
+        views.get_coachee_of_coach,
     ),
     path(
         "get-learner-course-enrolled-of-user-optimized/<str:user_type>/<int:user_id>/",
@@ -399,12 +436,103 @@ urlpatterns = [
     #     views.delete_pmo,
     # ),
     path("edit-pmo/", views.edit_pmo),
-    path("get-coaches-in-project-is-vendor/<int:project_id>/", views.get_coaches_in_project_is_vendor),
+    path("ctt-pmo/edit/<int:ctt_pmo_id>/", views.edit_ctt_pmo),
+    path(
+        "get-coaches-in-project-is-vendor/<int:project_id>/",
+        views.get_coaches_in_project_is_vendor,
+    ),
     path("update-user-roles/", UpdateUserRoles.as_view()),
     path("tasks/", views.get_tasks),
+    path("coach/tasks/", views.get_coach_tasks),
+    path("learner/tasks/", views.get_learner_tasks),
     path("tasks/add-remark/", views.add_remark_to_task),
     path("tasks/complete/", views.complete_task),
     path("archive-project/", views.archive_project),
     path("change-user-password/", views.change_user_password),
     path("all-users/", views.get_all_users),
+    path("add-new-user/", views.add_new_user),
+    path("add/sales-user/", views.add_sales_user),
+    path("get-sales-user/", views.get_sales_user),
+    path("get-coach-summary-data/<int:coach_id>/", views.get_coach_summary_data),
+    path(
+        "get-facilitator-summary-data/<int:facilitator_id>/",
+        views.get_facilitator_summary_data,
+    ),
+    path(
+        "hide-columns/",
+        views.hide_columns,
+    ),
+    path(
+        "get-table-hide-columns/<str:table_name>/",
+        views.get_table_hide_columns,
+    ),
+    path(
+        "edit-remark/",
+        views.edit_remark,
+    ),
+    path(
+        "get-all-goals/",
+        views.get_all_goals,
+    ),
+    path(
+        "create-goal/",
+        views.create_goal_without_enagagement,
+    ),
+    path(
+        "get-competency-of-goal/<int:goal_id>/",
+        views.get_competency_of_goal,
+    ),
+    path(
+        "create-competency-for-goal/<int:goal_id>/",
+        views.create_competency_for_goal,
+    ),
+    path(
+        "get-goal-detail/<int:goal_id>/",
+        views.get_goal_detail,
+    ),
+    path(
+        "get-competency-action-items/<int:comp_id>/",
+        views.get_competency_action_items,
+    ),
+    path(
+        "edit-pmo-goal/",
+        views.edit_pmo_goal,
+    ),
+    path(
+        "get-all-competency/",
+        views.get_all_competency,
+    ),
+    path(
+        "get-all-po-of-project/<int:project_id>/",
+        views.get_all_po_of_project,
+    ),
+    path(
+        "get-all-to-be-booked-sessions-for-coachee/<int:learner_id>/",
+        views.get_all_to_be_booked_sessions_for_coachee,
+    ),
+    path(
+        "get-engagement-of-a-coachee/<int:learner_id>/",
+        views.get_engagement_of_a_coachee,
+    ),
+    path(
+        "create-new-engagement/",
+        views.create_engagement_of_learner,
+    ),
+    path(
+        "get-avaliable-credits/<int:engagement_id>/",
+        views.get_available_credits,
+    ),
+    path(
+        "get-avaliable-credits-of-project/<int:project_id>/",
+        views.get_available_credit_of_project,
+    ),
+    path(
+        "get-avaliable-credits-without-project-structure/<int:engagement_id>/",
+        views.get_available_credits_without_project_structure,
+    ),
+     path(
+        "get-available-credits-of-all-cod-projects/",
+        views.get_available_credits_of_all_cod_projects,
+    ),
+    
 ]

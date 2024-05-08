@@ -409,4 +409,8 @@ urlpatterns = [
         "nudges/switch/<int:nudge_id>/",
         views.update_nudge_status,
     ),
+    path(
+        "delete-nudge/<int:nudge_id>/",
+        views.delete_nudge,
+    ),
 ]
