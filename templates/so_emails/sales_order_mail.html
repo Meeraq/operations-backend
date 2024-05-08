@@ -35,8 +35,8 @@ Order Created{% endblock %} {% block content %}
                 <li>SO Number: {{so_number}}</li>
                 <li>Customer Name: {{customer_name}}</li>
                 <li>
-                  Project Type: {% if project_type %} Not Assigned {% else %}
-                  {{project_type}} {% endif %}
+                  Project Type: {% if project_type %} {{project_type}} {% else %}
+                 Not Assigned  {% endif %}
                 </li>
 
                 <li>Salesperson: {{salesperson}}</li>

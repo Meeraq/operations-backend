@@ -114,6 +114,7 @@ from schedularApi.models import (
     SchedularBatch,
     Expense,
     SchedularProject,
+    Task,
 )
 from api.models import Facilitator
 from decimal import Decimal
@@ -1501,7 +1502,7 @@ def get_invoices_by_status_for_founders(request, status):
 @permission_classes(
     [IsAuthenticated, IsInRoles("pmo", "vendor", "superadmin", "finance")]
 )
-def edit_vendor(request, vendor_id):
+def edit_vendor_existing(request, vendor_id):
     try:
         vendor = Vendor.objects.get(id=vendor_id)
         data = request.data
@@ -1644,7 +1645,7 @@ def get_vendor_details_from_zoho(request, vendor_id):
         return Response({"error": "Failed to get data."}, status=500)
 
 
-# creating a PO in zoho and adding the create po id and number in either coach pricing or facilitator pricing
+# creating a PO in zoho and adding the created po id and number in either coach pricing or facilitator pricing
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def create_purchase_order(request, user_type, facilitator_pricing_id):
@@ -1727,6 +1728,18 @@ def update_purchase_order(request, user_type, facilitator_pricing_id):
                     "purchaseorder_number"
                 ]
                 facilitator_pricing.save()
+                try:
+                    tasks = Task.objects.filter(
+                        task="create_purchase_order_facilitator",
+                        status="pending",
+                        facilitator=facilitator_pricing.facilitator.id,
+                        schedular_project=facilitator_pricing.project,
+                    )
+                    tasks.update(status="completed")
+                except Exception as e:
+                    print(str(e))
+                    pass
+
             elif user_type == "coach":
                 for coach_pricing in coach_pricings:
                     coach_pricing.purchase_order_id = purchaseorder_created[
@@ -1736,6 +1749,17 @@ def update_purchase_order(request, user_type, facilitator_pricing_id):
                         "purchaseorder_number"
                     ]
                     coach_pricing.save()
+                try:
+                    tasks = Task.objects.filter(
+                        task="create_purchase_order",
+                        status="pending",
+                        coach=coach_pricing.coach.id,
+                        schedular_project=coach_pricing.project,
+                    )
+                    tasks.update(status="completed")
+                except Exception as e:
+                    print(str(e))
+                    pass
             return Response({"message": "Purchase Order created successfully."})
         else:
             print(response.json())
@@ -3682,6 +3706,7 @@ def edit_vendor(request, vendor_id):
             vendor.user.user.save()
             vendor.name = name
             vendor.phone = phone
+            vendor.hsn_or_sac = data.get("hsn_or_sac", vendor.hsn_or_sac)
             vendor.save()
 
             if (
@@ -3895,6 +3920,41 @@ def get_client_invoices(request):
         print(str(e))
 
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def expense_coaching_purchase_order_create(request, project_id,coach_id):
+    try:
+        expenses = []
+        expenses = Expense.objects.filter(
+            coach__id=coach_id, session__project__id=project_id
+        )
+
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header, data=request.data)
+        if response.status_code == 201:
+            purchaseorder_created = response.json().get("purchaseorder")
+            for expense in expenses:
+                expense.purchase_order_id = purchaseorder_created["purchaseorder_id"]
+                expense.purchase_order_no = purchaseorder_created[
+                    "purchaseorder_number"
+                ]
+                expense.save()
+
+            return Response({"message": "Purchase Order created successfully."})
+        else:
+            print(response.json())
+            return Response(status=500)
+    except Exception as e:
+        print(str(e))
+        return Response(status=500)
 
 
 @api_view(["GET"])

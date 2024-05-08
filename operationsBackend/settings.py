@@ -350,6 +350,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "zohoapi.tasks.update_zoho_data",
         "schedule": crontab(hour=0, minute=1),
     },
+     "schedule_request_expiry_for_session": {
+        "task": "api.tasks.schedule_request_expiry_for_session",
+        "schedule": crontab(hour=0, minute=1),  # Run every day at midnight in UTC
+    },
+
 }
 
 
