@@ -853,7 +853,6 @@ def generate_room_id(email):
             },
             json=payload,
         )
-
         if response_from_100ms.status_code == 200:
             room_id = response_from_100ms.json().get("id")
             return room_id
@@ -1104,10 +1103,10 @@ def add_new_pmo(data):
         username = email  # username and email are the same
         password = data.get("password")
         sub_role = data.get("sub_role")
-        room_id = generate_room_id(email)
+        # room_id = generate_room_id(email)
 
         # Check if required data is provided
-        if not all([name, email, phone, username, password, room_id]):
+        if not all([name, email, phone, username, password]):
             return Response(
                 {"error": "All required fields must be provided."}, status=400
             )
@@ -1137,7 +1136,6 @@ def add_new_pmo(data):
                 name=name,
                 email=email,
                 phone=phone,
-                room_id=room_id,
                 sub_role=sub_role,
             )
 
