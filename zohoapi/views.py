@@ -1494,7 +1494,7 @@ def get_invoices_by_status_for_founders(request, status):
 @permission_classes(
     [IsAuthenticated, IsInRoles("pmo", "vendor", "superadmin", "finance")]
 )
-def edit_vendor(request, vendor_id):
+def edit_vendor_existing(request, vendor_id):
     try:
         vendor = Vendor.objects.get(id=vendor_id)
         data = request.data
@@ -3675,6 +3675,7 @@ def edit_vendor(request, vendor_id):
             vendor.user.user.save()
             vendor.name = name
             vendor.phone = phone
+            vendor.hsn_or_sac = data.get("hsn_or_sac", vendor.hsn_or_sac)
             vendor.save()
 
             if (
