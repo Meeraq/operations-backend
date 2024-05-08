@@ -10,8 +10,13 @@ from api.models import (
     Profile,
     Facilitator,
     Project,
+    Engagement,
+    Goal,
     Sales,
 )
+
+from django.utils import timezone
+from django.contrib.auth.models import User
 
 
 # Create your models here.
@@ -375,3 +380,102 @@ class HandoverDetails(models.Model):
 
     # def __str__(self):
     #     return f"Handover Details for"
+
+
+class Task(models.Model):
+    PRIORITY_CHOICES = (
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+    )
+    TASK_STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("in_progress", "In Progress"),
+        ("completed", "Completed"),
+    )
+    PROJECT_TYPE_CHOICES = [("caas", "CAAS"), ("skill_training", "Skill Training")]
+    task = models.CharField(max_length=100)
+    project_type = models.CharField(
+        max_length=255, choices=PROJECT_TYPE_CHOICES, blank=True, null=True
+    )  # caas or skill_training
+    caas_project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
+    schedular_project = models.ForeignKey(
+        SchedularProject,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
+    schedular_batch = models.ForeignKey(
+        SchedularBatch,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
+    session_caas = models.ForeignKey(
+        SessionRequestCaas,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
+    coach = models.ForeignKey(
+        Coach, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    engagement = models.ForeignKey(
+        Engagement, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+
+    goal = models.ForeignKey(
+        Goal, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    engagement = models.ForeignKey(
+        Engagement, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    live_session = models.ForeignKey(
+        LiveSession, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    coaching_session = models.ForeignKey(
+        CoachingSession, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    schedular_session = models.ForeignKey(
+        SchedularSessions, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    vendor_user = models.ForeignKey(
+        User, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES)
+    status = models.CharField(
+        max_length=20, choices=TASK_STATUS_CHOICES, default="pending"
+    )
+
+    remarks = models.JSONField(default=list, blank=True)
+    trigger_date = models.DateTimeField(default=timezone.now, blank=True)
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def add_remark(self, remark_message):
+        current_datetime = timezone.now()
+        formatted_datetime = current_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        new_remark = {
+            "message": remark_message,
+            "datetime": formatted_datetime,
+        }
+        self.remarks.append(new_remark)
+        self.save()
+
+    def is_visible(self):
+        return timezone.now() >= self.trigger_date
+
+    def __str__(self):
+        return self.task

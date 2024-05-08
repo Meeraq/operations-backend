@@ -39,7 +39,6 @@ from .models import (
     SuperAdmin,
     Facilitator,
     APILog,
-    Task,
     Sales,
     CTTPmo,
 )
@@ -531,8 +530,8 @@ class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = "__all__"
-
-
+        
+        
 class SalesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sales

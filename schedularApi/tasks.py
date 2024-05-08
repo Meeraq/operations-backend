@@ -16,6 +16,7 @@ from schedularApi.models import (
     CoachSchedularAvailibilty,
     SchedularProject,
     SchedularBatch,
+    Task,
 )
 from django.db import transaction
 from django.utils import timezone
@@ -24,6 +25,8 @@ from api.views import (
     refresh_microsoft_access_token,
     generateManagementToken,
     add_contact_in_wati,
+    create_task,
+    get_live_session_name
 )
 
 from schedularApi.serializers import AvailabilitySerializer
@@ -153,19 +156,7 @@ def timestamp_to_datetime(timestamp):
     return datetime.utcfromtimestamp(int(timestamp) / 1000.0)
 
 
-def get_live_session_name(session_type):
-    session_name = None
-    if session_type == "live_session":
-        session_name = "Live Session"
-    elif session_type == "check_in_session":
-        session_name = "Check In Session"
-    elif session_type == "in_person_session":
-        session_name = "In Person Session"
-    elif session_type == "kickoff_session":
-        session_name = "Kickoff Session"
-    elif session_type == "virtual_session":
-        session_name = "Virtual Session"
-    return session_name
+
 
 
 def get_nudges_of_course(course):
@@ -2819,6 +2810,19 @@ def create_batch_calendar(batch):
                 duration=duration,
                 session_type=session_type,
             )
+            create_task(
+                {
+                    "task": "add_session_details",
+                    "schedular_project": batch.project.id,
+                    "project_type": "skill_training",
+                    "live_session": live_session.id,
+                    "priority": "medium",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                3,
+            )
+
         elif session_type == "laser_coaching_session":
             coaching_session_number = (
                 CoachingSession.objects.filter(
@@ -2835,6 +2839,19 @@ def create_batch_calendar(batch):
                 booking_link=booking_link,
                 session_type=session_type,
             )
+            create_task(
+                {
+                    "task": "add_dates",
+                    "schedular_project": batch.project.id,
+                    "project_type": "skill_training",
+                    "coaching_session": coaching_session.id,
+                    "priority": "medium",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                7,
+            )
+
         elif session_type == "mentoring_session":
             coaching_session_number = (
                 CoachingSession.objects.filter(
@@ -2851,6 +2868,18 @@ def create_batch_calendar(batch):
                 duration=duration,
                 booking_link=booking_link,
                 session_type=session_type,
+            )
+            create_task(
+                {
+                    "task": "add_dates",
+                    "schedular_project": batch.project.id,
+                    "project_type": "skill_training",
+                    "coaching_session": coaching_session.id,
+                    "priority": "medium",
+                    "status": "pending",
+                    "remarks": [],
+                },
+                7,
             )
 
 
@@ -2878,10 +2907,11 @@ def add_batch_to_project(data):
                 batch = SchedularBatch.objects.filter(
                     name=batch_name, project=project
                 ).first()
-
+                
                 if not batch:
                     # If batch does not exist, create a new batch
                     batch = SchedularBatch.objects.create(
+                       
                         name=batch_name, project=project
                     )
                     batch.email_reminder = project.email_reminder
@@ -2889,10 +2919,88 @@ def add_batch_to_project(data):
                     batch.calendar_invites = project.calendar_invites
                     batch.save()
                     create_batch_calendar(batch)
+                    try:
+                        tasks = Task.objects.filter(
+                            task="add_batches",
+                            status="pending",
+                            schedular_project=project,
+                        )
+                        tasks.update(status="completed")
+                    except Exception as e:
+                        print(str(e))
+                        pass
+                    try:
+                        create_task(
+                            {
+                                "task": "add_coach",
+                                "schedular_project": batch.project.id,
+                                "schedular_batch": batch.id,
+                                "project_type": "skill_training",
+                                "priority": "high",
+                                "status": "pending",
+                                "remarks": [],
+                            },
+                            1,
+                        )
+                        create_task(
+                            {
+                                "task": "add_facilitator",
+                                "schedular_project": batch.project.id,
+                                "schedular_batch": batch.id,
+                                "project_type": "skill_training",
+                                "priority": "high",
+                                "status": "pending",
+                                "remarks": [],
+                            },
+                            1,
+                        )
+                        create_task(
+                            {
+                                "task": "request_availability",
+                                "schedular_project": batch.project.id,
+                                "schedular_batch": batch.id,
+                                "project_type": "skill_training",
+                                "priority": "medium",
+                                "status": "pending",
+                                "remarks": [],
+                            },
+                            7,
+                        )
+                        if batch.project.nudges:
+                            create_task(
+                                {
+                                    "task": "add_nudges",
+                                    "schedular_project": batch.project.id,
+                                    "schedular_batch": batch.id,
+                                    "project_type": "skill_training",
+                                    "priority": "medium",
+                                    "status": "pending",
+                                    "remarks": [],
+                                },
+                                1,
+                            )
+                            create_task(
+                                {
+                                    "task": "add_nudge_date_and_frequency",
+                                    "schedular_project": batch.project.id,
+                                    "schedular_batch": batch.id,
+                                    "project_type": "skill_training",
+                                    "priority": "medium",
+                                    "status": "pending",
+                                    "remarks": [],
+                                },
+                                1,
+                            )
+                    except Exception as e:
+                        print(str(e))
+                        pass
+                 
+                 
+                    
+
                     # Create Live Sessions and Coaching Sessions based on project structure
 
                 # Check if participant with the same email exists
-
                 learner = create_or_get_learner(
                     {"name": name, "email": email, "phone": phone}
                 )

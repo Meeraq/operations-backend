@@ -19,7 +19,6 @@ from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
 from django_celery_beat.models import PeriodicTask
-from django.utils import timezone
 
 
 import environ
@@ -191,7 +190,6 @@ class Finance(models.Model):
     def __str__(self):
         return self.name
 
-
 class Sales(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -205,6 +203,7 @@ class Sales(models.Model):
 
     def __str__(self):
         return self.name
+
 
 
 class Pmo(models.Model):

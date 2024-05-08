@@ -156,7 +156,6 @@ from .models import (
     APILog,
     Facilitator,
     SuperAdmin,
-    Task,
     Finance,
     Sales,
     TableHiddenColumn,
@@ -193,10 +192,12 @@ from schedularApi.models import (
     CoachingSession,
     LiveSession,
     HandoverDetails,
+    Task,
     Expense,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
+    TaskSerializer,
     ExpenseSerializerDepthOne,
 )
 from django_rest_passwordreset.models import ResetPasswordToken
@@ -235,6 +236,20 @@ def get_current_date_timestamps():
         int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
     )
     return start_timestamp, end_timestamp
+
+def get_live_session_name(session_type):
+    session_name = None
+    if session_type == "live_session":
+        session_name = "Live Session"
+    elif session_type == "check_in_session":
+        session_name = "Check In Session"
+    elif session_type == "in_person_session":
+        session_name = "In Person Session"
+    elif session_type == "kickoff_session":
+        session_name = "Kickoff Session"
+    elif session_type == "virtual_session":
+        session_name = "Virtual Session"
+    return session_name
 
 
 def calculate_nps(ratings):
@@ -10455,13 +10470,110 @@ def get_formatted_tasks(tasks):
     except Exception as e:
         print(str(e))
         return None
+    
+
+def get_formatted_skill_training_tasks(tasks):
+    try:
+        task_details = []
+        for task in tasks:
+            # Extract the latest remark message or set it to None if remarks are empty
+            latest_remark = task.remarks[-1]["message"] if task.remarks else None
+
+            # Determine the coach name associated with the task
+            coach_name = (
+                task.coach.__str__()
+                if task.coach
+                else (
+                    task.schedular_session.coach.__str__()
+                    if task.schedular_session and task.schedular_session.coach
+                    else ""
+                )
+            )
+            facilitator_name = (
+                task.facilitator.__str__()
+                if task.facilitator
+                else ""
+            )
+            learner_name = (
+                task.schedular_session.learner.name
+                if task.schedular_session and task.schedular_session.learner
+                else ""
+            )
+            coaching_session = task.coaching_session or (task.schedular_session.coaching_session if task.schedular_session else None) or None
+            session_name =(
+                (
+                    coaching_session.session_type.replace("_", " ").capitalize() 
+                    if not coaching_session.session_type == "laser_coaching_session"
+                    else "Coaching Session"
+                    + " "
+                    + str(coaching_session.coaching_session_number)
+                )
+                if coaching_session
+                else ""
+            )
+            # Retrieve vendor name associated with the task, handling exceptions gracefully
+            vendor_name = None
+            if task.vendor_user:
+                try:
+                    vendor = Vendor.objects.get(user__user=task.vendor_user)
+                    vendor_name = vendor.name
+                except Vendor.DoesNotExist:
+                    pass
+
+            # Determine the project name associated with the task
+            project_name = (
+                task.schedular_project.name
+                if task.schedular_project
+                else (
+                    task.schedular_batch.project.name
+                    if task.schedular_batch
+                    else ""
+                )
+            )
+            batch_name = (
+                task.schedular_batch.name
+                if task.schedular_batch
+                else (
+                    task.live_session.batch.name
+                    if task.live_session
+                    else (
+                    task.coaching_session.batch.name
+                    if task.coaching_session
+                    else "")
+                )
+            )
+            live_session_name = get_live_session_name(task.live_session.session_type) if task.live_session else ""
+
+            # Serialize task data
+            serialized_data = TaskSerializer(task).data
+
+            # Append task details to the list
+            task_details.append(
+                {
+                    **serialized_data,
+                    "learner_name": learner_name,
+                    "project_name": project_name,
+                    "latest_remark": latest_remark,
+                    "coach_name": coach_name,
+                    "vendor_name": vendor_name,
+                    "session_name": session_name,
+                    "batch_name" : batch_name,
+                    "facilitator_name" : facilitator_name,
+                    "live_session_name" : live_session_name
+                }
+            )
+        return task_details
+    except Exception as e:
+        print(str(e))
+        return None
+    
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_tasks(request):
     # Retrieve tasks that are pending and have a trigger date before or equal to current time
-    tasks = Task.objects.filter(trigger_date__lte=timezone.now())
+    tasks = Task.objects.filter(Q(trigger_date__lte=timezone.now()), ~Q(project_type ="skill_training"))
     # Initialize a list to store task details
     task_details = []
     junior_pmo_id = request.query_params.get("junior_pmo")
@@ -10474,6 +10586,27 @@ def get_tasks(request):
         )
 
     task_details = get_formatted_tasks(tasks)
+
+    return Response(task_details)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def get_skill_training_tasks(request):
+    # Retrieve tasks that are pending and have a trigger date before or equal to current time
+    tasks = Task.objects.filter(trigger_date__lte=timezone.now(), project_type="skill_training")
+    # Initialize a list to store task details
+    task_details = []
+    junior_pmo_id = request.query_params.get("junior_pmo")
+    if junior_pmo_id:
+        tasks = tasks.filter(
+            Q(schedular_project__junior_pmo=junior_pmo_id)
+            | Q(schedular_batch__project__junior_pmo=junior_pmo_id)
+            | Q(live_session__batch__project__junior_pmo=junior_pmo_id)
+            | Q(coaching_session__batch__project__junior_pmo=junior_pmo_id)
+            | Q(schedular_session__coaching_session__batch__project__junior_pmo=junior_pmo_id)
+        )
+
+    task_details = get_formatted_skill_training_tasks(tasks)
 
     return Response(task_details)
 

@@ -114,6 +114,7 @@ from schedularApi.models import (
     SchedularBatch,
     Expense,
     SchedularProject,
+    Task,
 )
 from api.models import Facilitator
 from decimal import Decimal
@@ -1637,7 +1638,7 @@ def get_vendor_details_from_zoho(request, vendor_id):
         return Response({"error": "Failed to get data."}, status=500)
 
 
-# creating a PO in zoho and adding the create po id and number in either coach pricing or facilitator pricing
+# creating a PO in zoho and adding the created po id and number in either coach pricing or facilitator pricing
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def create_purchase_order(request, user_type, facilitator_pricing_id):
@@ -1720,6 +1721,18 @@ def update_purchase_order(request, user_type, facilitator_pricing_id):
                     "purchaseorder_number"
                 ]
                 facilitator_pricing.save()
+                try:
+                    tasks = Task.objects.filter(
+                        task="create_purchase_order_facilitator",
+                        status="pending",
+                        facilitator=facilitator_pricing.facilitator.id,
+                        schedular_project=facilitator_pricing.project,
+                    )
+                    tasks.update(status="completed")
+                except Exception as e:
+                    print(str(e))
+                    pass
+
             elif user_type == "coach":
                 for coach_pricing in coach_pricings:
                     coach_pricing.purchase_order_id = purchaseorder_created[
@@ -1729,6 +1742,17 @@ def update_purchase_order(request, user_type, facilitator_pricing_id):
                         "purchaseorder_number"
                     ]
                     coach_pricing.save()
+                try:
+                    tasks = Task.objects.filter(
+                        task="create_purchase_order",
+                        status="pending",
+                        coach=coach_pricing.coach.id,
+                        schedular_project=coach_pricing.project,
+                    )
+                    tasks.update(status="completed")
+                except Exception as e:
+                    print(str(e))
+                    pass
             return Response({"message": "Purchase Order created successfully."})
         else:
             print(response.json())
