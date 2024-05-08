@@ -76,7 +76,6 @@ from .serializers import (
     PmoSerializerAll,
     CTTPmoSerializer,
     CTTPmoDepthOneSerializer,
-    TaskSerializer,
     ProjectDepthTwoSerializerArchiveCheck,
     CustomUserSerializer,
     SalesSerializer,
