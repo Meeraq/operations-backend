@@ -583,6 +583,63 @@ def delete_microsoft_calendar_event(access_token, event_id):
         return {"error": "An error occurred", "details": str(e)}
 
 
+def create_teams_meeting(user_email,live_session_id, topic, start_time, end_time):
+    try:
+        event_create_url = "https://graph.microsoft.com/v1.0/me/onlineMeetings"
+        user_token = UserToken.objects.get(user_profile__user__username=user_email)
+        new_access_token = refresh_microsoft_access_token(user_token)
+        if not new_access_token:
+            new_access_token = user_token.access_token
+        headers = {
+            "Authorization": f"Bearer {new_access_token}",
+            "Content-Type": "application/json",
+        }
+        event_payload = {
+            "startDateTime":start_time,
+            "endDateTime": end_time,
+            "subject": topic
+        }
+        response = requests.post(event_create_url, json=event_payload, headers=headers)
+        print(response.json())
+        if response.status_code == 201:
+            meeting_info = response.json()
+            meeting_link = meeting_info.get("joinWebUrl")
+            live_session = LiveSession.objects.get(id=live_session_id)
+            live_session.meeting_link = meeting_link
+            live_session.teams_meeting_id = meeting_info.get("id")
+            live_session.save()
+            print("Meeting Link Generated")
+            return True
+        else:
+            return False
+    except Exception as e:
+        print(str(e))
+        return False
+
+def delete_teams_meeting(user_email, live_session):
+    user_token = UserToken.objects.get(user_profile__user__username=user_email)
+    new_access_token = refresh_microsoft_access_token(user_token)
+    if not new_access_token:
+        new_access_token = user_token.access_token
+    meeting_delete_url = (
+        f"https://graph.microsoft.com/v1.0/me/onlineMeetings/{live_session.teams_meeting_id}"
+    )
+    headers = {
+        "Authorization": f"Bearer {new_access_token}",
+    }
+    response = requests.delete(meeting_delete_url, headers=headers)
+    if response.status_code == 204:
+        # live_session.meeting_link = ""
+        # live_session.save()
+        return {"message": "Event deleted successfully"}
+    elif response.status_code == 404:
+        return {"error": "Event not found"}
+    else:
+        return {
+            "error": "Failed to delete event",
+            "status_code": response.status_code,
+        }
+
 def create_outlook_calendar_invite(
     subject,
     description,
@@ -9593,7 +9650,7 @@ def microsoft_auth(request, user_mail_address):
         "response_type": "code",
         "redirect_uri": env("MICROSOFT_REDIRECT_URI"),
         "response_mode": "query",
-        "scope": "openid offline_access User.Read Calendars.ReadWrite profile email",
+        "scope": "openid offline_access User.Read Calendars.ReadWrite profile email  OnlineMeetings.Read OnlineMeetings.ReadWrite",
         "state": "shashankmeeraq",
         "login_hint": user_mail_address,
     }
@@ -11177,6 +11234,46 @@ def get_all_po_of_project(request, project_id):
             {"error": f"Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+# def create_teams_meeting():
+#     event_create_url = "https://graph.microsoft.com/v1.0/me/onlineMeetings"
+#     try:
+#         user_token = UserToken.objects.get(user_profile__user__username="pankaj@meeraq.com")
+#         new_access_token = refresh_microsoft_access_token(user_token)
+#         if not new_access_token:
+#             new_access_token = user_token.access_token
+#         headers = {
+#             "Authorization": f"Bearer {new_access_token}",
+#             "Content-Type": "application/json",
+#         }
+#         start_datetime_obj = datetime(2024, 4, 5, 8, 0, 0) + timedelta(hours=5, minutes=30)
+#         end_datetime_obj = datetime(2024, 4, 5, 11, 0, 0) + timedelta(hours=5, minutes=30)
+#         start_datetime = start_datetime_obj.isoformat()
+#         end_datetime = end_datetime_obj.isoformat()
+#         event_payload = {
+#             "startDateTime":"2024-04-05T14:30:34.2444915-07:00",
+#             "endDateTime":"2024-04-05T15:00:34.2464912-07:00",
+#             "subject": "User Token Meeting"
+#         }
+#         response = requests.post(event_create_url, json=event_payload, headers=headers)
+#         print(response.json())
+#         if response.status_code == 201:
+#             microsoft_response_data = response.json()
+#             print("Meeting created successfully.")
+#         else:
+#             print(f"Meeting creation failed. Status code: {response.status_code}")
+#             print(response.text)
+#             return False
+
+#     except UserToken.DoesNotExist:
+#         print("User token not found for email.")
+#         return False
+
+#     except Exception as e:
+#         print(f"An error occurred: {str(e)}")
+#         return False
+
+#     return True
 
 
 @api_view(["GET"])

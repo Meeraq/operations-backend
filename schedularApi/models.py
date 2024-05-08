@@ -43,6 +43,7 @@ class SchedularProject(models.Model):
         blank=True,
     )
     is_archive = models.BooleanField(default=False)
+    teams_enabled = models.BooleanField(blank=True, default=False)
 
     class Meta:
         ordering = ["-created_at"]
@@ -163,6 +164,7 @@ class LiveSession(models.Model):
         max_length=50, choices=SESSION_CHOICES, default="virtual_session"
     )
     meeting_link = models.TextField(default="", blank=True)
+    teams_meeting_id = models.TextField(default="", blank=True)
 
 
 class EmailTemplate(models.Model):
