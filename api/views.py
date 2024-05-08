@@ -193,14 +193,16 @@ from schedularApi.models import (
     CoachingSession,
     LiveSession,
     HandoverDetails,
+    Expense,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
+    ExpenseSerializerDepthOne,
 )
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping, PurchaseOrder
+from zohoapi.models import Vendor, InvoiceData,  OrdersAndProjectMapping, PurchaseOrder
 from courses.models import CourseEnrollment, CoachingSessionsFeedbackResponse, Answer
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
@@ -6552,6 +6554,9 @@ def get_current_session(request, user_type, room_id, user_id):
         return Response({"error": "You don't have any upcoming sessions."}, status=404)
 
 
+
+
+
 @api_view(["GET"])
 @permission_classes(
     [IsAuthenticated, IsInRoles("coach", "learner", "pmo", "hr", "facilitator")]
@@ -10832,6 +10837,67 @@ def get_table_hide_columns(request, table_name, user_id):
         print(str(e))
         return Response(
             {"detail": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_expenses_for_coaching_project(request, project_id, coach_id):
+    try:
+        expense = Expense.objects.filter(
+            session__project__id=project_id, coach__id=coach_id
+        )
+        serializer = ExpenseSerializerDepthOne(expense, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_with_vendor_id_in_project(request, project_id):
+    try:
+        project = Project.objects.get(id=project_id)
+        all_coach = {}
+        purchase_orders = fetch_purchase_orders(organization_id)
+        for coach_status in project.coaches_status.all():
+            coach = coach_status.coach
+            vendor = Vendor.objects.filter(user=coach.user).first()
+            if vendor:
+                expense = Expense.objects.filter(
+                    session__project__id=project_id, coach=coach
+                ).first()
+                purchase_order = None
+                if expense.purchase_order_id:
+                    purchase_order = get_purchase_order(
+                        purchase_orders, expense.purchase_order_id
+                    )
+
+                is_delete_purchase_order_allowed = True
+                invoices = InvoiceData.objects.filter(
+                    purchase_order_id=expense.purchase_order_id
+                )
+                if invoices.exists():
+                    is_delete_purchase_order_allowed = False
+
+                all_coach[coach.id] = {
+                    "is_vendor": True,
+                    "vendor_id": vendor.vendor_id,
+                    "purchase_order_id": expense.purchase_order_id,
+                    "purchase_order_no": expense.purchase_order_no,
+                    "purchase_order": purchase_order,
+                    "is_delete_purchase_order_allowed": is_delete_purchase_order_allowed,
+                }
+        return Response(all_coach)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 

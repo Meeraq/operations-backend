@@ -54,6 +54,7 @@ from api.models import (
     Facilitator,
     CoachStatus,
     Project,
+    SessionRequestCaas,
     Sales,
 )
 
@@ -6102,101 +6103,123 @@ def edit_facilitator_pricing(request, facilitator_pricing_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator", "coach")])
 def create_expense(request):
     try:
-        name = request.data.get("name")
-        description = request.data.get("description")
-        date_of_expense = request.data.get("date_of_expense")
-        live_session = request.data.get("live_session")
-        batch = request.data.get("batch")
-        facilitator = request.data.get("facilitator")
-        file = request.data.get("file")
-        amount = request.data.get("amount")
-        if not file:
-            return Response(
-                {"error": "Please upload file."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-        if not batch or not facilitator:
-            return Response(
-                {"error": "Failed to create expense."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-        if name and date_of_expense and description and amount:
-            facilitator = Facilitator.objects.get(id=int(facilitator))
-            batch = SchedularBatch.objects.get(id=int(batch))
-            if live_session:
-                live_session = LiveSession.objects.filter(id=int(live_session)).first()
-            expense = Expense.objects.create(
-                name=name,
-                description=description,
-                date_of_expense=date_of_expense,
-                live_session=live_session,
-                batch=batch,
-                facilitator=facilitator,
-                file=file,
-                amount=amount,
-            )
-
-            facilitator_name = f"{facilitator.first_name} {facilitator.last_name}"
-            expense_name = expense.name
-            project_name = expense.batch.project.name
-
-            try:
-                emails = [
-                    "madhuri@coachtotransformation.com",
-                    "nisha@coachtotransformation.com",
-                    "pmotraining@meeraq.com",
-                    "pmocoaching@meeraq.com",
-                ]
-                if batch.project.junior_pmo:
-                    emails.append(batch.project.junior_pmo.email)
-
-                send_mail_templates(
-                    "expenses/expenses_emails.html",
-                    emails,
-                    "Verification Required: Facilitators Expenses",
-                    {
-                        "facilitator_name": facilitator_name,
-                        "expense_name": expense_name,
-                        "project_name": project_name,
-                        "description": expense.description,
-                        "amount": expense.amount,
-                    },
+        with transaction.atomic():
+            name = request.data.get("name")
+            description = request.data.get("description")
+            date_of_expense = request.data.get("date_of_expense")
+            live_session = request.data.get("live_session")
+            session = request.data.get("session")
+            coach =  request.data.get("coach")
+            batch = request.data.get("batch")
+            facilitator = request.data.get("facilitator")
+            file = request.data.get("file")
+            amount = request.data.get("amount")
+            if not file:
+                return Response(
+                    {"error": "Please upload file."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
-                email_array = json.loads(env("EXPENSE_NOTIFICATION_EMAILS"))
-                if batch.project.junior_pmo:
-                    email_array.append(batch.project.junior_pmo.email)
-                for email in email_array:
-                    pmo = Pmo.objects.filter(email=email.strip().lower()).first()
+            if not session and (not batch or not facilitator):
+                return Response(
+                    {"error": "Failed to create expense."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+            if name and date_of_expense and description and amount:
+                if session:
+                    session = SessionRequestCaas.objects.get(id=int(session))
+                    coach = Coach.objects.get(id =int(coach) )
+                    expense = Expense.objects.create(
+                        name=name,
+                        description=description,
+                        date_of_expense=date_of_expense,
+                        session=session,
+                        coach =coach,
+                        file=file,
+                        amount=amount,
+                    )
+                else:
+
+                    facilitator = Facilitator.objects.get(id=int(facilitator))
+                    batch = SchedularBatch.objects.get(id=int(batch))
+                    if live_session:
+                        live_session = LiveSession.objects.filter(
+                            id=int(live_session)
+                        ).first()
+                    expense = Expense.objects.create(
+                        name=name,
+                        description=description,
+                        date_of_expense=date_of_expense,
+                        live_session=live_session,
+                        batch=batch,
+                        facilitator=facilitator,
+                        file=file,
+                        amount=amount,
+                    )
+
+                facilitator_name = f"{facilitator.first_name} {facilitator.last_name}"
+                expense_name = expense.name
+                project_name = expense.batch.project.name
+
+                try:
+                    emails = [
+                        "madhuri@coachtotransformation.com",
+                        "nisha@coachtotransformation.com",
+                        "pmotraining@meeraq.com",
+                        "pmocoaching@meeraq.com",
+                    ]
+                    if batch.project.junior_pmo:
+                        emails.append(batch.project.junior_pmo.email)
+
                     send_mail_templates(
-                        "pmo_emails/expense_added_by_facilitator.html",
-                        [email],
-                        "Meeraq | Expense Upload Notification",
+                        "expenses/expenses_emails.html",
+                        emails,
+                        "Verification Required: Facilitators Expenses",
                         {
-                            "name": pmo.name if pmo else "User",
-                            "project_name": batch.project.name,
-                            "facilitator_name": facilitator.first_name
-                            + " "
-                            + facilitator.last_name,
+                            "facilitator_name": facilitator_name,
+                            "expense_name": expense_name,
+                            "project_name": project_name,
                             "description": expense.description,
                             "amount": expense.amount,
-                            "date_of_expense": expense.created_at.strftime("%d/%m/%Y"),
                         },
-                        [],
                     )
-                    sleep(2)
-            except Exception as e:
-                print(str(e))
 
-            return Response({"message": "Expense created successfully!"}, status=201)
-        else:
-            return Response(
-                {"error": "Fill in all the required feild"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+                    email_array = json.loads(env("EXPENSE_NOTIFICATION_EMAILS"))
+                    if batch.project.junior_pmo:
+                        email_array.append(batch.project.junior_pmo.email)
+                    for email in email_array:
+                        pmo = Pmo.objects.filter(email=email.strip().lower()).first()
+                        send_mail_templates(
+                            "pmo_emails/expense_added_by_facilitator.html",
+                            [email],
+                            "Meeraq | Expense Upload Notification",
+                            {
+                                "name": pmo.name if pmo else "User",
+                                "project_name": batch.project.name,
+                                "facilitator_name": facilitator.first_name
+                                + " "
+                                + facilitator.last_name,
+                                "description": expense.description,
+                                "amount": expense.amount,
+                                "date_of_expense": expense.created_at.strftime("%d/%m/%Y"),
+                            },
+                            [],
+                        )
+                        sleep(2)
+                except Exception as e:
+                    print(str(e))
+
+                return Response(
+                        {"message": "Expense created successfully!"}, status=201
+                    )
+            else:
+                return Response(
+                    {"error": "Fill in all the required feild"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
     except Exception as e:
         print(str(e))
         return Response(

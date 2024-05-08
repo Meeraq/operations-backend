@@ -463,6 +463,14 @@ urlpatterns = [
         "get-facilitator-summary-data/<int:facilitator_id>/",
         views.get_facilitator_summary_data,
     ),
+     path(
+        "expenses/<int:project_id>/<int:coach_id>/",
+        views.get_expenses_for_coaching_project,
+    ),
+      path(
+        "get-coach-with-vendor-id-in-project/<int:project_id>/",
+        views.get_coach_with_vendor_id_in_project,
+    ),
     path(
         "hide-columns/",
         views.hide_columns,

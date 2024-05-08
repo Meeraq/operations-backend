@@ -270,11 +270,16 @@ class Expense(models.Model):
     name = models.CharField(max_length=255)
     description = models.CharField(max_length=255, blank=True, null=True)
     facilitator = models.ForeignKey(
-        Facilitator,
-        on_delete=models.CASCADE,
+        Facilitator, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    coach = models.ForeignKey(Coach, on_delete=models.SET_NULL, null=True)
+    session = models.ForeignKey(
+        SessionRequestCaas, on_delete=models.SET_NULL, null=True
     )
     date_of_expense = models.DateField(blank=True, null=True)
-    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    batch = models.ForeignKey(
+        SchedularBatch, on_delete=models.SET_NULL, null=True, blank=True
+    )
     live_session = models.ForeignKey(
         LiveSession, on_delete=models.SET_NULL, blank=True, null=True
     )
