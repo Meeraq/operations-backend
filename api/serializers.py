@@ -538,10 +538,6 @@ class APILogSerializer(serializers.ModelSerializer):
         fields = ["path", "username", "created_at", "method"]
 
 
-class TaskSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        fields = "__all__"
         
         
 class SalesSerializer(serializers.ModelSerializer):
