@@ -528,6 +528,9 @@ urlpatterns = [
         "get-engagement-of-a-coachee/<int:learner_id>/",
         views.get_engagement_of_a_coachee,
     ),
+    path("leaders/", views.get_leaders),
+    path("leaders/create/", views.add_leader),
+    path("leaders/edit/<int:leader_id>/", views.edit_leader),
     path(
         "create-new-engagement/",
         views.create_engagement_of_learner,

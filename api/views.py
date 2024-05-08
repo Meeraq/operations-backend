@@ -16,6 +16,8 @@ from operationsBackend import settings
 from .serializers import (
     CoachSerializer,
     UserSerializer,
+    LeaderDepthOneSerializer,
+    LeaderSerializer,
     LearnerSerializer,
     PmoDepthOneSerializer,
     SessionRequestCaasSerializer,
@@ -115,6 +117,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.forms.models import model_to_dict
 from .models import (
     Profile,
+    Leader,
     Pmo,
     CTTPmo,
     Coach,
@@ -1505,6 +1508,8 @@ def get_user_for_active_inactive(role, email):
             user = Sales.objects.get(email=email)
         if role == "ctt_pmo":
             user = CTTPmo.objects.get(email=email)
+        if role == "leader":
+            user = Leader.objects.get(email=email)
         return user
     except Exception as e:
         print(str(e))
@@ -2492,7 +2497,11 @@ def get_user_data(user):
     elif user_profile_role == "ctt_pmo":
         if not user.profile.cttpmo.active_inactive:
             return None
-        serializer = CTTPmoSerializer(user.profile.cttpmo)
+        serializer = CTTPmoDepthOneSerializer(user.profile.cttpmo)
+    elif user_profile_role == "leader":
+        if not user.profile.leader.active_inactive:
+            return None
+        serializer = LeaderDepthOneSerializer(user.profile.leader)
     else:
         return None
     return {
@@ -9393,6 +9402,10 @@ def change_user_role(request, user_id):
         if not user.profile.cttpmo.active_inactive:
             return None
         serializer = CTTPmoDepthOneSerializer(user.profile.cttpmo)
+    elif user_profile_role == "leader":
+        if not user.profile.leader.active_inactive:
+            return None
+        serializer = LeaderDepthOneSerializer(user.profile.leader)
     else:
         return Response({"error": "Unknown user role."}, status=400)
     return Response(
@@ -11427,6 +11440,94 @@ def get_engagement_of_a_coachee(request, learner_id):
     engagement = Engagement.objects.get(learner__id=learner_id)
     serializer = EngagementDepthOneSerializer(engagement)
     return Response(serializer.data, status=200)
+
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
+def add_leader(request):
+    try:
+        with transaction.atomic():
+            data = request.data
+            leader_serializer = LeaderSerializer(data=data)
+            if leader_serializer.is_valid():
+                name = data.get("name")
+                email = data.get("email", "").strip().lower()
+                phone = data.get("phone")
+                
+                if not (name and phone and email):
+                    return Response(
+                        {"error": "Name and phone are mandatory fields."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    user = User.objects.create_user(
+                        username=email,
+                        email=email,
+                        password=User.objects.make_random_password(),
+                    )
+
+                    profile = Profile.objects.create(user=user)
+                else:
+                    profile = Profile.objects.get(user=user)
+                leader_role, created = Role.objects.get_or_create(name="leader")
+                profile.roles.add(leader_role)
+                profile.save()
+                leader_serializer.save(user=profile)
+                return Response(leader_serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(
+                    leader_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
+def get_leaders(request):
+    try:
+        leaders = Leader.objects.all()
+        serializer = LeaderSerializer(leaders, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny, IsInRoles("superadmin")])
+def edit_leader(request, leader_id):
+    name = request.data.get("name")
+    email = request.data.get("email", "").strip().lower()
+    phone = request.data.get("phone")
+    leader = Leader.objects.get(id=leader_id)
+    try:
+        with transaction.atomic():
+            existing_user = (
+                User.objects.filter(username=email)
+                .exclude(username=leader.user.user.username)
+                .first()
+            )
+            if existing_user:
+                return Response(
+                    {"error": "User with this email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            leader.user.user.username = email
+            leader.user.user.email = email
+            leader.user.user.save()
+            leader.email = email
+            leader.name = name
+            leader.phone = phone
+            leader.save()
+            return Response({"message": "Leader updated successfully."}, status=201)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update Leader."}, status=500)
+
 
 
 @api_view(["POST"])
