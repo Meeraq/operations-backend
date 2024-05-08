@@ -6513,56 +6513,26 @@ def check_if_project_structure_edit_allowed(request, project_id):
 @permission_classes([IsAuthenticated])
 def get_all_project_purchase_orders_for_finance(request, project_id, project_type):
     try:
-        purchase_order_set = set()
-        all_purchase_orders = []
-        purchase_orders = PurchaseOrderGetSerializer(
-            PurchaseOrder.objects.filter(
-                Q(created_time__year__gte=2024)
-                | Q(purchaseorder_number__in=purchase_orders_allowed)
-            ),
-            many=True,
-        ).data
         # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data)
         # fetch_purchase_orders(organization_id)
-
-        if project_type == "SEEQ":
-            coach_pricings = CoachPricing.objects.filter(project__id=project_id)
-            facilitator_pricings = FacilitatorPricing.objects.filter(
-                project__id=project_id
-            )
-
-            for coach_pricing in coach_pricings:
-                if coach_pricing.purchase_order_id in purchase_order_set:
-                    continue
-                purchase_order = get_purchase_order(
-                    purchase_orders, coach_pricing.purchase_order_id
-                )
-                all_purchase_orders.append(purchase_order)
-                purchase_order_set.add(coach_pricing.purchase_order_id)
-            for facilitator_pricing in facilitator_pricings:
-                if facilitator_pricing.purchase_order_id in purchase_order_set:
-                    continue
-                purchase_order = get_purchase_order(
-                    purchase_orders, facilitator_pricing.purchase_order_id
-                )
-                all_purchase_orders.append(purchase_order)
-                purchase_order_set.add(facilitator_pricing.purchase_order_id)
-        elif project_type == "CAAS":
-            coach_statuses = CoachStatus.objects.filter(project__id=project_id)
-            for coach_status in coach_statuses:
-                if coach_status.purchase_order_id:
-                    if coach_status.purchase_order_id in purchase_order_set:
-                        continue
-                    purchase_order = get_purchase_order(
-                        purchase_orders, coach_status.purchase_order_id
-                    )
-                    all_purchase_orders.append(purchase_order)
-                    purchase_order_set.add(coach_status.purchase_order_id)
-        return Response(all_purchase_orders)
+        if project_type == "skill_training" or project_type == "SEEQ":
+            purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed), Q(schedular_project__id = project_id)
+            ),
+            many=True,).data
+        elif project_type == "CAAS" or project_type == "COD":
+            purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed), Q(caas_project__id = project_id)
+            ),
+            many=True,).data
+        return Response(purchase_orders)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
-
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
