@@ -173,6 +173,7 @@ from schedularApi.tasks import (
     get_current_date_timestamps,
     get_coaching_session_according_to_time,
     get_live_session_according_to_time,
+    send_emails_in_bulk,
     add_batch_to_project,
     create_or_get_learner,
 )
@@ -3305,17 +3306,18 @@ def finalize_project_structure(request, project_id):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "coach")])
 def send_live_session_link(request):
     live_session = LiveSession.objects.get(id=request.data.get("live_session_id"))
+    email_contents = []
     for learner in live_session.batch.learners.all():
         # Only send email if project status is ongoing
         is_not_in_person_session = (
             False if live_session.session_type == "in_person_session" else True
         )
         if live_session.batch.project.status == "ongoing":
-            send_mail_templates(
-                "send_live_session_link.html",
-                [learner.email],
-                "Meeraq - Live Session",
-                {
+            email_contents.append(
+               {"file_name": "send_live_session_link.html",
+                 "user_email" : learner.email,
+                 "email_subject": "Meeraq - Live Session",
+                 "content" :{
                     "participant_name": learner.name,
                     "live_session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
                     "project_name": live_session.batch.project.name,
@@ -3325,9 +3327,9 @@ def send_live_session_link(request):
                     "meeting_link": live_session.meeting_link,
                     "is_not_in_person_session": is_not_in_person_session,
                 },
-                [],
+                 "bcc_emails": []}
             )
-            sleep(4)
+    send_emails_in_bulk.delay(email_contents)
     return Response({"message": "Emails sent successfully"})
 
 
