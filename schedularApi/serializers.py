@@ -13,11 +13,22 @@ from .models import (
     CoachPricing,
     SchedularUpdate,
     Expense,
+    HandoverDetails,
+    Task,
 )
 from api.models import Coach
 
 
 class SchedularProjectSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchedularProject
+        fields = "__all__"
+        depth = 1
+
+
+class SchedularProjectSerializerArchiveCheck(serializers.ModelSerializer):
+    is_archive_enabled = serializers.BooleanField()
+
     class Meta:
         model = SchedularProject
         fields = "__all__"
@@ -112,7 +123,8 @@ class CoachBasicDetailsSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "email",
-            "phone","active_inactive",
+            "phone",
+            "active_inactive",
             "phone_country_code",
         ]
 
@@ -187,7 +199,6 @@ class CoachPricingSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-
 class ExpenseSerializerDepthOne(serializers.ModelSerializer):
     class Meta:
         model = Expense
@@ -199,4 +210,29 @@ class ExpenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense
         fields = "__all__"
-        
+
+
+class HandoverDetailsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HandoverDetails
+        fields = "__all__"
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = "__all__"
+
+
+
+class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer):
+    organisation_name = serializers.SerializerMethodField()
+
+    def get_organisation_name(self, obj):
+        if obj.organisation:
+            return obj.organisation.name
+        return None
+
+    class Meta:
+        model = HandoverDetails
+        fields = '__all__'

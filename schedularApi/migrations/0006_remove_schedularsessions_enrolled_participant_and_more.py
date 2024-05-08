@@ -3,7 +3,7 @@
 from django.db import migrations, models
 import django.db.models.deletion
 
-from courses.views import create_or_get_learner
+from schedularApi.tasks import create_or_get_learner
 
 
 def changeEnrollParticipantToLearner(apps, schema_editor):
