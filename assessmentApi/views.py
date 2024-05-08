@@ -1998,7 +1998,7 @@ class AddMultipleQuestions(APIView):
                     competency, created = Competency.objects.get_or_create(
                         name=question["compentency_name"].strip()
                     )
-
+                    competency.description = question["compentency_description"]
                     competency.behaviors.add(behavior)
                     competency.save()
 
@@ -3436,7 +3436,7 @@ def generate_graph_for_participant(
                     label_count = sum(
                         1 for key in question.label.keys() if question.label[key]
                     )
-                    if question.reverse_question:
+                    if not question.reverse_question:
 
                         swap_dict = swap_positions(label_count)
 
@@ -3549,7 +3549,7 @@ def generate_graph_for_participant_for_post_assessment(
                     )
                     swap_dict = swap_positions(label_count)
                     if pre_assessment_participant_response_value:
-                        if question.reverse_question:
+                        if not question.reverse_question:
 
                             pre_competency_object[
                                 question.competency.name
@@ -4962,7 +4962,7 @@ class DownloadQuestionWiseExcelForProject(APIView):
                                             for key in question.label.keys()
                                             if question.label[key]
                                         )
-                                        if question.reverse_question:
+                                        if not question.reverse_question:
                                             swap_dict = swap_positions(label_count)
                                             questions_object[question.self_question] = (
                                                 str(
