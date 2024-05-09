@@ -43,12 +43,48 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
         print(f"Error occurred while sending emails: {str(e)}")
 
 
+def get_user_name(user):
+    try:
+        roles = user.profile.roles.all()
+        if not roles.exists():
+            return "User"
+        role = roles.first().name
+        if role == "pmo":
+            return user.profile.pmo.name
+        elif role == "coach":
+            return user.profile.coach.first_name + " " + user.profile.coach.last_name
+        elif role == "vendor":
+            return user.profile.vendor.name
+        elif role == "hr":
+            return user.profile.hr.first_name + " " + user.profile.hr.last_name
+        elif role == "learner":
+            return user.profile.learner.name
+        elif role == "superadmin":
+            return user.profile.superadmin.name
+        elif role == "facilitator":
+            return (
+                user.profile.facilitator.first_name
+                + " "
+                + user.profile.facilitator.last_name
+            )
+        elif role == "finance":
+            return user.profile.finance.name
+        elif role == "sales":
+            return user.profile.sales.name
+        elif role == "ctt_pmo":
+            return user.profile.cttpmo.name
+        else:
+            return "User"
+    except Exception as e:
+        print(str(e))
+        return "User"
+
+
 @receiver(reset_password_token_created)
 def password_reset_token_created(
     sender, instance, reset_password_token, *args, **kwargs
 ):
     app_name = instance.request.data.get("app_name", "")
-    print("app", app_name)
     user = reset_password_token.user
     email_plaintext_message = "{}?token={}".format(
         reverse("password_reset:reset-password-request"), reset_password_token.key
@@ -89,7 +125,7 @@ def password_reset_token_created(
             )
             if projects.exists():
                 return None
-        name = "User"
+        name = get_user_name(user)
         if app_name == "assessment":
             link = f"{env('ASSESSMENT_APP_URL')}/create-password/{reset_password_token.key}"
         elif app_name == "zoho":
@@ -154,8 +190,21 @@ class Finance(models.Model):
     def __str__(self):
         return self.name
 
-
 class Sales(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+    phone = models.CharField(max_length=25)
+    active_inactive = models.BooleanField(default=True)
+    sales_person_id = models.CharField(max_length=255, blank=True, default="")
+    business = models.CharField(max_length=255, blank=True, default="meeraq")
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+class Leader(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
@@ -169,13 +218,13 @@ class Sales(models.Model):
 
 
 class Pmo(models.Model):
-
     SUB_ROLE_CHOICES = [
         ("manager", "Manager"),
         ("junior_pmo", "Junior PMO"),
     ]
 
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
     name = models.CharField(max_length=50)
     email = models.EmailField()
     phone = models.CharField(max_length=25)
@@ -183,6 +232,17 @@ class Pmo(models.Model):
         max_length=50, choices=SUB_ROLE_CHOICES, blank=True, default="manager"
     )
     room_id = models.CharField(max_length=50, blank=True)
+    active_inactive = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class CTTPmo(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+    phone = models.CharField(max_length=25)
     active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
@@ -218,6 +278,7 @@ class Coach(models.Model):
     years_of_corporate_experience = models.CharField(max_length=20, blank=True)
     years_of_coaching_experience = models.CharField(max_length=20, blank=True)
     is_approved = models.BooleanField(blank=True, default=False)
+    is_rejected = models.BooleanField(blank=True, default=False)
     location = models.JSONField(default=list, blank=True)
     ctt_nctt = models.BooleanField(blank=True, default=False)
     language = models.JSONField(default=list, blank=True)
@@ -244,6 +305,10 @@ class Coach(models.Model):
         null=True,
         validators=[validate_pdf_extension],
     )
+    remark = models.TextField(blank=True)
+    is_coach = models.BooleanField(blank=True, default=False)
+    is_mentor = models.BooleanField(blank=True, default=False)
+    is_consultant = models.BooleanField(blank=True, default=False)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -290,6 +355,7 @@ class Facilitator(models.Model):
     fees_per_day = models.CharField(max_length=20, blank=True)
     topic = models.JSONField(default=list, blank=True)
     is_approved = models.BooleanField(blank=True, default=False)
+    is_rejected = models.BooleanField(blank=True, default=False)
     active_inactive = models.BooleanField(default=True)
 
     def __str__(self):
@@ -321,6 +387,7 @@ class Organisation(models.Model):
 
 class HR(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    profile_pic = models.ImageField(upload_to="post_images", blank=True)
     first_name = models.CharField(max_length=50)
     last_name = models.CharField(max_length=50)
     email = models.EmailField()
@@ -363,7 +430,7 @@ class Project(models.Model):
     name = models.CharField(max_length=100, unique=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     project_type = models.CharField(
-        max_length=50, choices=project_type_choice, default="cod"
+        max_length=50, choices=project_type_choice, default="CAAS"
     )
     start_date = models.DateField(auto_now_add=True)
     end_date = models.DateField(blank=True, null=True)
@@ -410,6 +477,16 @@ class Project(models.Model):
     )
     is_archive = models.BooleanField(default=False)
     finance = models.BooleanField(blank=True, default=False)
+    is_project_structure = models.BooleanField(blank=True, default=True)
+    total_credits = models.DecimalField(
+        max_digits=10, decimal_places=2, blank=True, null=True
+    )
+    duration_of_each_session = models.IntegerField(blank=True, default=None, null=True)
+    request_expiry_time = models.DecimalField(
+        max_digits=10, decimal_places=2, blank=True, null=True
+    )
+    credit_history = models.JSONField(default=list, blank=True)
+    is_session_expiry = models.BooleanField(blank=True, default=False)
 
     class Meta:
         ordering = ["-created_at"]
@@ -420,7 +497,10 @@ class Project(models.Model):
 
 class Update(models.Model):
     pmo = models.ForeignKey(Pmo, on_delete=models.SET_NULL, null=True, blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    project = models.ForeignKey(
+        Project, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    coach = models.ForeignKey(Coach, on_delete=models.SET_NULL, null=True, blank=True)
     message = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(auto_now=True)
@@ -467,6 +547,28 @@ class Availibility(models.Model):
 #     learner_joined = models.BooleanField(blank=True,default=False)
 
 
+class Engagement(models.Model):
+    STATUS_CHOICES = (
+        ("active", "Active"),
+        ("completed", "Completed"),
+        ("archived", "Archived"),
+    )
+    TYPE_CHOICES = (
+        ("cod", "COD"),
+        ("caas", "CAAS"),
+    )
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, null=True, blank=True)
+    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    project_structure = models.JSONField(default=list, blank=True)
+    type = models.CharField(max_length=225, null=True, blank=True, choices=TYPE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Project: {self.project.name} - Learner: {self.learner.name}"
+
+
 class SessionRequestCaas(models.Model):
     hr = models.ForeignKey(
         HR, on_delete=models.CASCADE, blank=True, null=True, default=None
@@ -477,6 +579,9 @@ class SessionRequestCaas(models.Model):
 
     learner = models.ForeignKey(
         Learner, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
+    engagement = models.ForeignKey(
+        Engagement, on_delete=models.CASCADE, blank=True, null=True, default=None
     )
     project = models.ForeignKey(Project, on_delete=models.CASCADE, default=None)
     coach = models.ForeignKey(
@@ -511,6 +616,7 @@ class SessionRequestCaas(models.Model):
     order = models.IntegerField(
         blank=True, default=None, null=True
     )  # used for engagement structure
+    requested_at = models.DateTimeField(blank=True, null=True)
 
     def __str__(self):
         if self.session_type == "interview":
@@ -532,23 +638,6 @@ class Notification(models.Model):
         return self.user.username
 
 
-class Engagement(models.Model):
-    STATUS_CHOICES = (
-        ("active", "Active"),
-        ("completed", "Completed"),
-        ("archived", "Archived"),
-    )
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, null=True, blank=True)
-    learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
-    project_structure = models.JSONField(default=list, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"Project: {self.project.name} - Learner: {self.learner.name}"
-
-
 class Goal(models.Model):
     STATUS_CHOICES = (
         ("active", "Active"),
@@ -557,8 +646,12 @@ class Goal(models.Model):
     )
     name = models.TextField()
     description = models.TextField()
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
-    engagement = models.ForeignKey(Engagement, on_delete=models.CASCADE)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, blank=True, null=True
+    )
+    engagement = models.ForeignKey(
+        Engagement, on_delete=models.CASCADE, blank=True, null=True
+    )
 
 
 class Competency(models.Model):
@@ -866,3 +959,9 @@ class APILog(models.Model):
         return f"{self.path}"
 
 
+class TableHiddenColumn(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE,blank=True,null=True)
+    table_name = models.CharField(max_length=225, blank=True)
+    hidden_columns = models.JSONField(default=list, blank=True)
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

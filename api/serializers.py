@@ -40,6 +40,8 @@ from .models import (
     Facilitator,
     APILog,
     Sales,
+    CTTPmo,
+    Leader
 )
 from django.contrib.auth.models import User
 
@@ -56,6 +58,11 @@ class PmoDepthOneSerializer(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+class CTTPmoDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTPmo
+        fields = "__all__"
+        depth = 1
 
 class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
@@ -63,11 +70,13 @@ class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+
 class SalesDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sales
         fields = "__all__"
         depth = 1
+
 
 class FinanceDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
@@ -121,13 +130,14 @@ class ProjectDepthTwoSerializer(serializers.ModelSerializer):
         fields = "__all__"
         depth = 2
 
+
 class ProjectDepthTwoSerializerArchiveCheck(serializers.ModelSerializer):
     is_archive_enabled = serializers.BooleanField()
+
     class Meta:
         model = Project
         fields = "__all__"
         depth = 2
-
 
 
 class UpdateSerializer(serializers.ModelSerializer):
@@ -266,6 +276,12 @@ class GoalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Goal
         fields = ["id", "name", "status", "engagement"]
+
+
+class GoalDescriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Goal
+        fields = ["id", "name", "description", "status", "engagement"]
 
 
 class GetGoalSerializer(serializers.ModelSerializer):
@@ -468,6 +484,23 @@ class PmoSerializerAll(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class CTTPmoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTPmo
+        fields = "__all__"
+
+class LeaderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Leader
+        fields = "__all__"
+
+class LeaderDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Leader
+        fields = "__all__"
+        depth = 1
+
+
 class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilitator
@@ -505,7 +538,7 @@ class APILogSerializer(serializers.ModelSerializer):
         fields = ["path", "username", "created_at", "method"]
 
 
-
+        
         
 class SalesSerializer(serializers.ModelSerializer):
     class Meta:

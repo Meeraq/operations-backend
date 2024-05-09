@@ -12,6 +12,7 @@ from api.models import (
     Project,
     Engagement,
     Goal,
+    Sales,
 )
 
 from django.utils import timezone
@@ -47,6 +48,7 @@ class SchedularProject(models.Model):
         blank=True,
     )
     is_archive = models.BooleanField(default=False)
+    teams_enabled = models.BooleanField(blank=True, default=False)
 
     class Meta:
         ordering = ["-created_at"]
@@ -67,6 +69,9 @@ class SchedularBatch(models.Model):
     nudge_periodic_task = models.ForeignKey(
         PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
     )
+    email_reminder = models.BooleanField(blank=True, default=True)
+    whatsapp_reminder = models.BooleanField(blank=True, default=True)
+    calendar_invites = models.BooleanField(blank=True, default=True)
 
 
 class RequestAvailibilty(models.Model):
@@ -164,6 +169,7 @@ class LiveSession(models.Model):
         max_length=50, choices=SESSION_CHOICES, default="virtual_session"
     )
     meeting_link = models.TextField(default="", blank=True)
+    teams_meeting_id = models.TextField(default="", blank=True)
 
 
 class EmailTemplate(models.Model):
@@ -264,16 +270,23 @@ class Expense(models.Model):
         ("pending", "Pending"),
         ("accepted", "Accepted"),
         ("rejected", "Rejected"),
+        ("created", "Created"),
+        ("invoiced", "Invoiced"),
     ]
 
     name = models.CharField(max_length=255)
     description = models.CharField(max_length=255, blank=True, null=True)
     facilitator = models.ForeignKey(
-        Facilitator,
-        on_delete=models.CASCADE,
+        Facilitator, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    coach = models.ForeignKey(Coach, on_delete=models.SET_NULL, null=True)
+    session = models.ForeignKey(
+        SessionRequestCaas, on_delete=models.SET_NULL, null=True
     )
     date_of_expense = models.DateField(blank=True, null=True)
-    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    batch = models.ForeignKey(
+        SchedularBatch, on_delete=models.SET_NULL, null=True, blank=True
+    )
     live_session = models.ForeignKey(
         LiveSession, on_delete=models.SET_NULL, blank=True, null=True
     )
@@ -291,11 +304,23 @@ class Expense(models.Model):
 
 
 class HandoverDetails(models.Model):
-    PROJECT_TYPE_CHOICES = [("caas", "CAAS"), ("skill_training", "Skill Training")]
+    PROJECT_TYPE_CHOICES = [("caas", "CAAS"), ("skill_training", "Skill Training"),("COD", "COD"),]
     DELIVERY_MODE_CHOICES = [
         ("online", "Online"),
         ("hybrid", "Hybrid"),
         ("offline", "Offline"),
+    ]
+    PROGRAM_TYPE_CHOICES = [
+        ("soft_skill_training", "Soft skill training"),
+        ("coaching", "Coaching"),
+        ("coach_training", "Coach Training"),
+        ("coaching_and_coach_training", "Coaching + Coach Training"),
+    ]
+
+    LOGISTICE_MANAGER_CHOICES = [
+        ("client", "Client"),
+        ("meeraq", "Meeraq"),
+        ("faculty", "Faculty"),
     ]
 
     schedular_project = models.OneToOneField(
@@ -308,36 +333,46 @@ class HandoverDetails(models.Model):
     caas_project = models.OneToOneField(
         Project, on_delete=models.SET_NULL, blank=True, null=True
     )
+    sales = models.ForeignKey(Sales, on_delete=models.SET_NULL, blank=True, null=True)
+    organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
+    hr = models.ManyToManyField(HR, blank=True)
     project_type = models.CharField(
         max_length=255, choices=PROJECT_TYPE_CHOICES, blank=True, null=True
     )  # caas or skill_training
-    course_name = models.CharField(max_length=255, blank=True, null=True)
     delivery_mode = models.CharField(
         max_length=255, choices=DELIVERY_MODE_CHOICES, blank=True, null=True
     )
-    program_type = models.CharField(max_length=255, blank=True, null=True)
-    logistics_manager = models.CharField(max_length=255, blank=True, null=True)
-    faculty_payment_contact = models.CharField(max_length=255, blank=True, null=True)
-    poc_contact_details = models.CharField(max_length=255, blank=True, null=True)
-    audience_level = models.CharField(max_length=255, blank=True, null=True)
+    # program_type = models.CharField(max_length=255, blank=True, null=True)
+    program_type = models.CharField(
+        max_length=255, choices=PROGRAM_TYPE_CHOICES, blank=True, null=True
+    )
+    logistics_manager = models.CharField(
+        max_length=255, choices=LOGISTICE_MANAGER_CHOICES, blank=True, null=True
+    )
+    project_duration = models.CharField(max_length=255, blank=True, null=True)
+    po_number = models.CharField(max_length=255, blank=True, null=True)
+    participant_count = models.IntegerField(default=0, blank=True, null=True)
+    coach_fee = models.CharField(max_length=255, blank=True, null=True)
+    invoice_status = models.BooleanField(default=False, blank=True)
+    reporting_requirements = models.TextField(blank=True, null=True)
+    coach_names = models.TextField(blank=True, null=True)
+    poc_contact_details = models.TextField(blank=True, null=True)
+    audience_level = models.JSONField(max_length=255, blank=True, null=True)
     project_structure = models.JSONField(default=list, blank=True, null=True)
     sales_order_ids = models.JSONField(default=list, blank=True, null=True)
     # sales_order_nos = models.JSONField(default=list, blank=True, null=True)
-    total_training_hours = models.IntegerField(default=0, blank=True, null=True)
     total_coaching_hours = models.IntegerField(default=0, blank=True, null=True)
     tentative_start_date = models.DateField(blank=True, null=True)
-    training_duration_frequency = models.CharField(
-        max_length=255, blank=True, null=True
-    )
     pre_post_assessment = models.BooleanField(blank=True, default=True)
     nudges = models.BooleanField(blank=True, default=True)
-    special_commitments = models.TextField(blank=True, null=True)
     end_of_program_certification = models.BooleanField(default=False, blank=True)
-    billing_process_details = models.TextField(blank=True, null=True)
     out_of_pocket_expenses = models.TextField(blank=True, null=True)
-    other_feedback = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    project_name = models.CharField(max_length=255, blank=True, null=True)
+    is_accepted = models.BooleanField(default=False, blank=True)
+    gm_sheet = models.FileField(upload_to="gm_sheets/", blank=True, null=True)
+    proposals = models.FileField(upload_to="proposals/", blank=True, null=True)
 
     class Meta:
         verbose_name = "Handover Detail"
@@ -379,6 +414,13 @@ class Task(models.Model):
     )
     schedular_project = models.ForeignKey(
         SchedularProject,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
+    schedular_batch = models.ForeignKey(
+        SchedularBatch,
         on_delete=models.CASCADE,
         blank=True,
         null=True,
