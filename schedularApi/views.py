@@ -609,7 +609,7 @@ def create_facilitator_pricing(batch, facilitator):
                 duration=live_session.duration,
             )
             if created:
-                facilitator_pricing.price = session.get("price",0)
+                facilitator_pricing.price = session.get("price", 0)
                 facilitator_pricing.save()
 
 
@@ -661,7 +661,7 @@ def create_coach_pricing(batch, coach):
                 order=coaching_session.order,
             )
             if created:
-                coach_pricing.price = session.get("price",0)
+                coach_pricing.price = session.get("price", 0)
                 coach_pricing.save()
                 create_task(
                     {
@@ -1756,17 +1756,21 @@ def create_coach_schedular_availibilty(request):
                     "/slot-request",
                     "Admin has asked your availability!",
                 )
-                create_task(
-                {
-                    "task": "remind_coach_availability",
-                    "priority": "medium",
-                    "status": "pending",
-                    "coach": coach.id, 
-                    "request":serializer.data["id"],
-                    "remarks": [],
-                },
-                1,
-                 )
+
+                try:
+                    create_task(
+                        {
+                            "task": "remind_coach_availability",
+                            "priority": "medium",
+                            "status": "pending",
+                            "coach": coach.id,
+                            "request": serializer.data["id"],
+                            "remarks": [],
+                        },
+                        1,
+                    )
+                except Exception as e:
+                    print(str(e))
 
                 from_email = settings.DEFAULT_FROM_EMAIL
                 recipient_list = [coach.email]
@@ -2371,20 +2375,25 @@ def schedule_session_fixed(request):
                 )
                 booking_id = coach_availability.coach.room_id
                 meeting_location = f"{env('CAAS_APP_URL')}/call/{booking_id}"
-                tasks = Task.objects.filter(
-                task="coachee_book_session", status="pending",
-                )
-                tasks.update(status="completed")
-                create_task(
-                {
-                        "task": "schedular_update_session_status",
-                        "priority": "medium",
-                        "status": "pending",
-                        "coach_id": coach_id,
-                        "remarks": [],
-                },
-                 1,
-            )
+                # tasks = Task.objects.filter(
+                #     task="coachee_book_session",
+                #     status="pending",
+                # )
+                # if tasks:
+                #     tasks.update(status="completed")
+                try:
+                    create_task(
+                        {
+                            "task": "schedular_update_session_status",
+                            "priority": "medium",
+                            "status": "pending",
+                            "coach_id": coach_id,
+                            "remarks": [],
+                        },
+                        1,
+                    )
+                except Exception as e:
+                    print(str(e))
                 # Only send email if project status is ongoing
                 if coaching_session.batch.project.status == "ongoing":
                     attendees = None
@@ -2834,19 +2843,24 @@ def create_coach_availabilities(request):
             request.provided_by.append(int(coach_id))
             request.save()
             tasks = Task.objects.filter(
-            task="remind_coach_availability", status="pending"
+                task="remind_coach_availability", status="pending"
             )
-            tasks.update(status="completed")
-            create_task(
-                {
-                        "task": "coachee_book_session",
-                        "priority": "medium",
-                        "status": "pending",
-                        "engagement": engagement.id,
-                        "coach_id": coach_id
-                },
-                 3,
-            )
+            if tasks:
+                tasks.update(status="completed")
+            # try:
+
+            #     create_task(
+            #         {
+            #             "task": "coachee_book_session",
+            #             "priority": "medium",
+            #             "status": "pending",
+            #             "engagement": engagement.id,
+            #             "coach_id": coach_id,
+            #         },
+            #         3,
+            #     )
+            # except Exception as e:
+            #     print(str(e))
             # Convert dates from 'YYYY-MM-DD' to 'DD-MM-YYYY' format
             formatted_dates = []
             for date in unique_dates:
@@ -6496,7 +6510,11 @@ def create_expense(request):
                     send_mail_templates(
                         "expenses/expenses_emails.html",
                         emails,
-                        "Verification Required: Coaches Expenses" if session else   "Verification Required: Facilitators Expenses",
+                        (
+                            "Verification Required: Coaches Expenses"
+                            if session
+                            else "Verification Required: Facilitators Expenses"
+                        ),
                         {
                             "facilitator_name": email_name,
                             "expense_name": expense_name,
