@@ -300,17 +300,22 @@ class Expense(models.Model):
 
     def __str__(self):
         return f"{self.name}"
-    
+
+
 class Benchmark(models.Model):
     year = models.CharField(max_length=9, blank=True, null=True)
     caas_benchmark = models.CharField(max_length=3, blank=True, null=True)
-    seeq_benchmark= models.CharField(max_length=3, blank=True, null=True)
-    both_benchmark= models.CharField(max_length=3, blank=True, null=True)
+    seeq_benchmark = models.CharField(max_length=3, blank=True, null=True)
+    both_benchmark = models.CharField(max_length=3, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
- 
+
 
 class GmSheet(models.Model):
-    PROJECT_TYPE_CHOICES = [("caas", "CAAS"), ("skill_training", "Skill Training"),("both","Coaching+Training")]
+    PROJECT_TYPE_CHOICES = [
+        ("CAAS", "CAAS"),
+        ("SEEQ", "Skill Training"),
+        ("Coaching + Traning", "Coaching+Training"),
+    ]
     DEAL_STATUS_CHOICES = [
         ("pending", "Pending"),
         ("won", "Won"),
@@ -325,18 +330,24 @@ class GmSheet(models.Model):
     revenue_structure = models.JSONField(default=list, blank=True, null=True)
     cost_structure = models.JSONField(default=list, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    gmsheet_number =models.CharField( max_length=6, blank=True, null=True)
-    other_details = models.TextField(blank=True, null=True) 
-    sales = models.ForeignKey(Sales, null=True, on_delete=models.SET_NULL )
-    is_accepted=models.BooleanField(default=False)
-    deal_status = models.CharField(max_length=255, choices=DEAL_STATUS_CHOICES, default="pending")
+    gmsheet_number = models.CharField(max_length=6, blank=True, null=True)
+    other_details = models.TextField(blank=True, null=True)
+    sales = models.ForeignKey(Sales, null=True, on_delete=models.SET_NULL)
+    is_accepted = models.BooleanField(default=False)
+    deal_status = models.CharField(
+        max_length=255, choices=DEAL_STATUS_CHOICES, default="pending"
+    )
     total_profit = models.CharField(max_length=6, blank=True, null=True)
     gross_margin = models.CharField(max_length=6, blank=True, null=True)
-    benchmark = models.ForeignKey(Benchmark,null=True,on_delete=models.SET_NULL)
+    benchmark = models.ForeignKey(Benchmark, null=True, on_delete=models.SET_NULL)
 
 
 class HandoverDetails(models.Model):
-    PROJECT_TYPE_CHOICES = [("caas", "CAAS"), ("skill_training", "Skill Training"),("COD", "COD"),]
+    PROJECT_TYPE_CHOICES = [
+        ("caas", "CAAS"),
+        ("skill_training", "Skill Training"),
+        ("COD", "COD"),
+    ]
     DELIVERY_MODE_CHOICES = [
         ("online", "Online"),
         ("hybrid", "Hybrid"),
@@ -516,9 +527,9 @@ class Task(models.Model):
 #  }
 
 
-# initialValues 
+# initialValues
 #  form.setFieldsValue({ "name" : "", })
 
-# useState 
+# useState
 # setLineITems([])
 # set costLineItems()

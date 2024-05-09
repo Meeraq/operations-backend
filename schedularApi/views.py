@@ -505,6 +505,7 @@ def create_gmsheet(request):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
+            
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -512,7 +513,7 @@ def create_gmsheet(request):
 
 
 @api_view(["PUT"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales", "leader")])
 def update_gmsheet(request, gmsheet_id):
     try:
         gmsheet = GmSheet.objects.get(id=gmsheet_id)
