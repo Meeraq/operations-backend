@@ -14,7 +14,6 @@ from api.models import (
     Goal,
     Sales,
 )
-
 from django.utils import timezone
 from django.contrib.auth.models import User
 
@@ -301,6 +300,39 @@ class Expense(models.Model):
 
     def __str__(self):
         return f"{self.name}"
+    
+class Benchmark(models.Model):
+    year = models.CharField(max_length=9, blank=True, null=True)
+    caas_benchmark = models.CharField(max_length=3, blank=True, null=True)
+    seeq_benchmark= models.CharField(max_length=3, blank=True, null=True)
+    both_benchmark= models.CharField(max_length=3, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+
+class GmSheet(models.Model):
+    PROJECT_TYPE_CHOICES = [("caas", "CAAS"), ("skill_training", "Skill Training"),("both","Coaching+Training")]
+    DEAL_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("won", "Won"),
+        ("lost", "Lost"),
+        ("deferred", "Deferred"),
+    ]
+    client_name = models.TextField(blank=True, null=True)
+    project_type = models.CharField(
+        max_length=255, choices=PROJECT_TYPE_CHOICES, blank=True, null=True
+    )
+    project_name = models.TextField(blank=True, null=True)
+    revenue_structure = models.JSONField(default=list, blank=True, null=True)
+    cost_structure = models.JSONField(default=list, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    gmsheet_number =models.CharField( max_length=6, blank=True, null=True)
+    other_details = models.TextField(blank=True, null=True) 
+    sales = models.ForeignKey(Sales, null=True, on_delete=models.SET_NULL )
+    is_accepted=models.BooleanField(default=False)
+    deal_status = models.CharField(max_length=255, choices=DEAL_STATUS_CHOICES, default="pending")
+    total_profit = models.CharField(max_length=6, blank=True, null=True)
+    gross_margin = models.CharField(max_length=6, blank=True, null=True)
+    benchmark = models.ForeignKey(Benchmark,null=True,on_delete=models.SET_NULL)
 
 
 class HandoverDetails(models.Model):
@@ -479,3 +511,14 @@ class Task(models.Model):
 
     def __str__(self):
         return self.task
+
+
+#  }
+
+
+# initialValues 
+#  form.setFieldsValue({ "name" : "", })
+
+# useState 
+# setLineITems([])
+# set costLineItems()

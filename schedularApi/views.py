@@ -94,6 +94,8 @@ from .serializers import (
     SchedularProjectSerializerArchiveCheck,
     HandoverDetailsSerializer,
     TaskSerializer,
+    BenchmarkSerializer,
+    GmSheetSerializer,
     HandoverDetailsSerializerWithOrganisationName,
 )
 from .models import (
@@ -114,6 +116,8 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
+    GmSheet,
+    Benchmark,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -440,6 +444,86 @@ def create_handover(request):
     else:
         print(serializer.errors)
         return Response({"error": "Failed to add handover. "}, status=500)
+    
+from django.utils import timezone
+
+@api_view(["GET"])
+def get_current_or_next_year(request):
+    try:
+        latest_benchmark = Benchmark.objects.latest('created_at')
+        if latest_benchmark:
+            current_year = int(latest_benchmark.year.split('-')[0])
+            print("curr",current_year)
+            next_year = f"{current_year + 1}-{str(current_year + 2)[2:]}"
+            print(next_year)
+            return Response({'year': next_year})
+    except Benchmark.DoesNotExist:
+        # If no benchmark exists, return the current year
+        current_year = timezone.now().year
+        next_year = f"{current_year}-{str(current_year + 1)[2:]}"
+        return Response({'year': next_year}, status=status.HTTP_200_OK)
+    
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("leader")])
+def create_benchmark(request):
+    try:
+        benchmarks_data = request.data.get('lineItems')  
+        created_benchmarks = []
+
+        with transaction.atomic():
+            for benchmark_data in benchmarks_data:
+                serializer = BenchmarkSerializer(data=benchmark_data)
+                if serializer.is_valid():
+                    serializer.save()
+                    created_benchmarks.append(serializer.data)
+                else:
+                    # If any benchmark data is invalid, return the errors
+                    return Response(serializer.errors, status=400)
+
+        return Response(created_benchmarks, status=201)  # Return the created benchmarks
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])  # Assuming authenticated users can access all benchmarks
+def get_all_benchmarks(request):
+    if request.method == 'GET':
+        try:
+            benchmarks = Benchmark.objects.all()
+            serializer = BenchmarkSerializer(benchmarks, many=True)
+            return Response(serializer.data, status=200)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+    
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
+def create_gmsheet(request):
+    try:
+        serializer = GmSheetSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
+def update_gmsheet(request, gmsheet_id):
+    try:
+        gmsheet = GmSheet.objects.get(id=gmsheet_id)
+        serializer = GmSheetSerializer(gmsheet,data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["POST"])
@@ -7047,6 +7131,67 @@ def get_pmo_handovers(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])   
+def max_gmsheet_number(request):
+    try:
+        # Get the latest gmsheet_number
+        latest_gmsheet = GmSheet.objects.latest('created_at')
+        latest_number = int(latest_gmsheet.gmsheet_number[3:])  # Extract the number part and convert to integer
+        next_number = latest_number + 1
+        next_gmsheet_number = f'PRO{next_number:03}'  # Format the next number to match 'PRO001' format
+    except GmSheet.DoesNotExist:
+        # If no GmSheet objects exist, create the first gmsheet_number as 'PRO001'
+        next_gmsheet_number = 'PRO001'
+        # GmSheet.objects.create(gmsheet_number=next_gmsheet_number)
+
+    return JsonResponse({'max_number': next_gmsheet_number})
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated]) 
+def get_gmsheet_by_sales(request, sales_person_id):
+    try:
+        gmsheet = GmSheet.objects.filter(sales__id=sales_person_id).order_by("-created_at")
+        serializer = GmSheetSerializer(gmsheet, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get GM Sheets for the specified salesperson."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_gmsheet(request):
+    try:
+        gmsheet_id = request.data.get("gmSheetId")
+        gmsheet = GmSheet.objects.get(id=gmsheet_id)
+        gmsheet.delete()
+        return Response({"success": "GM Sheet deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+    except GmSheet.DoesNotExist:
+        return Response({"error": "GM Sheet does not exist."}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to delete GM Sheet."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_gmsheet(request):
+    try:
+        gmsheet = GmSheet.objects.all().order_by("-created_at")
+        serializer = GmSheetSerializer(gmsheet, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get GM Sheet."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
