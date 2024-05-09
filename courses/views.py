@@ -577,6 +577,7 @@ def create_new_nudge(request):
     if serializer.is_valid():
         nudge_instance = serializer.save()
         nudge_instance.is_switched_on = True
+        nudge_instance.unique_id = uuid.uuid4()
         nudge_instance.save()
         nudges_start_date = nudge_instance.batch.nudge_start_date
         today_date = datetime.today().date()
@@ -3541,7 +3542,7 @@ def duplicate_nudge(request, nudge_id, batch_id):
             file=original_nudge.file,
             order=order,
             batch=batch,
-            is_sent=False,  # Assuming the duplicated nudge is not sent yet
+            is_sent=False,  
             unique_id=str(uuid.uuid4())
         )
         return Response({"message": "Nudge duplicated successfully."})
@@ -4030,6 +4031,7 @@ def get_all_nudges_for_that_learner(request, learner_id):
 @permission_classes([IsAuthenticated])
 def get_nudge_data(request, nudge_id):
     try:
+        print("nudeg_iud",nudge_id)
         nudge = Nudge.objects.get(unique_id=nudge_id)
         serializer = NudgeSerializer(nudge)
         return Response({"nudge": serializer.data})
