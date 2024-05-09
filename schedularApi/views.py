@@ -6453,7 +6453,11 @@ def create_expense(request):
                     send_mail_templates(
                         "expenses/expenses_emails.html",
                         emails,
-                        "Verification Required: Coaches Expenses" if session else   "Verification Required: Facilitators Expenses",
+                        (
+                            "Verification Required: Coaches Expenses"
+                            if session
+                            else "Verification Required: Facilitators Expenses"
+                        ),
                         {
                             "facilitator_name": email_name,
                             "expense_name": expense_name,
@@ -6540,54 +6544,52 @@ def edit_expense_amount(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
 def edit_expense(request):
     try:
-        name = request.data.get("name")
-        description = request.data.get("description")
-        date_of_expense = request.data.get("date_of_expense")
-        live_session = request.data.get("live_session")
-        batch = request.data.get("batch")
-        facilitator = request.data.get("facilitator")
-        file = request.data.get("file")
-        expense_id = request.data.get("expense_id")
+        data = request.data
+        expense_id = data.get("expense_id")
 
-        if not file:
+        # Ensure all required fields are present
+        required_fields = ["name", "description", "date_of_expense", "file"]
+        if not all(field in data for field in required_fields):
             return Response(
-                {"error": "Please upload file."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {"error": "Please provide all required fields."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        if not batch or not facilitator:
-            return Response(
-                {"error": "Failed to create expense."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-        if name and date_of_expense and description:
-            facilitator = Facilitator.objects.get(id=int(facilitator))
-            batch = SchedularBatch.objects.get(id=int(batch))
-            if live_session:
-                live_session = LiveSession.objects.filter(id=int(live_session)).first()
 
-            expense = Expense.objects.get(id=int(expense_id))
+        expense = Expense.objects.get(id=int(expense_id))
 
-            expense.name = name
-            expense.description = description
-            expense.date_of_expense = date_of_expense
-            expense.live_session = live_session
-            expense.batch = batch
-            expense.facilitator = facilitator
-            if not file == "null":
-                expense.file = file
+        # Update expense object
+        expense.name = data["name"]
+        expense.description = data["description"]
+        expense.date_of_expense = data["date_of_expense"]
 
-            expense.save()
-
-            return Response({"message": "Expense created successfully!"}, status=201)
+        # Fetch related instances if provided
+        session_id = data.get("session")
+        if session_id:
+            expense.session = SessionRequestCaas.objects.get(id=int(session_id))
+            expense.coach = None
         else:
-            return Response(
-                {"error": "Fill in all the required feild"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            expense.live_session = LiveSession.objects.filter(
+                id=int(data.get("live_session"))
+            ).first()
+            expense.batch = SchedularBatch.objects.get(id=int(data.get("batch")))
+            expense.facilitator = Facilitator.objects.get(
+                id=int(data.get("facilitator"))
             )
+
+        # Update file if provided
+        if data["file"] != "null":
+            expense.file = data["file"]
+
+        expense.save()
+
+        return Response(
+            {"message": "Expense updated successfully!"}, status=status.HTTP_200_OK
+        )
+
     except Exception as e:
         print(str(e))
         return Response(
-            {"error": "Failed to create expense"},
+            {"error": "Failed to update expense."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
