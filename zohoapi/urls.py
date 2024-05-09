@@ -24,7 +24,7 @@ urlpatterns = [
         views.get_invoices_with_status,
     ),
     path(
-        "api/total-revenue/<vendor_id>/",
+        "total-revenue/<vendor_id>/",
         views.get_total_revenue,
         name="get_total_revenue",
     ),
@@ -82,6 +82,11 @@ urlpatterns = [
         "get-all-invoices/",
         views.get_all_invoices,
         name="get_all_invoices",
+    ),
+    path(
+        "get-invoice/<int:invoice_id>/",
+        views.get_invoice,
+        name="get_invoice",
     ),
     path(
         "pmo/invoices/",
@@ -198,6 +203,11 @@ urlpatterns = [
         "expense-purchase-order/create/<int:facilitator_id>/<int:batch_or_project_id>/",
         views.expense_purchase_order_create,
     ),
+    path(
+        "expense-coaching-purchase-order/create/<int:project_id>/<int:coach_id>/",
+        views.expense_coaching_purchase_order_create,
+    ),
+    
     path(
         "expense-purchase-order/update/<int:facilitator_id>/<int:batch_or_project_id>/",
         views.expense_purchase_order_update,
@@ -348,6 +358,11 @@ urlpatterns = [
         name="get_so_for_the_project",
     ),
     path(
+        "get-handovers-so/<int:sales_id>/",
+        views.get_handovers_so,
+        name="get_handovers_so",
+    ),
+    path(
         "get-total-so-created-count/<str:sales_person_id>/",
         views.get_total_so_created_count,
         name="get_total_so_created_count",
@@ -355,7 +370,7 @@ urlpatterns = [
     path(
         "get-handovers-count/<str:sales_person_id>/",
         views.get_handovers_count,
-        name="get_handovers_count"
+        name="get_handovers_count",
     ),
     path(
         "sales-orders-with-due-invoices/<str:sales_person_id>/",
@@ -363,4 +378,6 @@ urlpatterns = [
         name="sales_orders_with_due_invoices",
     ),
     path("line-items/", views.get_line_items, name="get_line_items"),
+    path("latest-data/", views.get_latest_data, name="get_latest_data"),
+
 ]

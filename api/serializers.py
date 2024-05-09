@@ -39,8 +39,9 @@ from .models import (
     SuperAdmin,
     Facilitator,
     APILog,
-    Task,
     Sales,
+    CTTPmo,
+    Leader
 )
 from django.contrib.auth.models import User
 
@@ -57,6 +58,11 @@ class PmoDepthOneSerializer(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+class CTTPmoDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTPmo
+        fields = "__all__"
+        depth = 1
 
 class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
@@ -478,6 +484,23 @@ class PmoSerializerAll(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class CTTPmoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTPmo
+        fields = "__all__"
+
+class LeaderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Leader
+        fields = "__all__"
+
+class LeaderDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Leader
+        fields = "__all__"
+        depth = 1
+
+
 class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilitator
@@ -515,12 +538,8 @@ class APILogSerializer(serializers.ModelSerializer):
         fields = ["path", "username", "created_at", "method"]
 
 
-class TaskSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        fields = "__all__"
-
-
+        
+        
 class SalesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sales

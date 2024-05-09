@@ -71,7 +71,7 @@ MIDDLEWARE = [
     "api.middlewares.APILoggingMiddleware",
 ]
 
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = env("EMAIL_HOST")
 EMAIL_PORT = env("EMAIL_PORT")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL")
@@ -346,6 +346,15 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_on_same_day_morning",
         "schedule": crontab(hour=2, minute=30),  # 8 AM
     },
+    "update_zoho_data": {
+        "task": "zohoapi.tasks.update_zoho_data",
+        "schedule": crontab(hour=0, minute=1),
+    },
+     "schedule_request_expiry_for_session": {
+        "task": "api.tasks.schedule_request_expiry_for_session",
+        "schedule": crontab(hour=0, minute=1),  # Run every day at midnight in UTC
+    },
+
 }
 
 
