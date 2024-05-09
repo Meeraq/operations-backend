@@ -4043,7 +4043,7 @@ def update_nudge_status(request, nudge_id):
 @permission_classes([IsAuthenticated, IsInRoles("learner")])
 def get_all_nudges_for_that_learner(request, learner_id):
     try:
-        nudges = Nudge.objects.filter(batch__learners__id=learner_id)
+        nudges = Nudge.objects.filter(is_sent=True, is_switched_on=True, batch__learners__id=learner_id)
         serializer = NudgeSerializer(nudges, many=True)
         return Response({"nudges": serializer.data})
     except Nudge.DoesNotExist:
