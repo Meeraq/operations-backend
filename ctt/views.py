@@ -558,10 +558,7 @@ def get_all_client_invoice_of_participant_for_batch(request, participant_id, bat
 @permission_classes([IsAuthenticated])
 def get_participants_of_that_batch(request, batch_id):
     try:
-        print("hellsasa")
-        print("batch_id", batch_id)
         batch_users = BatchUsers.objects.using("ctt").filter(batch_id=batch_id)
-        print("hell", batch_users)
         data = []
         index = 1
         for batch_user in batch_users:
@@ -624,16 +621,70 @@ def get_participants_of_that_batch(request, batch_id):
 @permission_classes([IsAuthenticated])
 def get_ctt_salesperson_individual(request, salesperson_id):
     try:
-        response = []
-        salesorders = SalesOrder.objects.filter(salesperson_id=salesperson_id)
-        for salesorder in salesorders:
-            participant_name = salesorder.customer_name
-            sos = salesorder.so_line_items.all()  # Retrieve related SalesOrderLineItem objects
-            temp = []
-            for so in sos:
-                temp.append(so.salesorder_number)
-            response.append({"participant_name": participant_name, "salesorder_items": temp})
-        return Response(response)
+        batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
+        data = []
+        index = 1
+        for batch_user in batch_users:
+            salesorders = SalesOrder.objects.filter(
+                zoho_customer__email=batch_user.user.email,
+                custom_field_hash__cf_ctt_batch=batch_user.batch.name,
+                salesperson_id=salesperson_id,
+            )
+            if salesorders.exists():
+                total = 0
+                invoiced_amount = 0
+                paid_amount = 0
+                currency_code = None
+                sales_persons = set()
+                all_invoices_paid = []
+
+                for sales_order in salesorders:
+                    total += sales_order.total
+                    currency_code = sales_order.currency_code
+                    sales_persons.add(sales_order.salesperson_name)
+
+                    for invoice in sales_order.invoices:
+                        invoiced_amount += invoice["total"]
+
+                        if invoice["status"] == "paid":
+                            paid_amount += invoice["total"]
+                            all_invoices_paid.append(True)
+                        else:
+                            all_invoices_paid.append(False)
+
+                pending_amount = invoiced_amount - paid_amount
+
+                if all(all_invoices_paid) and len(all_invoices_paid) > 0:
+                    payment_status = "Paid"
+                elif any(all_invoices_paid) and len(all_invoices_paid) > 0:
+                    payment_status = "Partially Paid"
+                else:
+                    payment_status = "Not Paid"
+
+                temp = {
+                    "index": index,
+                    "participant_name": batch_user.user.first_name
+                    + " "
+                    + batch_user.user.last_name,
+                    "participant_email": batch_user.user.email,
+                    "participant_id": batch_user.user.id,
+                    "participant_phone": batch_user.user.phone,
+                    "batch_name": batch_user.batch.name,
+                    "batch_id": batch_user.batch.id,
+                    "program_name": batch_user.batch.program.name,
+                    "payment_status": payment_status,
+                    "program_start_date": batch_user.batch.start_date,
+                    "salesperson_name": list(sales_persons),
+                    "total": total,
+                    "invoiced_amount": invoiced_amount,
+                    "pending_amount": pending_amount,
+                    "paid_amount": paid_amount,
+                    "currency_code": currency_code,
+                    "no_of_sales_orders": len(salesorders),
+                }
+                index += 1
+                data.append(temp)
+        return Response(data)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=500)
