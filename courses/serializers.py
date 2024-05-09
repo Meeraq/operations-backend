@@ -262,7 +262,6 @@ class CertificateSerializerDepthOne(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
-
 class ResourcesSerializer(serializers.ModelSerializer):
     file_size_kb = serializers.SerializerMethodField()
 
@@ -272,12 +271,12 @@ class ResourcesSerializer(serializers.ModelSerializer):
 
     def get_file_size_kb(self, obj):
         try:
-            if obj.pdf_file:
+            if obj.pdf_file and hasattr(obj.pdf_file, 'size'):
                 return obj.pdf_file.size / 1024.0
-        except (AttributeError, FileNotFoundError):
+        except Exception as e:  # Catching more general exceptions
+            # Handle exceptions appropriately, like logging or returning a specific error message
             pass
         return None
-
 
 
 class PdfLessonSerializer(serializers.ModelSerializer):
