@@ -16,6 +16,8 @@ from operationsBackend import settings
 from .serializers import (
     CoachSerializer,
     UserSerializer,
+    LeaderDepthOneSerializer,
+    LeaderSerializer,
     LearnerSerializer,
     PmoDepthOneSerializer,
     SessionRequestCaasSerializer,
@@ -74,7 +76,6 @@ from .serializers import (
     PmoSerializerAll,
     CTTPmoSerializer,
     CTTPmoDepthOneSerializer,
-    TaskSerializer,
     ProjectDepthTwoSerializerArchiveCheck,
     CustomUserSerializer,
     SalesSerializer,
@@ -115,6 +116,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.forms.models import model_to_dict
 from .models import (
     Profile,
+    Leader,
     Pmo,
     CTTPmo,
     Coach,
@@ -156,7 +158,6 @@ from .models import (
     APILog,
     Facilitator,
     SuperAdmin,
-    Task,
     Finance,
     Sales,
     TableHiddenColumn,
@@ -193,9 +194,13 @@ from schedularApi.models import (
     CoachingSession,
     LiveSession,
     HandoverDetails,
+    Task,
+    Expense,
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
+    TaskSerializer,
+    ExpenseSerializerDepthOne,
 )
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
@@ -233,6 +238,21 @@ def get_current_date_timestamps():
         int(datetime.combine(current_date, datetime.max.time()).timestamp() * 1000)
     )
     return start_timestamp, end_timestamp
+
+
+def get_live_session_name(session_type):
+    session_name = None
+    if session_type == "live_session":
+        session_name = "Live Session"
+    elif session_type == "check_in_session":
+        session_name = "Check In Session"
+    elif session_type == "in_person_session":
+        session_name = "In Person Session"
+    elif session_type == "kickoff_session":
+        session_name = "Kickoff Session"
+    elif session_type == "virtual_session":
+        session_name = "Virtual Session"
+    return session_name
 
 
 def calculate_nps(ratings):
@@ -579,6 +599,63 @@ def delete_microsoft_calendar_event(access_token, event_id):
 
     except Exception as e:
         return {"error": "An error occurred", "details": str(e)}
+
+
+def create_teams_meeting(user_email, live_session_id, topic, start_time, end_time):
+    try:
+        event_create_url = "https://graph.microsoft.com/v1.0/me/onlineMeetings"
+        user_token = UserToken.objects.get(user_profile__user__username=user_email)
+        new_access_token = refresh_microsoft_access_token(user_token)
+        if not new_access_token:
+            new_access_token = user_token.access_token
+        headers = {
+            "Authorization": f"Bearer {new_access_token}",
+            "Content-Type": "application/json",
+        }
+        event_payload = {
+            "startDateTime": start_time,
+            "endDateTime": end_time,
+            "subject": topic,
+        }
+        response = requests.post(event_create_url, json=event_payload, headers=headers)
+        print(response.json())
+        if response.status_code == 201:
+            meeting_info = response.json()
+            meeting_link = meeting_info.get("joinWebUrl")
+            live_session = LiveSession.objects.get(id=live_session_id)
+            live_session.meeting_link = meeting_link
+            live_session.teams_meeting_id = meeting_info.get("id")
+            live_session.save()
+            print("Meeting Link Generated")
+            return True
+        else:
+            return False
+    except Exception as e:
+        print(str(e))
+        return False
+
+
+def delete_teams_meeting(user_email, live_session):
+    user_token = UserToken.objects.get(user_profile__user__username=user_email)
+    new_access_token = refresh_microsoft_access_token(user_token)
+    if not new_access_token:
+        new_access_token = user_token.access_token
+    meeting_delete_url = f"https://graph.microsoft.com/v1.0/me/onlineMeetings/{live_session.teams_meeting_id}"
+    headers = {
+        "Authorization": f"Bearer {new_access_token}",
+    }
+    response = requests.delete(meeting_delete_url, headers=headers)
+    if response.status_code == 204:
+        # live_session.meeting_link = ""
+        # live_session.save()
+        return {"message": "Event deleted successfully"}
+    elif response.status_code == 404:
+        return {"error": "Event not found"}
+    else:
+        return {
+            "error": "Failed to delete event",
+            "status_code": response.status_code,
+        }
 
 
 def create_outlook_calendar_invite(
@@ -1209,23 +1286,31 @@ def approve_coach(request):
 @permission_classes([AllowAny])
 def reject_coach(request, coach_id):
     try:
+        with transaction.atomic():
+            coach = Coach.objects.get(id=coach_id)
 
-        coach = Coach.objects.get(id=coach_id)
+            update_data = {
+                "pmo": request.data.get("pmo", ""),
+                "coach": coach.id,
+                "message": request.data.get("message", ""),
+            }
 
-        coach.is_rejected = True
-        coach.save()
-
-        send_mail_templates(
-            "coach_templates/coach_is_rejected.html",
-            [coach.email],
-            "Meeraq | Profile Rejected",
-            {
-                "name": f"{coach.first_name.strip().title()}",
-            },
-            [],
-        )
-
-        return Response({"message": "Coach rejected successfully!"}, status=200)
+            serializer = UpdateSerializer(data=update_data)
+            if serializer.is_valid():
+                serializer.save()
+                coach.is_rejected = True
+                coach.save()
+                send_mail_templates(
+                    "coach_templates/coach_is_rejected.html",
+                    [coach.email],
+                    "Meeraq | Profile Rejected",
+                    {
+                        "name": f"{coach.first_name.strip().title()}",
+                    },
+                    [],
+                )
+                return Response({"message": "Coach rejected successfully!"}, status=200)
+            return Response(serializer.errors, status=500)
     except Exception as e:
         print(str(e))
 
@@ -1423,6 +1508,8 @@ def get_user_for_active_inactive(role, email):
             user = Sales.objects.get(email=email)
         if role == "ctt_pmo":
             user = CTTPmo.objects.get(email=email)
+        if role == "leader":
+            user = Leader.objects.get(email=email)
         return user
     except Exception as e:
         print(str(e))
@@ -1848,6 +1935,14 @@ def get_project_updates(request, project_id):
     return Response(serializer.data)
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def get_coach_updates(request, coach_id):
+    updates = Update.objects.filter(coach__id=coach_id).order_by("-created_at")
+    serializer = UpdateDepthOneSerializer(updates, many=True)
+    return Response(serializer.data)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_project_update(request, project_id):
@@ -1871,6 +1966,28 @@ def add_project_update(request, project_id):
         )
     return Response(serializer.errors, status=400)
 
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def add_coach_update(request, coach_id):
+    try:
+        coach = Coach.objects.get(id=coach_id)
+
+        update_data = {
+            "pmo": request.data.get("pmo", ""),
+            "coach": coach.id,
+            "message": request.data.get("message", ""),
+        }
+        serializer = UpdateSerializer(data=update_data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Update added to coach successfully!"}, status=201
+            )
+        return Response(serializer.errors, status=500)
+    except Exception as e:
+        print(e)
+        return Response({"error": "Failed to add update"}, status=500)
 
 
 @api_view(["GET"])
@@ -1897,6 +2014,15 @@ def get_ongoing_projects_of_hr(request, hr_id):
         },
         status=200,
     )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("hr")])
+def get_schedular_projects_of_hr(request, hr_id):
+
+    schedular_projects = SchedularProject.objects.filter(hr__id=hr_id)
+    serializer = SchedularProjectSerializer(schedular_projects, many=True)
+    return Response(serializer.data, status=200)
 
 
 @api_view(["GET"])
@@ -2369,7 +2495,11 @@ def get_user_data(user):
     elif user_profile_role == "ctt_pmo":
         if not user.profile.cttpmo.active_inactive:
             return None
-        serializer = CTTPmoSerializer(user.profile.cttpmo)
+        serializer = CTTPmoDepthOneSerializer(user.profile.cttpmo)
+    elif user_profile_role == "leader":
+        if not user.profile.leader.active_inactive:
+            return None
+        serializer = LeaderDepthOneSerializer(user.profile.leader)
     else:
         return None
     return {
@@ -9267,6 +9397,10 @@ def change_user_role(request, user_id):
         if not user.profile.cttpmo.active_inactive:
             return None
         serializer = CTTPmoDepthOneSerializer(user.profile.cttpmo)
+    elif user_profile_role == "leader":
+        if not user.profile.leader.active_inactive:
+            return None
+        serializer = LeaderDepthOneSerializer(user.profile.leader)
     else:
         return Response({"error": "Unknown user role."}, status=400)
     return Response(
@@ -9539,7 +9673,7 @@ def microsoft_auth(request, user_mail_address):
         "response_type": "code",
         "redirect_uri": env("MICROSOFT_REDIRECT_URI"),
         "response_mode": "query",
-        "scope": "openid offline_access User.Read Calendars.ReadWrite profile email",
+        "scope": "openid offline_access User.Read Calendars.ReadWrite profile email  OnlineMeetings.Read OnlineMeetings.ReadWrite",
         "state": "shashankmeeraq",
         "login_hint": user_mail_address,
     }
@@ -10346,11 +10480,114 @@ def get_formatted_tasks(tasks):
         return None
 
 
+def get_formatted_skill_training_tasks(tasks):
+    try:
+        task_details = []
+        for task in tasks:
+            # Extract the latest remark message or set it to None if remarks are empty
+            latest_remark = task.remarks[-1]["message"] if task.remarks else None
+
+            # Determine the coach name associated with the task
+            coach_name = (
+                task.coach.__str__()
+                if task.coach
+                else (
+                    task.schedular_session.coach.__str__()
+                    if task.schedular_session and task.schedular_session.coach
+                    else ""
+                )
+            )
+            facilitator_name = task.facilitator.__str__() if task.facilitator else ""
+            learner_name = (
+                task.schedular_session.learner.name
+                if task.schedular_session and task.schedular_session.learner
+                else ""
+            )
+            coaching_session = (
+                task.coaching_session
+                or (
+                    task.schedular_session.coaching_session
+                    if task.schedular_session
+                    else None
+                )
+                or None
+            )
+            session_name = (
+                (
+                    coaching_session.session_type.replace("_", " ").capitalize()
+                    if not coaching_session.session_type == "laser_coaching_session"
+                    else "Coaching Session"
+                    + " "
+                    + str(coaching_session.coaching_session_number)
+                )
+                if coaching_session
+                else ""
+            )
+            # Retrieve vendor name associated with the task, handling exceptions gracefully
+            vendor_name = None
+            if task.vendor_user:
+                try:
+                    vendor = Vendor.objects.get(user__user=task.vendor_user)
+                    vendor_name = vendor.name
+                except Vendor.DoesNotExist:
+                    pass
+
+            # Determine the project name associated with the task
+            project_name = (
+                task.schedular_project.name
+                if task.schedular_project
+                else (task.schedular_batch.project.name if task.schedular_batch else "")
+            )
+            batch_name = (
+                task.schedular_batch.name
+                if task.schedular_batch
+                else (
+                    task.live_session.batch.name
+                    if task.live_session
+                    else (
+                        task.coaching_session.batch.name
+                        if task.coaching_session
+                        else ""
+                    )
+                )
+            )
+            live_session_name = (
+                get_live_session_name(task.live_session.session_type)
+                if task.live_session
+                else ""
+            )
+
+            # Serialize task data
+            serialized_data = TaskSerializer(task).data
+
+            # Append task details to the list
+            task_details.append(
+                {
+                    **serialized_data,
+                    "learner_name": learner_name,
+                    "project_name": project_name,
+                    "latest_remark": latest_remark,
+                    "coach_name": coach_name,
+                    "vendor_name": vendor_name,
+                    "session_name": session_name,
+                    "batch_name": batch_name,
+                    "facilitator_name": facilitator_name,
+                    "live_session_name": live_session_name,
+                }
+            )
+        return task_details
+    except Exception as e:
+        print(str(e))
+        return None
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_tasks(request):
     # Retrieve tasks that are pending and have a trigger date before or equal to current time
-    tasks = Task.objects.filter(trigger_date__lte=timezone.now())
+    tasks = Task.objects.filter(
+        Q(trigger_date__lte=timezone.now()), ~Q(project_type="skill_training")
+    )
     # Initialize a list to store task details
     task_details = []
     junior_pmo_id = request.query_params.get("junior_pmo")
@@ -10363,6 +10600,32 @@ def get_tasks(request):
         )
 
     task_details = get_formatted_tasks(tasks)
+
+    return Response(task_details)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def get_skill_training_tasks(request):
+    # Retrieve tasks that are pending and have a trigger date before or equal to current time
+    tasks = Task.objects.filter(
+        trigger_date__lte=timezone.now(), project_type="skill_training"
+    )
+    # Initialize a list to store task details
+    task_details = []
+    junior_pmo_id = request.query_params.get("junior_pmo")
+    if junior_pmo_id:
+        tasks = tasks.filter(
+            Q(schedular_project__junior_pmo=junior_pmo_id)
+            | Q(schedular_batch__project__junior_pmo=junior_pmo_id)
+            | Q(live_session__batch__project__junior_pmo=junior_pmo_id)
+            | Q(coaching_session__batch__project__junior_pmo=junior_pmo_id)
+            | Q(
+                schedular_session__coaching_session__batch__project__junior_pmo=junior_pmo_id
+            )
+        )
+
+    task_details = get_formatted_skill_training_tasks(tasks)
 
     return Response(task_details)
 
@@ -10747,14 +11010,18 @@ def get_facilitator_summary_data(request, facilitator_id):
 @permission_classes([IsAuthenticated])
 def hide_columns(request):
     try:
+        user_id = request.data.get("user_id")
         hidden_columns = request.data.get("hidden_columns")
         table_name = request.data.get("table_name")
+
+        user = User.objects.get(id=user_id)
+
         table_hidden_column, created = TableHiddenColumn.objects.get_or_create(
-            table_name=table_name
+            table_name=table_name, user=user
         )
         table_hidden_column.hidden_columns = hidden_columns
         table_hidden_column.save()
-        return Response(status=200)
+        return Response(table_hidden_column.hidden_columns)
 
     except Exception as e:
         print(str(e))
@@ -10766,10 +11033,12 @@ def hide_columns(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_table_hide_columns(request, table_name):
+def get_table_hide_columns(request, table_name, user_id):
     try:
 
-        table_hidden_column = TableHiddenColumn.objects.get(table_name=table_name)
+        table_hidden_column = TableHiddenColumn.objects.get(
+            table_name=table_name, user__id=user_id
+        )
 
         return Response(table_hidden_column.hidden_columns)
 
@@ -10777,6 +11046,83 @@ def get_table_hide_columns(request, table_name):
         print(str(e))
         return Response(
             {"detail": f"Failed to get data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_expenses_for_coaching_project(request, project_id, coach_id):
+    try:
+        expense = Expense.objects.filter(
+            session__project__id=project_id, coach__id=coach_id
+        )
+        serializer = ExpenseSerializerDepthOne(expense, many=True)
+        serialized_data = serializer.data
+
+        for data in serialized_data:
+            session = data.get("session") 
+            if session:
+                session_new = SessionRequestCaas.objects.filter(id=session.get("id")).first()
+                if session_new:
+                    learner = session_new.learner
+                    data["learner"] = {
+                        "id": learner.id,
+                        "name": learner.name,
+                    }
+                else:
+                    data["learner"] = None
+            else:
+                data["learner"] = None
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get expense"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_with_vendor_id_in_project(request, project_id):
+    try:
+        project = Project.objects.get(id=project_id)
+        all_coach = {}
+        purchase_orders = fetch_purchase_orders(organization_id)
+        for coach_status in project.coaches_status.all():
+            coach = coach_status.coach
+            vendor = Vendor.objects.filter(user=coach.user).first()
+            if vendor:
+                expense = Expense.objects.filter(
+                    session__project__id=project_id, coach=coach
+                ).first()
+                purchase_order = None
+                if expense and expense.purchase_order_id:
+                    purchase_order = get_purchase_order(
+                        purchase_orders, expense.purchase_order_id
+                    )
+
+                is_delete_purchase_order_allowed = True
+                invoices = InvoiceData.objects.filter(
+                    purchase_order_id=expense.purchase_order_id
+                )
+                if invoices.exists():
+                    is_delete_purchase_order_allowed = False
+
+                all_coach[coach.id] = {
+                    "is_vendor": True,
+                    "vendor_id": vendor.vendor_id,
+                    "purchase_order_id": expense.purchase_order_id if expense else None,
+                    "purchase_order_no": expense.purchase_order_no if expense else None,
+                    "purchase_order": purchase_order,
+                    "is_delete_purchase_order_allowed": is_delete_purchase_order_allowed,
+                }
+        return Response(all_coach)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -11058,6 +11404,47 @@ def get_all_po_of_project(request, project_id):
         )
 
 
+# def create_teams_meeting():
+#     event_create_url = "https://graph.microsoft.com/v1.0/me/onlineMeetings"
+#     try:
+#         user_token = UserToken.objects.get(user_profile__user__username="pankaj@meeraq.com")
+#         new_access_token = refresh_microsoft_access_token(user_token)
+#         if not new_access_token:
+#             new_access_token = user_token.access_token
+#         headers = {
+#             "Authorization": f"Bearer {new_access_token}",
+#             "Content-Type": "application/json",
+#         }
+#         start_datetime_obj = datetime(2024, 4, 5, 8, 0, 0) + timedelta(hours=5, minutes=30)
+#         end_datetime_obj = datetime(2024, 4, 5, 11, 0, 0) + timedelta(hours=5, minutes=30)
+#         start_datetime = start_datetime_obj.isoformat()
+#         end_datetime = end_datetime_obj.isoformat()
+#         event_payload = {
+#             "startDateTime":"2024-04-05T14:30:34.2444915-07:00",
+#             "endDateTime":"2024-04-05T15:00:34.2464912-07:00",
+#             "subject": "User Token Meeting"
+#         }
+#         response = requests.post(event_create_url, json=event_payload, headers=headers)
+#         print(response.json())
+#         if response.status_code == 201:
+#             microsoft_response_data = response.json()
+#             print("Meeting created successfully.")
+#         else:
+#             print(f"Meeting creation failed. Status code: {response.status_code}")
+#             print(response.text)
+#             return False
+
+#     except UserToken.DoesNotExist:
+#         print("User token not found for email.")
+#         return False
+
+#     except Exception as e:
+#         print(f"An error occurred: {str(e)}")
+#         return False
+
+#     return True
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner")])
 def get_all_to_be_booked_sessions_for_coachee(request, learner_id):
@@ -11076,6 +11463,91 @@ def get_engagement_of_a_coachee(request, learner_id):
     engagement = Engagement.objects.get(learner__id=learner_id)
     serializer = EngagementDepthOneSerializer(engagement)
     return Response(serializer.data, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
+def add_leader(request):
+    try:
+        with transaction.atomic():
+            data = request.data
+            leader_serializer = LeaderSerializer(data=data)
+            if leader_serializer.is_valid():
+                name = data.get("name")
+                email = data.get("email", "").strip().lower()
+                phone = data.get("phone")
+
+                if not (name and phone and email):
+                    return Response(
+                        {"error": "Name and phone are mandatory fields."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                user = User.objects.filter(email=email).first()
+                if not user:
+                    user = User.objects.create_user(
+                        username=email,
+                        email=email,
+                        password=User.objects.make_random_password(),
+                    )
+
+                    profile = Profile.objects.create(user=user)
+                else:
+                    profile = Profile.objects.get(user=user)
+                leader_role, created = Role.objects.get_or_create(name="leader")
+                profile.roles.add(leader_role)
+                profile.save()
+                leader_serializer.save(user=profile)
+                return Response(leader_serializer.data, status=status.HTTP_201_CREATED)
+            else:
+                return Response(
+                    leader_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+                )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("superadmin")])
+def get_leaders(request):
+    try:
+        leaders = Leader.objects.all()
+        serializer = LeaderSerializer(leaders, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PUT"])
+@permission_classes([AllowAny, IsInRoles("superadmin")])
+def edit_leader(request, leader_id):
+    name = request.data.get("name")
+    email = request.data.get("email", "").strip().lower()
+    phone = request.data.get("phone")
+    leader = Leader.objects.get(id=leader_id)
+    try:
+        with transaction.atomic():
+            existing_user = (
+                User.objects.filter(username=email)
+                .exclude(username=leader.user.user.username)
+                .first()
+            )
+            if existing_user:
+                return Response(
+                    {"error": "User with this email already exists."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            leader.user.user.username = email
+            leader.user.user.email = email
+            leader.user.user.save()
+            leader.email = email
+            leader.name = name
+            leader.phone = phone
+            leader.save()
+            return Response({"message": "Leader updated successfully."}, status=201)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update Leader."}, status=500)
 
 
 @api_view(["POST"])

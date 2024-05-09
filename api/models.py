@@ -19,7 +19,6 @@ from django.template.loader import render_to_string
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
 from django_celery_beat.models import PeriodicTask
-from django.utils import timezone
 
 
 import environ
@@ -191,7 +190,6 @@ class Finance(models.Model):
     def __str__(self):
         return self.name
 
-
 class Sales(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -200,6 +198,18 @@ class Sales(models.Model):
     active_inactive = models.BooleanField(default=True)
     sales_person_id = models.CharField(max_length=255, blank=True, default="")
     business = models.CharField(max_length=255, blank=True, default="meeraq")
+    created_at = models.DateField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+class Leader(models.Model):
+    user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
+    name = models.CharField(max_length=50)
+    email = models.EmailField()
+    phone = models.CharField(max_length=25)
+    active_inactive = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -487,7 +497,10 @@ class Project(models.Model):
 
 class Update(models.Model):
     pmo = models.ForeignKey(Pmo, on_delete=models.SET_NULL, null=True, blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    project = models.ForeignKey(
+        Project, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    coach = models.ForeignKey(Coach, on_delete=models.SET_NULL, null=True, blank=True)
     message = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(auto_now=True)
@@ -946,73 +959,8 @@ class APILog(models.Model):
         return f"{self.path}"
 
 
-class Task(models.Model):
-    PRIORITY_CHOICES = (
-        ("low", "Low"),
-        ("medium", "Medium"),
-        ("high", "High"),
-    )
-    TASK_STATUS_CHOICES = (
-        ("pending", "Pending"),
-        ("in_progress", "In Progress"),
-        ("completed", "Completed"),
-    )
-    task = models.CharField(max_length=100)
-    caas_project = models.ForeignKey(
-        Project,
-        on_delete=models.CASCADE,
-        blank=True,
-        null=True,
-        default=None,
-    )
-    session_caas = models.ForeignKey(
-        SessionRequestCaas,
-        on_delete=models.CASCADE,
-        blank=True,
-        null=True,
-        default=None,
-    )
-    coach = models.ForeignKey(
-        Coach, on_delete=models.CASCADE, blank=True, null=True, default=None
-    )
-    engagement = models.ForeignKey(
-        Engagement, on_delete=models.CASCADE, blank=True, null=True, default=None
-    )
-    goal = models.ForeignKey(
-        Goal, on_delete=models.CASCADE, blank=True, null=True, default=None
-    )
-    vendor_user = models.ForeignKey(
-        User, on_delete=models.CASCADE, blank=True, null=True, default=None
-    )
-    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES)
-    status = models.CharField(
-        max_length=20, choices=TASK_STATUS_CHOICES, default="pending"
-    )
-
-    remarks = models.JSONField(default=list, blank=True)
-    trigger_date = models.DateTimeField(default=timezone.now, blank=True)
-    created_at = models.DateField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def add_remark(self, remark_message):
-        current_datetime = timezone.now()
-        formatted_datetime = current_datetime.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        new_remark = {
-            "message": remark_message,
-            "datetime": formatted_datetime,
-        }
-        self.remarks.append(new_remark)
-        self.save()
-
-    def is_visible(self):
-        return timezone.now() >= self.trigger_date
-
-    def __str__(self):
-        return self.task
-
-
 class TableHiddenColumn(models.Model):
-
+    user = models.ForeignKey(User, on_delete=models.CASCADE,blank=True,null=True)
     table_name = models.CharField(max_length=225, blank=True)
     hidden_columns = models.JSONField(default=list, blank=True)
     created_at = models.DateField(auto_now_add=True)
