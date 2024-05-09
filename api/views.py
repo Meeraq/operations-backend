@@ -8848,17 +8848,18 @@ class StandardizedFieldRequestAcceptReject(APIView):
                                     ):
                                         field_value.remove(value)
                                         instance.save()
-                    send_mail_templates(
-                        "coach_templates/reject_feild_item_request.html",
-                        [request_instance.coach.email],
-                        "Meeraq | Field Rejected",
-                        {
-                            "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
-                            "value": value,
-                            "feild": field_name.replace(" ", "_").title(),
-                        },
-                        [],
-                    )
+                    if request_instance.coach:             
+                        send_mail_templates(
+                            "coach_templates/reject_feild_item_request.html",
+                            [request_instance.coach.email ],
+                            "Meeraq | Field Rejected",
+                            {
+                                "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
+                                "value": value,
+                                "feild": field_name.replace(" ", "_").title(),
+                            },
+                            [],
+                        )
                     return Response({"message": f"Request {status}"}, status=200)
         except Exception as e:
             print(str(e))
