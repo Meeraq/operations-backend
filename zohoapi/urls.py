@@ -207,7 +207,6 @@ urlpatterns = [
         "expense-coaching-purchase-order/create/<int:project_id>/<int:coach_id>/",
         views.expense_coaching_purchase_order_create,
     ),
-    
     path(
         "expense-purchase-order/update/<int:facilitator_id>/<int:batch_or_project_id>/",
         views.expense_purchase_order_update,
@@ -328,6 +327,11 @@ urlpatterns = [
         name="update_sales_order_status",
     ),
     path(
+        "get-total-revenue-and-cost",
+        views.get_total_revenue_and_cost,
+        name="get_total_revenue_and_cost",
+    ),
+    path(
         "create-vendor/",
         views.create_vendor,
         name="create_vendor",
@@ -374,5 +378,4 @@ urlpatterns = [
     ),
     path("line-items/", views.get_line_items, name="get_line_items"),
     path("latest-data/", views.get_latest_data, name="get_latest_data"),
-
 ]
