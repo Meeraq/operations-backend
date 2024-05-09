@@ -202,7 +202,7 @@ def create_learner(learner_name, learner_email):
                     profile = Profile.objects.get(user=user)
                     learner_role, created = Role.objects.get_or_create(name="learner")
                     profile.roles.add(learner_role)
-                    learner.name = learner_name.strip()
+                    learner.name = learner_name.strip().title()
                     learner.save()
                     return learner
                 else:
@@ -227,7 +227,7 @@ def create_learner(learner_name, learner_email):
             profile.save()
             learner = Learner.objects.create(
                 user=profile,
-                name=learner_name,
+                name=learner_name.strip().title(),
                 email=learner_email,
             )
             return learner
@@ -1999,7 +1999,7 @@ class AddMultipleQuestions(APIView):
                     competency, created = Competency.objects.get_or_create(
                         name=question["compentency_name"].strip()
                     )
-
+                    competency.description = question["compentency_description"]
                     competency.behaviors.add(behavior)
                     competency.save()
 
@@ -3441,7 +3441,7 @@ def generate_graph_for_participant(
                     label_count = sum(
                         1 for key in question.label.keys() if question.label[key]
                     )
-                    if question.reverse_question:
+                    if not question.reverse_question:
 
                         swap_dict = swap_positions(label_count)
 
@@ -3558,7 +3558,7 @@ def generate_graph_for_participant_for_post_assessment(
                     )
                     swap_dict = swap_positions(label_count)
                     if pre_assessment_participant_response_value:
-                        if question.reverse_question:
+                        if not question.reverse_question:
 
                             pre_competency_object[
                                 question.competency.name
@@ -4326,7 +4326,13 @@ class GetAllAssessments(APIView):
 
     def get(self, request):
         pmo = Pmo.objects.filter(email=request.user.username).first()
-        if pmo and pmo.sub_role == "junior_pmo":
+        hr_id = request.query_params.get("hr")
+        assessments = []
+        if hr_id:
+            assessments = Assessment.objects.filter(
+                Q(hr__id=int(hr_id)), Q(status="ongoing") | Q(status="completed")
+            )
+        elif pmo and pmo.sub_role == "junior_pmo":
             assessments = Assessment.objects.filter(
                 assessment_modal__lesson__course__batch__project__junior_pmo=pmo
             )
@@ -4420,6 +4426,7 @@ class GetAssessmentsOfHr(APIView):
                 "total_responses_count": total_responses_count,
                 "created_at": assessment.created_at,
             }
+
             assessment_list.append(assessment_data)
 
         return Response(assessment_list)
@@ -4965,7 +4972,7 @@ class DownloadQuestionWiseExcelForProject(APIView):
                                             for key in question.label.keys()
                                             if question.label[key]
                                         )
-                                        if question.reverse_question:
+                                        if not question.reverse_question:
                                             swap_dict = swap_positions(label_count)
                                             questions_object[question.self_question] = (
                                                 str(
@@ -5037,3 +5044,43 @@ class DownloadQuestionWiseExcelForProject(APIView):
                 {"error": "Failed to get data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_learner_assessment_result_image(request, learner_id):
+    participant = Learner.objects.get(id=learner_id)
+    assessments = Assessment.objects.filter(participants_observers__participant__id=learner_id).order_by("-created_at")
+    print(assessments)
+    if assessments.exists():
+        first_assessment = assessments.first()
+        if first_assessment.assessment_timing == "pre":
+            print("pre")
+            pre_assessment = first_assessment
+            post_assessment = Assessment.objects.get(pre_assessment = pre_assessment)
+        elif first_assessment.assessment_timing == "post":
+            print("post")
+            pre_assessment = first_assessment.pre_assessment
+            post_assessment = first_assessment
+        
+        if pre_assessment and post_assessment:
+            pre_assessment_image, pre_assessment_compentency_with_description = generate_graph_for_participant(
+                    participant, pre_assessment.id, pre_assessment
+                )
+            post_assessment_image, post_assessment_compentency_with_description = generate_graph_for_participant_for_post_assessment(participant, post_assessment.id, post_assessment) 
+            print(pre_assessment_image, post_assessment_image)
+            if post_assessment_image:
+                return Response({
+                    "assessment_exists":  True, 
+                    "graph" : post_assessment_image
+                })
+            if pre_assessment_image: 
+                return Response({
+                    "assessment_exists":  True, 
+                    "graph" : pre_assessment_image
+                })
+
+    return Response({
+                    "assessment_exists":  False, 
+                    "graph" : None
+                })
