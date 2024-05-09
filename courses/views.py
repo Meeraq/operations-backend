@@ -79,6 +79,7 @@ from schedularApi.models import (
     SchedularBatch,
     SchedularProject,
     LiveSession as LiveSessionSchedular,
+    Task,
 )
 from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
@@ -208,9 +209,6 @@ def add_question_to_feedback_lesson(feedback_lesson, questions):
             question = question_serializer.save()
             feedback_lesson.questions.add(question)
     feedback_lesson.save()
-
-
-
 
 
 def get_feedback_lesson_name(lesson_name):
@@ -579,6 +577,17 @@ def create_new_nudge(request):
         nudge_instance.is_switched_on = True
         nudge_instance.unique_id = uuid.uuid4()
         nudge_instance.save()
+        # complete add nudge task
+        try:
+            tasks = Task.objects.filter(
+                task="add_nudges",
+                status="pending",
+                schedular_batch=nudge_instance.batch,
+            )
+            tasks.update(status="completed")
+        except Exception as e:
+            print(str(e))
+            pass
         nudges_start_date = nudge_instance.batch.nudge_start_date
         today_date = datetime.today().date()
         if nudges_start_date and nudges_start_date <= today_date:
@@ -654,6 +663,18 @@ def add_nudges_date_frequency_to_batch(request, batch_id):
         )
         batch.nudge_periodic_task = periodic_task
         batch.save()
+        # complete tasks for nudge
+        try:
+            tasks = Task.objects.filter(
+                task="add_nudge_date_and_frequency",
+                status="pending",
+                schedular_batch=batch,
+            )
+            tasks.update(status="completed")
+        except Exception as e:
+            print(str(e))
+            pass
+
         return Response({"message": "Updated successfully"}, status=201)
     except Course.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
@@ -2696,7 +2717,10 @@ def create_pdf_lesson(request):
         return Response({"message": "Course Template does not exist."})
     except Exception as e:
         print(str(e))
-        return Response({"message": "Failed to create pdf lesson."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"message": "Failed to create pdf lesson."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 @api_view(["PUT"])
@@ -4054,6 +4078,7 @@ def update_completion_nudge_status(request, nudge_id):
         nudge.learner_ids = list(existing_learner_ids)
     nudge.save()
     return Response({"message": f"Nudge {nudge_id} completion status updated successfully"}, status=status.HTTP_200_OK)
+
 
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
