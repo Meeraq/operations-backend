@@ -27,6 +27,10 @@ from .models import (
     Feedback,
 )
 from schedularApi.models import LiveSession
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+from urllib.parse import urlparse
+import requests
 
 
 class CourseSerializer(serializers.ModelSerializer):
@@ -199,9 +203,31 @@ class AssessmentSerializerDepthOne(serializers.ModelSerializer):
 
 
 class VideoSerializer(serializers.ModelSerializer):
+    file_size_mb = serializers.SerializerMethodField()
+
     class Meta:
         model = Video
-        fields = "__all__"
+        fields = ['id', 'name', 'video', 'file_size_mb']
+
+    def get_file_size_mb(self, obj):
+        if obj.video:  # Assuming 'video' is the attribute for the video FileField
+            return self.get_video_file_size(obj.video)
+        else:
+            return None
+
+    def get_video_file_size(self, video_field):
+        # Check if it's a FieldFile
+        if hasattr(video_field, 'size'):
+            try:
+                # Convert file size from bytes to MB
+                file_size_mb = video_field.size / (1024 * 1024)
+                return round(file_size_mb, 2)  # Round to 2 decimal places
+            except Exception as e:
+                # Handle any errors, such as file not found
+                print(f"Error calculating file size: {e}")
+                return None
+        else:
+            return None
 
 
 class VideoLessonSerializer(serializers.ModelSerializer):
@@ -236,11 +262,21 @@ class CertificateSerializerDepthOne(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
-
 class ResourcesSerializer(serializers.ModelSerializer):
+    file_size_kb = serializers.SerializerMethodField()
+
     class Meta:
         model = Resources
-        fields = "__all__"
+        fields = ["id", "name", "pdf_file", "file_size_kb"]
+
+    def get_file_size_kb(self, obj):
+        try:
+            if obj.pdf_file and hasattr(obj.pdf_file, 'size'):
+                return obj.pdf_file.size / 1024.0
+        except Exception as e:  # Catching more general exceptions
+            # Handle exceptions appropriately, like logging or returning a specific error message
+            pass
+        return None
 
 
 class PdfLessonSerializer(serializers.ModelSerializer):
@@ -256,9 +292,19 @@ class LessonUpdateSerializer(serializers.Serializer):
 
 
 class FileSerializer(serializers.ModelSerializer):
+    file_size_mb = serializers.SerializerMethodField()
+
     class Meta:
         model = File
-        fields = "__all__"
+        fields = ['id', 'name', 'file', 'file_size_mb']
+
+    def get_file_size_mb(self, obj):
+        if obj.file:
+            file_size_bytes = obj.file.size
+            file_size_mb = file_size_bytes / (1024 * 1024)  # Convert bytes to MB
+            return round(file_size_mb, 2)  # Round to 2 decimal places
+        else:
+            return None
 
 
 class DownloadableLessonSerializer(serializers.ModelSerializer):
