@@ -97,6 +97,9 @@ from zohoapi.tasks import (
     purchase_orders_allowed,
     purchase_orders_allowed,
 )
+import streamlit as st
+from langchain.prompts import PromptTemplate
+from langchain.llms import CTransformers
 from .permissions import IsInRoles
 from rest_framework import generics
 from django.utils.crypto import get_random_string
@@ -658,6 +661,32 @@ def delete_teams_meeting(user_email, live_session):
             "error": "Failed to delete event",
             "status_code": response.status_code,
         }
+
+
+def generate_email_response(input_text, no_words):
+
+    ### LLama2 model
+    llm = CTransformers(
+        model="models/llama-2-7b-chat.ggmlv3.q8_0.bin",
+        model_type="llama",
+        config={"max_new_tokens": 256, "temperature": 0.01},
+    )
+
+    ## Prompt Template
+
+    template = """
+        Write a email on {input_text}
+        within {no_words} words.
+            """
+
+    prompt = PromptTemplate(
+        input_variables=["input_text", "no_words"], template=template
+    )
+
+    ## Generate the ressponse from the LLama 2 model
+    response = llm(prompt.format(input_text=input_text, no_words=no_words))
+    print(response)
+    return response
 
 
 def create_outlook_calendar_invite(
@@ -11786,7 +11815,7 @@ def coach_profile_sharable_email(request):
             masked_coach_profile=masked_coach_profile,
             unique_id=unique_id,
             emails=emails,
-            name=name
+            name=name,
         )
 
         for coach_id in coaches:
@@ -11910,5 +11939,21 @@ def get_coach_shared_links(request):
         print(str(e))
         return Response(
             {"error": "Failed to get coach profile shares."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def get_email_for_email_template(request):
+    try:
+        topic = request.data.get("topic")
+
+        response = generate_email_response(topic, 200)
+        return Response(response)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )

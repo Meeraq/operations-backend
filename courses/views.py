@@ -260,6 +260,8 @@ def download_file_response(file_url):
         return HttpResponse(status=500, content=f"Error downloading file: {str(e)}")
 
 
+
+
 def create_lessons_for_batch(batch):
     try:
         course = Course.objects.get(batch=batch)
