@@ -16,7 +16,8 @@ urlpatterns = [
     path("create-project-schedular/", views.create_project_schedular),
     path("handover/<str:project_type>/<int:project_id>/", views.get_project_handover),
     path("handover/create/", views.create_handover),
-    path("handover/edit/<int:handover_id>/", views.edit_handover),
+    path("handover/update/", views.update_handover),
+    path("handover/<int:handover_id>/salesorders/", views.get_handover_salesorders),
     path(
         "schedular-batches/",
         views.get_schedular_batches,
@@ -344,9 +345,17 @@ urlpatterns = [
         views.edit_expense_amount,
     ),
     path(
-        "get-all-courses-for-all-batches/",
+        "edit-amount-expense/",
+        views.edit_expense_amount,
+    ),
+    path(
+        "get-all-courses-for-all-batches/<int:project_id>/",
         views.get_all_courses_for_all_batches,
         name="get_all_courses_for_all_batches",
+    ),
+    path(
+        "get-card-data-for-coach-in-skill-project/<int:project_id>/<int:coach_id>",
+        views.get_card_data_for_coach_in_skill_project,
     ),
     path(
         "projects/<int:project_id>/check-project-structure-edit-allowed/",
@@ -361,5 +370,12 @@ urlpatterns = [
         views.get_project_and_handover,
         name="get_project_and_handover",
     ),
-    path("handovers/", views.get_handovers, name="get_handovers"),
+    path("handovers/<int:sales_id>/", views.get_handovers, name="get_handovers"),
+    path("send-mail-to-coaches/", views.send_mail_to_coaches, name="send_mail_to_coaches"),
+    path("handovers/pmo/", views.get_pmo_handovers, name="get_handovers"),
+    path(
+        "update-reminder-in-batch/<int:batch_id>/",
+        views.update_reminder_in_batch,
+        name="update_reminder_in_batch",
+    ),
 ]
