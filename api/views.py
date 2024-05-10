@@ -1386,7 +1386,6 @@ def update_coach_profile(request, id):
     remove_education_upload_file = request.data.get(
         "remove_education_upload_file", False
     )
-
     internal_coach = json.loads(request.data["internal_coach"])
     organization_of_coach = request.data.get("organization_of_coach")
     user = coach.user.user
@@ -5655,6 +5654,10 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
             "is_seeq_project": True,
             "auto_generated_status": session.auto_generated_status,
             "coaching_session_id": session.coaching_session.id,
+            "learner_id": session.learner.id,
+            "learner_profile_pic": (
+                session.learner.profile_pic.url if session.learner.profile_pic else None
+            ),
         }
         session_details.append(session_detail)
 
@@ -8846,17 +8849,18 @@ class StandardizedFieldRequestAcceptReject(APIView):
                                     ):
                                         field_value.remove(value)
                                         instance.save()
-                    send_mail_templates(
-                        "coach_templates/reject_feild_item_request.html",
-                        [request_instance.coach.email],
-                        "Meeraq | Field Rejected",
-                        {
-                            "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
-                            "value": value,
-                            "feild": field_name.replace(" ", "_").title(),
-                        },
-                        [],
-                    )
+                    if request_instance.coach:             
+                        send_mail_templates(
+                            "coach_templates/reject_feild_item_request.html",
+                            [request_instance.coach.email ],
+                            "Meeraq | Field Rejected",
+                            {
+                                "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
+                                "value": value,
+                                "feild": field_name.replace(" ", "_").title(),
+                            },
+                            [],
+                        )
                     return Response({"message": f"Request {status}"}, status=200)
         except Exception as e:
             print(str(e))
