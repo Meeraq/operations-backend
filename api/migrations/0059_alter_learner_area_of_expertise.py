@@ -2,6 +2,10 @@
 
 from django.db import migrations, models
 
+def populate_area_of_expertise(apps, schema):
+    Learner = apps.get_model("api", "Learner")
+    learners = Learner.objects.all()
+    learners.update(area_of_expertise="")
 
 class Migration(migrations.Migration):
 
@@ -10,6 +14,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(populate_area_of_expertise),
         migrations.AlterField(
             model_name='learner',
             name='area_of_expertise',
