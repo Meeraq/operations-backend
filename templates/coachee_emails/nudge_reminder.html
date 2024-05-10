@@ -1,0 +1,64 @@
+{% extends "table_parent_template.html" %} {% block title %}Meeraq | Nudge
+Reminder{% endblock %} {% block content %}
+<tr style="border: 0">
+  <td style="padding: 20px; background: #f8f7f8; border: 0">
+    <div align="center">
+      <table
+        border="0"
+        cellpadding="0"
+        cellspacing="0"
+        style="
+          width: 100%;
+          mso-cellspacing: 0cm;
+          background: #f8f7f8;
+          mso-yfti-tbllook: 1184;
+          mso-padding-alt: 0cm 0cm 0cm 0cm;
+        "
+        width="100%"
+      >
+        <tbody>
+          <tr
+            style="
+              mso-yfti-irow: 0;
+              mso-yfti-firstrow: yes;
+              mso-yfti-lastrow: yes;
+            "
+          >
+            <td style="padding: 15pt 15pt 15pt 15pt">
+              <p><br /></p>
+              <p>Dear {{learner_name}},</p>
+              <p>
+                We hope this email finds you well. As part of our commitment to
+                your progress, we're thrilled to introduce our latest monthly
+                nudge, "{{nudge_name}}". It's designed to offer you valuable
+                insights and motivation to keep you on track toward your goals.
+              </p>
+              <p>
+                To access this month's nudge and explore its content, please
+                click on the following link to log in to your account: {{link}}
+              </p>
+              <p>
+                Upon logging in, you'll find Nudge "{{nudge_name}}" waiting for
+                you, filled with prompts and guidance to help you reflect on
+                your recent achievements and set new objectives for the month
+                ahead.
+              </p>
+              <p>
+                Your success is our priority, and we're here to support you
+                every step of the way. If you have any questions or need
+                assistance, please don't hesitate to reach out to us at
+                <a href="mailto:pmocoaching@meeraq.com"
+                  >pmocoaching@meeraq.com</a
+                >.
+              </p>
+              <p>Wishing you continued growth and success,</p>
+              <p>Team Meeraq.</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </td>
+</tr>
+
+{% endblock %}
