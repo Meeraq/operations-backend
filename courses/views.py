@@ -4,6 +4,9 @@ from collections import defaultdict
 # Create your views here.
 import boto3
 import requests
+import io
+from pdfminer.pdfparser import PDFParser
+from pdfminer.pdfdocument import PDFDocument
 from rest_framework import generics, serializers, status
 from datetime import timedelta, time, datetime, date
 from .models import (
@@ -1782,15 +1785,15 @@ from .models import Video
 from .serializers import VideoSerializer
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "facilitator", "hr")])
-def get_all_videos(request):
-    videos = Video.objects.all()  # Retrieve all videos from the database
+# @api_view(["GET"])
+# @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "facilitator", "hr")])
+# def get_all_videos(request):
+#     videos = Video.objects.all()  # Retrieve all videos from the database
 
-    # Serialize the video queryset
-    serializer = VideoSerializer(videos, many=True)
+#     # Serialize the video queryset
+#     serializer = VideoSerializer(videos, many=True)
 
-    return Response(serializer.data)
+#     return Response(serializer.data)
 
 
 # views.py
@@ -1957,6 +1960,19 @@ class GetLaserCoachingTime(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+    def get_remote_file_size(self, url):
+        # This function gets the file size of a remote file in MB
+        # You'll need to implement this based on your specific requirements
+        # Here's a basic example using requests library
+        import requests
+        response = requests.head(url)
+        if response.status_code == 200:
+            content_length = response.headers.get('content-length')
+            if content_length:
+                file_size_bytes = int(content_length)
+                file_size_mb = file_size_bytes / (1024 * 1024)  # Convert bytes to MB
+                return round(file_size_mb, 2)  # Round to 2 decimal places
+        return None
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "hr", "facilitator")])
@@ -2606,18 +2622,21 @@ def get_resources(request):
 def create_resource(request):
     pdf_name = request.data.get("pdfName")  # Extracting pdfName from request data
     pdf_file = request.data.get("pdfFile")  # Extracting pdfFile from request data
+    # Calculate the file size
+    file_size = len(pdf_file.read())
+    # Convert to KB
+    file_size_kb = file_size / 1024.0
 
     # Create a dictionary containing the data for the Resources model instance
     resource_data = {
         "name": pdf_name,
         "pdf_file": pdf_file,
+        "file_size_kb": file_size_kb  # Add the file size to the data
     }
 
-    # Assuming you have a serializer for the Resources model
     serializer = ResourcesSerializer(data=resource_data)
 
     if serializer.is_valid():
-        # Save the validated data to create a new Resources instance
         serializer.save()
         return Response(serializer.data, status=201)  # Return the serialized data
     else:
