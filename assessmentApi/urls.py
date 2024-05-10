@@ -73,6 +73,7 @@ from .views import (
     AssessmentsResponseStatusDownload,
     GetAssessmentBatchAndProject,
     DownloadQuestionWiseExcelForProject,
+    ResponseDownloadForAllParticipants,
 )
 
 
@@ -321,6 +322,10 @@ urlpatterns = [
     path(
         "download-question-wise-excel/<int:project_id>/",
         DownloadQuestionWiseExcelForProject.as_view(),
+    ),
+    path(
+        "response-download-for-all-participants/<int:assessment_id>/",
+        ResponseDownloadForAllParticipants.as_view(),
     ),
     path(
         "learner-assessment-result-image/<int:learner_id>/",

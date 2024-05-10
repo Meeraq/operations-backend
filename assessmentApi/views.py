@@ -5,6 +5,7 @@ from rest_framework import status
 from django.template.loader import render_to_string
 from operationsBackend import settings
 from openpyxl import Workbook
+import openpyxl
 from rest_framework.decorators import api_view, permission_classes
 from .models import (
     Competency,
@@ -45,6 +46,7 @@ from django.db import transaction, IntegrityError
 import json
 import string
 import random
+import pandas as pd
 from django.contrib.auth.models import User
 from api.models import Profile, Learner, Organisation, HR, SentEmailActivity, Role, Pmo
 from api.serializers import OrganisationSerializer
@@ -991,6 +993,7 @@ class QuestionsForAssessment(APIView):
                     "self_question": question.self_question,
                     "label": question.label,
                     "rating_type": question.rating_type,
+                    "response_type": question.response_type,
                 }
 
                 if competency_name in competency_questions:
@@ -3405,6 +3408,8 @@ def generate_graph_for_participant(
             compentency_with_description.append(competency_object)
 
         for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
             if question.competency.name not in total_for_each_comp:
                 total_for_each_comp[question.competency.name] = 1
             else:
@@ -3412,6 +3417,8 @@ def generate_graph_for_participant(
 
         competency_object = {}
         for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
             if question.competency.name not in competency_object:
                 competency_object[question.competency.name] = 0
 
@@ -3431,7 +3438,7 @@ def generate_graph_for_participant(
                         competency_object[question.competency.name] + 1
                     )
 
-            else:
+            elif question.response_type == "rating_type": 
                 if participant_response_value:
                     label_count = sum(
                         1 for key in question.label.keys() if question.label[key]
@@ -3501,6 +3508,8 @@ def generate_graph_for_participant_for_post_assessment(
             compentency_with_description.append(competency_object)
 
         for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
             if question.competency.name not in total_for_each_comp:
                 total_for_each_comp[question.competency.name] = 1
             else:
@@ -3509,6 +3518,8 @@ def generate_graph_for_participant_for_post_assessment(
         competency_object = {}
         pre_competency_object = {}
         for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
             if question.competency.name not in competency_object:
                 competency_object[question.competency.name] = 0
             if question.competency.name not in pre_competency_object:
@@ -3542,7 +3553,7 @@ def generate_graph_for_participant_for_post_assessment(
                         competency_object[question.competency.name] + 1
                     )
 
-            else:
+            elif question.response_type == "rating_type": 
                 if participant_response_value:
                     label_count = sum(
                         1 for key in question.label.keys() if question.label[key]
@@ -4229,7 +4240,68 @@ def getParticipantsResponseStatusForAssessment(assessment):
         print(str(e))
 
 
-import pandas as pd
+def getAllParticipantResponsesForAssessment(assessment):
+    try:
+        response_data = {}
+        questionnaire = assessment.questionnaire
+        questions = questionnaire.questions.all()
+
+        # Fetch all participant responses at once to reduce DB hits
+        participant_responses = ParticipantResponse.objects.filter(
+            participant__in=assessment.participants_observers.values_list('participant', flat=True),
+            assessment=assessment
+        ).select_related('participant')
+
+        for participant_response in participant_responses:
+            participant_name = participant_response.participant.name
+            if participant_name not in response_data:
+                response_data[participant_name] = []
+
+            for question in questions:
+                correct_answer_label = ", ".join(question.correct_answer) if question.correct_answer else "N/A"
+                participant_response_value = participant_response.participant_response.get(str(question.id), "N/A")
+
+                response_data[participant_name].append({
+                    "Question": question.self_question,
+                    "Response": participant_response_value,
+                    "Answer": correct_answer_label
+                })
+
+        return response_data
+    except Exception as e:
+        print(str(e))
+        return {}
+
+class ResponseDownloadForAllParticipants(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, assessment_id):
+        try:
+            assessment = Assessment.objects.get(id=assessment_id)
+            response_data = getAllParticipantResponsesForAssessment(assessment)
+            if (
+                assessment.assessment_timing in ["pre", "post"]
+                or assessment.assessment_type == "self"
+            ):
+                excel_writer = BytesIO()
+                with pd.ExcelWriter(excel_writer) as writer:
+                    for participant_name, participant_responses in response_data.items():
+                        df = pd.DataFrame(participant_responses)
+                        df.to_excel(writer, sheet_name=participant_name, index=False)
+                excel_writer.seek(0)
+                response = HttpResponse(
+                    excel_writer.getvalue(),
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+                response["Content-Disposition"] = (
+                    f'attachment; filename="{assessment.name}_all_participant_response_status.xlsx"'
+                )
+
+                return response
+        except Exception as e:
+            print(str(e))
+            return HttpResponse(status=500)
+
 
 
 class DownloadParticipantResponseStatusData(APIView):
@@ -4930,7 +5002,8 @@ class DownloadQuestionWiseExcelForProject(APIView):
                         if participant_response:
                             questions_object = {"Participant Name": participant.name}
                             for question in assessment.questionnaire.questions.all():
-
+                                if question.response_type == "descriptive":
+                                    continue
                                 participant_response_value = (
                                     participant_response.participant_response.get(
                                         str(question.id)
@@ -4955,7 +5028,7 @@ class DownloadQuestionWiseExcelForProject(APIView):
                                         )
                                     else:
                                         questions_object[question.self_question] = "0%"
-                                else:
+                                elif question.response_type == "rating_type": 
                                     if participant_response_value:
                                         label_count = sum(
                                             1

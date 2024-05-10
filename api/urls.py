@@ -464,11 +464,11 @@ urlpatterns = [
         "get-facilitator-summary-data/<int:facilitator_id>/",
         views.get_facilitator_summary_data,
     ),
-     path(
+    path(
         "expenses/<int:project_id>/<int:coach_id>/",
         views.get_expenses_for_coaching_project,
     ),
-      path(
+    path(
         "get-coach-with-vendor-id-in-project/<int:project_id>/",
         views.get_coach_with_vendor_id_in_project,
     ),
@@ -555,5 +555,16 @@ urlpatterns = [
         "get-schedular-projects-of-hr/<int:hr_id>/",
         views.get_schedular_projects_of_hr,
     ),
-    
+    path("sharable-emails/", views.get_sharable_emails),
+    path("coach-profile-sharable-email/", views.coach_profile_sharable_email),
+    path(
+        "coach-profile-share-email-validation/",
+        views.coach_profile_share_email_validation,
+    ),
+    path(
+        "get-coach-profile-sharing-form/<str:unique_id>/",
+        views.get_coach_profile_sharing_form,
+    ),
+    path("get-coach-profile-shared-with/", views.get_coach_profile_shared_with),
+    path("coach-share-links/", views.get_coach_shared_links)
 ]
