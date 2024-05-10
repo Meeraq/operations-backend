@@ -5,7 +5,7 @@ from django.db import migrations, models
 def populate_area_of_expertise(apps, schema):
     Learner = apps.get_model("api", "Learner")
     learners = Learner.objects.all()
-    learners.update(area_of_expertise="")
+    learners.update(area_of_expertise=[])
 
 class Migration(migrations.Migration):
 
