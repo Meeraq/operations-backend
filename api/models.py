@@ -724,6 +724,7 @@ class AddGoalActivity(models.Model):
 
 
 class CoachProfileShare(models.Model):
+    name = models.CharField(max_length=200, null=True, blank=True)
     emails = models.JSONField(default=list, blank=True)
     masked_coach_profile = models.BooleanField(default=False)
     unique_id = models.CharField(max_length=225, unique=True, blank=True)

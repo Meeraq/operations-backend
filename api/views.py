@@ -8849,10 +8849,10 @@ class StandardizedFieldRequestAcceptReject(APIView):
                                     ):
                                         field_value.remove(value)
                                         instance.save()
-                    if request_instance.coach:             
+                    if request_instance.coach:
                         send_mail_templates(
                             "coach_templates/reject_feild_item_request.html",
-                            [request_instance.coach.email ],
+                            [request_instance.coach.email],
                             "Meeraq | Field Rejected",
                             {
                                 "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
@@ -11780,11 +11780,13 @@ def coach_profile_sharable_email(request):
         masked_coach_profile = request.data.get("masked_coach_profile", False)
         unique_id = request.data.get("unique_id", "")
         coaches = request.data.get("coaches", [])
+        name = request.data.get("name", "")
 
         coach_profile_share = CoachProfileShare.objects.create(
             masked_coach_profile=masked_coach_profile,
             unique_id=unique_id,
             emails=emails,
+            name=name
         )
 
         for coach_id in coaches:
@@ -11890,5 +11892,23 @@ def get_coach_profile_shared_with(request):
         print(str(e))
         return Response(
             {"error": "Failed to get Coach Profiles."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_shared_links(request):
+    try:
+        # Retrieve all CoachProfileShare instances
+        coach_profile_shares = CoachProfileShare.objects.all().order_by("-created_at")
+        coach_profile_shares_serializer = CoachProfileShareSerializer(
+            coach_profile_shares, many=True
+        )
+        return Response(coach_profile_shares_serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get coach profile shares."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )

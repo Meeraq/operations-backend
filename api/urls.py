@@ -566,4 +566,5 @@ urlpatterns = [
         views.get_coach_profile_sharing_form,
     ),
     path("get-coach-profile-shared-with/", views.get_coach_profile_shared_with),
+    path("coach-share-links/", views.get_coach_shared_links)
 ]
