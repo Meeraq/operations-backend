@@ -35,6 +35,7 @@ class Question(models.Model):
     RESPONSE_CHOICES = [
         ("correct_answer", "Correct Answer"),
         ("rating_type", "Rating Type"),
+        ("descriptive", "Descriptive"),
     ]
 
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
