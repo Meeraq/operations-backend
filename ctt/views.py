@@ -23,6 +23,7 @@ from .models import (
     UserAssignments,
     Assignments,
     MentorCoachSessions,
+    Users,
 )
 from zohoapi.models import SalesOrder, ClientInvoice
 from datetime import datetime, timedelta
@@ -471,21 +472,20 @@ def get_all_finance(request):
 
                 for invoice in sales_order.invoices:
                     invoiced_amount += invoice["total"]
-
                     if invoice["status"] == "paid":
                         paid_amount += invoice["total"]
                         all_invoices_paid.append(True)
                     else:
                         all_invoices_paid.append(False)
 
-            pending_amount = invoiced_amount - paid_amount
+            pending_amount = total - paid_amount
 
-            if all(all_invoices_paid) and len(all_invoices_paid) > 0:
-                payment_status = "Paid"
-            elif any(all_invoices_paid) and len(all_invoices_paid) > 0:
-                payment_status = "Partially Paid"
-            else:
+            if paid_amount == 0:
                 payment_status = "Not Paid"
+            if total == paid_amount:
+                payment_status = "Paid"
+            else:
+                payment_status = "Partially Paid"
 
             temp = {
                 "index": index,
@@ -521,31 +521,26 @@ def get_all_finance(request):
 @permission_classes([IsAuthenticated])
 def get_all_client_invoice_of_participant_for_batch(request, participant_id, batch_id):
     try:
-        batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
         data = []
-
-        for batch_user in batch_users:
-            salesorders = SalesOrder.objects.filter(
-                zoho_customer__email=batch_user.user.email,
-                custom_field_hash__cf_ctt_batch=batch_user.batch.name,
-            )
-            for sales_order in salesorders:
-                client_invoices = ClientInvoice.objects.filter(sales_order=sales_order)
-                for client_invoice in client_invoices:
-                    payment_status = (
-                        "Paid" if client_invoice.status == "paid" else "Not Paid"
-                    )
-
-                    temp = {
-                        "invoice_number": client_invoice.invoice_number,
-                        "so_number": sales_order.salesorder_number,
-                        "due_date": client_invoice.due_date_formatted,
-                        "date": client_invoice.date_formatted,
-                        "payment_status": payment_status,
-                    }
-
-                    data.append(temp)
-
+        user = Users.objects.using("ctt").get(id=participant_id)
+        batch = Batches.objects.using("ctt").get(id=batch_id)
+        client_invoices = ClientInvoice.objects.filter(
+            custom_field_hash__cf_ctt_batch=batch.name, zoho_customer__email=user.email
+        )
+        for client_invoice in client_invoices:
+            payment_status = "Paid" if client_invoice.status == "paid" else "Not Paid"
+            temp = {
+                "invoice_number": client_invoice.invoice_number,
+                "so_number": (
+                    client_invoice.sales_order.salesorder_number
+                    if client_invoice.sales_order
+                    else None
+                ),
+                "due_date": client_invoice.due_date,
+                "date": client_invoice.date,
+                "payment_status": payment_status,
+            }
+            data.append(temp)
         return Response(data)
     except Exception as e:
         print(str(e))
