@@ -284,8 +284,10 @@ class Nudge(models.Model):
         SchedularBatch, on_delete=models.CASCADE, null=True, blank=True, default=None
     )
     trigger_date = models.DateField(default=None, blank=True, null=True)
+    learner_ids = models.JSONField(default=list, blank=True) # nudge completed by learners 
     is_sent = models.BooleanField(default=False)
     is_switched_on = models.BooleanField(default=True)
+    unique_id = models.CharField(max_length=225, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
