@@ -1831,9 +1831,10 @@ def create_video_lesson(request):
             }
             video_lesson_serializer = VideoLessonSerializer(data=video_lesson_data)
             if video_lesson_serializer.is_valid():
-                video_lesson_serializer.save()
+                instance =  video_lesson_serializer.save()
+                serializer_depth_one = VideoLessonSerializerDepthOne(instance)
                 return Response(
-                    video_lesson_serializer.data, status=status.HTTP_201_CREATED
+                    serializer_depth_one.data, status=status.HTTP_201_CREATED
                 )
             return Response(
                 video_lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST
@@ -2436,6 +2437,7 @@ class AssignCourseTemplateToBatch(APIView):
                     status="draft",
                     course_template=course_template,
                     batch=batch,
+                    course_image=course_template.course_image
                 )
                 # Duplicate lessons
                 original_lessons = Lesson.objects.filter(
@@ -2683,8 +2685,8 @@ def create_pdf_lesson(request):
                 pdf_lesson_instance = PdfLesson.objects.create(
                     lesson=lesson_instance, content=content, pdf=resources
                 )
-
-                return Response({"message": "PDF lesson created successfully."})
+                serializer_depth_one = PdfLessonSerializer(pdf_lesson_instance)
+                return Response({"message": "PDF lesson created successfully.", "data" : serializer_depth_one.data})
 
             elif course_template_id:
                 course_template_instance = CourseTemplate.objects.get(

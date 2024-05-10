@@ -24,6 +24,7 @@ class CourseTemplate(models.Model):
     name = models.TextField()
     description = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    course_image = models.ImageField(upload_to="post_images", blank=True)
 
     def __str__(self):
         return self.name
@@ -41,6 +42,7 @@ class Course(models.Model):
         CourseTemplate, on_delete=models.SET_NULL, blank=True, null=True
     )
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    course_image = models.ImageField(upload_to="post_images", blank=True)
 
     def __str__(self):
         return self.name
