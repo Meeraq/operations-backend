@@ -705,7 +705,7 @@ class AssessmentStatusChange(APIView):
                     and assessment.status == "ongoing"
                     and not assessment.initial_reminder
                 ):
-                    send_assessment_invitation_mail.delay(assessment.id)
+                    # send_assessment_invitation_mail.delay(assessment.id)
                     assessment.initial_reminder = True
                     assessment.save()
                     # for hr in assessment.hr.all():
@@ -1031,6 +1031,7 @@ class QuestionsForObserverAssessment(APIView):
                     "observer_question": question.observer_question,
                     "label": question.label,
                     "rating_type": question.rating_type,
+                    "response_type" : question.response_type
                 }
 
                 if competency_name in competency_questions:
