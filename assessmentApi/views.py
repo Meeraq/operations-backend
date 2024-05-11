@@ -705,7 +705,7 @@ class AssessmentStatusChange(APIView):
                     and assessment.status == "ongoing"
                     and not assessment.initial_reminder
                 ):
-                    # send_assessment_invitation_mail.delay(assessment.id)
+                    send_assessment_invitation_mail.delay(assessment.id)
                     assessment.initial_reminder = True
                     assessment.save()
                     # for hr in assessment.hr.all():
@@ -993,6 +993,7 @@ class QuestionsForAssessment(APIView):
                     "self_question": question.self_question,
                     "label": question.label,
                     "rating_type": question.rating_type,
+                    "response_type": question.response_type,
                 }
 
                 if competency_name in competency_questions:
@@ -3407,6 +3408,8 @@ def generate_graph_for_participant(
             compentency_with_description.append(competency_object)
 
         for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
             if question.competency.name not in total_for_each_comp:
                 total_for_each_comp[question.competency.name] = 1
             else:
@@ -3414,6 +3417,8 @@ def generate_graph_for_participant(
 
         competency_object = {}
         for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
             if question.competency.name not in competency_object:
                 competency_object[question.competency.name] = 0
 
@@ -3433,7 +3438,7 @@ def generate_graph_for_participant(
                         competency_object[question.competency.name] + 1
                     )
 
-            else:
+            elif question.response_type == "rating_type": 
                 if participant_response_value:
                     label_count = sum(
                         1 for key in question.label.keys() if question.label[key]
@@ -3503,6 +3508,8 @@ def generate_graph_for_participant_for_post_assessment(
             compentency_with_description.append(competency_object)
 
         for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
             if question.competency.name not in total_for_each_comp:
                 total_for_each_comp[question.competency.name] = 1
             else:
@@ -3511,6 +3518,8 @@ def generate_graph_for_participant_for_post_assessment(
         competency_object = {}
         pre_competency_object = {}
         for question in assessment.questionnaire.questions.all():
+            if question.response_type == "descriptive":
+                continue
             if question.competency.name not in competency_object:
                 competency_object[question.competency.name] = 0
             if question.competency.name not in pre_competency_object:
@@ -3544,7 +3553,7 @@ def generate_graph_for_participant_for_post_assessment(
                         competency_object[question.competency.name] + 1
                     )
 
-            else:
+            elif question.response_type == "rating_type": 
                 if participant_response_value:
                     label_count = sum(
                         1 for key in question.label.keys() if question.label[key]
@@ -4993,7 +5002,8 @@ class DownloadQuestionWiseExcelForProject(APIView):
                         if participant_response:
                             questions_object = {"Participant Name": participant.name}
                             for question in assessment.questionnaire.questions.all():
-
+                                if question.response_type == "descriptive":
+                                    continue
                                 participant_response_value = (
                                     participant_response.participant_response.get(
                                         str(question.id)
@@ -5018,7 +5028,7 @@ class DownloadQuestionWiseExcelForProject(APIView):
                                         )
                                     else:
                                         questions_object[question.self_question] = "0%"
-                                else:
+                                elif question.response_type == "rating_type": 
                                     if participant_response_value:
                                         label_count = sum(
                                             1

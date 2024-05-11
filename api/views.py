@@ -81,6 +81,7 @@ from .serializers import (
     SalesSerializer,
     SalesDepthOneSerializer,
     GoalDescriptionSerializer,
+    CoachProfileShareSerializer,
 )
 from zohoapi.serializers import (
     VendorDepthOneSerializer,
@@ -161,6 +162,7 @@ from .models import (
     Finance,
     Sales,
     TableHiddenColumn,
+    CoachProfileShare,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -8847,10 +8849,10 @@ class StandardizedFieldRequestAcceptReject(APIView):
                                     ):
                                         field_value.remove(value)
                                         instance.save()
-                    if request_instance.coach:             
+                    if request_instance.coach:
                         send_mail_templates(
                             "coach_templates/reject_feild_item_request.html",
-                            [request_instance.coach.email ],
+                            [request_instance.coach.email],
                             "Meeraq | Field Rejected",
                             {
                                 "name": f"{request_instance.coach.first_name} {request_instance.coach.last_name}",
@@ -10590,7 +10592,9 @@ def get_formatted_skill_training_tasks(tasks):
 def get_tasks(request):
     # Retrieve tasks that are pending and have a trigger date before or equal to current time
     tasks = Task.objects.filter(
-        Q(trigger_date__lte=timezone.now()), ~Q(project_type="skill_training")
+        Q(trigger_date__lte=timezone.now()),
+        ~Q(project_type="skill_training"),
+        ~Q(status="completed"),
     )
     # Initialize a list to store task details
     task_details = []
@@ -10613,7 +10617,9 @@ def get_tasks(request):
 def get_skill_training_tasks(request):
     # Retrieve tasks that are pending and have a trigger date before or equal to current time
     tasks = Task.objects.filter(
-        trigger_date__lte=timezone.now(), project_type="skill_training"
+        Q(trigger_date__lte=timezone.now()),
+        Q(project_type="skill_training"),
+        ~Q(status="completed"),
     )
     # Initialize a list to store task details
     task_details = []
@@ -11065,9 +11071,11 @@ def get_expenses_for_coaching_project(request, project_id, coach_id):
         serialized_data = serializer.data
 
         for data in serialized_data:
-            session = data.get("session") 
+            session = data.get("session")
             if session:
-                session_new = SessionRequestCaas.objects.filter(id=session.get("id")).first()
+                session_new = SessionRequestCaas.objects.filter(
+                    id=session.get("id")
+                ).first()
                 if session_new:
                     learner = session_new.learner
                     data["learner"] = {
@@ -11747,5 +11755,164 @@ def get_available_credits_of_all_cod_projects(request):
         print(str(e))
         return Response(
             {"error": "Failed to retrieve data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sharable_emails(request):
+    try:
+        all_emails = set()
+        all_coach_profiles = CoachProfileShare.objects.all()
+        for profile in all_coach_profiles:
+            all_emails.update(profile.emails)
+
+        return Response({"emails": list(all_emails)})
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def coach_profile_sharable_email(request):
+    try:
+        emails = request.data.get("emails", [])
+        if not emails:
+            return Response({"message": "No emails provided."}, status=400)
+
+        masked_coach_profile = request.data.get("masked_coach_profile", False)
+        unique_id = request.data.get("unique_id", "")
+        coaches = request.data.get("coaches", [])
+        name = request.data.get("name", "")
+
+        coach_profile_share = CoachProfileShare.objects.create(
+            masked_coach_profile=masked_coach_profile,
+            unique_id=unique_id,
+            emails=emails,
+            name=name,
+        )
+
+        for coach_id in coaches:
+            coach_profile_share.coaches.add(coach_id)
+
+        coach_profile_share.save()
+
+        for email in emails:
+            print("emails", email)
+            print("id", unique_id)
+            send_mail_templates(
+                "coach_profile_share.html",
+                [email],
+                "Meeraq Coaching | Shared Coach Profiles!",
+                {
+                    "profiles_id": unique_id,
+                },
+                [],
+            )
+        return Response({"message": "Coach Profile Shared successfully."})
+
+    except Exception as e:
+        print(str(e))
+        return Response({"message": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def coach_profile_share_email_validation(request):
+    try:
+        unique_id = request.data.get("unique_id")
+        email = request.data.get("email").strip().lower()
+        coach_profile_share = CoachProfileShare.objects.get(unique_id=unique_id)
+        coach_serializer = CoachProfileShareSerializer(coach_profile_share)
+        if email in coach_serializer.data["emails"]:
+            return Response(
+                {"message": "Email is verified."},
+                status=status.HTTP_200_OK,
+            )
+        else:
+            return Response(
+                {"error": "Email is not verified."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    except CoachProfileShare.DoesNotExist:
+        return Response(
+            {"error": "Coach Profile Share not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to validate email."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_coach_profile_sharing_form(request, unique_id):
+    try:
+        coach_profile_share = CoachProfileShare.objects.get(unique_id=unique_id)
+        coach_serializer = CoachSerializer(coach_profile_share.coaches.all(), many=True)
+        return Response(
+            {
+                "coaches": coach_serializer.data,
+                "masked_coach_profile": coach_profile_share.masked_coach_profile,
+            },
+            status=status.HTTP_200_OK,
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get Coach Profiles."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_coach_profile_shared_with(request):
+    try:
+        # Retrieve all CoachProfileShare instances
+        coach_profile_shares = CoachProfileShare.objects.all()
+
+        # Dictionary to store coach emails mapping
+        coach_email_mapping = {}
+
+        # Iterate through each CoachProfileShare instance
+        for profile_share in coach_profile_shares:
+            emails = profile_share.emails
+            coaches = profile_share.coaches.all()
+            for coach in coaches:
+                # If the coach is not already in the mapping, add them
+                if coach.id not in coach_email_mapping:
+                    coach_email_mapping[coach.id] = {"emails": set()}
+                # Add the emails shared with this coach
+                coach_email_mapping[coach.id]["emails"].update(emails)
+
+        return Response(coach_email_mapping)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get Coach Profiles."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_coach_shared_links(request):
+    try:
+        # Retrieve all CoachProfileShare instances
+        coach_profile_shares = CoachProfileShare.objects.all().order_by("-created_at")
+        coach_profile_shares_serializer = CoachProfileShareSerializer(
+            coach_profile_shares, many=True
+        )
+        return Response(coach_profile_shares_serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get coach profile shares."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )

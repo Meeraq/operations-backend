@@ -190,6 +190,7 @@ class Finance(models.Model):
     def __str__(self):
         return self.name
 
+
 class Sales(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -203,6 +204,7 @@ class Sales(models.Model):
 
     def __str__(self):
         return self.name
+
 
 class Leader(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
@@ -721,10 +723,23 @@ class AddGoalActivity(models.Model):
         return f"{self.user} added a goal."
 
 
+class CoachProfileShare(models.Model):
+    name = models.CharField(max_length=200, null=True, blank=True)
+    emails = models.JSONField(default=list, blank=True)
+    masked_coach_profile = models.BooleanField(default=False)
+    unique_id = models.CharField(max_length=225, unique=True, blank=True)
+    coaches = models.ManyToManyField(Coach, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class CoachProfileTemplate(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     templates = models.JSONField(default=dict, blank=True)
+    coach_profile_share = models.ForeignKey(
+        CoachProfileShare, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
 
     def __str__(self):
         return f"{self.coach} template."
@@ -960,7 +975,7 @@ class APILog(models.Model):
 
 
 class TableHiddenColumn(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE,blank=True,null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
     table_name = models.CharField(max_length=225, blank=True)
     hidden_columns = models.JSONField(default=list, blank=True)
     created_at = models.DateField(auto_now_add=True)
