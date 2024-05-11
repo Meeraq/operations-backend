@@ -327,8 +327,6 @@ class GmSheet(models.Model):
         max_length=255, choices=PROJECT_TYPE_CHOICES, blank=True, null=True
     )
     project_name = models.TextField(blank=True, null=True)
-    revenue_structure = models.JSONField(default=list, blank=True, null=True)
-    cost_structure = models.JSONField(default=list, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     gmsheet_number = models.CharField(max_length=6, blank=True, null=True)
     other_details = models.TextField(blank=True, null=True)
@@ -337,10 +335,16 @@ class GmSheet(models.Model):
     deal_status = models.CharField(
         max_length=255, choices=DEAL_STATUS_CHOICES, default="pending"
     )
-    total_profit = models.CharField(max_length=6, blank=True, null=True)
-    gross_margin = models.CharField(max_length=6, blank=True, null=True)
+    total_profit = models.CharField(max_length=9, blank=True, null=True)
+    gross_margin = models.CharField(max_length=3, default=0,blank=True, null=True)
     benchmark = models.ForeignKey(Benchmark, null=True, on_delete=models.SET_NULL)
+    # offerings=  models.ManyToManyField(Offering)
 
+class Offering(models.Model):
+    gm_sheet = models.ForeignKey(GmSheet, on_delete=models.CASCADE)
+    mode = models.CharField(max_length=100, blank=True,null=True,default="")
+    revenue_structure = models.JSONField(default=list, blank=True, null=True)
+    cost_structure = models.JSONField(default=list, blank=True, null=True)
 
 class HandoverDetails(models.Model):
     PROJECT_TYPE_CHOICES = [

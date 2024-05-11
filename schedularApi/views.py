@@ -7248,3 +7248,32 @@ def send_mail_to_coaches(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to send mail!"}, status=500)
+
+
+# off1, off2, off3, 
+
+
+
+# {
+#     "mode": "" #string 
+#     "revenue": [] #json array
+#     "cost" : [] #json array
+# }
+
+
+
+# offerings = [{}, {}]
+
+
+# Gm sheet create
+# gm sheet
+# offerings
+# connect both
+
+
+
+# request data = {
+# "gmsheet" : {},
+# "offerings" : []
+# }
+
