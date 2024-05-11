@@ -4,6 +4,9 @@ from collections import defaultdict
 # Create your views here.
 import boto3
 import requests
+import io
+from pdfminer.pdfparser import PDFParser
+from pdfminer.pdfdocument import PDFDocument
 from rest_framework import generics, serializers, status
 from datetime import timedelta, time, datetime, date
 from .models import (
@@ -111,7 +114,7 @@ import environ
 import uuid
 import logging
 from rest_framework.permissions import AllowAny, IsAuthenticated
-
+from django.http import JsonResponse
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -575,6 +578,7 @@ def create_new_nudge(request):
     if serializer.is_valid():
         nudge_instance = serializer.save()
         nudge_instance.is_switched_on = True
+        nudge_instance.unique_id = uuid.uuid4()
         nudge_instance.save()
         # complete add nudge task
         try:
@@ -1782,15 +1786,15 @@ from .models import Video
 from .serializers import VideoSerializer
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "facilitator", "hr")])
-def get_all_videos(request):
-    videos = Video.objects.all()  # Retrieve all videos from the database
+# @api_view(["GET"])
+# @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "facilitator", "hr")])
+# def get_all_videos(request):
+#     videos = Video.objects.all()  # Retrieve all videos from the database
 
-    # Serialize the video queryset
-    serializer = VideoSerializer(videos, many=True)
+#     # Serialize the video queryset
+#     serializer = VideoSerializer(videos, many=True)
 
-    return Response(serializer.data)
+#     return Response(serializer.data)
 
 
 # views.py
@@ -1958,6 +1962,19 @@ class GetLaserCoachingTime(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+    def get_remote_file_size(self, url):
+        # This function gets the file size of a remote file in MB
+        # You'll need to implement this based on your specific requirements
+        # Here's a basic example using requests library
+        import requests
+        response = requests.head(url)
+        if response.status_code == 200:
+            content_length = response.headers.get('content-length')
+            if content_length:
+                file_size_bytes = int(content_length)
+                file_size_mb = file_size_bytes / (1024 * 1024)  # Convert bytes to MB
+                return round(file_size_mb, 2)  # Round to 2 decimal places
+        return None
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "hr", "facilitator")])
@@ -2608,18 +2625,21 @@ def get_resources(request):
 def create_resource(request):
     pdf_name = request.data.get("pdfName")  # Extracting pdfName from request data
     pdf_file = request.data.get("pdfFile")  # Extracting pdfFile from request data
+    # Calculate the file size
+    file_size = len(pdf_file.read())
+    # Convert to KB
+    file_size_kb = file_size / 1024.0
 
     # Create a dictionary containing the data for the Resources model instance
     resource_data = {
         "name": pdf_name,
         "pdf_file": pdf_file,
+        "file_size_kb": file_size_kb  # Add the file size to the data
     }
 
-    # Assuming you have a serializer for the Resources model
     serializer = ResourcesSerializer(data=resource_data)
 
     if serializer.is_valid():
-        # Save the validated data to create a new Resources instance
         serializer.save()
         return Response(serializer.data, status=201)  # Return the serialized data
     else:
@@ -3567,7 +3587,8 @@ def duplicate_nudge(request, nudge_id, batch_id):
             file=original_nudge.file,
             order=order,
             batch=batch,
-            is_sent=False,  # Assuming the duplicated nudge is not sent yet
+            is_sent=False,  
+            unique_id=str(uuid.uuid4())
         )
         return Response({"message": "Nudge duplicated successfully."})
     except Nudge.DoesNotExist:
@@ -4038,6 +4059,46 @@ def update_nudge_status(request, nudge_id):
     nudge.save()
     nudge_serializer = NudgeSerializer(nudge)
     return Response(nudge_serializer.data)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
+def get_all_nudges_for_that_learner(request, learner_id):
+    try:
+        nudges = Nudge.objects.filter(is_sent=True, is_switched_on=True, batch__learners__id=learner_id)
+        serializer = NudgeSerializer(nudges, many=True)
+        return Response({"nudges": serializer.data})
+    except Nudge.DoesNotExist:
+        return JsonResponse({'error': 'No nudges found for the specified learner'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_nudge_data(request, nudge_id):
+    try:
+        print("nudeg_iud",nudge_id)
+        nudge = Nudge.objects.get(unique_id=nudge_id)
+        serializer = NudgeSerializer(nudge)
+        return Response({"nudge": serializer.data})
+    except Nudge.DoesNotExist:
+        return JsonResponse({'error': 'Nudge not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+    
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_completion_nudge_status(request, nudge_id):
+    try:
+        nudge = Nudge.objects.get(pk=nudge_id)
+    except Nudge.DoesNotExist:
+        return Response({"error": "Nudge does not exist"}, status=status.HTTP_404_NOT_FOUND)
+    learner_id = request.data.get('learner_id',None)
+    if learner_id:
+        existing_learner_ids = set(nudge.learner_ids)
+        existing_learner_ids.add(int(learner_id))
+        nudge.learner_ids = list(existing_learner_ids)
+    nudge.save()
+    return Response({"message": f"Nudge {nudge_id} completion status updated successfully"}, status=status.HTTP_200_OK)
 
 
 @api_view(["DELETE"])

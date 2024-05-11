@@ -1315,7 +1315,11 @@ def get_all_invoices(request):
             purchase_order_ids = get_purchase_order_ids_for_project(
                 project_id, project_type
             )
-            all_invoices =  [invoice for invoice in all_invoices if invoice['purchase_order_id'] in purchase_order_ids]
+            all_invoices = [
+                invoice
+                for invoice in all_invoices
+                if invoice["purchase_order_id"] in purchase_order_ids
+            ]
         return Response(all_invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -3108,6 +3112,8 @@ def create_sales_order(request):
                     "customer_name": customer_name,
                     "salesperson": salesperson_name,
                     "project_type": "CTT" if ctt else project_type,
+                    "total_amount": salesorder_created["total"],
+                    "currency_symbol":salesorder_created["currency_symbol"],
                 },
                 (
                     (
@@ -3924,7 +3930,7 @@ def get_client_invoices(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def expense_coaching_purchase_order_create(request, project_id,coach_id):
+def expense_coaching_purchase_order_create(request, project_id, coach_id):
     try:
         expenses = []
         expenses = Expense.objects.filter(

@@ -38,7 +38,9 @@ Order Created{% endblock %} {% block content %}
                   Project Type: {% if project_type %} {{project_type}} {% else %}
                  Not Assigned  {% endif %}
                 </li>
-
+                <li>
+                 Total Amount: {{currency_symbol}} {{total_amount}}
+                </li>
                 <li>Salesperson: {{salesperson}}</li>
               </ul>
               <p>
