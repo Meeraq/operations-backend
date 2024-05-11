@@ -27,6 +27,7 @@ from .models import (
 )
 from zohoapi.models import SalesOrder, ClientInvoice
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 
 def get_month_start_end_dates():
@@ -299,6 +300,8 @@ def sales_persons_finances(request):
             "quarterly": 0,
             "yearly": 0,
             "actc": 0,
+            "total": 0,
+            "salesperson": "",
         }
     )
     for order in sales_orders:
@@ -308,29 +311,32 @@ def sales_persons_finances(request):
         salesperson = order.salesperson_name
         salesperson_id = order.salesperson_id
         # amount = order["total"]
+        salesperson_totals[salesperson_id]["salesperson"] += salesperson
+        salesperson_totals[salesperson_id]["total"] += 1
+
         if batch in l1_batches:
-            salesperson_totals[salesperson]["l1"] += 1
+            salesperson_totals[salesperson_id]["l1"] += 1
         elif batch in l2_batches:
-            salesperson_totals[salesperson]["l2"] += 1
+            salesperson_totals[salesperson_id]["l2"] += 1
         elif batch in l3_batches:
-            salesperson_totals[salesperson]["l3"] += 1
+            salesperson_totals[salesperson_id]["l3"] += 1
         elif batch in actc_batches:
-            salesperson_totals[salesperson]["actc"] += 1
+            salesperson_totals[salesperson_id]["actc"] += 1
 
         if month_start_date.date() <= order.date <= month_end_date.date():
-            salesperson_totals[salesperson]["monthly"] += 1
+            salesperson_totals[salesperson_id]["monthly"] += 1
         if quarter_start_date.date() <= order.date <= quarter_end_date.date():
-            salesperson_totals[salesperson]["quarterly"] += 1
+            salesperson_totals[salesperson_id]["quarterly"] += 1
         if (
             financial_year_start_date.date()
             <= order.date
             <= financial_year_end_date.date()
         ):
-            salesperson_totals[salesperson]["yearly"] += 1
+            salesperson_totals[salesperson_id]["yearly"] += 1
 
     res_list = [
-        {"id": salesperson_id, "index": index, "salesperson": salesperson, **totals}
-        for index, (salesperson, totals) in enumerate(
+        {"index": index, "salesperson_id": salesperson_id, **totals}
+        for index, (salesperson_id, totals) in enumerate(
             salesperson_totals.items(), start=1
         )
     ]
@@ -468,14 +474,13 @@ def get_all_finance(request):
             all_invoices_paid = []
 
             for sales_order in salesorders:
-                total += sales_order.total
+                total += Decimal(str(sales_order.total))
                 currency_code = sales_order.currency_code
                 sales_persons.add(sales_order.salesperson_name)
-
                 for invoice in sales_order.invoices:
-                    invoiced_amount += invoice["total"]
+                    invoiced_amount += Decimal(str(invoice["total"]))
                     if invoice["status"] == "paid":
-                        paid_amount += invoice["total"]
+                        paid_amount += Decimal(str(invoice["total"]))
                         all_invoices_paid.append(True)
                     else:
                         all_invoices_paid.append(False)
@@ -634,27 +639,24 @@ def get_ctt_salesperson_individual(request, salesperson_id):
                 all_invoices_paid = []
 
                 for sales_order in salesorders:
-                    total += sales_order.total
+                    total += Decimal(str(sales_order.total))
                     currency_code = sales_order.currency_code
                     sales_persons.add(sales_order.salesperson_name)
-
                     for invoice in sales_order.invoices:
-                        invoiced_amount += invoice["total"]
-
+                        invoiced_amount += Decimal(str(invoice["total"]))
                         if invoice["status"] == "paid":
-                            paid_amount += invoice["total"]
+                            paid_amount += Decimal(str(invoice["total"]))
                             all_invoices_paid.append(True)
                         else:
                             all_invoices_paid.append(False)
 
-                pending_amount = invoiced_amount - paid_amount
-
-                if all(all_invoices_paid) and len(all_invoices_paid) > 0:
-                    payment_status = "Paid"
-                elif any(all_invoices_paid) and len(all_invoices_paid) > 0:
-                    payment_status = "Partially Paid"
-                else:
+                pending_amount = total - paid_amount
+                if paid_amount == 0:
                     payment_status = "Not Paid"
+                if total == paid_amount:
+                    payment_status = "Paid"
+                else:
+                    payment_status = "Partially Paid"
 
                 temp = {
                     "index": index,
