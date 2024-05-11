@@ -858,10 +858,33 @@ def send_assessment_invitation_mail(assessment_id):
                         },
                         [],
                     )
+                    sleep(3)
+            if assessment.assessment_type == "360":
+                for observer in participant_observers.observers.all():
+                    observer_response = ObserverResponse.objects.filter(
+                        observer=observer, assessment=assessment
+                    ).first()
+                    if not observer_response:
+                        observer_unique_id = ObserverUniqueId.objects.filter(
+                            observer=observer, assessment=assessment
+                        ).first()
+                        observer_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+                        send_mail_templates(
+                            "assessment/assessment_email_to_observer.html",
+                            [observer.email],
+                            "Welcome to Meeraq Assessment!",
+                            {
+                                "assessment_name": assessment.participant_view_name,
+                                "participant_name": participant.name.title(),
+                                "observer_name": observer.name.title(),
+                                "link": observer_link,
+                            },
+                            [],
+                        )
+                        sleep(3)
         except Exception as e:
             print(str(e))
             pass
-        sleep(5)
 
 
 @shared_task
@@ -3134,8 +3157,8 @@ def send_nudge_reminder_on_trigger_date_at_6pm():
                     f"Meeraq: Your Monthly Nudge: {nudge.name} ",
                     {
                         "learner_name": learner.name.title(),
-                        "nudge_name" : nudge.name.title(),
-                        "link" : env('CAAS_APP_URL')
+                        "nudge_name": nudge.name.title(),
+                        "link": env("CAAS_APP_URL"),
                     },
                     [],
                 )
