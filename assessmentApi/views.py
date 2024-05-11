@@ -1526,18 +1526,19 @@ class AddObserverToParticipant(APIView):
             observer_unique_id.unique_id = str(uuid.uuid4())
             observer_unique_id.save()
             observer_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
-            send_mail_templates(
-                "assessment/assessment_email_to_observer.html",
-                [observer.email],
-                "Meeraq - Welcome to Assessment Platform !",
-                {
-                    "assessment_name": assessment.participant_view_name,
-                    "participant_name": participants_observer.participant.name,
-                    "observer_name": observer.name,
-                    "link": observer_link,
-                },
-                [],
-            )
+            
+            # send_mail_templates(
+            #     "assessment/assessment_email_to_observer.html",
+            #     [observer.email],
+            #     "Meeraq - Welcome to Assessment Platform !",
+            #     {
+            #         "assessment_name": assessment.participant_view_name,
+            #         "participant_name": participants_observer.participant.name,
+            #         "observer_name": observer.name,
+            #         "link": observer_link,
+            #     },
+            #     [],
+            # )
 
             serializer = AssessmentSerializerDepthFour(assessment)
             return Response(
