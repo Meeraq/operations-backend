@@ -7063,9 +7063,10 @@ def get_competency_averages(request, hr_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "pmo", "hr")])
 def get_learner_competency_averages(request, learner_id):
-    competencies = Competency.objects.filter(goal__engagement__learner__id=learner_id)
+    competencies = Competency.objects.filter(goal__engagement__learner__id=learner_id).order_by('-created_at')
     serializer = CompetencyDepthOneSerializer(competencies, many=True)
     return Response(serializer.data, status=200)
+
 
 
 @api_view(["GET"])
@@ -9395,6 +9396,17 @@ def change_user_role(request, user_id):
         if not user.profile.hr.active_inactive:
             return None
         serializer = HrDepthOneSerializer(user.profile.hr)
+        is_caas_allowed = Project.objects.filter(hr=user.profile.hr).exists()
+        is_seeq_allowed = SchedularProject.objects.filter(hr=user.profile.hr).exists()
+        return Response(
+            {
+                **serializer.data,
+                "roles": roles,
+                "is_caas_allowed": is_caas_allowed,
+                "is_seeq_allowed": is_seeq_allowed,
+                "user": {**serializer.data["user"], "type": user_profile_role},
+            }
+        )
     elif user_profile_role == "sales":
         if not user.profile.sales.active_inactive:
             return None
@@ -10153,7 +10165,6 @@ def add_extra_session_in_caas(request, learner_id, project_id):
         return Response(
             {"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
