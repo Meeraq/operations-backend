@@ -1564,9 +1564,18 @@ class GetFilteredCoursesForCertificate(APIView):
             )
 
         available_courses = all_courses.exclude(id__in=courses_in_certificates)
-
         serializer = CourseSerializer(available_courses, many=True)
-        return Response(serializer.data)
+        all_data = []
+        for data in serializer.data:
+            course = Course.objects.get(id=data.get("id"))
+            all_data.append(
+                {
+                    **data,
+                    "project": course.batch.project.name,
+                    "organisation": course.batch.project.organisation.name,
+                }
+            )
+        return Response(all_data)
 
 
 class AssignCoursesToCertificate(APIView):
@@ -2695,7 +2704,10 @@ def create_pdf_lesson(request):
         return Response({"message": "Course Template does not exist."})
     except Exception as e:
         print(str(e))
-        return Response({"message": "Failed to create pdf lesson."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"message": "Failed to create pdf lesson."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 @api_view(["PUT"])
