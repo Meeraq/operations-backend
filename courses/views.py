@@ -1590,9 +1590,18 @@ class GetFilteredCoursesForCertificate(APIView):
             )
 
         available_courses = all_courses.exclude(id__in=courses_in_certificates)
-
         serializer = CourseSerializer(available_courses, many=True)
-        return Response(serializer.data)
+        all_data = []
+        for data in serializer.data:
+            course = Course.objects.get(id=data.get("id"))
+            all_data.append(
+                {
+                    **data,
+                    "project": course.batch.project.name,
+                    "organisation": course.batch.project.organisation.name,
+                }
+            )
+        return Response(all_data)
 
 
 class AssignCoursesToCertificate(APIView):
