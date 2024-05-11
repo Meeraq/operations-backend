@@ -16,6 +16,8 @@ from .models import (
     HandoverDetails,
     Task,
     GmSheet,
+    Offering,
+    StandardizedFieldGmSheet,
     Benchmark,
 )
 from api.models import Coach
@@ -234,7 +236,14 @@ class GmSheetSerializer(serializers.ModelSerializer):
     class Meta:
         model = GmSheet
         fields = '__all__'
-
+class OfferingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Offering
+        fields = '__all__'
+class StandardizedFieldGmSheetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StandardizedFieldGmSheet
+        fields = '__all__'
 class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer):
     organisation_name = serializers.SerializerMethodField()
 

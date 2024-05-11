@@ -96,6 +96,8 @@ from .serializers import (
     TaskSerializer,
     BenchmarkSerializer,
     GmSheetSerializer,
+    StandardizedFieldGmSheetSerializer,
+    OfferingSerializer,
     HandoverDetailsSerializerWithOrganisationName,
 )
 from .models import (
@@ -117,6 +119,7 @@ from .models import (
     HandoverDetails,
     Task,
     GmSheet,
+    StandardizedFieldGmSheet,
     Benchmark,
 )
 from api.serializers import (
@@ -496,35 +499,88 @@ def get_all_benchmarks(request):
             return Response({"error": str(e)}, status=500)
 
     
-@api_view(["POST"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
+@api_view(['POST'])
+@transaction.atomic
 def create_gmsheet(request):
-    try:
-        serializer = GmSheetSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
+    if request.method == 'POST':
+        gmsheet_data = request.data.get('gmsheet')
+        gm_sheet_serializer = GmSheetSerializer(data=gmsheet_data)
+        if gm_sheet_serializer.is_valid():
+            gm_sheet = gm_sheet_serializer.save()
+            offerings_data = gmsheet_data.get('offerings')
+            if offerings_data:
+                for offering_data in offerings_data:
+                    offering_data['gm_sheet'] = gm_sheet.id
+                    offering_serializer = OfferingSerializer(data=offering_data)
+                    if offering_serializer.is_valid():
+                        offering_serializer.save()
+                    else:
+                        return Response(offering_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+            return Response(gm_sheet_serializer.data, status=status.HTTP_201_CREATED)
+        return Response(gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST)    
 
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "sales", "leader")])
-def update_gmsheet(request, gmsheet_id):
-    try:
-        gmsheet = GmSheet.objects.get(id=gmsheet_id)
-        serializer = GmSheetSerializer(gmsheet,data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
+@api_view(['POST'])
+def add_values_to_field(request):
+    if request.method == 'POST':
+        field_name = request.data.get('field')
+        value = request.data.get('value')
+
+        # Check if the field already exists
+        field_gm_sheet, created = StandardizedFieldGmSheet.objects.get_or_create(
+            field=field_name
+        )
+
+        # If the field doesn't exist, it has been created now, so add the value
+        if created:
+            field_gm_sheet.values.append(value)
+            field_gm_sheet.save()
+            serializer = StandardizedFieldGmSheetSerializer(field_gm_sheet)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # If the field already exists, add the value to its existing list of values
+        field_gm_sheet.values.append(value)
+        field_gm_sheet.save()
+        serializer = StandardizedFieldGmSheetSerializer(field_gm_sheet)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+@api_view(['PUT'])
+@transaction.atomic
+def update_gmsheet(request, pk):
+    try:
+        gm_sheet = GmSheet.objects.get(pk=pk)
+    except GmSheet.DoesNotExist:
+        return Response({'error': 'GM Sheet does not exist'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'PUT':
+        gmsheet_data = request.data.get('gmsheet')
+        gm_sheet_serializer = GmSheetSerializer(gm_sheet, data=gmsheet_data, partial=True)
+        if gm_sheet_serializer.is_valid():
+            updated_gmsheet = gm_sheet_serializer.save()
+
+            # Update or create offerings
+            offerings_data = gmsheet_data.get('offerings')
+            if offerings_data:
+                for offering_data in offerings_data:
+                    offering_id = offering_data.get('id')  # If exists, update, else create new
+                    if offering_id:
+                        try:
+                            offering = Offering.objects.get(pk=offering_id, gm_sheet=gm_sheet)
+                        except Offering.DoesNotExist:
+                            return Response({'error': f'Offering with ID {offering_id} does not exist for this GM Sheet'}, 
+                                            status=status.HTTP_400_BAD_REQUEST)
+                    else:
+                        offering_data['gm_sheet'] = gm_sheet.id
+                        offering = None
+
+                    offering_serializer = OfferingSerializer(offering, data=offering_data, partial=True)
+                    if offering_serializer.is_valid():
+                        offering_serializer.save()
+                    else:
+                        return Response(offering_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response(gm_sheet_serializer.data, status=status.HTTP_200_OK)
+        return Response(gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["POST"])
