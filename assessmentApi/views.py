@@ -5021,3 +5021,32 @@ class DownloadQuestionWiseExcelForProject(APIView):
                 {"error": "Failed to get data"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+class GetSelectedProjectAssessment(APIView):
+    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+
+    def get(self, request, project_id):
+        project = get_object_or_404(SchedularProject, id=project_id)
+        try:
+            # get batch and project of assessment
+            assessment_lessons = AssessmentLesson.objects.filter(
+                assessment_modal__id=assessment_id
+            )
+            if assessment_lessons.exists():
+                assessment_lesson = assessment_lessons.first()
+                batch = assessment_lesson.lesson.course.batch
+                project = batch.project
+                return Response(
+                    {"batch": {"id": batch.id}, "project": {"id": project.id}}
+                )
+            else:
+                return Response(
+                    {"error": "Batch and project not found for the assessment"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        except Exception as e:
+            # Handle specific exceptions if needed
+            return Response(
+                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
