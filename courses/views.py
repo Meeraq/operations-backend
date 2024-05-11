@@ -42,6 +42,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializers import (
+    CourseEnrollmentWithNamesSerializer,
     CourseSerializer,
     CourseTemplateSerializer,
     TextLessonCreateSerializer,
@@ -3624,6 +3625,7 @@ def get_nps_project_wise(request):
 
 class GetAllNudgesOfSchedularProjects(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
+
     def get(self, request, project_id):
         try:
             hr_id = request.query_params.get("hr", None)
@@ -3644,7 +3646,9 @@ class GetAllNudgesOfSchedularProjects(APIView):
                     trigger_date__isnull=False,
                 )
             if hr_id:
-                nudges = nudges.filter(batch__project__hr__id=hr_id,is_switched_on=True)
+                nudges = nudges.filter(
+                    batch__project__hr__id=hr_id, is_switched_on=True
+                )
             data = NudgeSerializer(nudges, many=True).data
             return Response(data)
         except Exception as e:
@@ -4059,6 +4063,17 @@ def update_nudge_status(request, nudge_id):
     nudge.save()
     nudge_serializer = NudgeSerializer(nudge)
     return Response(nudge_serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_released_certificates_for_learner(request, learner_id):
+    course_enrollments = CourseEnrollment.objects.filter(
+        is_certificate_allowed=True, learner__id=learner_id
+    )
+    serializer = CourseEnrollmentWithNamesSerializer(course_enrollments, many=True)
+    return Response(serializer.data)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner")])

@@ -383,3 +383,18 @@ class FeedbackDepthOneSerializer(serializers.ModelSerializer):
         model = Feedback
         fields = "__all__"
         depth = 1
+
+
+class CourseEnrollmentWithNamesSerializer(serializers.ModelSerializer):
+    learner_name = serializers.SerializerMethodField()
+    course_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CourseEnrollment
+        fields = ['id', 'course', 'learner', 'learner_name', 'course_name', 'enrollment_date', 'completed_lessons', 'is_certificate_allowed']
+
+    def get_learner_name(self, obj):
+        return obj.learner.name
+
+    def get_course_name(self, obj):
+        return obj.course.name
