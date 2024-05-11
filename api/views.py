@@ -10592,7 +10592,9 @@ def get_formatted_skill_training_tasks(tasks):
 def get_tasks(request):
     # Retrieve tasks that are pending and have a trigger date before or equal to current time
     tasks = Task.objects.filter(
-        Q(trigger_date__lte=timezone.now()), ~Q(project_type="skill_training")
+        Q(trigger_date__lte=timezone.now()),
+        ~Q(project_type="skill_training"),
+        ~Q(status="completed"),
     )
     # Initialize a list to store task details
     task_details = []
@@ -10615,7 +10617,9 @@ def get_tasks(request):
 def get_skill_training_tasks(request):
     # Retrieve tasks that are pending and have a trigger date before or equal to current time
     tasks = Task.objects.filter(
-        trigger_date__lte=timezone.now(), project_type="skill_training"
+        Q(trigger_date__lte=timezone.now()),
+        Q(project_type="skill_training"),
+        ~Q(status="completed"),
     )
     # Initialize a list to store task details
     task_details = []
@@ -11786,7 +11790,7 @@ def coach_profile_sharable_email(request):
             masked_coach_profile=masked_coach_profile,
             unique_id=unique_id,
             emails=emails,
-            name=name
+            name=name,
         )
 
         for coach_id in coaches:
