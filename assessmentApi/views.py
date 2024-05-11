@@ -1031,7 +1031,7 @@ class QuestionsForObserverAssessment(APIView):
                     "observer_question": question.observer_question,
                     "label": question.label,
                     "rating_type": question.rating_type,
-                    "response_type" : question.response_type
+                    "response_type": question.response_type,
                 }
 
                 if competency_name in competency_questions:
@@ -3439,7 +3439,7 @@ def generate_graph_for_participant(
                         competency_object[question.competency.name] + 1
                     )
 
-            elif question.response_type == "rating_type": 
+            elif question.response_type == "rating_type":
                 if participant_response_value:
                     label_count = sum(
                         1 for key in question.label.keys() if question.label[key]
@@ -3554,7 +3554,7 @@ def generate_graph_for_participant_for_post_assessment(
                         competency_object[question.competency.name] + 1
                     )
 
-            elif question.response_type == "rating_type": 
+            elif question.response_type == "rating_type":
                 if participant_response_value:
                     label_count = sum(
                         1 for key in question.label.keys() if question.label[key]
@@ -4249,9 +4249,11 @@ def getAllParticipantResponsesForAssessment(assessment):
 
         # Fetch all participant responses at once to reduce DB hits
         participant_responses = ParticipantResponse.objects.filter(
-            participant__in=assessment.participants_observers.values_list('participant', flat=True),
-            assessment=assessment
-        ).select_related('participant')
+            participant__in=assessment.participants_observers.values_list(
+                "participant", flat=True
+            ),
+            assessment=assessment,
+        ).select_related("participant")
 
         for participant_response in participant_responses:
             participant_name = participant_response.participant.name
@@ -4259,19 +4261,30 @@ def getAllParticipantResponsesForAssessment(assessment):
                 response_data[participant_name] = []
 
             for question in questions:
-                correct_answer_label = ", ".join(question.correct_answer) if question.correct_answer else "N/A"
-                participant_response_value = participant_response.participant_response.get(str(question.id), "N/A")
+                correct_answer_label = (
+                    ", ".join(question.correct_answer)
+                    if question.correct_answer
+                    else "N/A"
+                )
+                participant_response_value = (
+                    participant_response.participant_response.get(
+                        str(question.id), "N/A"
+                    )
+                )
 
-                response_data[participant_name].append({
-                    "Question": question.self_question,
-                    "Response": participant_response_value,
-                    "Answer": correct_answer_label
-                })
+                response_data[participant_name].append(
+                    {
+                        "Question": question.self_question,
+                        "Response": participant_response_value,
+                        "Answer": correct_answer_label,
+                    }
+                )
 
         return response_data
     except Exception as e:
         print(str(e))
         return {}
+
 
 class ResponseDownloadForAllParticipants(APIView):
     permission_classes = [AllowAny]
@@ -4286,7 +4299,10 @@ class ResponseDownloadForAllParticipants(APIView):
             ):
                 excel_writer = BytesIO()
                 with pd.ExcelWriter(excel_writer) as writer:
-                    for participant_name, participant_responses in response_data.items():
+                    for (
+                        participant_name,
+                        participant_responses,
+                    ) in response_data.items():
                         df = pd.DataFrame(participant_responses)
                         df.to_excel(writer, sheet_name=participant_name, index=False)
                 excel_writer.seek(0)
@@ -4302,7 +4318,6 @@ class ResponseDownloadForAllParticipants(APIView):
         except Exception as e:
             print(str(e))
             return HttpResponse(status=500)
-
 
 
 class DownloadParticipantResponseStatusData(APIView):
@@ -5029,7 +5044,7 @@ class DownloadQuestionWiseExcelForProject(APIView):
                                         )
                                     else:
                                         questions_object[question.self_question] = "0%"
-                                elif question.response_type == "rating_type": 
+                                elif question.response_type == "rating_type":
                                     if participant_response_value:
                                         label_count = sum(
                                             1
@@ -5114,37 +5129,40 @@ class DownloadQuestionWiseExcelForProject(APIView):
 @permission_classes([IsAuthenticated])
 def get_learner_assessment_result_image(request, learner_id):
     participant = Learner.objects.get(id=learner_id)
-    assessments = Assessment.objects.filter(participants_observers__participant__id=learner_id).order_by("-created_at")
-    print(assessments)
+    assessments = Assessment.objects.filter(
+        participants_observers__participant__id=learner_id
+    ).order_by("-created_at")
+
     if assessments.exists():
         first_assessment = assessments.first()
         if first_assessment.assessment_timing == "pre":
-            print("pre")
+
             pre_assessment = first_assessment
-            post_assessment = Assessment.objects.get(pre_assessment = pre_assessment)
+            post_assessment = Assessment.objects.get(pre_assessment=pre_assessment)
         elif first_assessment.assessment_timing == "post":
-            print("post")
+
             pre_assessment = first_assessment.pre_assessment
             post_assessment = first_assessment
-        
+
         if pre_assessment and post_assessment:
-            pre_assessment_image, pre_assessment_compentency_with_description = generate_graph_for_participant(
+            pre_assessment_image, pre_assessment_compentency_with_description = (
+                generate_graph_for_participant(
                     participant, pre_assessment.id, pre_assessment
                 )
-            post_assessment_image, post_assessment_compentency_with_description = generate_graph_for_participant_for_post_assessment(participant, post_assessment.id, post_assessment) 
-            print(pre_assessment_image, post_assessment_image)
-            if post_assessment_image:
-                return Response({
-                    "assessment_exists":  True, 
-                    "graph" : post_assessment_image
-                })
-            if pre_assessment_image: 
-                return Response({
-                    "assessment_exists":  True, 
-                    "graph" : pre_assessment_image
-                })
+            )
+            post_assessment_image, post_assessment_compentency_with_description = (
+                generate_graph_for_participant_for_post_assessment(
+                    participant, post_assessment.id, post_assessment
+                )
+            )
 
-    return Response({
-                    "assessment_exists":  False, 
-                    "graph" : None
-                })
+            if post_assessment_image:
+                return Response(
+                    {"assessment_exists": True, "graph": post_assessment_image}
+                )
+            if pre_assessment_image:
+                return Response(
+                    {"assessment_exists": True, "graph": pre_assessment_image}
+                )
+
+    return Response({"assessment_exists": False, "graph": None})
