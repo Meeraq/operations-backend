@@ -362,6 +362,18 @@ urlpatterns = [
         views.check_if_project_structure_edit_allowed,
     ),
     path(
+        "get-upcoming-coaching-and-live-session-data-for-learner/<int:user_id>/",
+        views.get_upcoming_coaching_and_live_session_data_for_learner,
+    ),
+    path(
+        "get-upcoming-assessment-data/<int:user_id>/",
+        views.get_upcoming_assessment_data,
+    ),
+    path(
+        "get-just-upcoming-session-data/<int:user_id>/",
+        views.get_just_upcoming_session_data,
+    ),
+    path(
         "get-all-project-purchase-orders-for-finance/<int:project_id>/<str:project_type>/",
         views.get_all_project_purchase_orders_for_finance,
     ),

@@ -42,6 +42,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializers import (
+    CourseEnrollmentWithNamesSerializer,
     CourseSerializer,
     CourseTemplateSerializer,
     TextLessonCreateSerializer,
@@ -1835,9 +1836,10 @@ def create_video_lesson(request):
             }
             video_lesson_serializer = VideoLessonSerializer(data=video_lesson_data)
             if video_lesson_serializer.is_valid():
-                video_lesson_serializer.save()
+                instance =  video_lesson_serializer.save()
+                serializer_depth_one = VideoLessonSerializerDepthOne(instance)
                 return Response(
-                    video_lesson_serializer.data, status=status.HTTP_201_CREATED
+                    serializer_depth_one.data, status=status.HTTP_201_CREATED
                 )
             return Response(
                 video_lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST
@@ -2453,6 +2455,7 @@ class AssignCourseTemplateToBatch(APIView):
                     status="draft",
                     course_template=course_template,
                     batch=batch,
+                    course_image=course_template.course_image
                 )
                 # Duplicate lessons
                 original_lessons = Lesson.objects.filter(
@@ -2703,8 +2706,8 @@ def create_pdf_lesson(request):
                 pdf_lesson_instance = PdfLesson.objects.create(
                     lesson=lesson_instance, content=content, pdf=resources
                 )
-
-                return Response({"message": "PDF lesson created successfully."})
+                serializer_depth_one = PdfLessonSerializer(pdf_lesson_instance)
+                return Response({"message": "PDF lesson created successfully.", "data" : serializer_depth_one.data})
 
             elif course_template_id:
                 course_template_instance = CourseTemplate.objects.get(
@@ -3622,6 +3625,7 @@ def get_nps_project_wise(request):
 
 class GetAllNudgesOfSchedularProjects(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo", "hr")]
+
     def get(self, request, project_id):
         try:
             hr_id = request.query_params.get("hr", None)
@@ -3642,7 +3646,9 @@ class GetAllNudgesOfSchedularProjects(APIView):
                     trigger_date__isnull=False,
                 )
             if hr_id:
-                nudges = nudges.filter(batch__project__hr__id=hr_id,is_switched_on=True)
+                nudges = nudges.filter(
+                    batch__project__hr__id=hr_id, is_switched_on=True
+                )
             data = NudgeSerializer(nudges, many=True).data
             return Response(data)
         except Exception as e:
@@ -4057,6 +4063,17 @@ def update_nudge_status(request, nudge_id):
     nudge.save()
     nudge_serializer = NudgeSerializer(nudge)
     return Response(nudge_serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_released_certificates_for_learner(request, learner_id):
+    course_enrollments = CourseEnrollment.objects.filter(
+        is_certificate_allowed=True, learner__id=learner_id
+    )
+    serializer = CourseEnrollmentWithNamesSerializer(course_enrollments, many=True)
+    return Response(serializer.data)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner")])
