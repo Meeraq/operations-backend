@@ -13,6 +13,7 @@ from api.models import (
     Engagement,
     Goal,
     Sales,
+    Project,
 )
 
 from django.utils import timezone
@@ -147,6 +148,7 @@ class LiveSession(models.Model):
         ("in_person_session", "In Person Session"),
         ("kickoff_session", "Kickoff Session"),
         ("virtual_session", "Virtual Session"),
+        ("pre_study", "Pre Study"),
     ]
 
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
@@ -226,6 +228,51 @@ class SchedularUpdate(models.Model):
 
     def __str__(self):
         return f"{self.project.name} update by {self.pmo.name}"
+
+
+class ProjectContract(models.Model):
+    template_id = models.IntegerField(null=True)
+    title = models.CharField(max_length=100, blank=True)
+    content = models.TextField(blank=True)
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, blank=True, null=True
+    )
+    schedular_project = models.ForeignKey(
+        SchedularProject, on_delete=models.CASCADE, blank=True, null=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, blank=True)
+    reminder_timestamp = models.CharField(max_length=30, blank=True)
+
+    def __str__(self):
+        return f"Contract {self.title} for Project {self.project.name if self.project else self.schedular_project.name}"
+
+
+class CoachContract(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    project_contract = models.ForeignKey(
+        ProjectContract, on_delete=models.CASCADE, blank=True
+    )
+    name_inputed = models.CharField(max_length=100, blank=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True,null=True)
+    schedular_project = models.ForeignKey(
+        SchedularProject, on_delete=models.CASCADE, blank=True, null=True
+    )
+    status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="pending", blank=True
+    )
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    send_date = models.DateField(auto_now_add=True, blank=True)
+    response_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
+
+    def __str__(self):
+        return f"{self.coach.first_name}'s Contract for {self.project.name if self.project else self.schedular_project.name}"
 
 
 class CoachPricing(models.Model):
