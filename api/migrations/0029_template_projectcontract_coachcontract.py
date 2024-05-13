@@ -4,7 +4,9 @@ from django.db import migrations, models
 import django.db.models.deletion
 from django.utils import timezone
 from django.db import transaction
-from api.models import CoachStatus ,Project,Template,ProjectContract,CoachContract
+from api.models import CoachStatus, Project, Template
+from schedularApi.models import ProjectContract, CoachContract
+
 
 def populate_coach_contracts(apps, schema_editor):
     try:

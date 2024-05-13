@@ -357,6 +357,7 @@ urlpatterns = [
         "get-card-data-for-coach-in-skill-project/<int:project_id>/<int:coach_id>",
         views.get_card_data_for_coach_in_skill_project,
     ),
+   
     path(
         "projects/<int:project_id>/check-project-structure-edit-allowed/",
         views.check_if_project_structure_edit_allowed,
