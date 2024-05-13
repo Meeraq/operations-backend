@@ -2152,9 +2152,7 @@ def send_tomorrow_action_items_data():
                 )
                 nudges = NudgeSerializer(nudges, many=True).data
                 for nudge in nudges:
-                    nudge["nudge_scheduled_for"] = nudge["trigger_date"].strftime(
-                        "%d-%m-%Y %H:%M"
-                    )
+                    nudge["nudge_scheduled_for"] = str(nudge["trigger_date"])
                     projects_data[project.name]["nudges"].append(nudge)
 
         assessments = Assessment.objects.filter(
