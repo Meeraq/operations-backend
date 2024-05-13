@@ -126,7 +126,7 @@ def send_reset_password_link(users):
             send_mail_templates(
                 "assessment/assessment_email_to_participant.html",
                 [user_data["email"]],
-                "Meeraq - Welcome to Assessment Platform !",
+                "Meeraq - Welcome to Meeraq Assessment!",
                 {
                     "participant_name": user_data["name"],
                     "link": reset_password_link,
@@ -722,7 +722,7 @@ class AssessmentStatusChange(APIView):
                     # send_mail_templates(
                     #     "assessment/create_password_to_hr.html",
                     #     [hr.email],
-                    #     "Meeraq - Welcome to Assessment Platform !",
+                    #     "Meeraq - Welcome to Meeraq Assessment!",
                     #     {
                     #         "hr_name": hr.first_name,
                     #         "link": create_password_link,
@@ -749,7 +749,7 @@ class AssessmentStatusChange(APIView):
                     #                 send_mail_templates(
                     #                     "assessment/assessment_initial_reminder.html",
                     #                     [participant.email],
-                    #                     "Meeraq - Welcome to Assessment Platform !",
+                    #                     "Meeraq - Welcome to Meeraq Assessment!",
                     #                     {
                     #                         "assessment_name": assessment.participant_view_name,
                     #                         "participant_name": participant.name.title(),
@@ -1526,11 +1526,11 @@ class AddObserverToParticipant(APIView):
             observer_unique_id.unique_id = str(uuid.uuid4())
             observer_unique_id.save()
             observer_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
-            
+
             # send_mail_templates(
             #     "assessment/assessment_email_to_observer.html",
             #     [observer.email],
-            #     "Meeraq - Welcome to Assessment Platform !",
+            #     "Meeraq - Welcome to Meeraq Assessment!",
             #     {
             #         "assessment_name": assessment.participant_view_name,
             #         "participant_name": participants_observer.participant.name,
@@ -1690,7 +1690,7 @@ class ParticipantAddsObserverToAssessment(APIView):
                 send_mail_templates(
                     "assessment/assessment_email_to_observer.html",
                     [observer.email],
-                    "Meeraq - Welcome to Assessment Platform !",
+                    "Meeraq - Welcome to Meeraq Assessment!",
                     {
                         "assessment_name": assessment.participant_view_name,
                         "participant_name": participants_observer.participant.name,
@@ -1925,7 +1925,7 @@ class ReminderMailForObserverByPmoAndParticipant(APIView):
                     send_mail_templates(
                         "assessment/reminder_mail_for_observer_by_pmo_and_participant.html",
                         [observer.email],
-                        "Meeraq - Welcome to Assessment Platform !",
+                        "Meeraq - Welcome to Meeraq Assessment!",
                         {
                             "assessment_name": assessment.participant_view_name,
                             "participant_name": participants_observer.participant.name,
@@ -4147,7 +4147,7 @@ class GetAllLearnersUniqueId(APIView):
             )
 
 
-def getParticipantsResponseStatusForAssessment(assessment):
+def getParticipantsResponseStatusForAssessment(assessment, multiple=False):
     try:
         response_data = []
 
@@ -4198,7 +4198,8 @@ def getParticipantsResponseStatusForAssessment(assessment):
                 response_data.append(data)
             return response_data
         elif assessment.assessment_type == "360":
-            response_data = {"Participants": [], "Observers": []}
+            if not multiple:
+                response_data = {"Participants": [], "Observers": []}
             for participant_observers in assessment.participants_observers.all():
                 participant_responses = ParticipantResponse.objects.filter(
                     assessment=assessment,
@@ -4213,30 +4214,32 @@ def getParticipantsResponseStatusForAssessment(assessment):
                         "Responded" if participant_responses else "Not Responded"
                     ),
                 }
-                response_data["Participants"].append(temp)
+                if multiple:
+                    response_data.append(temp)
+                if not multiple:
+                    response_data["Participants"].append(temp)
+                    # Initialize an empty list to store observer data for each participant
+                    observers_data = []
 
-                # Initialize an empty list to store observer data for each participant
-                observers_data = []
+                    for observer in participant_observers.observers.all():
+                        observer_response = ObserverResponse.objects.filter(
+                            assessment=assessment,
+                            participant__id=participant_observers.participant.id,
+                            observer=observer,
+                        ).first()
+                        observer_data = {
+                            "Participant name": participant_name,
+                            "Participant email": participant_email,
+                            "Observer Name": observer.name,
+                            "Observer Email": observer.email,
+                            "Observer Response": (
+                                "Responded" if observer_response else "Not Responded"
+                            ),
+                        }
+                        observers_data.append(observer_data)
 
-                for observer in participant_observers.observers.all():
-                    observer_response = ObserverResponse.objects.filter(
-                        assessment=assessment,
-                        participant__id=participant_observers.participant.id,
-                        observer=observer,
-                    ).first()
-                    observer_data = {
-                        "Participant name": participant_name,
-                        "Participant email": participant_email,
-                        "Observer Name": observer.name,
-                        "Observer Email": observer.email,
-                        "Observer Response": (
-                            "Responded" if observer_response else "Not Responded"
-                        ),
-                    }
-                    observers_data.append(observer_data)
-
-                # Append observer data for this participant to the response_data
-                response_data["Observers"].extend(observers_data)
+                    # Append observer data for this participant to the response_data
+                    response_data["Observers"].extend(observers_data)
             return response_data
     except Exception as e:
         print(str(e))
@@ -4905,7 +4908,7 @@ class AssessmentsResponseStatusDownload(APIView):
             response_data_for_assessments = {}
             for assessment_id in assessment_ids:
                 assessment = Assessment.objects.get(id=assessment_id)
-                response_data = getParticipantsResponseStatusForAssessment(assessment)
+                response_data = getParticipantsResponseStatusForAssessment(assessment,True)
                 response_data_for_assessments[assessment.name] = response_data
             return Response(response_data_for_assessments)
         except Exception as e:
