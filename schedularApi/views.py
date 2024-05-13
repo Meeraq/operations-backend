@@ -34,6 +34,10 @@ from django.db.models import (
     Q,
     BooleanField,
     CharField,
+    Count,
+    ExpressionWrapper,
+    FloatField,
+    Sum,
 )
 from time import sleep
 import json
@@ -122,6 +126,7 @@ from api.serializers import (
     CoachSerializer,
     FacilitatorDepthOneSerializer,
     ProjectSerializer,
+    FacilitatorSerializerWithNps,
 )
 
 from courses.models import (
@@ -609,7 +614,7 @@ def create_facilitator_pricing(batch, facilitator):
                 duration=live_session.duration,
             )
             if created:
-                facilitator_pricing.price = session["price"]
+                facilitator_pricing.price = session.get("price", 0)
                 facilitator_pricing.save()
 
 
@@ -661,7 +666,7 @@ def create_coach_pricing(batch, coach):
                 order=coaching_session.order,
             )
             if created:
-                coach_pricing.price = session["price"]
+                coach_pricing.price = session.get("price", 0)
                 coach_pricing.save()
                 create_task(
                     {
@@ -1767,6 +1772,22 @@ def create_coach_schedular_availibilty(request):
                     "/slot-request",
                     "Admin has asked your availability!",
                 )
+
+                try:
+                    create_task(
+                        {
+                            "task": "remind_coach_availability",
+                            "priority": "medium",
+                            "status": "pending",
+                            "coach": coach.id,
+                            "request": serializer.data["id"],
+                            "remarks": [],
+                        },
+                        1,
+                    )
+                except Exception as e:
+                    print(str(e))
+
                 from_email = settings.DEFAULT_FROM_EMAIL
                 recipient_list = [coach.email]
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -2370,6 +2391,25 @@ def schedule_session_fixed(request):
                 )
                 booking_id = coach_availability.coach.room_id
                 meeting_location = f"{env('CAAS_APP_URL')}/call/{booking_id}"
+                # tasks = Task.objects.filter(
+                #     task="coachee_book_session",
+                #     status="pending",
+                # )
+                # if tasks:
+                #     tasks.update(status="completed")
+                try:
+                    create_task(
+                        {
+                            "task": "schedular_update_session_status",
+                            "priority": "medium",
+                            "status": "pending",
+                            "coach_id": coach_id,
+                            "remarks": [],
+                        },
+                        1,
+                    )
+                except Exception as e:
+                    print(str(e))
                 # Only send email if project status is ongoing
                 if coaching_session.batch.project.status == "ongoing":
                     attendees = None
@@ -2818,7 +2858,25 @@ def create_coach_availabilities(request):
             serializer.save()
             request.provided_by.append(int(coach_id))
             request.save()
+            tasks = Task.objects.filter(
+                task="remind_coach_availability", status="pending"
+            )
+            if tasks:
+                tasks.update(status="completed")
+            # try:
 
+            #     create_task(
+            #         {
+            #             "task": "coachee_book_session",
+            #             "priority": "medium",
+            #             "status": "pending",
+            #             "engagement": engagement.id,
+            #             "coach_id": coach_id,
+            #         },
+            #         3,
+            #     )
+            # except Exception as e:
+            #     print(str(e))
             # Convert dates from 'YYYY-MM-DD' to 'DD-MM-YYYY' format
             formatted_dates = []
             for date in unique_dates:
@@ -2962,6 +3020,10 @@ def edit_session_status(request, session_id):
         return Response({"error": "Status is required."}, status=400)
     session.status = new_status
     session.save()
+    tasks = Task.objects.filter(
+        task="schedular_update_session_status", status="pending", caas_project=project
+    )
+    tasks.update(status="completed")
     return Response({"message": "Session status updated successfully."}, status=200)
 
 
@@ -3325,20 +3387,22 @@ def send_live_session_link(request):
         )
         if live_session.batch.project.status == "ongoing":
             email_contents.append(
-               {"file_name": "send_live_session_link.html",
-                 "user_email" : learner.email,
-                 "email_subject": "Meeraq - Live Session",
-                 "content" :{
-                    "participant_name": learner.name,
-                    "live_session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
-                    "project_name": live_session.batch.project.name,
-                    "description": (
-                        live_session.description if live_session.description else ""
-                    ),
-                    "meeting_link": live_session.meeting_link,
-                    "is_not_in_person_session": is_not_in_person_session,
-                },
-                 "bcc_emails": []}
+                {
+                    "file_name": "send_live_session_link.html",
+                    "user_email": learner.email,
+                    "email_subject": "Meeraq - Live Session",
+                    "content": {
+                        "participant_name": learner.name,
+                        "live_session_name": f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}",
+                        "project_name": live_session.batch.project.name,
+                        "description": (
+                            live_session.description if live_session.description else ""
+                        ),
+                        "meeting_link": live_session.meeting_link,
+                        "is_not_in_person_session": is_not_in_person_session,
+                    },
+                    "bcc_emails": [],
+                }
             )
     send_emails_in_bulk.delay(email_contents)
     return Response({"message": "Emails sent successfully"})
@@ -3767,13 +3831,23 @@ def add_facilitator(request):
 def get_facilitators(request):
     try:
         # Get all the Coach objects
+        all_fac =  []
         facilitators = Facilitator.objects.filter(is_approved=True)
-
-        # Serialize the Coach objects
-        serializer = FacilitatorSerializer(facilitators, many=True)
-
+        for facilitator in facilitators:
+            overall_answer = Answer.objects.filter(
+                question__type="rating_0_to_10",
+                question__feedbacklesson__live_session__facilitator__id=facilitator.id,
+            )
+            overall_nps = calculate_nps_from_answers(overall_answer)
+            serializer = FacilitatorSerializer(facilitator)
+            all_fac.append({
+                **serializer.data,
+                "overall_nps": overall_nps,
+            })
+        # Serialize the Coach objects   
+        
         # Return the serialized Coach objects as the response
-        return Response(serializer.data, status=200)
+        return Response(all_fac, status=200)
 
     except Exception as e:
         # Return error response if any exception occurs
@@ -5045,6 +5119,9 @@ class GetAllBatchesParticipantDetails(APIView):
 def coach_inside_skill_training_or_not(request, project_id, batch_id):
     try:
         if batch_id == "all":
+            sessions = SchedularSessions.objects.filter(
+                coaching_session__batch__project__id=project_id
+            )
             sessions = SchedularSessions.objects.filter(
                 coaching_session__batch__project__id=project_id
             )
@@ -6404,7 +6481,7 @@ def create_expense(request):
             date_of_expense = request.data.get("date_of_expense")
             live_session = request.data.get("live_session")
             session = request.data.get("session")
-            coach =  request.data.get("coach")
+            coach = request.data.get("coach")
             batch = request.data.get("batch")
             facilitator = request.data.get("facilitator")
             file = request.data.get("file")
@@ -6420,19 +6497,27 @@ def create_expense(request):
                     {"error": "Failed to create expense."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
+            email_name = None
+            expense_name = None
+            project_name = None
+
             if name and date_of_expense and description and amount:
                 if session:
                     session = SessionRequestCaas.objects.get(id=int(session))
-                    coach = Coach.objects.get(id =int(coach) )
+                    coach = Coach.objects.get(id=int(coach))
                     expense = Expense.objects.create(
                         name=name,
                         description=description,
                         date_of_expense=date_of_expense,
                         session=session,
-                        coach =coach,
+                        coach=coach,
                         file=file,
                         amount=amount,
                     )
+                    email_name = f"{coach.first_name} {coach.last_name}"
+                    expense_name = expense.name
+                    project_name = session.project.name
+
                 else:
 
                     facilitator = Facilitator.objects.get(id=int(facilitator))
@@ -6452,9 +6537,9 @@ def create_expense(request):
                         amount=amount,
                     )
 
-                facilitator_name = f"{facilitator.first_name} {facilitator.last_name}"
-                expense_name = expense.name
-                project_name = expense.batch.project.name
+                    email_name = f"{facilitator.first_name} {facilitator.last_name}"
+                    expense_name = expense.name
+                    project_name = expense.batch.project.name
 
                 try:
                     emails = [
@@ -6469,9 +6554,13 @@ def create_expense(request):
                     send_mail_templates(
                         "expenses/expenses_emails.html",
                         emails,
-                        "Verification Required: Facilitators Expenses",
+                        (
+                            "Verification Required: Coaches Expenses"
+                            if session
+                            else "Verification Required: Facilitators Expenses"
+                        ),
                         {
-                            "facilitator_name": facilitator_name,
+                            "facilitator_name": email_name,
                             "expense_name": expense_name,
                             "project_name": project_name,
                             "description": expense.description,
@@ -6485,18 +6574,22 @@ def create_expense(request):
                     for email in email_array:
                         pmo = Pmo.objects.filter(email=email.strip().lower()).first()
                         send_mail_templates(
-                            "pmo_emails/expense_added_by_facilitator.html",
+                            (
+                                "pmo_emails/expense_added_by_coach.html"
+                                if session
+                                else "pmo_emails/expense_added_by_facilitator.html"
+                            ),
                             [email],
                             "Meeraq | Expense Upload Notification",
                             {
                                 "name": pmo.name if pmo else "User",
-                                "project_name": batch.project.name,
-                                "facilitator_name": facilitator.first_name
-                                + " "
-                                + facilitator.last_name,
+                                "project_name": project_name,
+                                "facilitator_name": email_name,
                                 "description": expense.description,
                                 "amount": expense.amount,
-                                "date_of_expense": expense.created_at.strftime("%d/%m/%Y"),
+                                "date_of_expense": expense.created_at.strftime(
+                                    "%d/%m/%Y"
+                                ),
                             },
                             [],
                         )
@@ -6505,8 +6598,8 @@ def create_expense(request):
                     print(str(e))
 
                 return Response(
-                        {"message": "Expense created successfully!"}, status=201
-                    )
+                    {"message": "Expense created successfully!"}, status=201
+                )
             else:
                 return Response(
                     {"error": "Fill in all the required feild"},
@@ -6552,54 +6645,52 @@ def edit_expense_amount(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "facilitator")])
 def edit_expense(request):
     try:
-        name = request.data.get("name")
-        description = request.data.get("description")
-        date_of_expense = request.data.get("date_of_expense")
-        live_session = request.data.get("live_session")
-        batch = request.data.get("batch")
-        facilitator = request.data.get("facilitator")
-        file = request.data.get("file")
-        expense_id = request.data.get("expense_id")
+        data = request.data
+        expense_id = data.get("expense_id")
 
-        if not file:
+        # Ensure all required fields are present
+        required_fields = ["name", "description", "date_of_expense", "file"]
+        if not all(field in data for field in required_fields):
             return Response(
-                {"error": "Please upload file."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                {"error": "Please provide all required fields."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        if not batch or not facilitator:
-            return Response(
-                {"error": "Failed to create expense."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-        if name and date_of_expense and description:
-            facilitator = Facilitator.objects.get(id=int(facilitator))
-            batch = SchedularBatch.objects.get(id=int(batch))
-            if live_session:
-                live_session = LiveSession.objects.filter(id=int(live_session)).first()
 
-            expense = Expense.objects.get(id=int(expense_id))
+        expense = Expense.objects.get(id=int(expense_id))
 
-            expense.name = name
-            expense.description = description
-            expense.date_of_expense = date_of_expense
-            expense.live_session = live_session
-            expense.batch = batch
-            expense.facilitator = facilitator
-            if not file == "null":
-                expense.file = file
+        # Update expense object
+        expense.name = data["name"]
+        expense.description = data["description"]
+        expense.date_of_expense = data["date_of_expense"]
 
-            expense.save()
-
-            return Response({"message": "Expense created successfully!"}, status=201)
+        # Fetch related instances if provided
+        session_id = data.get("session")
+        if session_id:
+            expense.session = SessionRequestCaas.objects.get(id=int(session_id))
+            expense.coach = None
         else:
-            return Response(
-                {"error": "Fill in all the required feild"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            expense.live_session = LiveSession.objects.filter(
+                id=int(data.get("live_session"))
+            ).first()
+            expense.batch = SchedularBatch.objects.get(id=int(data.get("batch")))
+            expense.facilitator = Facilitator.objects.get(
+                id=int(data.get("facilitator"))
             )
+
+        # Update file if provided
+        if data["file"] != "null":
+            expense.file = data["file"]
+
+        expense.save()
+
+        return Response(
+            {"message": "Expense updated successfully!"}, status=status.HTTP_200_OK
+        )
+
     except Exception as e:
         print(str(e))
         return Response(
-            {"error": "Failed to create expense"},
+            {"error": "Failed to update expense."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -6822,6 +6913,124 @@ def check_if_project_structure_edit_allowed(request, project_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get details"}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_coaching_and_live_session_data_for_learner(request, user_id):
+    current_time_seeq = timezone.now()
+    timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+    learner = Learner.objects.get(id=user_id)
+    schedular_sessions = SchedularSessions.objects.filter(learner=learner)
+    available_sessions = schedular_sessions.filter(
+        availibility__end_time__gt=timestamp_milliseconds
+    )
+    live_sessions = LiveSession.objects.filter(
+        batch__learners__id=user_id, date_time__gt=current_time_seeq
+    )
+    upcoming_sessions_data = []
+
+    # LIVE SESSION
+    for live_session in live_sessions:
+        project_name = live_session.batch.project.name
+        session_name = f"{get_live_session_name(live_session.session_type)} {live_session.live_session_number}"
+        facilitator_names = (
+            f"{live_session.facilitator.first_name} {live_session.facilitator.last_name}"
+            if live_session.facilitator
+            else []
+        )
+        session_timing = live_session.date_time
+        room_id = live_session.meeting_link
+        session_data = {
+            "project_name": project_name,
+            "session_name": session_name,
+            "coach_name": facilitator_names,
+            "session_timing": session_timing,
+            "type": "Live Session",
+            "room_id":room_id,
+            "start_time":"",
+            "end_time":"",
+        }
+        upcoming_sessions_data.append(session_data)
+
+    # COACHING SESSION
+    for available_session in available_sessions:
+        project_name = available_session.coaching_session.batch.project.name
+        session_name = available_session.coaching_session.session_type
+        session_type = available_session.coaching_session.session_type
+        session_timing = available_session.availibility.start_time
+        coach_name = (
+            available_session.availibility.coach.first_name
+            + " "
+            + available_session.availibility.coach.last_name
+        )
+        room_id = f"{available_session.availibility.coach.room_id}"
+        start_time=available_session.availibility.start_time
+        end_time=available_session.availibility.end_time
+        session_data = {
+            "project_name": project_name,
+            "session_name": session_name,
+            "coach_name": coach_name,
+            "session_timing": session_timing,
+            "type": "Coaching Session",
+            "room_id": room_id,
+            "start_time":start_time,
+            "end_time":end_time,
+        }
+
+        upcoming_sessions_data.append(session_data)
+
+    return JsonResponse(upcoming_sessions_data, safe=False)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_assessment_data(request, user_id):
+    try:
+        current_time = timezone.now()
+        upcoming_assessment = Assessment.objects.filter(assessment_start_date__gt=current_time, participants_observers__participant__id=user_id).first()
+        
+        if upcoming_assessment:
+            assessment_data = {
+                "assessment_name": upcoming_assessment.participant_view_name,
+                "assessment_type": upcoming_assessment.assessment_type,
+                "assessment_start_date": upcoming_assessment.assessment_start_date,
+            }
+            return Response(assessment_data)
+        else:
+            return Response({"message": "No upcoming assessment found."}, status = 400)
+    
+    except Exception as e:
+        return Response({"message": f"An error occurred: {str(e)}"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_just_upcoming_session_data(request, user_id):
+    try:
+        current_time = int(timezone.now().timestamp() * 1000)
+        learner = Learner.objects.get(id=user_id)
+        sessions = SchedularSessions.objects.filter(
+            availibility__end_time__gt=current_time,
+            learner=learner,
+        ).order_by("availibility__start_time")
+        upcoming_session = sessions.first()
+        
+        # You can customize the response based on whether an upcoming session is found or not
+        if upcoming_session:
+            # Customize the response data according to your requirement
+            response_data = {
+                "session_id": upcoming_session.id,
+                "start_time": upcoming_session.availibility.start_time,
+                # Add more fields as needed
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+        else:
+            return Response({"message": "No upcoming sessions found"}, status=status.HTTP_404_NOT_FOUND)
+    except Learner.DoesNotExist:
+        return Response({"message": "Learner not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({"message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["GET"])

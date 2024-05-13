@@ -1309,6 +1309,17 @@ def fetch_invoices_db(organization_id):
 def get_all_invoices(request):
     try:
         all_invoices = fetch_invoices_db(organization_id)
+        project_id = request.query_params.get("project_id")
+        project_type = request.query_params.get("projectType")
+        if project_id and project_type:
+            purchase_order_ids = get_purchase_order_ids_for_project(
+                project_id, project_type
+            )
+            all_invoices = [
+                invoice
+                for invoice in all_invoices
+                if invoice["purchase_order_id"] in purchase_order_ids
+            ]
         return Response(all_invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -3101,6 +3112,8 @@ def create_sales_order(request):
                     "customer_name": customer_name,
                     "salesperson": salesperson_name,
                     "project_type": "CTT" if ctt else project_type,
+                    "total_amount": salesorder_created["total"],
+                    "currency_symbol":salesorder_created["currency_symbol"],
                 },
                 (
                     (
@@ -3334,8 +3347,8 @@ def add_so_to_project(request, project_type, project_id):
             if len(sales_order_ids) == 0:
                 mapping.sales_order_ids = sales_order_ids
             else:
-                existing_sales_order_ids = mapping.sales_order_ids
-                set_of_sales_order_ids = set(existing_sales_order_ids)
+                # existing_sales_order_ids = mapping.sales_order_ids
+                set_of_sales_order_ids = set()
                 for id in sales_order_ids:
                     set_of_sales_order_ids.add(id)
                 final_list_of_sales_order_ids = list(set_of_sales_order_ids)
@@ -3917,7 +3930,7 @@ def get_client_invoices(request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def expense_coaching_purchase_order_create(request, project_id,coach_id):
+def expense_coaching_purchase_order_create(request, project_id, coach_id):
     try:
         expenses = []
         expenses = Expense.objects.filter(

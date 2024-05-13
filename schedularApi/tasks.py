@@ -867,7 +867,7 @@ def send_assessment_invitation_mail(assessment_id):
                     send_mail_templates(
                         "assessment/assessment_initial_reminder.html",
                         [participant.email],
-                        "Meeraq - Welcome to Assessment Platform !",
+                        "Meeraq - Welcome to Meeraq Assessment!",
                         {
                             "assessment_name": assessment.participant_view_name,
                             "participant_name": participant.name.title(),
@@ -875,10 +875,33 @@ def send_assessment_invitation_mail(assessment_id):
                         },
                         [],
                     )
+                    sleep(3)
+            if assessment.assessment_type == "360":
+                for observer in participant_observers.observers.all():
+                    observer_response = ObserverResponse.objects.filter(
+                        observer=observer, assessment=assessment
+                    ).first()
+                    if not observer_response:
+                        observer_unique_id = ObserverUniqueId.objects.filter(
+                            observer=observer, assessment=assessment
+                        ).first()
+                        observer_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+                        send_mail_templates(
+                            "assessment/assessment_email_to_observer.html",
+                            [observer.email],
+                            "Welcome to Meeraq Assessment!",
+                            {
+                                "assessment_name": assessment.participant_view_name,
+                                "participant_name": participant.name.title(),
+                                "observer_name": observer.name.title(),
+                                "link": observer_link,
+                            },
+                            [],
+                        )
+                        sleep(3)
         except Exception as e:
             print(str(e))
             pass
-        sleep(5)
 
 
 @shared_task
@@ -1660,42 +1683,42 @@ def get_file_extension(url):
 
 
 # runs every day at 8:30 AM
-@shared_task
-def send_nudges():
-    today_date = date.today()
-    nudges = Nudge.objects.filter(
-        trigger_date=today_date,
-        is_sent=False,
-        is_switched_on=True,
-        batch__project__nudges=True,
-        batch__project__status="ongoing",
-    )
-    for nudge in nudges:
-        subject = f"New Nudge: {nudge.name}"
-        message = nudge.content
-        email_message = render_to_string(
-            "nudge/nudge_wrapper.html", {"message": mark_safe(message)}
-        )
-        if nudge.file:
-            attachment_path = nudge.file.url
-            file_content = get_file_content(nudge.file.url)
+# @shared_task
+# def send_nudges():
+#     today_date = date.today()
+#     nudges = Nudge.objects.filter(
+#         trigger_date=today_date,
+#         is_sent=False,
+#         is_switched_on=True,
+#         batch__project__nudges=True,
+#         batch__project__status="ongoing",
+#     )
+#     for nudge in nudges:
+#         subject = f"New Nudge: {nudge.name}"
+#         message = nudge.content
+#         email_message = render_to_string(
+#             "nudge/nudge_wrapper.html", {"message": mark_safe(message)}
+#         )
+#         if nudge.file:
+#             attachment_path = nudge.file.url
+#             file_content = get_file_content(nudge.file.url)
 
-        for learner in nudge.batch.learners.all():
-            email = EmailMessage(
-                subject,
-                email_message,
-                settings.DEFAULT_FROM_EMAIL,
-                [learner.email],
-            )
-            if nudge.file:
-                extension = get_file_extension(nudge.file.url)
-                file_name = f"Attatchment.{extension}"
-                email.attach(file_name, file_content, f"application/{extension}")
-            email.content_subtype = "html"
-            email.send()
-            sleep(5)
-        nudge.is_sent = True
-        nudge.save()
+#         for learner in nudge.batch.learners.all():
+#             email = EmailMessage(
+#                 subject,
+#                 email_message,
+#                 settings.DEFAULT_FROM_EMAIL,
+#                 [learner.email],
+#             )
+#             if nudge.file:
+#                 extension = get_file_extension(nudge.file.url)
+#                 file_name = f"Attatchment.{extension}"
+#                 email.attach(file_name, file_content, f"application/{extension}")
+#             email.content_subtype = "html"
+#             email.send()
+#             sleep(5)
+#         nudge.is_sent = True
+#         nudge.save()
 
 
 @shared_task
@@ -2146,9 +2169,7 @@ def send_tomorrow_action_items_data():
                 )
                 nudges = NudgeSerializer(nudges, many=True).data
                 for nudge in nudges:
-                    nudge["nudge_scheduled_for"] = nudge["trigger_date"].strftime(
-                        "%d-%m-%Y %H:%M"
-                    )
+                    nudge["nudge_scheduled_for"] = str(nudge["trigger_date"])
                     projects_data[project.name]["nudges"].append(nudge)
 
         assessments = Assessment.objects.filter(
@@ -2406,6 +2427,7 @@ def send_mail_templates_dynamic_smtp_config(
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
 
+
 @shared_task
 def send_emails_in_bulk(content_of_mails):
     smtp_configs = json.loads(env("SMTP_EMAILS"))  # List of SMTP configurations
@@ -2428,8 +2450,6 @@ def send_emails_in_bulk(content_of_mails):
             )
             sleep(3)
         start_idx = end_idx
-
-
 
 
 @shared_task
@@ -2967,11 +2987,10 @@ def add_batch_to_project(data):
                 batch = SchedularBatch.objects.filter(
                     name=batch_name, project=project
                 ).first()
-                
+
                 if not batch:
                     # If batch does not exist, create a new batch
                     batch = SchedularBatch.objects.create(
-                       
                         name=batch_name, project=project
                     )
                     batch.email_reminder = project.email_reminder
@@ -3054,9 +3073,6 @@ def add_batch_to_project(data):
                     except Exception as e:
                         print(str(e))
                         pass
-                 
-                 
-                    
 
                     # Create Live Sessions and Coaching Sessions based on project structure
 
@@ -3112,3 +3128,53 @@ def add_batch_to_project(data):
 
     except Exception as e:
         print(str(e))
+
+
+@shared_task
+def send_nudge_reminder_on_trigger_date_at_6pm():
+    today = datetime.now().date()
+    nudges = Nudge.objects.filter(
+        trigger_date=today,
+        is_sent=False,
+        is_switched_on=True,
+        batch__project__nudges=True,
+        batch__project__status="ongoing",
+    )
+    for nudge in nudges:
+        learners = nudge.batch.learners.all()
+        for learner in learners:
+            if learner.id not in nudge.learner_ids:
+                nudge_id = nudge.unique_id
+                send_whatsapp_message_template(
+                    learner.phone,
+                    {
+                        "broadcast_name": "send_nudge_reminder_on_trigger_date_at_6pm",
+                        "parameters": [
+                            {
+                                "name": "learner_name",
+                                "value": learner.name,
+                            },
+                            {
+                                "name": "nudge_name",
+                                "value": nudge.name,
+                            },
+                            {
+                                "name": "nudge_id",
+                                "value": nudge_id,
+                            },
+                        ],
+                        "template_name": "nudge_reminder_at6",
+                    },
+                )
+                send_mail_templates(
+                    "coachee_emails/nudge_reminder.html",
+                    [learner.email],
+                    f"Meeraq: Your Monthly Nudge: {nudge.name} ",
+                    {
+                        "learner_name": learner.name.title(),
+                        "nudge_name": nudge.name.title(),
+                        "link": env("CAAS_APP_URL"),
+                    },
+                    [],
+                )
+                sleep(5)
