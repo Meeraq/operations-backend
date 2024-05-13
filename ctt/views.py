@@ -310,8 +310,7 @@ def sales_persons_finances(request):
             continue
         salesperson = order.salesperson_name
         salesperson_id = order.salesperson_id
-        # amount = order["total"]
-        salesperson_totals[salesperson_id]["salesperson"] += salesperson
+        salesperson_totals[salesperson_id]["salesperson"] = salesperson
         salesperson_totals[salesperson_id]["total"] += 1
 
         if batch in l1_batches:
@@ -487,12 +486,15 @@ def get_all_finance(request):
 
             pending_amount = total - paid_amount
 
-            if paid_amount == 0:
-                payment_status = "Not Paid"
-            if total == paid_amount:
-                payment_status = "Paid"
+            if salesorders.count() == 0:
+                payment_status = "N/A"
             else:
-                payment_status = "Partially Paid"
+                if paid_amount == 0:
+                    payment_status = "Not Paid"
+                elif total == paid_amount:
+                    payment_status = "Paid"
+                else:
+                    payment_status = "Partially Paid"
 
             temp = {
                 "index": index,
@@ -651,12 +653,15 @@ def get_ctt_salesperson_individual(request, salesperson_id):
                             all_invoices_paid.append(False)
 
                 pending_amount = total - paid_amount
-                if paid_amount == 0:
-                    payment_status = "Not Paid"
-                if total == paid_amount:
-                    payment_status = "Paid"
+                if salesorders.count() == 0:
+                    payment_status = "N/A"
                 else:
-                    payment_status = "Partially Paid"
+                    if paid_amount == 0:
+                        payment_status = "Not Paid"
+                    elif total == paid_amount:
+                        payment_status = "Paid"
+                    else:
+                        payment_status = "Partially Paid"
 
                 temp = {
                     "index": index,
