@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0061_remove_projectcontract_project_delete_coachcontract_and_more'),
+        ('schedularApi', '0030_handoverdetails_billing_instructions_and_more'),
     ]
 
     operations = [

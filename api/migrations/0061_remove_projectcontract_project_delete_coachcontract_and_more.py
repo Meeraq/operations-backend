@@ -50,6 +50,7 @@ def update_contracts(apps, schema):
 class Migration(migrations.Migration):
 
     dependencies = [
+        ('api', '0060_coachprofileshare_and_more'),
         ("schedularApi", "0031_alter_livesession_session_type_projectcontract_and_more"),
     ]
 
