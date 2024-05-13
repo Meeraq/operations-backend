@@ -39,7 +39,10 @@ from .models import (
     SuperAdmin,
     Facilitator,
     Finance,
-    Task,
+    Sales,
+    TableHiddenColumn,
+    CTTPmo,
+    CoachProfileShare,
 )
 
 from schedularApi.models import ProjectContract, CoachContract
@@ -87,4 +90,7 @@ admin.site.register(Role)
 admin.site.register(APILog)
 admin.site.register(SuperAdmin)
 admin.site.register(Finance)
-admin.site.register(Task)
+admin.site.register(Sales)
+admin.site.register(TableHiddenColumn)
+admin.site.register(CTTPmo)
+admin.site.register(CoachProfileShare)

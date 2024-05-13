@@ -37,7 +37,10 @@ from .models import (
     SuperAdmin,
     Facilitator,
     APILog,
-    Task,
+    Sales,
+    CTTPmo,
+    Leader,
+    CoachProfileShare,
 )
 from django.contrib.auth.models import User
 from schedularApi.models import ProjectContract, CoachContract
@@ -56,9 +59,23 @@ class PmoDepthOneSerializer(serializers.ModelSerializer):
         depth = 1
 
 
+class CTTPmoDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTPmo
+        fields = "__all__"
+        depth = 1
+
+
 class SuperAdminDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = SuperAdmin
+        fields = "__all__"
+        depth = 1
+
+
+class SalesDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Sales
         fields = "__all__"
         depth = 1
 
@@ -110,6 +127,15 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 
 class ProjectDepthTwoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Project
+        fields = "__all__"
+        depth = 2
+
+
+class ProjectDepthTwoSerializerArchiveCheck(serializers.ModelSerializer):
+    is_archive_enabled = serializers.BooleanField()
+
     class Meta:
         model = Project
         fields = "__all__"
@@ -252,6 +278,12 @@ class GoalSerializer(serializers.ModelSerializer):
     class Meta:
         model = Goal
         fields = ["id", "name", "status", "engagement"]
+
+
+class GoalDescriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Goal
+        fields = ["id", "name", "description", "status", "engagement"]
 
 
 class GetGoalSerializer(serializers.ModelSerializer):
@@ -455,6 +487,25 @@ class PmoSerializerAll(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class CTTPmoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTPmo
+        fields = "__all__"
+
+
+class LeaderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Leader
+        fields = "__all__"
+
+
+class LeaderDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Leader
+        fields = "__all__"
+        depth = 1
+
+
 class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilitator
@@ -463,6 +514,22 @@ class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
 
 
 class FacilitatorSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Facilitator
+        fields = "__all__"
+        
+class FacilitatorSerializerWithNps(serializers.ModelSerializer):
+    overall_nps = serializers.FloatField()
+    class Meta:
+        model = Facilitator
+        fields = "__all__"
+
+
+class FacilitatorSerializerIsVendor(serializers.ModelSerializer):
+    is_vendor = serializers.BooleanField()
+    vendor_id = serializers.CharField()
+
     class Meta:
         model = Facilitator
         fields = "__all__"
@@ -482,7 +549,52 @@ class APILogSerializer(serializers.ModelSerializer):
         fields = ["path", "username", "created_at", "method"]
 
 
-class TaskSerializer(serializers.ModelSerializer):
+class SalesSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Task
+        model = Sales
         fields = "__all__"
+
+
+class CoachProfileShareSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachProfileShare
+        fields = "__all__"
+
+
+class CustomUserSerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ["id", "name", "email"]
+
+    def get_name(self, obj):
+        try:
+            profile = Profile.objects.get(user=obj)
+            if hasattr(profile, "superadmin"):
+                return profile.superadmin.name
+            elif hasattr(profile, "finance"):
+                return profile.finance.name
+            elif hasattr(profile, "pmo"):
+                return profile.pmo.name
+            elif hasattr(profile, "coach"):
+                return profile.coach.first_name + " " + profile.coach.last_name
+            elif hasattr(profile, "facilitator"):
+                return (
+                    profile.facilitator.first_name + " " + profile.facilitator.last_name
+                )
+            elif hasattr(profile, "vendor"):
+                return profile.vendor.name
+            elif hasattr(profile, "learner"):
+                return profile.learner.name
+            # Add more conditions for other profile models if needed
+            else:
+                return ""
+        except Profile.DoesNotExist:
+            return ""
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["id"] = instance.id
+        data["email"] = instance.email
+        return data
