@@ -1106,10 +1106,10 @@ def add_new_pmo(data):
         username = email  # username and email are the same
         password = data.get("password")
         sub_role = data.get("sub_role")
-        # room_id = generate_room_id(email)
+        room_id = generate_room_id(email)
 
         # Check if required data is provided
-        if not all([name, email, phone, username, password]):
+        if not all([name, email, phone, username, password,room_id]):
             return Response(
                 {"error": "All required fields must be provided."}, status=400
             )
@@ -1140,6 +1140,7 @@ def add_new_pmo(data):
                 email=email,
                 phone=phone,
                 sub_role=sub_role,
+                room_id=room_id
             )
 
             name = pmo_user.name
