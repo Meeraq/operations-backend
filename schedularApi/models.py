@@ -322,11 +322,11 @@ class HandoverDetails(models.Model):
         ("meeraq", "Meeraq"),
         ("faculty", "Faculty"),
     ]
-    INVOICE_STATUS_CHOICES =[
-        ("Yes" , "yes"),
-        ("No", "no"),
-        ("Billed", "billed"),
-        ("Partially Billed","partially_billed")
+    INVOICE_STATUS_CHOICES = [
+        ("yes", "Yes"),
+        ("no", "No"),
+        ("billed", "Billed"),
+        ("partially_billed", "Partially Billed"),
     ]
     schedular_project = models.OneToOneField(
         SchedularProject,
@@ -359,7 +359,9 @@ class HandoverDetails(models.Model):
     po_number = models.CharField(max_length=255, blank=True, null=True)
     participant_count = models.IntegerField(default=0, blank=True, null=True)
     coach_fee = models.CharField(max_length=255, blank=True, null=True)
-    invoice_status = models.CharField(max_length=255, choices=INVOICE_STATUS_CHOICES, blank=True, null=True)
+    invoice_status = models.CharField(
+        max_length=255, choices=INVOICE_STATUS_CHOICES, blank=True, null=True
+    )
     reporting_requirements = models.TextField(blank=True, null=True)
     coach_names = models.TextField(blank=True, null=True)
     poc_contact_details = models.TextField(blank=True, null=True)
@@ -385,6 +387,7 @@ class HandoverDetails(models.Model):
     details_of_delivery = models.TextField(blank=True, null=True)
     pre_post_assessment_details = models.TextField(blank=True, null=True)
     other_feedback = models.TextField(blank=True, null=True)
+
     class Meta:
         verbose_name = "Handover Detail"
         verbose_name_plural = "Handover Details"
