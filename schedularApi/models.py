@@ -373,6 +373,12 @@ class HandoverDetails(models.Model):
     is_accepted = models.BooleanField(default=False, blank=True)
     gm_sheet = models.FileField(upload_to="gm_sheets/", blank=True, null=True)
     proposals = models.FileField(upload_to="proposals/", blank=True, null=True)
+    nudge_details = models.TextField(blank=True, null=True)
+    billing_instructions = models.TextField(blank=True, null=True)
+    course_name = models.TextField(blank=True, null=True)
+    details_of_delivery = models.TextField(blank=True, null=True)
+    pre_post_assessment_details = models.TextField(blank=True, null=True)
+    other_feedback = models.TextField(blank=True, null=True)
 
     class Meta:
         verbose_name = "Handover Detail"
@@ -401,6 +407,13 @@ class Task(models.Model):
     caas_project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
+    request = models.ForeignKey(
+        RequestAvailibilty,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         default=None,
