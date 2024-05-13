@@ -126,7 +126,7 @@ def send_reset_password_link(users):
             send_mail_templates(
                 "assessment/assessment_email_to_participant.html",
                 [user_data["email"]],
-                "Meeraq - Welcome to Meeraq Assessment!!",
+                "Meeraq - Welcome to Meeraq Assessment!",
                 {
                     "participant_name": user_data["name"],
                     "link": reset_password_link,
@@ -722,7 +722,7 @@ class AssessmentStatusChange(APIView):
                     # send_mail_templates(
                     #     "assessment/create_password_to_hr.html",
                     #     [hr.email],
-                    #     "Meeraq - Welcome to Meeraq Assessment!!",
+                    #     "Meeraq - Welcome to Meeraq Assessment!",
                     #     {
                     #         "hr_name": hr.first_name,
                     #         "link": create_password_link,
@@ -749,7 +749,7 @@ class AssessmentStatusChange(APIView):
                     #                 send_mail_templates(
                     #                     "assessment/assessment_initial_reminder.html",
                     #                     [participant.email],
-                    #                     "Meeraq - Welcome to Meeraq Assessment!!",
+                    #                     "Meeraq - Welcome to Meeraq Assessment!",
                     #                     {
                     #                         "assessment_name": assessment.participant_view_name,
                     #                         "participant_name": participant.name.title(),
@@ -1530,7 +1530,7 @@ class AddObserverToParticipant(APIView):
             # send_mail_templates(
             #     "assessment/assessment_email_to_observer.html",
             #     [observer.email],
-            #     "Meeraq - Welcome to Meeraq Assessment!!",
+            #     "Meeraq - Welcome to Meeraq Assessment!",
             #     {
             #         "assessment_name": assessment.participant_view_name,
             #         "participant_name": participants_observer.participant.name,
@@ -1690,7 +1690,7 @@ class ParticipantAddsObserverToAssessment(APIView):
                 send_mail_templates(
                     "assessment/assessment_email_to_observer.html",
                     [observer.email],
-                    "Meeraq - Welcome to Meeraq Assessment!!",
+                    "Meeraq - Welcome to Meeraq Assessment!",
                     {
                         "assessment_name": assessment.participant_view_name,
                         "participant_name": participants_observer.participant.name,
@@ -1925,7 +1925,7 @@ class ReminderMailForObserverByPmoAndParticipant(APIView):
                     send_mail_templates(
                         "assessment/reminder_mail_for_observer_by_pmo_and_participant.html",
                         [observer.email],
-                        "Meeraq - Welcome to Meeraq Assessment!!",
+                        "Meeraq - Welcome to Meeraq Assessment!",
                         {
                             "assessment_name": assessment.participant_view_name,
                             "participant_name": participants_observer.participant.name,
