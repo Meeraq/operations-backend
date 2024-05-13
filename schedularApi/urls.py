@@ -14,6 +14,10 @@ urlpatterns = [
         name="create_project_structure",
     ),
     path("create-project-schedular/", views.create_project_schedular),
+    path("handover/<str:project_type>/<int:project_id>/", views.get_project_handover),
+    path("handover/create/", views.create_handover),
+    path("handover/update/", views.update_handover),
+    path("handover/<int:handover_id>/salesorders/", views.get_handover_salesorders),
     path(
         "schedular-batches/",
         views.get_schedular_batches,
@@ -329,7 +333,7 @@ urlpatterns = [
     path("create-expense/", views.create_expense),
     path("edit-expense/", views.edit_expense),
     path(
-        "expenses/<int:batch_id>/<str:usertype>/<int:user_id>/",
+        "expenses/<int:batch_or_project_id>/<str:usertype>/<int:user_id>/",
         views.get_expense_for_facilitator,
     ),
     path(
@@ -341,17 +345,49 @@ urlpatterns = [
         views.edit_expense_amount,
     ),
     path(
-        "get-all-courses-for-all-batches/",
+        "edit-amount-expense/",
+        views.edit_expense_amount,
+    ),
+    path(
+        "get-all-courses-for-all-batches/<int:project_id>/",
         views.get_all_courses_for_all_batches,
         name="get_all_courses_for_all_batches",
+    ),
+    path(
+        "get-card-data-for-coach-in-skill-project/<int:project_id>/<int:coach_id>",
+        views.get_card_data_for_coach_in_skill_project,
     ),
     path(
         "projects/<int:project_id>/check-project-structure-edit-allowed/",
         views.check_if_project_structure_edit_allowed,
     ),
- 
+    path(
+        "get-upcoming-coaching-and-live-session-data-for-learner/<int:user_id>/",
+        views.get_upcoming_coaching_and_live_session_data_for_learner,
+    ),
+    path(
+        "get-upcoming-assessment-data/<int:user_id>/",
+        views.get_upcoming_assessment_data,
+    ),
+    path(
+        "get-just-upcoming-session-data/<int:user_id>/",
+        views.get_just_upcoming_session_data,
+    ),
     path(
         "get-all-project-purchase-orders-for-finance/<int:project_id>/<str:project_type>/",
         views.get_all_project_purchase_orders_for_finance,
+    ),
+    path(
+        "get-project-and-handover/",
+        views.get_project_and_handover,
+        name="get_project_and_handover",
+    ),
+    path("handovers/<int:sales_id>/", views.get_handovers, name="get_handovers"),
+    path("send-mail-to-coaches/", views.send_mail_to_coaches, name="send_mail_to_coaches"),
+    path("handovers/pmo/", views.get_pmo_handovers, name="get_handovers"),
+    path(
+        "update-reminder-in-batch/<int:batch_id>/",
+        views.update_reminder_in_batch,
+        name="update_reminder_in_batch",
     ),
 ]
