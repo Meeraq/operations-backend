@@ -10134,6 +10134,7 @@ def add_extra_session_in_caas(request, learner_id, project_id):
         sessions = SessionRequestCaas.objects.filter(
             project__id=project_id, learner__id=learner_id
         ).order_by("order")
+        engagement = Engagement.objects.filter(project=project, learner=learner).first()
         filtered_sessions = sessions.filter(session_type=session_data["session_type"])
         max_session_number = (
             filtered_sessions.aggregate(Max("session_number"))["session_number__max"]
@@ -10145,6 +10146,7 @@ def add_extra_session_in_caas(request, learner_id, project_id):
         )["billable_session_number__max"]
         max_order = sessions.aggregate(Max("order"))["order__max"]
         session_data = SessionRequestCaas.objects.create(
+            engagement=engagement,
             learner=learner,
             project=project,
             session_duration=session_data["session_duration"],

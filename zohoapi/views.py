@@ -3347,8 +3347,8 @@ def add_so_to_project(request, project_type, project_id):
             if len(sales_order_ids) == 0:
                 mapping.sales_order_ids = sales_order_ids
             else:
-                existing_sales_order_ids = mapping.sales_order_ids
-                set_of_sales_order_ids = set(existing_sales_order_ids)
+                # existing_sales_order_ids = mapping.sales_order_ids
+                set_of_sales_order_ids = set()
                 for id in sales_order_ids:
                     set_of_sales_order_ids.add(id)
                 final_list_of_sales_order_ids = list(set_of_sales_order_ids)
