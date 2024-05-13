@@ -43,6 +43,7 @@ from .serializers import (
     VendorSerializer,
     InvoiceStatusUpdateGetSerializer,
     VendorEditSerializer,
+    ZohoVendorSerializer,
     SalesOrderSerializer,
     SalesOrderGetSerializer,
     PurchaseOrderSerializer,
@@ -1197,6 +1198,21 @@ def get_all_vendors(request):
             {"detail": f"Error fetching vendors: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+    
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("finance")])
+def get_zoho_vendors(request):
+    try:
+        vendors = ZohoVendor.objects.all()
+        serializer = ZohoVendorSerializer(vendors, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"detail": f"Error fetching vendors: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["GET"])
@@ -1838,6 +1854,25 @@ def generate_new_po_number(po_list, regex_to_match):
     new_po_number = f"{regex_to_match}{str(new_number).zfill(4)}"
     return new_po_number
 
+def generate_new_ctt_po_number(po_list, regex_to_match):
+    # pattern to match the purchase order number
+    pattern = rf"^{regex_to_match}\d+$"
+    # Filter out purchase orders with the desired format
+    filtered_pos = [
+        po for po in po_list if re.match(pattern, po["purchaseorder_number"])
+    ]
+    latest_number = 0
+    # Finding the latest number for each year
+    for po in filtered_pos:
+        print(po["purchaseorder_number"].split("/"))
+        _, _, _, po_number = po["purchaseorder_number"].split("/")
+        latest_number = max(latest_number, int(po_number))
+    # Generating the new purchase order number
+    new_number = latest_number + 1
+    new_po_number = f"{regex_to_match}{str(new_number).zfill(4)}"
+    return new_po_number
+
+
 
 def generate_new_so_number(so_list, regex_to_match):
     # pattern to match the sales order number
@@ -1899,7 +1934,7 @@ def get_current_month_start_and_end_date():
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
-def get_po_number_to_create(request):
+def get_po_number_to_create(request, po_type):
     try:
         purchase_orders = PurchaseOrderGetSerializer(
             PurchaseOrder.objects.filter(
@@ -1913,8 +1948,15 @@ def get_po_number_to_create(request):
         # )
         # fetch_purchase_orders(organization_id)
         current_financial_year = get_current_financial_year()
-        regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
-        new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
+        if po_type =="meeraq":
+            regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
+            new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
+        elif po_type == "others":
+            regex_to_match = f"Meeraq/PO/{current_financial_year}/OTH/"
+            new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
+        elif po_type == "ctt":
+            regex_to_match = f"CTT/PO/{current_financial_year}/"
+            new_po_number = generate_new_ctt_po_number(purchase_orders, regex_to_match)
         return Response({"new_po_number": new_po_number})
     except Exception as e:
         print(str(e))
@@ -2019,6 +2061,30 @@ def coching_purchase_order_create(request, coach_id, project_id):
     except Exception as e:
         print(str(e))
         return Response(status=500)
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_purchase_order_for_outside_vendors(request):
+    try:
+        access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        if not access_token:
+            raise Exception(
+                "Access token not found. Please generate an access token first."
+            )
+        api_url = f"{base_url}/purchaseorders?organization_id={organization_id}"
+        auth_header = {"Authorization": f"Bearer {access_token}"}
+        response = requests.post(api_url, headers=auth_header, data=request.data)
+        if response.status_code == 201:
+            purchaseorder_created = response.json().get("purchaseorder")
+            return Response({"message": "Purchase Order created successfully."})
+        else:
+            print(response.json())
+            return Response(status=500)
+    except Exception as e:
+        print(str(e))
+        return Response(status=500)
+
+
 
 
 @api_view(["PUT"])

@@ -68,6 +68,7 @@ urlpatterns = [
     ),
     path("add/vendor/", views.add_vendor),
     path("vendors/", views.get_all_vendors),
+    path("zoho-vendors/", views.get_zoho_vendors),
     path(
         "get-all-purchase-orders/",
         views.get_all_purchase_orders,
@@ -144,7 +145,7 @@ urlpatterns = [
         name="update_purchase_order",
     ),
     path(
-        "po-number/meeraq/",
+        "po-number/<str:po_type>/",
         views.get_po_number_to_create,
         name="get_po_number_to_create",
     ),
@@ -166,6 +167,10 @@ urlpatterns = [
     path(
         "coching-purchase-order/create/<int:coach_id>/<int:project_id>/",
         views.coching_purchase_order_create,
+    ),
+    path(
+        "purchase-order/outside/create/",
+        views.create_purchase_order_for_outside_vendors,
     ),
     path(
         "coching-purchase-order/update/<int:coach_id>/<int:project_id>/",
