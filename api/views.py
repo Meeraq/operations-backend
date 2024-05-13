@@ -250,6 +250,8 @@ def get_live_session_name(session_type):
         session_name = "Check In Session"
     elif session_type == "in_person_session":
         session_name = "In Person Session"
+    elif session_type == "pre_study":
+        session_name = "Pre Study"
     elif session_type == "kickoff_session":
         session_name = "Kickoff Session"
     elif session_type == "virtual_session":

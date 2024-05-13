@@ -244,6 +244,8 @@ def get_live_session_name(session_type):
         session_name = "Check In Session"
     elif session_type == "in_person_session":
         session_name = "In Person Session"
+    elif session_type == "pre_study":
+        session_name = "Pre Study"
     elif session_type == "kickoff_session":
         session_name = "Kickoff Session"
     elif session_type == "virtual_session":
@@ -595,6 +597,7 @@ def create_facilitator_pricing(batch, facilitator):
         if session["session_type"] in [
             "check_in_session",
             "in_person_session",
+            "pre_study",
             "kickoff_session",
             "virtual_session",
             "live_session",
@@ -626,6 +629,7 @@ def delete_facilitator_pricing(batch, facilitator):
         if session["session_type"] in [
             "check_in_session",
             "in_person_session",
+            "pre_study",
             "kickoff_session",
             "virtual_session",
             "live_session",
@@ -692,6 +696,7 @@ def create_batch_calendar(batch):
             "live_session",
             "check_in_session",
             "in_person_session",
+            "pre_study",
             "kickoff_session",
             "virtual_session",
         ]:
@@ -4525,6 +4530,7 @@ def add_new_session_in_project_structure(request):
                     "check_in_session",
                     "in_person_session",
                     "kickoff_session",
+                    "pre_study",
                     "virtual_session",
                 ]:
                     session_number = (
@@ -4583,6 +4589,8 @@ def add_new_session_in_project_structure(request):
                             session_name = "In Person Session"
                         elif live_session.session_type == "kickoff_session":
                             session_name = "Kickoff Session"
+                        elif live_session.session_type == "pre_study":
+                            session_name = "Pre Study"
                         elif live_session.session_type == "virtual_session":
                             session_name = "Virtual Session"
                         new_lesson = Lesson.objects.create(
@@ -4779,6 +4787,7 @@ def delete_session_from_project_structure(request):
                     "live_session",
                     "check_in_session",
                     "in_person_session",
+                    "pre_study",
                     "kickoff_session",
                     "virtual_session",
                 ]:
@@ -4850,6 +4859,7 @@ def delete_session_from_project_structure(request):
                     "live_session",
                     "check_in_session",
                     "in_person_session",
+                    "pre_study",
                     "kickoff_session",
                     "virtual_session",
                 ]:
@@ -5819,6 +5829,7 @@ def update_price_in_project_structure(request):
         if session_type in [
             "check_in_session",
             "in_person_session",
+            "pre_study",
             "kickoff_session",
             "virtual_session",
         ]:
@@ -6100,6 +6111,7 @@ def get_project_wise_progress_data(request, project_id):
                         "live_session",
                         "check_in_session",
                         "in_person_session",
+                        "pre_study",
                         "kickoff_session",
                         "virtual_session",
                     ]:
@@ -6209,6 +6221,7 @@ def get_session_progress_data_for_dashboard(request, project_id):
                     "live_session",
                     "check_in_session",
                     "in_person_session",
+                    "pre_study",
                     "kickoff_session",
                     "virtual_session",
                 ]:

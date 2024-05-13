@@ -2874,6 +2874,7 @@ def create_batch_calendar(batch):
             "live_session",
             "check_in_session",
             "in_person_session",
+            "pre_study",
             "kickoff_session",
             "virtual_session",
         ]:
