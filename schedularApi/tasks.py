@@ -850,7 +850,7 @@ def send_assessment_invitation_mail(assessment_id):
                     send_mail_templates(
                         "assessment/assessment_initial_reminder.html",
                         [participant.email],
-                        "Meeraq - Welcome to Assessment Platform !",
+                        "Meeraq - Welcome to Meeraq Assessment!!",
                         {
                             "assessment_name": assessment.participant_view_name,
                             "participant_name": participant.name.title(),
