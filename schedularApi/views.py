@@ -118,6 +118,7 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
+    Offering,
     GmSheet,
     StandardizedFieldGmSheet,
     Benchmark,
@@ -7234,6 +7235,14 @@ def delete_gmsheet(request):
             {"error": "Failed to delete GM Sheet."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+    
+    
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])    
+def get_offerings_by_gmsheet_id(request, gmsheet_id):
+    offerings = Offering.objects.filter(gm_sheet=gmsheet_id)
+    serializer = OfferingSerializer(offerings, many=True)
+    return JsonResponse(serializer.data, safe=False)
 
 
 @api_view(["GET"])
@@ -7249,6 +7258,7 @@ def get_all_gmsheet(request):
             {"error": "Failed to get GM Sheet."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])

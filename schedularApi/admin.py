@@ -19,6 +19,7 @@ from .models import (
     Task,
     GmSheet,
     Benchmark,
+    Offering,
 )
 
 # Register your models here.
@@ -41,4 +42,5 @@ admin.site.register(Expense)
 admin.site.register(HandoverDetails)
 admin.site.register(Task)
 admin.site.register(GmSheet)
+admin.site.register(Offering)
 admin.site.register(Benchmark)

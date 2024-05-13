@@ -1017,6 +1017,8 @@ FIELD_NAME_VALUES = {
     "city": "City",
     "country": "Country",
     "topic": "Topic",
+    "project_type":"Project Type",
+    "product_type":"Product Type"
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [

@@ -14,6 +14,7 @@ urlpatterns = [
     path('update-gmsheet/<int:gmsheet_id>/', views.update_gmsheet),
     path('delete-gmsheet/', views.delete_gmsheet, name='delete_gmsheet'),
     path('all-gmsheet/', views.get_all_gmsheet),
+    path('offerings/<int:gmsheet_id>/', views.get_offerings_by_gmsheet_id, name='offerings-list'),
     path('gmsheet/maxNumber/', views.max_gmsheet_number, name='max_gmsheet_number'),
     path('gmsheet-by-sales/<int:sales_person_id>', views.get_gmsheet_by_sales),
     path('current-or-next-year/', views.get_current_or_next_year, name='current_or_next_year'),
