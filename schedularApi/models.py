@@ -326,6 +326,10 @@ class GmSheet(models.Model):
     project_type = models.CharField(
         max_length=255, choices=PROJECT_TYPE_CHOICES, blank=True, null=True
     )
+    product_type= models.CharField(
+        max_length=255, blank=True, null=True
+    )
+    currency = models.CharField(max_length=255, blank=True, null=True)
     project_name = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     gmsheet_number = models.CharField(max_length=6, blank=True, null=True)
