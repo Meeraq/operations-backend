@@ -14,6 +14,7 @@ from .models import (
     SchedularUpdate,
     Expense,
     HandoverDetails,
+    Task,
 )
 from api.models import Coach
 
@@ -27,6 +28,7 @@ class SchedularProjectSerializer(serializers.ModelSerializer):
 
 class SchedularProjectSerializerArchiveCheck(serializers.ModelSerializer):
     is_archive_enabled = serializers.BooleanField()
+
     class Meta:
         model = SchedularProject
         fields = "__all__"
@@ -214,6 +216,13 @@ class HandoverDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = HandoverDetails
         fields = "__all__"
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = "__all__"
+
 
 
 class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer):
