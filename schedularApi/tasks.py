@@ -3124,7 +3124,7 @@ def send_nudge_reminder_on_trigger_date_at_6pm():
         batch__project__status="ongoing",
     )
     for nudge in nudges:
-        learners = nudge.batch.learners.all()
+        learners = nudge.batch.learners.all() if nudge.batch else []
         for learner in learners:
             if learner.id not in nudge.learner_ids:
                 nudge_id = nudge.unique_id
@@ -3149,6 +3149,7 @@ def send_nudge_reminder_on_trigger_date_at_6pm():
                         "template_name": "nudge_reminder_at6",
                     },
                 )
+                link = f"{env('CAAS_APP_URL')}/view-nudge/{nudge_id}"
                 send_mail_templates(
                     "coachee_emails/nudge_reminder.html",
                     [learner.email],
@@ -3156,7 +3157,7 @@ def send_nudge_reminder_on_trigger_date_at_6pm():
                     {
                         "learner_name": learner.name.title(),
                         "nudge_name": nudge.name.title(),
-                        "link": env("CAAS_APP_URL"),
+                        "link": link,
                     },
                     [],
                 )
