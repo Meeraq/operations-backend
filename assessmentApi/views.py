@@ -2551,7 +2551,7 @@ def get_frequency_analysis_data(
 
 
 class DownloadParticipantResultReport(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo", "learner")]
+    permission_classes = [AllowAny]
 
     def post(self, request):
         try:
