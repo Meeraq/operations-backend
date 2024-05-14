@@ -1438,28 +1438,13 @@ def get_invoices_by_status(request, status):
 
 
 def get_purchase_order_ids_for_project(project_id, project_type):
-    purchase_order_set = set()
-    if project_type == "SEEQ":
-        coach_pricings = CoachPricing.objects.filter(project__id=project_id)
-        facilitator_pricings = FacilitatorPricing.objects.filter(project__id=project_id)
-
-        for coach_pricing in coach_pricings:
-            if coach_pricing.purchase_order_id in purchase_order_set:
-                continue
-            purchase_order_set.add(coach_pricing.purchase_order_id)
-        for facilitator_pricing in facilitator_pricings:
-            if facilitator_pricing.purchase_order_id in purchase_order_set:
-                continue
-            purchase_order_set.add(facilitator_pricing.purchase_order_id)
-    elif project_type == "CAAS":
-        coach_statuses = CoachStatus.objects.filter(project__id=project_id)
-        for coach_status in coach_statuses:
-            if coach_status.purchase_order_id:
-                if coach_status.purchase_order_id in purchase_order_set:
-                    continue
-                purchase_order_set.add(coach_status.purchase_order_id)
-
-    return list(purchase_order_set)
+    purchase_orders = []
+    if project_type == "skill_training" or project_type == "SEEQ":
+        purchase_orders = PurchaseOrder.objects.filter(schedular_project__id=project_id).values_list("purchaseorder_id")
+    elif project_type == "CAAS" or project_type == "COD":
+        purchase_orders = PurchaseOrder.objects.filter(caas_project__id=project_id).values_list("purchaseorder_id")
+    purchase_order_ids = list(purchase_orders)
+    return purchase_order_ids
 
 
 @api_view(["GET"])
@@ -2019,6 +2004,7 @@ def update_purchase_order_status(request, purchase_order_id, status):
         api_url = f"{base_url}/purchaseorders/{purchase_order_id}/status/{status}?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.post(api_url, headers=auth_header)
+        print(response.json())
         if response.status_code == 200:
             create_or_update_po(purchase_order_id)
             return Response({"message": f"Purchase Order changed to {status}."})
@@ -2031,13 +2017,14 @@ def update_purchase_order_status(request, purchase_order_id, status):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def coching_purchase_order_create(request, coach_id, project_id):
+def coching_purchase_order_create(request, project_type, project_id):
     try:
-        coach_status = CoachStatus.objects.get(
-            coach__id=coach_id, project__id=project_id
-        )
-
+        engagements = json.loads(request.data.get("engagements", []))
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        caas_project = project_id if project_type != "skill_training" else None
+        schedular_project = project_id if project_type == "skill_training" else None
+        coach = request.data.get("coach", None)
+        facilitator = request.data.get("facilitator", None)
         if not access_token:
             raise Exception(
                 "Access token not found. Please generate an access token first."
@@ -2048,12 +2035,28 @@ def coching_purchase_order_create(request, coach_id, project_id):
         if response.status_code == 201:
             purchaseorder_created = response.json().get("purchaseorder")
             create_or_update_po(purchaseorder_created["purchaseorder_id"])
-            coach_status.purchase_order_id = purchaseorder_created["purchaseorder_id"]
-            coach_status.purchase_order_no = purchaseorder_created[
-                "purchaseorder_number"
-            ]
-            coach_status.save()
-
+            try:
+                purchase_order = PurchaseOrder.objects.get(
+                    purchaseorder_id=purchaseorder_created["purchaseorder_id"]
+                )
+                serializer = PurchaseOrderSerializer(
+                    purchase_order,
+                    data={
+                        "caas_project": caas_project,
+                        "schedular_project": schedular_project,
+                        "engagements": engagements,
+                        "coach": coach,
+                        "facilitator": facilitator,
+                    },
+                    partial=True,
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                else:
+                    print(serializer.errors)
+            except Exception as e:
+                print(str(e))
+                pass
             return Response({"message": "Purchase Order created successfully."})
         else:
             print(response.json())
@@ -2089,28 +2092,42 @@ def create_purchase_order_for_outside_vendors(request):
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
-def coching_purchase_order_update(request, coach_id, project_id):
+def coching_purchase_order_update(request, purchase_order_id, project_id):
     try:
-        coach_status = CoachStatus.objects.get(
-            coach__id=coach_id, project__id=project_id
-        )
-
+        engagements = json.loads(request.data.get("engagements", []))
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
         if not access_token:
             raise Exception(
                 "Access token not found. Please generate an access token first."
             )
-        api_url = f"{base_url}/purchaseorders/{coach_status.purchase_order_id}?organization_id={organization_id}"
+        api_url = f"{base_url}/purchaseorders/{purchase_order_id}?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.put(api_url, headers=auth_header, data=request.data)
         if response.status_code == 200:
             purchaseorder_created = response.json().get("purchaseorder")
             create_or_update_po(purchaseorder_created["purchaseorder_id"])
-            coach_status.purchase_order_id = purchaseorder_created["purchaseorder_id"]
-            coach_status.purchase_order_no = purchaseorder_created[
-                "purchaseorder_number"
-            ]
-            coach_status.save()
+            try:
+                purchase_order = PurchaseOrder.objects.get(
+                    purchaseorder_id=purchaseorder_created["purchaseorder_id"]
+                )
+                serializer = PurchaseOrderSerializer(
+                    purchase_order,
+                    data={"caas_project": project_id, "engagements": engagements},
+                    partial=True,
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                else:
+                    print(serializer.errors)
+            except Exception as e:
+                print(str(e))
+                pass
+
+            # coach_status.purchase_order_id = purchaseorder_created["purchaseorder_id"]
+            # coach_status.purchase_order_no = purchaseorder_created[
+            #     "purchaseorder_number"
+            # ]
+            # coach_status.save()
 
             return Response({"message": "Purchase Order updated successfully."})
         else:
@@ -2862,31 +2879,29 @@ def get_sales_persons_sales_orders(request, sales_person_id):
 def get_so_for_project(project_id, project_type):
     try:
         sales_order_ids_set = set()
-        if project_type == "CAAS":
+        if project_type == "CAAS" or project_type == 'COD':
             orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                 project__id=project_id
             )
             for mapping in orders_project_mapping:
                 sales_order_ids_set.update(mapping.sales_order_ids)
-        elif project_type == "SEEQ":
+        elif project_type == "SEEQ" or project_type == "skill_training":
             orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                 schedular_project__id=project_id
             )
             for mapping in orders_project_mapping:
                 sales_order_ids_set.update(mapping.sales_order_ids)
-
         sales_order_ids = list(sales_order_ids_set)
-
-        all_sales_orders = []
-        for salesorder_id in sales_order_ids:
-            access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-            if access_token_sales_order:
-                api_url = f"{base_url}/salesorders/{salesorder_id}?organization_id={organization_id}"
-                auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
-                response = requests.get(api_url, headers=auth_header)
-                if response.status_code == 200:
-                    sales_order = response.json().get("salesorder")
-                    all_sales_orders.append(sales_order)
+        all_sales_orders = SalesOrderSerializer(SalesOrder.objects.filter(salesorder_id__in=sales_order_ids), many=True).data
+        # for salesorder_id in sales_order_ids:
+        #     access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        #     if access_token_sales_order:
+        #         api_url = f"{base_url}/salesorders/{salesorder_id}?organization_id={organization_id}"
+        #         auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
+        #         response = requests.get(api_url, headers=auth_header)
+        #         if response.status_code == 200:
+        #             sales_order = response.json().get("salesorder")
+        #             all_sales_orders.append(sales_order)
 
         return all_sales_orders
 
@@ -2899,9 +2914,7 @@ def get_so_for_project(project_id, project_type):
 def get_all_sales_orders_of_project(request, project_id, project_type):
     try:
         all_sales_orders = get_so_for_project(project_id, project_type)
-
         return Response(all_sales_orders)
-
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -3534,16 +3547,18 @@ def get_so_data_of_project(request, project_id, project_type):
         paid_amount = 0
         currency_code = None
         for sales_order in all_sales_orders:
-            total += sales_order["total"]
+            total += Decimal(sales_order["total"])
             currency_code = sales_order["currency_code"]
+            currency_symbol = sales_order['currency_symbol']
 
             for invoice in sales_order["invoices"]:
-                invoiced_amount += invoice["total"]
-            not_invoiced_amount += sales_order["total"] - invoiced_amount
+                print(2,type(invoice["total"]), invoice["total"])
+                invoiced_amount += int(invoice["total"])
+            not_invoiced_amount += Decimal(sales_order["total"]) - int(invoiced_amount)
 
             for invoice in sales_order["invoices"]:
                 if invoice["status"] == "paid":
-                    paid_amount += invoice["total"]
+                    paid_amount += int(invoice["total"])
 
         return Response(
             {
@@ -3553,6 +3568,7 @@ def get_so_data_of_project(request, project_id, project_type):
                 "paid_amount": paid_amount,
                 "currency_code": currency_code,
                 "no_of_sales_orders": len(all_sales_orders),
+                "currency_symbol": currency_symbol
             }
         )
     except Exception as e:
@@ -3949,13 +3965,13 @@ def get_client_invoices(request):
         project_type = request.query_params.get("project_type")
         if project_id:
             sales_order_ids_set = set()
-            if project_type == "CAAS":
+            if project_type == "CAAS" or project_type == "COD":
                 orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                     project__id=project_id
                 )
                 for mapping in orders_project_mapping:
                     sales_order_ids_set.update(mapping.sales_order_ids)
-            elif project_type == "SEEQ":
+            elif project_type == "SEEQ" or project_type == "skill_training":
                 orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                     schedular_project__id=project_id
                 )

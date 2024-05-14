@@ -134,11 +134,11 @@ urlpatterns = [
         views.get_vendor_details_from_zoho,
         name="get_vendor_details_from_zoho",
     ),
-    path(
-        "purchase-order/create/<str:user_type>/<int:facilitator_pricing_id>/",
-        views.create_purchase_order,
-        name="create_purchase_order",
-    ),
+    # path(
+    #     "purchase-order/create/<str:user_type>/<int:facilitator_pricing_id>/",
+    #     views.create_purchase_order,
+    #     name="create_purchase_order",
+    # ),
     path(
         "purchase-order/update/<str:user_type>/<int:facilitator_pricing_id>/",
         views.update_purchase_order,
@@ -165,7 +165,7 @@ urlpatterns = [
         name="update_purchase_order_status",
     ),
     path(
-        "coching-purchase-order/create/<int:coach_id>/<int:project_id>/",
+        "purchase-order/create/<str:project_type>/<int:project_id>/",
         views.coching_purchase_order_create,
     ),
     path(
@@ -173,7 +173,12 @@ urlpatterns = [
         views.create_purchase_order_for_outside_vendors,
     ),
     path(
-        "coching-purchase-order/update/<int:coach_id>/<int:project_id>/",
+        "purchase-order/outside/create/",
+        views.create_purchase_order_for_outside_vendors,
+    ),
+    path(
+        "coching-purchase-order/update/<int:purchase_order_id>/<int:project_id>/",
+        
         views.coching_purchase_order_update,
     ),
     path(
@@ -379,5 +384,4 @@ urlpatterns = [
     ),
     path("line-items/", views.get_line_items, name="get_line_items"),
     path("latest-data/", views.get_latest_data, name="get_latest_data"),
-
 ]
