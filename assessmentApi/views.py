@@ -4888,7 +4888,7 @@ class GetProjectWiseReport(APIView):
 
             response = HttpResponse(pdf, content_type="application/pdf")
             response["Content-Disposition"] = (
-                f'attachment; filename={f"{participant.name} Report.pdf"}'
+                f'attachment; filename={f"Report.pdf"}'
             )
 
             return response
