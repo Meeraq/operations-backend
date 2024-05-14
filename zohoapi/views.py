@@ -2080,6 +2080,7 @@ def create_purchase_order_for_outside_vendors(request):
         response = requests.post(api_url, headers=auth_header, data=request.data)
         if response.status_code == 201:
             purchaseorder_created = response.json().get("purchaseorder")
+            create_or_update_po(purchaseorder_created["purchaseorder_id"])
             return Response({"message": "Purchase Order created successfully."})
         else:
             print(response.json())

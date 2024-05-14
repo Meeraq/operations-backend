@@ -2097,8 +2097,8 @@ def coach_session_list(request, coach_id):
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_coach(request):
     # Get data from request
-    first_name = request.data.get("first_name")
-    last_name = request.data.get("last_name")
+    first_name = request.data.get("first_name").strip().title()
+    last_name = request.data.get("last_name").strip().title()
     email = request.data.get("email", "").strip().lower()
     age = request.data.get("age")
     gender = request.data.get("gender")
@@ -2726,11 +2726,11 @@ def add_hr(request):
             organisation = Organisation.objects.filter(
                 id=request.data.get("organisation")
             ).first()
-
+            
             hr = HR.objects.create(
                 user=profile,
-                first_name=request.data.get("first_name"),
-                last_name=request.data.get("last_name"),
+                first_name=request.data.get("first_name").strip().title(),
+                last_name=request.data.get("last_name").strip().title(),
                 email=email,
                 phone=request.data.get("phone"),
                 organisation=organisation,
@@ -3764,6 +3764,7 @@ def add_learner_to_project(request):
 
         for learner in learners:
 
+           
             create_engagement(learner, project)
             try:
                 tasks = Task.objects.filter(task="add_coachee", caas_project=project)
@@ -3783,7 +3784,7 @@ def add_learner_to_project(request):
                         [learner.email],
                         "Meeraq Coaching | Welcome to Meeraq",
                         {
-                            "name": learner.name,
+                            "name": learner.name.strip().title(),
                             "orgname": project.organisation.name,
                             "email": learner.email,
                         },
@@ -9356,8 +9357,31 @@ class AssignCoachContractAndProjectContract(APIView):
                                         contract_serializer.errors,
                                         status=status.HTTP_400_BAD_REQUEST,
                                     )
-
                 # update the tasks
+                elif schedular_project_id:
+                    current_date = timezone.now().date()
+                    coaches = Coach.objects.filter(schedularbatch__project__id = schedular_project_id).distinct()
+                    for coach in coaches:
+                        existing_coach_contract = CoachContract.objects.filter(
+                                schedular_project=schedular_project, coach=coach.id
+                            ).exists()
+                        if not existing_coach_contract:
+                            contract_data = {
+                                "project_contract": contract.id,
+                                "schedular_project": schedular_project.id,
+                                "status": "pending",
+                                "coach": coach.id,
+                            }
+                            contract_serializer = CoachContractSerializer(
+                                data=contract_data
+                            )
+                            if contract_serializer.is_valid():
+                                contract_serializer.save()
+                            else:
+                                return Response(
+                                    {"error": "Failed to perform task."},
+                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                )        
 
                 return Response(
                     {

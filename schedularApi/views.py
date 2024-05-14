@@ -1904,30 +1904,32 @@ def update_batch(request, batch_id):
 
             if serializer.is_valid():
                 serializer.save()
-                contract = ProjectContract.objects.get(
+                contracts = ProjectContract.objects.filter(
                     schedular_project__id=batch.project.id
                 )
-                for coach in batch.coaches.all():
-                    existing_coach_contract = CoachContract.objects.filter(
-                        schedular_project=batch.project, coach=coach.id
-                    ).exists()
-                    if not existing_coach_contract:
-                        contract_data = {
-                            "project_contract": contract.id,
-                            "schedular_project": batch.project.id,
-                            "status": "pending",
-                            "coach": coach.id,
-                        }
-                        contract_serializer = CoachContractSerializer(
-                            data=contract_data
-                        )
-                        if contract_serializer.is_valid():
-                            contract_serializer.save()
-                        else:
-                            return Response(
-                                {"error": "Failed to perform task."},
-                                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            )        
+                if contracts.exists():
+                    contract = contracts.first()
+                    for coach in batch.coaches.all():
+                        existing_coach_contract = CoachContract.objects.filter(
+                            schedular_project=batch.project, coach=coach.id
+                        ).exists()
+                        if not existing_coach_contract:
+                            contract_data = {
+                                "project_contract": contract.id,
+                                "schedular_project": batch.project.id,
+                                "status": "pending",
+                                "coach": coach.id,
+                            }
+                            contract_serializer = CoachContractSerializer(
+                                data=contract_data
+                            )
+                            if contract_serializer.is_valid():
+                                contract_serializer.save()
+                            else:
+                                return Response(
+                                    {"error": "Failed to perform task."},
+                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                )        
                 try:
                     tasks = Task.objects.filter(
                         task="add_coach", status="pending", schedular_batch=batch
@@ -3699,8 +3701,8 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_facilitator(request):
-    first_name = request.data.get("first_name", "")
-    last_name = request.data.get("last_name", "")
+    first_name = request.data.get("first_name", "").strip().title()
+    last_name = request.data.get("last_name", "").strip().title()
     email = request.data.get("email", "").strip().lower()
     age = request.data.get("age")
     gender = request.data.get("gender", "")
