@@ -157,6 +157,23 @@ def timestamp_to_datetime(timestamp):
     return datetime.utcfromtimestamp(int(timestamp) / 1000.0)
 
 
+def get_live_session_name(session_type):
+    session_name = None
+    if session_type == "live_session":
+        session_name = "Live Session"
+    elif session_type == "check_in_session":
+        session_name = "Check In Session"
+    elif session_type == "in_person_session":
+        session_name = "In Person Session"
+    elif session_type == "kickoff_session":
+        session_name = "Kickoff Session"
+    elif session_type == "virtual_session":
+        session_name = "Virtual Session"
+    elif  session_type == "pre_study":
+        session_name = "Pre Study"
+    return session_name
+
+
 def get_nudges_of_course(course):
     try:
         data = []
@@ -2857,6 +2874,7 @@ def create_batch_calendar(batch):
             "live_session",
             "check_in_session",
             "in_person_session",
+            "pre_study",
             "kickoff_session",
             "virtual_session",
         ]:

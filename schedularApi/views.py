@@ -113,6 +113,8 @@ from .models import (
     SchedularBatch,
     SchedularUpdate,
     CalendarInvites,
+    CoachContract,
+    ProjectContract,
     CoachPricing,
     FacilitatorPricing,
     Expense,
@@ -127,6 +129,7 @@ from api.serializers import (
     FacilitatorDepthOneSerializer,
     ProjectSerializer,
     FacilitatorSerializerWithNps,
+    CoachContractSerializer,
 )
 
 from courses.models import (
@@ -244,6 +247,8 @@ def get_live_session_name(session_type):
         session_name = "Check In Session"
     elif session_type == "in_person_session":
         session_name = "In Person Session"
+    elif session_type == "pre_study":
+        session_name = "Pre Study"
     elif session_type == "kickoff_session":
         session_name = "Kickoff Session"
     elif session_type == "virtual_session":
@@ -595,6 +600,7 @@ def create_facilitator_pricing(batch, facilitator):
         if session["session_type"] in [
             "check_in_session",
             "in_person_session",
+            "pre_study",
             "kickoff_session",
             "virtual_session",
             "live_session",
@@ -626,6 +632,7 @@ def delete_facilitator_pricing(batch, facilitator):
         if session["session_type"] in [
             "check_in_session",
             "in_person_session",
+            "pre_study",
             "kickoff_session",
             "virtual_session",
             "live_session",
@@ -692,6 +699,7 @@ def create_batch_calendar(batch):
             "live_session",
             "check_in_session",
             "in_person_session",
+            "pre_study",
             "kickoff_session",
             "virtual_session",
         ]:
@@ -701,13 +709,27 @@ def create_batch_calendar(batch):
                 ).count()
                 + 1
             )
-            live_session = LiveSession.objects.create(
-                batch=batch,
-                live_session_number=session_number,
-                order=order,
-                duration=duration,
-                session_type=session_type,
-            )
+            if session_type == "pre_study":
+                facilitator = Facilitator.objects.filter(
+                    email=env("PRE_STUDY_FACILITATOR")
+                ).first()
+
+                live_session = LiveSession.objects.create(
+                    batch=batch,
+                    live_session_number=session_number,
+                    order=order,
+                    duration=duration,
+                    session_type=session_type,
+                    facilitator=facilitator,
+                )
+            else:
+                live_session = LiveSession.objects.create(
+                    batch=batch,
+                    live_session_number=session_number,
+                    order=order,
+                    duration=duration,
+                    session_type=session_type,
+                )
             create_task(
                 {
                     "task": "add_session_details",
@@ -1173,97 +1195,94 @@ def get_batch_calendar(request, batch_id):
 def update_live_session(request, live_session_id):
     try:
         with transaction.atomic():
-            live_session = LiveSession.objects.get(id=live_session_id)
-            existing_date_time = live_session.date_time
-            serializer = LiveSessionSerializer(
-                live_session, data=request.data, partial=True
-            )
-            if serializer.is_valid():
-                update_live_session = serializer.save()
-                try:
-                    tasks = Task.objects.filter(
-                        task="add_session_details",
-                        status="pending",
-                        live_session=live_session,
-                    )
-                    tasks.update(status="completed")
-                except Exception as e:
-                    print(str(e))
-                    pass
+            change_in_all_batches = request.query_params.get("change_in_all_batches")
+            change_in_all_batches_bool = bool(change_in_all_batches)
+            main_live_session = LiveSession.objects.get(id=live_session_id)
+            batches = []
+            if change_in_all_batches:
+                batches = SchedularBatch.objects.filter(
+                    project=main_live_session.batch.project
+                )
+            else:
+                batches = SchedularBatch.objects.filter(id=main_live_session.batch.id)
+            count = 0 
+            for batch in batches:
 
-                current_time = timezone.now()
-                days_difference = (update_live_session.date_time - current_time).days
-
-                if update_live_session.date_time > current_time:
-                    # delete existing task and create new task based on date
-                    update_status_tasks = Task.objects.filter(
-                        task="update_status_of_virtual_session",
-                        live_session=update_live_session,
-                    )
-                    update_status_tasks.delete()
-                    create_task(
-                        {
-                            "task": "update_status_of_virtual_session",
-                            "schedular_project": update_live_session.batch.project.id,
-                            "project_type": "skill_training",
-                            "live_session": update_live_session.id,
-                            "priority": "low",
-                            "status": "pending",
-                            "remarks": [],
-                        },
-                        days_difference + 3,
-                    )
-
+                live_session = LiveSession.objects.get(
+                    batch=batch, order=main_live_session.order
+                )
+                data = request.data
+                if change_in_all_batches and count >= 1:
+                    if "attendees" in request.data:
+                        del request.data["attendees"]
+                existing_date_time = live_session.date_time
+                serializer = LiveSessionSerializer(
+                    live_session, data=data, partial=True
+                )
+                count +=1
+                if serializer.is_valid():
+                    update_live_session = serializer.save()
                     try:
-                        scheduled_for = update_live_session.date_time - timedelta(
-                            minutes=30
+                        tasks = Task.objects.filter(
+                            task="add_session_details",
+                            status="pending",
+                            live_session=live_session,
                         )
-                        clocked = ClockedSchedule.objects.create(
-                            clocked_time=scheduled_for
-                        )
-                        # time is utc one here
-                        periodic_task = PeriodicTask.objects.create(
-                            name=f"send_whatsapp_reminder_30_min_before_live_session_{uuid.uuid1()}",
-                            task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
-                            args=[update_live_session.id],
-                            clocked=clocked,
-                            one_off=True,
-                        )
-                        periodic_task.save()
-                        if update_live_session.pt_30_min_before:
-                            update_live_session.pt_30_min_before.enabled = False
-                            update_live_session.pt_30_min_before.save()
-                        live_session.pt_30_min_before = periodic_task
-                        live_session.save()
-
-                        periodic_task = PeriodicTask.objects.create(
-                            name=f"send_live_session_link_whatsapp_to_facilitators_30_min_before{uuid.uuid1()}",
-                            task="schedularApi.tasks.send_live_session_link_whatsapp_to_facilitators_30_min_before",
-                            args=[update_live_session.id],
-                            clocked=clocked,
-                            one_off=True,
-                        )
-                        periodic_task.save()
-                        if update_live_session.pt_30_min_before:
-                            update_live_session.pt_30_min_before.enabled = False
-                            update_live_session.pt_30_min_before.save()
-                        live_session.pt_30_min_before = periodic_task
-                        live_session.save()
+                        tasks.update(status="completed")
                     except Exception as e:
                         print(str(e))
                         pass
-                live_session_lesson = LiveSessionLesson.objects.filter(
-                    live_session=live_session
-                ).first()
-                if live_session_lesson:
-                    lesson = live_session_lesson.lesson
+                    current_time = timezone.now()
+                    days_difference = (update_live_session.date_time - current_time).days
+                    if update_live_session.date_time > current_time:
+                        try:
+                            scheduled_for = update_live_session.date_time - timedelta(
+                                minutes=30
+                            )
+                            clocked = ClockedSchedule.objects.create(
+                                clocked_time=scheduled_for
+                            )
+                            # time is utc one here
+                            periodic_task = PeriodicTask.objects.create(
+                                name=f"send_whatsapp_reminder_30_min_before_live_session_{uuid.uuid1()}",
+                                task="schedularApi.tasks.send_whatsapp_reminder_30_min_before_live_session",
+                                args=[update_live_session.id],
+                                clocked=clocked,
+                                one_off=True,
+                            )
+                            periodic_task.save()
+                            if update_live_session.pt_30_min_before:
+                                update_live_session.pt_30_min_before.enabled = False
+                                update_live_session.pt_30_min_before.save()
+                            periodic_task = PeriodicTask.objects.create(
+                                name=f"send_live_session_link_whatsapp_to_facilitators_30_min_before{uuid.uuid1()}",
+                                task="schedularApi.tasks.send_live_session_link_whatsapp_to_facilitators_30_min_before",
+                                args=[update_live_session.id],
+                                clocked=clocked,
+                                one_off=True,
+                            )
+                            periodic_task.save()
+                            if update_live_session.pt_30_min_before:
+                                update_live_session.pt_30_min_before.enabled = False
+                                update_live_session.pt_30_min_before.save()
+                            live_session.pt_30_min_before = periodic_task
+                            live_session.save()
 
-                    lesson.drip_date = live_session.date_time + timedelta(
-                        hours=5, minutes=30
-                    )
+                        except Exception as e:
+                            print(str(e))
+                            pass
+                    live_session_lesson = LiveSessionLesson.objects.filter(
+                        live_session=live_session
+                    ).first()
+                    if live_session_lesson:
+                        lesson = live_session_lesson.lesson
 
-                    lesson.save()
+                        lesson.drip_date = live_session.date_time + timedelta(
+                            hours=5, minutes=30
+                        )
 
+
+                        lesson.save()
                 if update_live_session.batch.project.teams_enabled:
                     if (
                         existing_date_time
@@ -1339,7 +1358,7 @@ def update_live_session(request, live_session_id):
                 if (
                     not update_live_session.batch.project.id == AIR_INDIA_PROJECT_ID
                     and update_live_session.batch.project.status == "ongoing"
-                    and update_live_session.batch.calendar_invites
+                    and update_live_session.batch.project.calendar_invites
                 ):
                     try:
                         learners = live_session.batch.learners.all()
@@ -1870,7 +1889,6 @@ def get_coaches(request):
 def update_batch(request, batch_id):
     existing_coaches = None
     coaches = request.data.get("coaches")
-
     try:
         with transaction.atomic():
             batch = SchedularBatch.objects.get(id=batch_id)
@@ -1886,6 +1904,32 @@ def update_batch(request, batch_id):
 
             if serializer.is_valid():
                 serializer.save()
+                contracts = ProjectContract.objects.filter(
+                    schedular_project__id=batch.project.id
+                )
+                if contracts.exists():
+                    contract = contracts.first()
+                    for coach in batch.coaches.all():
+                        existing_coach_contract = CoachContract.objects.filter(
+                            schedular_project=batch.project, coach=coach.id
+                        ).exists()
+                        if not existing_coach_contract:
+                            contract_data = {
+                                "project_contract": contract.id,
+                                "schedular_project": batch.project.id,
+                                "status": "pending",
+                                "coach": coach.id,
+                            }
+                            contract_serializer = CoachContractSerializer(
+                                data=contract_data
+                            )
+                            if contract_serializer.is_valid():
+                                contract_serializer.save()
+                            else:
+                                return Response(
+                                    {"error": "Failed to perform task."},
+                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                )        
                 try:
                     tasks = Task.objects.filter(
                         task="add_coach", status="pending", schedular_batch=batch
@@ -1899,7 +1943,8 @@ def update_batch(request, batch_id):
     except Exception as e:
         print(str(e))
         return Response(
-            {"error": "Failed to add coach"}, status=status.HTTP_404_NOT_FOUND
+            {"error": "Failed to perform task."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
@@ -4514,6 +4559,7 @@ def add_new_session_in_project_structure(request):
                     "check_in_session",
                     "in_person_session",
                     "kickoff_session",
+                    "pre_study",
                     "virtual_session",
                 ]:
                     session_number = (
@@ -4522,13 +4568,28 @@ def add_new_session_in_project_structure(request):
                         ).count()
                         + 1
                     )
-                    live_session = LiveSession.objects.create(
-                        batch=batch,
-                        live_session_number=session_number,
-                        order=new_session["order"],
-                        duration=new_session["duration"],
-                        session_type=session_type,
-                    )
+
+                    if session_type == "pre_study":
+                        facilitator = Facilitator.objects.filter(
+                            email=env("PRE_STUDY_FACILITATOR")
+                        ).first()
+
+                        live_session = LiveSession.objects.create(
+                            batch=batch,
+                            live_session_number=session_number,
+                            order=new_session["order"],
+                            duration=new_session["duration"],
+                            session_type=session_type,
+                            facilitator=facilitator,
+                        )
+                    else:
+                        live_session = LiveSession.objects.create(
+                            batch=batch,
+                            live_session_number=session_number,
+                            order=new_session["order"],
+                            duration=new_session["duration"],
+                            session_type=session_type,
+                        )
                     create_task(
                         {
                             "task": "add_session_details",
@@ -4557,6 +4618,8 @@ def add_new_session_in_project_structure(request):
                             session_name = "In Person Session"
                         elif live_session.session_type == "kickoff_session":
                             session_name = "Kickoff Session"
+                        elif live_session.session_type == "pre_study":
+                            session_name = "Pre Study"
                         elif live_session.session_type == "virtual_session":
                             session_name = "Virtual Session"
                         new_lesson = Lesson.objects.create(
@@ -4753,6 +4816,7 @@ def delete_session_from_project_structure(request):
                     "live_session",
                     "check_in_session",
                     "in_person_session",
+                    "pre_study",
                     "kickoff_session",
                     "virtual_session",
                 ]:
@@ -4824,6 +4888,7 @@ def delete_session_from_project_structure(request):
                     "live_session",
                     "check_in_session",
                     "in_person_session",
+                    "pre_study",
                     "kickoff_session",
                     "virtual_session",
                 ]:
@@ -5793,6 +5858,7 @@ def update_price_in_project_structure(request):
         if session_type in [
             "check_in_session",
             "in_person_session",
+            "pre_study",
             "kickoff_session",
             "virtual_session",
         ]:
@@ -6074,6 +6140,7 @@ def get_project_wise_progress_data(request, project_id):
                         "live_session",
                         "check_in_session",
                         "in_person_session",
+                        "pre_study",
                         "kickoff_session",
                         "virtual_session",
                     ]:
@@ -6183,6 +6250,7 @@ def get_session_progress_data_for_dashboard(request, project_id):
                     "live_session",
                     "check_in_session",
                     "in_person_session",
+                    "pre_study",
                     "kickoff_session",
                     "virtual_session",
                 ]:
@@ -6792,7 +6860,7 @@ def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
             for s in session_counts
             if s["session_type"] == "mentoring_session"
         )
-
+        print(total_laser_coaching_session)
         # Get merged dates for coaching sessions
         batches = SchedularBatch.objects.filter(project=project)
         merged_dates = get_merged_date_of_coaching_session_for_a_batches(batches)
@@ -6821,25 +6889,31 @@ def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
             else None
         )
 
-        # Count available slots
-        avaliable_solts = CoachSchedularAvailibilty.objects.filter(
-            coach=coach,
-            start_time__gte=start_timestamp,
-            end_time__lte=end_timestamp,
-            is_confirmed=False,
-        )
+        avaliable_solts = []
 
-        # Count booked slots (pending sessions)
+        if start_timestamp and end_timestamp:
+            # Count available slots
+            avaliable_solts = CoachSchedularAvailibilty.objects.filter(
+                coach=coach,
+                start_time__gte=start_timestamp,
+                end_time__lte=end_timestamp,
+                is_confirmed=False,
+            )
+
         booked_slots = SchedularSessions.objects.filter(
-            coaching_session__batch__coaches=coach,
-            coaching_session__batch__project=project,
+            Q(coaching_session__batch__coaches=coach)
+            | Q(coaching_session__batch__coaches__isnull=True),
+            Q(coaching_session__batch__project=project)
+            | Q(coaching_session__batch__project__isnull=True),
             status="pending",
         ).count()
 
         # Count completed sessions
         completed_sessions = SchedularSessions.objects.filter(
-            coaching_session__batch__coaches=coach,
-            coaching_session__batch__project=project,
+            Q(coaching_session__batch__coaches=coach)
+            | Q(coaching_session__batch__coaches__isnull=True),
+            Q(coaching_session__batch__project=project)
+            | Q(coaching_session__batch__project__isnull=True),
             status="completed",
         ).count()
 
@@ -6853,7 +6927,7 @@ def get_card_data_for_coach_in_skill_project(request, project_id, coach_id):
                 "last_end_date": (
                     last_end_date.strftime("%d-%m-%Y") if last_end_date else None
                 ),
-                "available_slots": avaliable_solts.count(),
+                "available_slots": len(avaliable_solts),
                 "booked_slots": booked_slots,
                 "completed_sessions": completed_sessions,
             },

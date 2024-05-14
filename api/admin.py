@@ -28,8 +28,6 @@ from .models import (
     SessionRequestedActivity,
     PastSessionActivity,
     Template,
-    ProjectContract,
-    CoachContract,
     Update,
     UserToken,
     CalendarEvent,
@@ -46,6 +44,8 @@ from .models import (
     CTTPmo,
     CoachProfileShare,
 )
+
+from schedularApi.models import ProjectContract, CoachContract
 
 # Register your models here.
 
