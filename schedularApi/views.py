@@ -442,6 +442,13 @@ def create_handover(request):
         return Response({"error": "Failed to add handover. "}, status=500)
 
 
+
+PROJECT_TYPE_VALUES = {
+    "caas" : "CAAS",
+    "skill_training" : "Skill Training",
+    "COD" : "COD"
+}
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
 def update_handover(request):
@@ -490,21 +497,22 @@ def update_handover(request):
                 {"project_name": project_name},
                 [],  # no bcc
             )
-            if request.query_params.get('handover') == 'accepted':
-            # Send email only if 'handover' parameter is 'accepted'
-                send_mail_templates(
-                    "pmo_emails/accept_handover.html",
-                    [junior_pmo.email, handover_instance.sales.email],
-                    "Handover Accepted: {project_name} - {handover_instance.project_type}",
-                    {
-                        "project_name": project_name,
-                        "project_type": handover_instance.project_type,
-                        "pmo_name": junior_pmo.name,
-                        "sales_name": handover_instance.sales.name,
-                        "sales_number":handover_instance.sales_order_ids
-                    },
-                    ["rajat@meeraq.com", "sujata@meeraq.com", "sales@meeraq.com", "pmo@meeraq.com"],
-                )
+        if request.query_params.get('handover', '') == 'accepted':
+            bcc_emails = ["pmocoaching@meeraq.com", "pmotraining@meeraq.com", "rajat@meeraq.com", "sujata@meeraq.com", "sales@meeraq.com"]
+            project_name = handover_instance.project_name
+            send_mail_templates(
+                "pmo_emails/accept_handover.html",
+                [handover_instance.sales.email if handover_instance.sales else "sales@meeraq.com"],
+                f"Handover Accepted: {PROJECT_TYPE_VALUES[handover_instance.project_type]}",
+                {
+                    "project_name": project_name,
+                    "project_type": PROJECT_TYPE_VALUES[handover_instance.project_type],
+                    "pmo_name": "PMO",
+                    "sales_name": handover_instance.sales.name,
+                    "sales_number":handover_instance.sales_order_ids
+                },
+                bcc_emails if env("ENVIRONMENT") == "PRODUCTION" else ["tech@meeraq.com", "naveen@meeraq.com"],
+            )
 
         return Response(
             {"message": "Handover updated successfully.", "handover": serializer.data},
