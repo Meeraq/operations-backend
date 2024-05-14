@@ -2094,8 +2094,8 @@ def coach_session_list(request, coach_id):
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_coach(request):
     # Get data from request
-    first_name = request.data.get("first_name").capitalize()
-    last_name = request.data.get("last_name").capitalize
+    first_name = request.data.get("first_name").strip().title()
+    last_name = request.data.get("last_name").strip().title()
     email = request.data.get("email", "").strip().lower()
     age = request.data.get("age")
     gender = request.data.get("gender")
@@ -2726,8 +2726,8 @@ def add_hr(request):
             
             hr = HR.objects.create(
                 user=profile,
-                first_name=request.data.get("first_name").capitalize(),
-                last_name=request.data.get("last_name").capitalize(),
+                first_name=request.data.get("first_name").strip().title(),
+                last_name=request.data.get("last_name").strip().title(),
                 email=email,
                 phone=request.data.get("phone"),
                 organisation=organisation,
@@ -3761,7 +3761,7 @@ def add_learner_to_project(request):
 
         for learner in learners:
 
-            learner_name = learner.name.capitalize()
+           
             create_engagement(learner, project)
             try:
                 tasks = Task.objects.filter(task="add_coachee", caas_project=project)
@@ -3781,7 +3781,7 @@ def add_learner_to_project(request):
                         [learner.email],
                         "Meeraq Coaching | Welcome to Meeraq",
                         {
-                            "name": learner.name,
+                            "name": learner.name.strip().title(),
                             "orgname": project.organisation.name,
                             "email": learner.email,
                         },
