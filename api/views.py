@@ -4869,8 +4869,7 @@ def get_coaches_of_learner(request, learner_id):
             coach_name = f"{engagement.coach.first_name} {engagement.coach.last_name}"
             project_name = engagement.project.name
             profile_pic_url = None  # Default to None
-            if engagement.coach.profile_pic:
-                coach_serializer = CoachSerializer(engagement.coach)
+            coach_serializer = CoachSerializer(engagement.coach)
             data.append(
                 {
                     "coach": engagement.coach.id,
