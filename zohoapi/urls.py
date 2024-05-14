@@ -23,10 +23,12 @@ urlpatterns = [
         "get_invoices_with_status/<str:vendor_id>/<str:purchase_order_id>/",
         views.get_invoices_with_status,
     ),
-   
-    path('api/total-revenue/<vendor_id>/', views.get_total_revenue, name='get_total_revenue'),
+    path(
+        "total-revenue/<vendor_id>/",
+        views.get_total_revenue,
+        name="get_total_revenue",
+    ),
     # Other URL patterns for your app
-
     path(
         "get-purchase-order-data/<int:purchaseorder_id>/",
         views.get_purchase_order_data,
@@ -66,6 +68,7 @@ urlpatterns = [
     ),
     path("add/vendor/", views.add_vendor),
     path("vendors/", views.get_all_vendors),
+    path("zoho-vendors/", views.get_zoho_vendors),
     path(
         "get-all-purchase-orders/",
         views.get_all_purchase_orders,
@@ -82,9 +85,19 @@ urlpatterns = [
         name="get_all_invoices",
     ),
     path(
+        "get-invoice/<int:invoice_id>/",
+        views.get_invoice,
+        name="get_invoice",
+    ),
+    path(
         "pmo/invoices/",
         views.get_invoices_for_pmo,
         name="get_all_invoices",
+    ),
+    path(
+        "pmo/pending-invoices/",
+        views.get_pending_invoices_for_pmo,
+        name="get_pending_invoices_for_pmo",
     ),
     path(
         "sales/invoices/",
@@ -132,17 +145,15 @@ urlpatterns = [
         name="update_purchase_order",
     ),
     path(
-        "po-number/meeraq/",
+        "po-number/<str:po_type>/",
         views.get_po_number_to_create,
         name="get_po_number_to_create",
     ),
-    
     path(
         "invoice-number/new/",
         views.get_client_invoice_number_to_create,
         name="get_client_invoice_number_to_create",
     ),
-    
     path(
         "so-number/<str:brand>/",
         views.get_so_number_to_create,
@@ -158,6 +169,10 @@ urlpatterns = [
         views.coching_purchase_order_create,
     ),
     path(
+        "purchase-order/outside/create/",
+        views.create_purchase_order_for_outside_vendors,
+    ),
+    path(
         "coching-purchase-order/update/<int:coach_id>/<int:project_id>/",
         views.coching_purchase_order_update,
     ),
@@ -167,7 +182,23 @@ urlpatterns = [
         name="delete_coaching_purchase_order",
     ),
     path("coach/finances/", views.get_coach_wise_finances),
+    path("facilitator/finances/", views.get_facilitator_wise_finances),
     path("project/finances/", views.get_project_wise_finances),
+    path(
+        "invoices-data/",
+        views.get_all_the_invoices_counts,
+        name="get_all_the_invoices_counts",
+    ),
+    path(
+        "get-individual-vendor-data/<int:vendor_id>/",
+        views.get_individual_vendor_data,
+        name="get_individual_vendor_data",
+    ),
+    path(
+        "get-invoices-for-vendor/<int:vendor_id>/<str:purchase_order_id>/",
+        views.get_invoices_for_vendor,
+        name="get_invoices_for_vendor",
+    ),
     path(
         "purchase-order/delete/<str:user_type>/<str:purchase_order_id>/",
         views.delete_purchase_order,
@@ -177,6 +208,11 @@ urlpatterns = [
         "expense-purchase-order/create/<int:facilitator_id>/<int:batch_or_project_id>/",
         views.expense_purchase_order_create,
     ),
+    path(
+        "expense-coaching-purchase-order/create/<int:project_id>/<int:coach_id>/",
+        views.expense_coaching_purchase_order_create,
+    ),
+    
     path(
         "expense-purchase-order/update/<int:facilitator_id>/<int:batch_or_project_id>/",
         views.expense_purchase_order_update,
@@ -322,8 +358,26 @@ urlpatterns = [
         name="get_so_for_the_project",
     ),
     path(
+        "get-handovers-so/<int:sales_id>/",
+        views.get_handovers_so,
+        name="get_handovers_so",
+    ),
+    path(
         "get-total-so-created-count/<str:sales_person_id>/",
         views.get_total_so_created_count,
         name="get_total_so_created_count",
     ),
+    path(
+        "get-handovers-count/<str:sales_person_id>/",
+        views.get_handovers_count,
+        name="get_handovers_count",
+    ),
+    path(
+        "sales-orders-with-due-invoices/<str:sales_person_id>/",
+        views.sales_orders_with_due_invoices,
+        name="sales_orders_with_due_invoices",
+    ),
+    path("line-items/", views.get_line_items, name="get_line_items"),
+    path("latest-data/", views.get_latest_data, name="get_latest_data"),
+
 ]

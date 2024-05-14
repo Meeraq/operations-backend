@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "schedularApi",
     "assessmentApi",
     "courses",
+    "ctt",
     "rest_framework.authtoken",
     "django_rest_passwordreset",
     "corsheaders",
@@ -111,7 +112,15 @@ DATABASES = {
         "HOST": env("DATABASE_HOST"),
         "PORT": env("DATABASE_PORT"),
         "OPTIONS": {"init_command": "SET sql_mode='STRICT_TRANS_TABLES'"},
-    }
+    },
+    "ctt": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": env("CTT_DATABASE_NAME"),
+        "USER": env("CTT_DATABASE_USER"),
+        "PASSWORD": env("CTT_DATABASE_PASS"),
+        "HOST": env("CTT_DATABASE_HOST"),
+        "PORT": env("CTT_DATABASE_PORT"),
+    },
 }
 
 
@@ -325,10 +334,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.schedule_assessment_reminders",
         "schedule": crontab(hour=0, minute=1),  # Run every day at midnight in UTC
     },
-    "send_nudges": {
-        "task": "schedularApi.tasks.send_nudges",
-        "schedule": crontab(hour=3, minute=0, day_of_week="*"),  # 8:30 AM IST
-    },
+    # "send_nudges": {
+    #     "task": "schedularApi.tasks.send_nudges",
+    #     "schedule": crontab(hour=3, minute=0, day_of_week="*"),  # 8:30 AM IST
+    # },
     "send_live_session_reminder_to_facilitator_one_day_before": {
         "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_one_day_before",
         "schedule": crontab(hour=10, minute=30),  # 4 PM
@@ -336,6 +345,18 @@ CELERY_BEAT_SCHEDULE = {
     "send_live_session_reminder_to_facilitator_on_same_day_morning": {
         "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_on_same_day_morning",
         "schedule": crontab(hour=2, minute=30),  # 8 AM
+    },
+    "update_zoho_data": {
+        "task": "zohoapi.tasks.update_zoho_data",
+        "schedule": crontab(hour=0, minute=1),
+    },
+    "schedule_request_expiry_for_session": {
+        "task": "api.tasks.schedule_request_expiry_for_session",
+        "schedule": crontab(hour=0, minute=1),  # Run every day at midnight in UTC
+    },
+    "send_nudge_reminder_on_trigger_date_at_6pm": {
+        "task": "schedularApi.tasks.send_nudge_reminder_on_trigger_date_at_6pm",
+        "schedule": crontab(hour=12, minute=30, day_of_week="*"),  # 6:00 PM IST
     },
 }
 

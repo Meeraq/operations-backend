@@ -28,8 +28,6 @@ from .models import (
     RemoveCoachActivity,
     PastSessionActivity,
     Template,
-    ProjectContract,
-    CoachContract,
     Update,
     UserToken,
     CalendarEvent,
@@ -39,10 +37,13 @@ from .models import (
     SuperAdmin,
     Facilitator,
     APILog,
-    Task,
     Sales,
+    CTTPmo,
+    Leader,
+    CoachProfileShare,
 )
 from django.contrib.auth.models import User
+from schedularApi.models import ProjectContract, CoachContract
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -54,6 +55,13 @@ class UserSerializer(serializers.ModelSerializer):
 class PmoDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Pmo
+        fields = "__all__"
+        depth = 1
+
+
+class CTTPmoDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTPmo
         fields = "__all__"
         depth = 1
 
@@ -427,6 +435,7 @@ class CoachContractSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+
 class UserTokenSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserToken
@@ -478,6 +487,25 @@ class PmoSerializerAll(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class CTTPmoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CTTPmo
+        fields = "__all__"
+
+
+class LeaderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Leader
+        fields = "__all__"
+
+
+class LeaderDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Leader
+        fields = "__all__"
+        depth = 1
+
+
 class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Facilitator
@@ -487,6 +515,12 @@ class FacilitatorDepthOneSerializer(serializers.ModelSerializer):
 
 class FacilitatorSerializer(serializers.ModelSerializer):
 
+    class Meta:
+        model = Facilitator
+        fields = "__all__"
+        
+class FacilitatorSerializerWithNps(serializers.ModelSerializer):
+    overall_nps = serializers.FloatField()
     class Meta:
         model = Facilitator
         fields = "__all__"
@@ -515,15 +549,15 @@ class APILogSerializer(serializers.ModelSerializer):
         fields = ["path", "username", "created_at", "method"]
 
 
-class TaskSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        fields = "__all__"
-
-
 class SalesSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sales
+        fields = "__all__"
+
+
+class CoachProfileShareSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CoachProfileShare
         fields = "__all__"
 
 
