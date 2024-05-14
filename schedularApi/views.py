@@ -452,6 +452,13 @@ def create_handover(request):
         return Response({"error": "Failed to add handover. "}, status=500)
 
 
+
+PROJECT_TYPE_VALUES = {
+    "caas" : "CAAS",
+    "skill_training" : "Skill Training",
+    "COD" : "COD"
+}
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
 def update_handover(request):
@@ -500,9 +507,25 @@ def update_handover(request):
                 {"project_name": project_name},
                 [],  # no bcc
             )
+        if request.query_params.get('handover', '') == 'accepted':
+            bcc_emails = ["pmocoaching@meeraq.com", "pmotraining@meeraq.com", "rajat@meeraq.com", "sujata@meeraq.com", "sales@meeraq.com"]
+            project_name = handover_instance.project_name
+            send_mail_templates(
+                "pmo_emails/accept_handover.html",
+                [handover_instance.sales.email if handover_instance.sales else "sales@meeraq.com"],
+                f"Handover Accepted: {PROJECT_TYPE_VALUES[handover_instance.project_type]}",
+                {
+                    "project_name": project_name,
+                    "project_type": PROJECT_TYPE_VALUES[handover_instance.project_type],
+                    "pmo_name": "PMO",
+                    "sales_name": handover_instance.sales.name,
+                    "sales_number":handover_instance.sales_order_ids
+                },
+                bcc_emails if env("ENVIRONMENT") == "PRODUCTION" else ["tech@meeraq.com", "naveen@meeraq.com"],
+            )
 
         return Response(
-            {"message": "Handover updated successfully.", "handover": serializer.data},
+            {"message": "Handover updated successfully.", "handover": serializer.data,},
             status=200,
         )
     else:
@@ -3701,8 +3724,8 @@ def project_report_download_coaching_session_wise(request, project_id, batch_id)
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_facilitator(request):
-    first_name = request.data.get("first_name", "")
-    last_name = request.data.get("last_name", "")
+    first_name = request.data.get("first_name", "").strip().title()
+    last_name = request.data.get("last_name", "").strip().title()
     email = request.data.get("email", "").strip().lower()
     age = request.data.get("age")
     gender = request.data.get("gender", "")
@@ -4391,7 +4414,11 @@ def get_live_sessions_by_status(request):
             livesession__facilitator__id=facilitator_id
         )
         queryset = queryset.filter(batch__in=batches)
-
+    
+    learner_id = request.query_params.get("learner_id", None)
+    if learner_id:
+        queryset = queryset.filter(batch__learners__id=learner_id)
+    
     res = []
     for live_session in queryset:
         session_name = get_live_session_name(live_session.session_type)
@@ -7085,56 +7112,26 @@ def get_just_upcoming_session_data(request, user_id):
 @permission_classes([IsAuthenticated])
 def get_all_project_purchase_orders_for_finance(request, project_id, project_type):
     try:
-        purchase_order_set = set()
-        all_purchase_orders = []
-        purchase_orders = PurchaseOrderGetSerializer(
-            PurchaseOrder.objects.filter(
-                Q(created_time__year__gte=2024)
-                | Q(purchaseorder_number__in=purchase_orders_allowed)
-            ),
-            many=True,
-        ).data
         # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data)
         # fetch_purchase_orders(organization_id)
-
-        if project_type == "SEEQ":
-            coach_pricings = CoachPricing.objects.filter(project__id=project_id)
-            facilitator_pricings = FacilitatorPricing.objects.filter(
-                project__id=project_id
-            )
-
-            for coach_pricing in coach_pricings:
-                if coach_pricing.purchase_order_id in purchase_order_set:
-                    continue
-                purchase_order = get_purchase_order(
-                    purchase_orders, coach_pricing.purchase_order_id
-                )
-                all_purchase_orders.append(purchase_order)
-                purchase_order_set.add(coach_pricing.purchase_order_id)
-            for facilitator_pricing in facilitator_pricings:
-                if facilitator_pricing.purchase_order_id in purchase_order_set:
-                    continue
-                purchase_order = get_purchase_order(
-                    purchase_orders, facilitator_pricing.purchase_order_id
-                )
-                all_purchase_orders.append(purchase_order)
-                purchase_order_set.add(facilitator_pricing.purchase_order_id)
-        elif project_type == "CAAS":
-            coach_statuses = CoachStatus.objects.filter(project__id=project_id)
-            for coach_status in coach_statuses:
-                if coach_status.purchase_order_id:
-                    if coach_status.purchase_order_id in purchase_order_set:
-                        continue
-                    purchase_order = get_purchase_order(
-                        purchase_orders, coach_status.purchase_order_id
-                    )
-                    all_purchase_orders.append(purchase_order)
-                    purchase_order_set.add(coach_status.purchase_order_id)
-        return Response(all_purchase_orders)
+        if project_type == "skill_training" or project_type == "SEEQ":
+            purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed), Q(schedular_project__id = project_id)
+            ),
+            many=True,).data
+        elif project_type == "CAAS" or project_type == "COD":
+            purchase_orders = PurchaseOrderGetSerializer(
+            PurchaseOrder.objects.filter(
+                Q(created_time__year__gte=2024)
+                | Q(purchaseorder_number__in=purchase_orders_allowed), Q(caas_project__id = project_id)
+            ),
+            many=True,).data
+        return Response(purchase_orders)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
-
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -7305,8 +7302,9 @@ def get_handovers(request, sales_id):
 def get_pmo_handovers(request):
     try:
         handovers = HandoverDetails.objects.filter(
-            schedular_project__isnull=True, caas_project__isnull=True
+            schedular_project__isnull=True, caas_project__isnull=True, is_drafted=False
         ).order_by("-created_at")
+        print(handovers)
         formatted_handovers = get_formatted_handovers(handovers)
         return Response(formatted_handovers, status=status.HTTP_200_OK)
     except Exception as e:
