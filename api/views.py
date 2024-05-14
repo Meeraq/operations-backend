@@ -9353,8 +9353,31 @@ class AssignCoachContractAndProjectContract(APIView):
                                         contract_serializer.errors,
                                         status=status.HTTP_400_BAD_REQUEST,
                                     )
-
                 # update the tasks
+                elif schedular_project_id:
+                    current_date = timezone.now().date()
+                    coaches = Coach.objects.filter(schedularbatch__project__id = schedular_project_id).distinct()
+                    for coach in coaches:
+                        existing_coach_contract = CoachContract.objects.filter(
+                                schedular_project=schedular_project, coach=coach.id
+                            ).exists()
+                        if not existing_coach_contract:
+                            contract_data = {
+                                "project_contract": contract.id,
+                                "schedular_project": schedular_project.id,
+                                "status": "pending",
+                                "coach": coach.id,
+                            }
+                            contract_serializer = CoachContractSerializer(
+                                data=contract_data
+                            )
+                            if contract_serializer.is_valid():
+                                contract_serializer.save()
+                            else:
+                                return Response(
+                                    {"error": "Failed to perform task."},
+                                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                )        
 
                 return Response(
                     {
