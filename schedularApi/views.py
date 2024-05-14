@@ -1857,7 +1857,7 @@ def add_batch(request, project_id):
             "user_email": request.user.username,
         }
 
-        add_batch_to_project(data)
+        add_batch_to_project.delay(data)
 
         return Response(
             {
