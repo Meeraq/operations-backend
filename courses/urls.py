@@ -413,4 +413,20 @@ urlpatterns = [
         "delete-nudge/<int:nudge_id>/",
         views.delete_nudge,
     ),
+    path(
+        "certificates/released/<int:learner_id>/",
+        views.get_released_certificates_for_learner,
+    ),
+    path(
+        "get-all-nudges-for-that-learner/<int:learner_id>/",
+        views.get_all_nudges_for_that_learner,
+    ),
+    path(
+        "get-nudge-data/<str:nudge_id>/",
+        views.get_nudge_data,
+    ),
+    path(
+        "update-completion-nudge-status/<int:nudge_id>/",
+        views.update_completion_nudge_status,
+    ),
 ]
