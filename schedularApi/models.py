@@ -369,7 +369,12 @@ class HandoverDetails(models.Model):
         ("meeraq", "Meeraq"),
         ("faculty", "Faculty"),
     ]
-
+    INVOICE_STATUS_CHOICES = [
+        ("yes", "Yes"),
+        ("no", "No"),
+        ("billed", "Billed"),
+        ("partially_billed", "Partially Billed"),
+    ]
     schedular_project = models.OneToOneField(
         SchedularProject,
         on_delete=models.SET_NULL,
@@ -382,6 +387,7 @@ class HandoverDetails(models.Model):
     )
     sales = models.ForeignKey(Sales, on_delete=models.SET_NULL, blank=True, null=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
+    pmo = models.ForeignKey(Pmo, null=True, on_delete=models.SET_NULL)
     hr = models.ManyToManyField(HR, blank=True)
     project_type = models.CharField(
         max_length=255, choices=PROJECT_TYPE_CHOICES, blank=True, null=True
@@ -400,7 +406,9 @@ class HandoverDetails(models.Model):
     po_number = models.CharField(max_length=255, blank=True, null=True)
     participant_count = models.IntegerField(default=0, blank=True, null=True)
     coach_fee = models.CharField(max_length=255, blank=True, null=True)
-    invoice_status = models.BooleanField(default=False, blank=True)
+    invoice_status = models.CharField(
+        max_length=255, choices=INVOICE_STATUS_CHOICES, blank=True, null=True
+    )
     reporting_requirements = models.TextField(blank=True, null=True)
     coach_names = models.TextField(blank=True, null=True)
     poc_contact_details = models.TextField(blank=True, null=True)

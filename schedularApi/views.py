@@ -502,7 +502,7 @@ def update_handover(request):
             )
 
         return Response(
-            {"message": "Handover updated successfully.", "handover": serializer.data},
+            {"message": "Handover updated successfully.", "handover": serializer.data,},
             status=200,
         )
     else:
