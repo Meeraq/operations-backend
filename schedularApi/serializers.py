@@ -17,6 +17,7 @@ from .models import (
     Task,
 )
 from api.models import Coach
+from api.models import Sales
 
 
 class SchedularProjectSerializer(serializers.ModelSerializer):
@@ -224,7 +225,6 @@ class TaskSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-
 class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer):
     organisation_name = serializers.SerializerMethodField()
     pmo_name = serializers.SerializerMethodField()
@@ -241,4 +241,4 @@ class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer)
 
     class Meta:
         model = HandoverDetails
-        fields = '__all__'
+        fields = "__all__"

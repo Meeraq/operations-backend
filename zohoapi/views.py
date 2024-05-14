@@ -3540,6 +3540,70 @@ def update_sales_order_status(request, sales_order_id, status):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def get_total_revenue_and_cost(request):
+    try:
+        total_rev = 0
+        total_cost = 0
+        all_order_mapping = OrdersAndProjectMapping.objects.all()
+        unique_sales_order_ids = set()
+        unique_purchase_order_ids = set()
+
+        for order_mapping in all_order_mapping:
+            print(order_mapping)
+            project_sales_orders_ids = order_mapping.sales_order_ids
+            project_purchase_orders_ids = order_mapping.purchase_order_ids
+            # Calculate total invoiced amount for the sales orders of this project
+            expenses = None
+            if order_mapping.project:
+                expenses = Expense.objects.filter(batch__project=order_mapping.project)
+
+            if expenses:
+                for expense in expenses:
+                    if expense.purchase_order_id:
+                        project_purchase_orders_ids.append(expense.purchase_order_id)
+
+            project_total_rev = 0
+            project_total_cost = 0
+            for sales_order_id in project_sales_orders_ids:
+                if sales_order_id in unique_sales_order_ids:
+                    continue
+                else:
+                    print("hey", sales_order_id)
+                    sales_order = SalesOrder.objects.get(salesorder_id=sales_order_id)
+                    for invoice in sales_order.invoices:
+                        project_total_rev += invoice["total"]*sales_order.exchange_rate
+                    unique_sales_order_ids.add(sales_order_id)
+
+            for purchase_order_id in project_purchase_orders_ids:
+                if purchase_order_id in unique_purchase_order_ids:
+                    continue
+                else:
+                    purchase_order = PurchaseOrder.objects.get(
+                        purchaseorder_id=purchase_order_id
+                    )
+                    for bill in purchase_order.bills:
+                        project_total_cost += bill["total"]*purchase_order.exchange_rate
+                    unique_purchase_order_ids.add(purchase_order_id)
+
+            # Add the total invoiced amount to the overall total_rev
+            total_rev += project_total_rev
+            total_cost += project_total_cost
+
+        return Response(
+            {
+                "total_revenue": total_rev,
+                "total_cost": total_cost,
+                "profit": total_rev - total_cost,
+                "profit_percentage": (total_rev - total_cost) / total_rev * 100 if total_rev != 0 else 0,
+            }
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_so_data_of_project(request, project_id, project_type):
     try:
         all_sales_orders = get_so_for_project(project_id, project_type)
