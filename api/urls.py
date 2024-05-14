@@ -185,6 +185,10 @@ urlpatterns = [
         "new/sessions/past/<str:user_type>/<int:user_id>/",
         views.new_get_past_sessions_of_user,
     ),
+     path(
+        "get-session-count/<str:user_type>/<int:user_id>/",
+        views.get_count_sessions,
+    ),
     path("learners/<str:user_type>/<int:user_id>/", views.get_coachee_of_user),
     path("learner/<int:learner_id>/", views.get_learner_data),
     path(
@@ -453,6 +457,10 @@ urlpatterns = [
         "get-coaches-in-project-is-vendor/<int:project_id>/",
         views.get_coaches_in_project_is_vendor,
     ),
+    path(
+        "coachee-selected-coach-ids/<int:project_id>/",
+        views.get_coachee_selected_coach_ids,
+    ),
     path("update-user-roles/", UpdateUserRoles.as_view()),
     path("tasks/", views.get_tasks),
     path("tasks/skill-training/", views.get_skill_training_tasks),
@@ -555,8 +563,13 @@ urlpatterns = [
         views.get_available_credits_without_project_structure,
     ),
     path(
+
         "get-available-credits-of-all-cod-projects/",
         views.get_available_credits_of_all_cod_projects,
+    ),
+    path(
+        "projects/<str:project_type>/<int:project_id>/finalized-coaches-and-facilitators/",
+        views.get_finalized_coaches_and_facilitators_of_project_with_vendor_details,
     ),
     path(
         "get-schedular-projects-of-hr/<int:hr_id>/",

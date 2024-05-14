@@ -87,6 +87,7 @@ from zohoapi.serializers import (
     VendorDepthOneSerializer,
     PurchaseOrderSerializer,
     PurchaseOrderGetSerializer,
+    ZohoVendorSerializer
 )
 from zohoapi.views import get_organization_data, get_vendor, fetch_purchase_orders
 from zohoapi.tasks import (
@@ -194,6 +195,7 @@ from schedularApi.models import (
     CoachingSession,
     LiveSession,
     HandoverDetails,
+    CoachPricing,
     Task,
     Expense,
     CoachContract,
@@ -201,13 +203,14 @@ from schedularApi.models import (
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
+    CoachPricingSerializer,
     TaskSerializer,
     ExpenseSerializerDepthOne,
 )
 from django_rest_passwordreset.models import ResetPasswordToken
 from django_rest_passwordreset.serializers import EmailSerializer
 from django_rest_passwordreset.tokens import get_token_generator
-from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping, PurchaseOrder
+from zohoapi.models import Vendor, InvoiceData, OrdersAndProjectMapping, PurchaseOrder,ZohoVendor
 from courses.models import CourseEnrollment, CoachingSessionsFeedbackResponse, Answer
 from urllib.parse import urlencode
 from django.http import HttpResponseRedirect
@@ -2094,8 +2097,8 @@ def coach_session_list(request, coach_id):
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_coach(request):
     # Get data from request
-    first_name = request.data.get("first_name")
-    last_name = request.data.get("last_name")
+    first_name = request.data.get("first_name").strip().title()
+    last_name = request.data.get("last_name").strip().title()
     email = request.data.get("email", "").strip().lower()
     age = request.data.get("age")
     gender = request.data.get("gender")
@@ -2723,11 +2726,11 @@ def add_hr(request):
             organisation = Organisation.objects.filter(
                 id=request.data.get("organisation")
             ).first()
-
+            
             hr = HR.objects.create(
                 user=profile,
-                first_name=request.data.get("first_name"),
-                last_name=request.data.get("last_name"),
+                first_name=request.data.get("first_name").strip().title(),
+                last_name=request.data.get("last_name").strip().title(),
                 email=email,
                 phone=request.data.get("phone"),
                 organisation=organisation,
@@ -2949,12 +2952,12 @@ def send_consent(request):
 )
 def get_project_details(request, project_type, project_id):
     try:
-        if project_type == "caas":
-            project = Project.objects.get(id=project_id)
-            serializer = ProjectDepthTwoSerializer(project)
-        else:
+        if project_type == "seeq":
             project = SchedularProject.objects.get(id=project_id)
             serializer = SchedularProjectSerializer(project)
+        else:
+            project = Project.objects.get(id=project_id)
+            serializer = ProjectDepthTwoSerializer(project)
         return Response(serializer.data)
     except Exception as e:
         print(str(e))
@@ -3761,6 +3764,7 @@ def add_learner_to_project(request):
 
         for learner in learners:
 
+           
             create_engagement(learner, project)
             try:
                 tasks = Task.objects.filter(task="add_coachee", caas_project=project)
@@ -3780,7 +3784,7 @@ def add_learner_to_project(request):
                         [learner.email],
                         "Meeraq Coaching | Welcome to Meeraq",
                         {
-                            "name": learner.name,
+                            "name": learner.name.strip().title(),
                             "orgname": project.organisation.name,
                             "email": learner.email,
                         },
@@ -4871,8 +4875,7 @@ def get_coaches_of_learner(request, learner_id):
             coach_name = f"{engagement.coach.first_name} {engagement.coach.last_name}"
             project_name = engagement.project.name
             profile_pic_url = None  # Default to None
-            if engagement.coach.profile_pic:
-                coach_serializer = CoachSerializer(engagement.coach)
+            coach_serializer = CoachSerializer(engagement.coach)
             data.append(
                 {
                     "coach": engagement.coach.id,
@@ -4899,10 +4902,7 @@ def create_session_request_by_learner(request, session_id):
     session.save()
     return Response({"message": "Session requested successfully"})
 
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
-def get_session_requests_of_user(request, user_type, user_id):
+def session_requests_of_user(user_type,user_id):
     session_requests = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
@@ -4985,6 +4985,12 @@ def get_session_requests_of_user(request, user_type, user_id):
             & Q(project__hr__id=user_id)
             & ~Q(status="pending")
         )
+    return session_requests    
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
+def get_session_requests_of_user(request, user_type, user_id):
+    session_requests = session_requests_of_user(user_type,user_id)
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
             Engagement.objects.filter(
@@ -5291,26 +5297,23 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     return Response(serializer.data, status=200)
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
-def new_get_upcoming_sessions_of_user(request, user_type, user_id):
+def get_upcoming_session_of_user(user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
-    session_requests = []
     current_time_seeq = timezone.now()
     timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
-    avaliable_sessions = []
+    session_requests = []
+    available_sessions = []
 
     if user_type == "pmo":
         pmo = Pmo.objects.get(id=user_id)
         if pmo.sub_role == "manager":
-
             session_requests = SessionRequestCaas.objects.filter(
                 Q(is_booked=True),
                 Q(confirmed_availability__end_time__gt=current_time),
                 ~Q(status="completed"),
             )
             schedular_sessions = SchedularSessions.objects.all()
-            avaliable_sessions = schedular_sessions.filter(
+            available_sessions = schedular_sessions.filter(
                 availibility__end_time__gt=timestamp_milliseconds
             )
         else:
@@ -5323,7 +5326,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             schedular_sessions = SchedularSessions.objects.filter(
                 coaching_session__batch__project__junior_pmo=pmo
             )
-            avaliable_sessions = schedular_sessions.filter(
+            available_sessions = schedular_sessions.filter(
                 availibility__end_time__gt=timestamp_milliseconds
             )
 
@@ -5338,7 +5341,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
         )
         learner = Learner.objects.get(id=user_id)
         schedular_sessions = SchedularSessions.objects.filter(learner=learner)
-        avaliable_sessions = schedular_sessions.filter(
+        available_sessions = schedular_sessions.filter(
             availibility__end_time__gt=timestamp_milliseconds
         )
     if user_type == "coach":
@@ -5369,7 +5372,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
             schedular_sessions = SchedularSessions.objects.filter(
                 availibility__coach__id=user_id
             )
-        avaliable_sessions = schedular_sessions.filter(
+        available_sessions = schedular_sessions.filter(
             availibility__end_time__gt=timestamp_milliseconds
         )
     if user_type == "hr":
@@ -5383,9 +5386,24 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
         schedular_sessions = SchedularSessions.objects.filter(
             coaching_session__batch__project__hr__id=user_id
         )
-        avaliable_sessions = schedular_sessions.filter(
+        available_sessions = schedular_sessions.filter(
             availibility__end_time__gt=timestamp_milliseconds
         )
+    
+    return session_requests, available_sessions
+
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
+def new_get_upcoming_sessions_of_user(request, user_type, user_id):
+    # current_time = int(timezone.now().timestamp() * 1000)
+    # current_time_seeq = timezone.now()
+    # timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
+    # session_requests = []
+    # avaliable_sessions = []
+    session_requests, available_sessions = get_upcoming_session_of_user(user_type, user_id)
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -5401,7 +5419,7 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     coach_id = None
     if user_type == "coach":
         coach_id = user_id
-    for session in avaliable_sessions:
+    for session in available_sessions:
         session_detail = {
             "id": session.id,
             "batch_name": (
@@ -5513,15 +5531,12 @@ def get_past_sessions_of_user(request, user_type, user_id):
     )
     return Response(serializer.data, status=200)
 
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
-def new_get_past_sessions_of_user(request, user_type, user_id):
+def past_sessions_of_user(user_type, user_id):
     current_time = int(timezone.now().timestamp() * 1000)
-    session_requests = []
     current_time_seeq = timezone.now()
     timestamp_milliseconds = int(current_time_seeq.timestamp() * 1000)
     avaliable_sessions = []
+    session_requests = []
     if user_type == "pmo":
         pmo = Pmo.objects.get(id=user_id)
         if pmo.sub_role == "manager":
@@ -5605,6 +5620,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
         avaliable_sessions = schedular_sessions.filter(
             availibility__end_time__lt=timestamp_milliseconds
         )
+    return session_requests, avaliable_sessions
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
+def new_get_past_sessions_of_user(request, user_type, user_id):
+    session_requests, available_sessions = past_sessions_of_user(user_type, user_id)
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -5616,11 +5637,12 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
         ),
         is_seeq_project=Value(False, output_field=BooleanField()),
     )
+
     session_details = []
     coach_id = None
     if user_type == "coach":
         coach_id = user_id
-    for session in avaliable_sessions:
+    for session in available_sessions:
         session_detail = {
             "id": session.id,
             "batch_name": (
@@ -5674,6 +5696,21 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
         status=200,
     )
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
+def get_count_sessions(request,user_type, user_id):
+    upcoming_session_requests, upcoming_available_sessions = get_upcoming_session_of_user(user_type, user_id)
+    past_session_requests, past_avilable_sessions = past_sessions_of_user(user_type, user_id)
+    request_session_requests = session_requests_of_user(user_type,user_id)
+    upcoming_count = upcoming_session_requests.count() + upcoming_available_sessions.count()
+    past_count = past_session_requests.count() + past_avilable_sessions.count()
+    request_count = request_session_requests.count()
+    return Response({
+        "upcoming_count" : upcoming_count,
+        "past_count":past_count,
+        "request_count":request_count
+    })
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "coach", "hr", "learner")])
@@ -10919,6 +10956,15 @@ def get_purchase_order(purchase_orders, purchase_order_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def get_coachee_selected_coach_ids(request, project_id):
+    coaches = Coach.objects.filter(engagement__project__id = project_id).distinct()
+    coach_ids = []
+    for coach in coaches:
+        coach_ids.append(coach.id)
+    return Response(coach_ids)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_coaches_in_project_is_vendor(request, project_id):
     try:
         project = Project.objects.get(id=project_id)
@@ -11967,6 +12013,91 @@ def get_available_credits_of_all_cod_projects(request):
         print(str(e))
         return Response(
             {"error": "Failed to retrieve data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_finalized_coaches_and_facilitators_of_project_with_vendor_details(request,project_type, project_id):
+    try:
+        data = {
+            'coaches' : [],
+            'facilitators' : []
+        }
+        coaches = []
+        facilitators = []
+        
+        # get all coaches who are selected by coachees || coaches who are selected by HR and coach contract is approved if COD project
+        if project_type  == 'skill_training':
+            coaches = Coach.objects.filter(schedularbatch__project__id = project_id).distinct()
+            facilitators = Facilitator.objects.filter(livesession__batch__project__id=project_id).distinct()
+        else:
+            coaches = Coach.objects.filter(
+                Q(engagement__project__id=project_id) |
+                Q(Q(coachstatus__project__project_type="COD"),
+                Q(coachstatus__project__id=project_id),
+                Q(coachstatus__project__is_project_structure=False),
+                Q(coachstatus__status__hr__status="select"),
+                Q(coachcontract__project__id=project_id),
+                Q(coachcontract__status="approved")
+                )).distinct()
+        
+        for coach in coaches:
+            vendor_id = coach.user.vendor.vendor_id if (coach.user.roles.filter(name = "vendor").exists()) else None
+            vendor = None
+            if vendor_id:
+                try:
+                    vendor = ZohoVendorSerializer(ZohoVendor.objects.get(contact_id=vendor_id)).data
+                except ZohoVendor.DoesNotExist:
+                    pass
+            engagements = []
+            project_structure = []
+            coach_pricings = []
+            if project_type != "skill_training":
+                for engagement in Engagement.objects.filter(coach__id=coach.id,project__id=project_id):
+                    engagements.append({
+                        'learner_name':  engagement.learner.name,
+                        'learner_id' : engagement.learner.id,
+                        'engagement_id' : engagement.id
+                        })
+                coach_status = CoachStatus.objects.get(coach=coach, project__id=project_id)
+                project_structure = coach_status.project_structure
+            else: 
+                pricings = CoachPricing.objects.filter(project__id=project_id, coach=coach)
+                coach_pricings =  CoachPricingSerializer(pricings, many=True).data
+
+            data['coaches'].append({
+                'coach_name': coach.__str__(),
+                'coach_id': coach.id,
+                'vendor': vendor,
+                'vendor_id': vendor_id,
+                'project_structure' : project_structure,
+                'engagements' : engagements,
+                'coach_pricings' : coach_pricings
+            })
+
+        for facilitator in facilitators:
+            vendor_id = facilitator.user.vendor.vendor_id if (facilitator.user.roles.filter(name = "vendor").exists()) else None
+            vendor = None
+            if vendor_id:
+                try:
+                    vendor = ZohoVendorSerializer(ZohoVendor.objects.get(contact_id=vendor_id)).data
+                except ZohoVendor.DoesNotExist:
+                    pass
+            data['facilitators'].append({
+                'facilitator_name': facilitator.__str__(),
+                'facilitator_id': facilitator.id,
+                'vendor': vendor,
+                'vendor_id': vendor_id,
+            })
+        return Response(data)
+    
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get data"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 

@@ -1438,28 +1438,13 @@ def get_invoices_by_status(request, status):
 
 
 def get_purchase_order_ids_for_project(project_id, project_type):
-    purchase_order_set = set()
-    if project_type == "SEEQ":
-        coach_pricings = CoachPricing.objects.filter(project__id=project_id)
-        facilitator_pricings = FacilitatorPricing.objects.filter(project__id=project_id)
-
-        for coach_pricing in coach_pricings:
-            if coach_pricing.purchase_order_id in purchase_order_set:
-                continue
-            purchase_order_set.add(coach_pricing.purchase_order_id)
-        for facilitator_pricing in facilitator_pricings:
-            if facilitator_pricing.purchase_order_id in purchase_order_set:
-                continue
-            purchase_order_set.add(facilitator_pricing.purchase_order_id)
-    elif project_type == "CAAS":
-        coach_statuses = CoachStatus.objects.filter(project__id=project_id)
-        for coach_status in coach_statuses:
-            if coach_status.purchase_order_id:
-                if coach_status.purchase_order_id in purchase_order_set:
-                    continue
-                purchase_order_set.add(coach_status.purchase_order_id)
-
-    return list(purchase_order_set)
+    purchase_orders = []
+    if project_type == "skill_training" or project_type == "SEEQ":
+        purchase_orders = PurchaseOrder.objects.filter(schedular_project__id=project_id).values_list("purchaseorder_id")
+    elif project_type == "CAAS" or project_type == "COD":
+        purchase_orders = PurchaseOrder.objects.filter(caas_project__id=project_id).values_list("purchaseorder_id")
+    purchase_order_ids = list(purchase_orders)
+    return purchase_order_ids
 
 
 @api_view(["GET"])
@@ -1475,6 +1460,7 @@ def get_invoices_by_status_for_founders(request, status):
             )
         res = []
         status_counts = defaultdict(int)
+    
 
         for invoice_data in all_invoices:
             if (
@@ -1485,17 +1471,17 @@ def get_invoices_by_status_for_founders(request, status):
             # if status == "in_review":
             if not invoice_data["bill"] and invoice_data["status"] == "in_review":
                 status_counts["in_review"] += 1
-                if status == "in_review":
+                if status == "in_review" or status == "all" :
                     res.append(invoice_data)
             # elif status == "approved":
-            if not invoice_data["bill"] and invoice_data["status"] == "approved":
+            if not invoice_data["bill"] and invoice_data["status"] == "approved" :
                 status_counts["approved"] += 1
-                if status == "approved":
+                if status == "approved"or status == "all" :
                     res.append(invoice_data)
             # elif status == "rejected":
-            if not invoice_data["bill"] and invoice_data["status"] == "rejected":
+            if not invoice_data["bill"] and invoice_data["status"] == "rejected" :
                 status_counts["rejected"] += 1
-                if status == "rejected":
+                if status == "rejected"or status == "all" :
                     res.append(invoice_data)
             # if status == "accepted":
             if invoice_data["bill"]:
@@ -1504,12 +1490,12 @@ def get_invoices_by_status_for_founders(request, status):
                     and not invoice_data["bill"]["status"] == "paid"
                 ):
                     status_counts["accepted"] += 1
-                    if status == "accepted":
+                    if status == "accepted"  or status == "all":
                         res.append(invoice_data)
             # elif status == "paid":
-            if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid":
+            if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid" or status == "all":
                 status_counts["paid"] += 1
-                if status == "paid":
+                if status == "paid"  or status == "all":
                     res.append(invoice_data)
         return Response({"invoice_counts": status_counts, "invoices": res}, status=200)
 
@@ -2019,6 +2005,7 @@ def update_purchase_order_status(request, purchase_order_id, status):
         api_url = f"{base_url}/purchaseorders/{purchase_order_id}/status/{status}?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.post(api_url, headers=auth_header)
+        print(response.json())
         if response.status_code == 200:
             create_or_update_po(purchase_order_id)
             return Response({"message": f"Purchase Order changed to {status}."})
@@ -2031,13 +2018,14 @@ def update_purchase_order_status(request, purchase_order_id, status):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def coching_purchase_order_create(request, coach_id, project_id):
+def coching_purchase_order_create(request, project_type, project_id):
     try:
-        coach_status = CoachStatus.objects.get(
-            coach__id=coach_id, project__id=project_id
-        )
-
+        engagements = json.loads(request.data.get("engagements", []))
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        caas_project = project_id if project_type != "skill_training" else None
+        schedular_project = project_id if project_type == "skill_training" else None
+        coach = request.data.get("coach", None)
+        facilitator = request.data.get("facilitator", None)
         if not access_token:
             raise Exception(
                 "Access token not found. Please generate an access token first."
@@ -2048,12 +2036,28 @@ def coching_purchase_order_create(request, coach_id, project_id):
         if response.status_code == 201:
             purchaseorder_created = response.json().get("purchaseorder")
             create_or_update_po(purchaseorder_created["purchaseorder_id"])
-            coach_status.purchase_order_id = purchaseorder_created["purchaseorder_id"]
-            coach_status.purchase_order_no = purchaseorder_created[
-                "purchaseorder_number"
-            ]
-            coach_status.save()
-
+            try:
+                purchase_order = PurchaseOrder.objects.get(
+                    purchaseorder_id=purchaseorder_created["purchaseorder_id"]
+                )
+                serializer = PurchaseOrderSerializer(
+                    purchase_order,
+                    data={
+                        "caas_project": caas_project,
+                        "schedular_project": schedular_project,
+                        "engagements": engagements,
+                        "coach": coach,
+                        "facilitator": facilitator,
+                    },
+                    partial=True,
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                else:
+                    print(serializer.errors)
+            except Exception as e:
+                print(str(e))
+                pass
             return Response({"message": "Purchase Order created successfully."})
         else:
             print(response.json())
@@ -2090,28 +2094,42 @@ def create_purchase_order_for_outside_vendors(request):
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
-def coching_purchase_order_update(request, coach_id, project_id):
+def coching_purchase_order_update(request, purchase_order_id, project_id):
     try:
-        coach_status = CoachStatus.objects.get(
-            coach__id=coach_id, project__id=project_id
-        )
-
+        engagements = json.loads(request.data.get("engagements", []))
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
         if not access_token:
             raise Exception(
                 "Access token not found. Please generate an access token first."
             )
-        api_url = f"{base_url}/purchaseorders/{coach_status.purchase_order_id}?organization_id={organization_id}"
+        api_url = f"{base_url}/purchaseorders/{purchase_order_id}?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.put(api_url, headers=auth_header, data=request.data)
         if response.status_code == 200:
             purchaseorder_created = response.json().get("purchaseorder")
             create_or_update_po(purchaseorder_created["purchaseorder_id"])
-            coach_status.purchase_order_id = purchaseorder_created["purchaseorder_id"]
-            coach_status.purchase_order_no = purchaseorder_created[
-                "purchaseorder_number"
-            ]
-            coach_status.save()
+            try:
+                purchase_order = PurchaseOrder.objects.get(
+                    purchaseorder_id=purchaseorder_created["purchaseorder_id"]
+                )
+                serializer = PurchaseOrderSerializer(
+                    purchase_order,
+                    data={"caas_project": project_id, "engagements": engagements},
+                    partial=True,
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                else:
+                    print(serializer.errors)
+            except Exception as e:
+                print(str(e))
+                pass
+
+            # coach_status.purchase_order_id = purchaseorder_created["purchaseorder_id"]
+            # coach_status.purchase_order_no = purchaseorder_created[
+            #     "purchaseorder_number"
+            # ]
+            # coach_status.save()
 
             return Response({"message": "Purchase Order updated successfully."})
         else:
@@ -2863,31 +2881,29 @@ def get_sales_persons_sales_orders(request, sales_person_id):
 def get_so_for_project(project_id, project_type):
     try:
         sales_order_ids_set = set()
-        if project_type == "CAAS":
+        if project_type == "CAAS" or project_type == 'COD':
             orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                 project__id=project_id
             )
             for mapping in orders_project_mapping:
                 sales_order_ids_set.update(mapping.sales_order_ids)
-        elif project_type == "SEEQ":
+        elif project_type == "SEEQ" or project_type == "skill_training":
             orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                 schedular_project__id=project_id
             )
             for mapping in orders_project_mapping:
                 sales_order_ids_set.update(mapping.sales_order_ids)
-
         sales_order_ids = list(sales_order_ids_set)
-
-        all_sales_orders = []
-        for salesorder_id in sales_order_ids:
-            access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-            if access_token_sales_order:
-                api_url = f"{base_url}/salesorders/{salesorder_id}?organization_id={organization_id}"
-                auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
-                response = requests.get(api_url, headers=auth_header)
-                if response.status_code == 200:
-                    sales_order = response.json().get("salesorder")
-                    all_sales_orders.append(sales_order)
+        all_sales_orders = SalesOrderSerializer(SalesOrder.objects.filter(salesorder_id__in=sales_order_ids), many=True).data
+        # for salesorder_id in sales_order_ids:
+        #     access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
+        #     if access_token_sales_order:
+        #         api_url = f"{base_url}/salesorders/{salesorder_id}?organization_id={organization_id}"
+        #         auth_header = {"Authorization": f"Bearer {access_token_sales_order}"}
+        #         response = requests.get(api_url, headers=auth_header)
+        #         if response.status_code == 200:
+        #             sales_order = response.json().get("salesorder")
+        #             all_sales_orders.append(sales_order)
 
         return all_sales_orders
 
@@ -2900,9 +2916,7 @@ def get_so_for_project(project_id, project_type):
 def get_all_sales_orders_of_project(request, project_id, project_type):
     try:
         all_sales_orders = get_so_for_project(project_id, project_type)
-
         return Response(all_sales_orders)
-
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -3526,6 +3540,70 @@ def update_sales_order_status(request, sales_order_id, status):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def get_total_revenue_and_cost(request):
+    try:
+        total_rev = 0
+        total_cost = 0
+        all_order_mapping = OrdersAndProjectMapping.objects.all()
+        unique_sales_order_ids = set()
+        unique_purchase_order_ids = set()
+
+        for order_mapping in all_order_mapping:
+            print(order_mapping)
+            project_sales_orders_ids = order_mapping.sales_order_ids
+            project_purchase_orders_ids = order_mapping.purchase_order_ids
+            # Calculate total invoiced amount for the sales orders of this project
+            expenses = None
+            if order_mapping.project:
+                expenses = Expense.objects.filter(batch__project=order_mapping.project)
+
+            if expenses:
+                for expense in expenses:
+                    if expense.purchase_order_id:
+                        project_purchase_orders_ids.append(expense.purchase_order_id)
+
+            project_total_rev = 0
+            project_total_cost = 0
+            for sales_order_id in project_sales_orders_ids:
+                if sales_order_id in unique_sales_order_ids:
+                    continue
+                else:
+                    print("hey", sales_order_id)
+                    sales_order = SalesOrder.objects.get(salesorder_id=sales_order_id)
+                    for invoice in sales_order.invoices:
+                        project_total_rev += invoice["total"]*sales_order.exchange_rate
+                    unique_sales_order_ids.add(sales_order_id)
+
+            for purchase_order_id in project_purchase_orders_ids:
+                if purchase_order_id in unique_purchase_order_ids:
+                    continue
+                else:
+                    purchase_order = PurchaseOrder.objects.get(
+                        purchaseorder_id=purchase_order_id
+                    )
+                    for bill in purchase_order.bills:
+                        project_total_cost += bill["total"]*purchase_order.exchange_rate
+                    unique_purchase_order_ids.add(purchase_order_id)
+
+            # Add the total invoiced amount to the overall total_rev
+            total_rev += project_total_rev
+            total_cost += project_total_cost
+
+        return Response(
+            {
+                "total_revenue": total_rev,
+                "total_cost": total_cost,
+                "profit": total_rev - total_cost,
+                "profit_percentage": (total_rev - total_cost) / total_rev * 100 if total_rev != 0 else 0,
+            }
+        )
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_so_data_of_project(request, project_id, project_type):
     try:
         all_sales_orders = get_so_for_project(project_id, project_type)
@@ -3535,16 +3613,18 @@ def get_so_data_of_project(request, project_id, project_type):
         paid_amount = 0
         currency_code = None
         for sales_order in all_sales_orders:
-            total += sales_order["total"]
+            total += Decimal(sales_order["total"])
             currency_code = sales_order["currency_code"]
+            currency_symbol = sales_order['currency_symbol']
 
             for invoice in sales_order["invoices"]:
-                invoiced_amount += invoice["total"]
-            not_invoiced_amount += sales_order["total"] - invoiced_amount
+                print(2,type(invoice["total"]), invoice["total"])
+                invoiced_amount += int(invoice["total"])
+            not_invoiced_amount += Decimal(sales_order["total"]) - int(invoiced_amount)
 
             for invoice in sales_order["invoices"]:
                 if invoice["status"] == "paid":
-                    paid_amount += invoice["total"]
+                    paid_amount += int(invoice["total"])
 
         return Response(
             {
@@ -3554,6 +3634,7 @@ def get_so_data_of_project(request, project_id, project_type):
                 "paid_amount": paid_amount,
                 "currency_code": currency_code,
                 "no_of_sales_orders": len(all_sales_orders),
+                "currency_symbol": currency_symbol
             }
         )
     except Exception as e:
@@ -3950,13 +4031,13 @@ def get_client_invoices(request):
         project_type = request.query_params.get("project_type")
         if project_id:
             sales_order_ids_set = set()
-            if project_type == "CAAS":
+            if project_type == "CAAS" or project_type == "COD":
                 orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                     project__id=project_id
                 )
                 for mapping in orders_project_mapping:
                     sales_order_ids_set.update(mapping.sales_order_ids)
-            elif project_type == "SEEQ":
+            elif project_type == "SEEQ" or project_type == "skill_training":
                 orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                     schedular_project__id=project_id
                 )
@@ -4209,10 +4290,30 @@ def get_total_so_created_count(request, sales_person_id):
 @permission_classes([IsAuthenticated])
 def get_handovers_count(request, sales_person_id):
     try:
-        handovers_count = HandoverDetails.objects.filter(
-            sales__id=sales_person_id
+        # Count handovers where is_drafted is true
+        drafted_count = HandoverDetails.objects.filter(
+            sales__id=sales_person_id, is_drafted=True
         ).count()
-        return Response({"handovers_count": handovers_count}, status=status.HTTP_200_OK)
+        
+        # Count handovers where is_accepted is true
+        accepted_count = HandoverDetails.objects.filter(
+            sales__id=sales_person_id, is_accepted=True
+        ).count()
+        
+        # Count handovers where both is_drafted and is_accepted are false (pending)
+        pending_count = HandoverDetails.objects.filter(
+            sales__id=sales_person_id, is_drafted=False, is_accepted=False
+        ).count()
+
+        # Calculate total count
+        total_count = drafted_count + accepted_count + pending_count
+
+        return Response({
+            "drafted_count": drafted_count,
+            "accepted_count": accepted_count,
+            "pending_count": pending_count,
+            "total_count": total_count
+        }, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response(
