@@ -276,8 +276,8 @@ def fetch_sales_orders(organization_id, queryParams=""):
         api_url = f"{base_url}/salesorders/?organization_id={organization_id}&page={page}{queryParams}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.get(api_url, headers=auth_header)
-
         if response.status_code == 200:
+
             sales_orders = response.json().get("salesorders", [])
             all_sales_orders.extend(sales_orders)
 
@@ -285,6 +285,7 @@ def fetch_sales_orders(organization_id, queryParams=""):
             has_more_page = page_context.get("has_more_page", False)
             page += 1
         else:
+            print(response.json())
             raise Exception("Failed to fetch sales orders")
 
     return all_sales_orders

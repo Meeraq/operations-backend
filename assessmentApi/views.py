@@ -2551,7 +2551,7 @@ def get_frequency_analysis_data(
 
 
 class DownloadParticipantResultReport(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo", "learner")]
+    permission_classes = [AllowAny]
 
     def post(self, request):
         try:
@@ -4888,7 +4888,7 @@ class GetProjectWiseReport(APIView):
 
             response = HttpResponse(pdf, content_type="application/pdf")
             response["Content-Disposition"] = (
-                f'attachment; filename={f"{participant.name} Report.pdf"}'
+                f'attachment; filename={f"Report.pdf"}'
             )
 
             return response
