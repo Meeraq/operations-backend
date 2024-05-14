@@ -7273,8 +7273,9 @@ def get_handovers(request, sales_id):
 def get_pmo_handovers(request):
     try:
         handovers = HandoverDetails.objects.filter(
-            schedular_project__isnull=True, caas_project__isnull=True
+            schedular_project__isnull=True, caas_project__isnull=True, is_drafted=False
         ).order_by("-created_at")
+        print(handovers)
         formatted_handovers = get_formatted_handovers(handovers)
         return Response(formatted_handovers, status=status.HTTP_200_OK)
     except Exception as e:
