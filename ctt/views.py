@@ -141,25 +141,20 @@ def participant_details(request):
                     zoho_customer__email=batch_user.user.email,
                     custom_field_hash__cf_ctt_batch=batch_user.batch.name,
                 )
+                sales_order = salesorders.first()
                 payment_status = None
                 total = 0
                 invoiced_amount = 0
                 paid_amount = 0
                 currency_code = None
                 all_invoices_paid = []
-                for invoice in sales_order.invoices:
-                    invoiced_amount += invoice["total"]
-
-                    if invoice["status"] == "paid":
-                        paid_amount += invoice["total"]
-                        all_invoices_paid.append(True)
-                    else:
-                        all_invoices_paid.append(False)
-                pending_amount = invoiced_amount - paid_amount
-        
                 for sales_order in salesorders:
                     total += sales_order.total
                     currency_code = sales_order.currency_code
+                    for invoice in sales_order.invoices:
+                        invoiced_amount += invoice["total"]
+                        if invoice["status"] == "paid":
+                            paid_amount += invoice["total"]
 
                     if sales_order.invoiced_status != "invoiced":
                         if sales_order.invoiced_status == "partially_invoiced":
@@ -170,6 +165,8 @@ def participant_details(request):
                             break
                     else:
                         payment_status = "Invoiced"
+                        
+                pending_amount = invoiced_amount - paid_amount
 
                 user_data = {
                     "index": index,
