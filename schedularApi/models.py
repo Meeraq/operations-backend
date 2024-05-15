@@ -18,6 +18,7 @@ from api.models import (
 
 from django.utils import timezone
 from django.contrib.auth.models import User
+from assessmentApi.models import Competency, Behavior
 
 
 # Create your models here.
@@ -259,7 +260,9 @@ class CoachContract(models.Model):
         ProjectContract, on_delete=models.CASCADE, blank=True
     )
     name_inputed = models.CharField(max_length=100, blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True,null=True)
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, blank=True, null=True
+    )
     schedular_project = models.ForeignKey(
         SchedularProject, on_delete=models.CASCADE, blank=True, null=True
     )
@@ -351,7 +354,11 @@ class Expense(models.Model):
 
 
 class HandoverDetails(models.Model):
-    PROJECT_TYPE_CHOICES = [("caas", "CAAS"), ("skill_training", "Skill Training"),("COD", "COD"),]
+    PROJECT_TYPE_CHOICES = [
+        ("caas", "CAAS"),
+        ("skill_training", "Skill Training"),
+        ("COD", "COD"),
+    ]
     DELIVERY_MODE_CHOICES = [
         ("online", "Online"),
         ("hybrid", "Hybrid"),
@@ -548,3 +555,35 @@ class Task(models.Model):
 
     def __str__(self):
         return self.task
+
+
+class ActionItem(models.Model):
+    STATUS_CHOICES = (
+        ("not_started", "Not Started"),
+        ("occasionally_doing", "Occasionally Doing"),
+        ("regularly_doing", "Regularly Doing"),
+        ("actively_pursuing", "Actively Pursuing"),
+        ("consistently_achieving", "Consistently Achieving"),
+    )
+    text = models.TextField()
+    status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="not_started"
+    )
+    completion_date = models.DateField(null=True, blank=True)
+    learner = models.ForeignKey(
+        Learner, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    batch = models.ForeignKey(
+        SchedularBatch, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    competency = models.ForeignKey(
+        Competency, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    behavior = models.ForeignKey(
+        Behavior, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.learner.name if self.learner else None} {self.id}"

@@ -99,6 +99,7 @@ from .serializers import (
     HandoverDetailsSerializer,
     TaskSerializer,
     HandoverDetailsSerializerWithOrganisationName,
+    ActionItemSerializer
 )
 from .models import (
     SchedularBatch,
@@ -120,6 +121,7 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
+    ActionItem
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -161,6 +163,8 @@ from assessmentApi.models import (
     ParticipantUniqueId,
     ParticipantObserverMapping,
     ParticipantResponse,
+    Competency, 
+    Behavior
 )
 from io import BytesIO
 from api.serializers import LearnerSerializer
@@ -176,6 +180,7 @@ from django.db.models import Max
 import io
 from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
+from assessmentApi.serializers import CompetencySerializerDepthOne
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
     get_current_date_timestamps,
@@ -7369,3 +7374,69 @@ def send_mail_to_coaches(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to send mail!"}, status=500)
+
+
+
+@api_view(['POST'])
+def add_action_item(request):
+    if request.method == 'POST':
+        serializer = ActionItemSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['PUT'])
+def edit_action_item(request, pk):
+    try:
+        action_item = ActionItem.objects.get(pk=pk)
+    except ActionItem.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'PUT':
+        serializer = ActionItemSerializer(action_item, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def learner_batches(request, pk):
+    try:
+        batches = SchedularBatch.objects.filter(learners__id=pk, project__is_archive=False).distinct()
+        serializer = SchedularBatchSerializer(batches,many=True) 
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get batches."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def batch_competencies_and_behaviours(request,batch_id, learner_id):
+    try:
+        assessments = Assessment.objects.filter(
+                assessment_modal__lesson__course__batch__id=batch_id
+            )
+        competencies = Competency.objects.filter(question__questionnaire__assessment__in=assessments).distinct()
+        serializer = CompetencySerializerDepthOne(competencies, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get competencies."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def learner_action_items_in_batch(request, batch_id, learner_id, competency_id, behavior_id):
+    action_items = ActionItem.objects.filter(batch__id=batch_id, competency__id=competency_id,behavior__id=behavior_id,learner__id=learner_id).order_by('-created_at')
+    action_items_serializer = ActionItemSerializer(action_items, many=True)
+    return Response(action_items_serializer.data, status=status.HTTP_200_OK)

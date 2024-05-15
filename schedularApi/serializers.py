@@ -15,6 +15,7 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
+    ActionItem,
 )
 from api.models import Coach
 from api.models import Sales
@@ -233,7 +234,7 @@ class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer)
         if obj.organisation:
             return obj.organisation.name
         return None
-    
+
     def get_pmo_name(self, obj):
         if obj.pmo:
             return obj.pmo.name
@@ -241,4 +242,10 @@ class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer)
 
     class Meta:
         model = HandoverDetails
+        fields = "__all__"
+
+
+class ActionItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ActionItem
         fields = "__all__"

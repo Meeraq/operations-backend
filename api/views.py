@@ -6667,6 +6667,8 @@ def get_current_session(request, user_type, room_id, user_id):
                 if isinstance(nearest_session, SessionRequestCaas)
                 else nearest_session.availibility.end_time
             ),
+            "batch" : None if  isinstance(nearest_session, SessionRequestCaas) else nearest_session.coaching_session.batch.id,
+            "learner" : nearest_session.learner.id,
         }
         response_data = {
             "message": "success",

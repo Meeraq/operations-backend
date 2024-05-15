@@ -357,7 +357,6 @@ urlpatterns = [
         "get-card-data-for-coach-in-skill-project/<int:project_id>/<int:coach_id>",
         views.get_card_data_for_coach_in_skill_project,
     ),
-   
     path(
         "projects/<int:project_id>/check-project-structure-edit-allowed/",
         views.check_if_project_structure_edit_allowed,
@@ -384,11 +383,28 @@ urlpatterns = [
         name="get_project_and_handover",
     ),
     path("handovers/<int:sales_id>/", views.get_handovers, name="get_handovers"),
-    path("send-mail-to-coaches/", views.send_mail_to_coaches, name="send_mail_to_coaches"),
+    path(
+        "send-mail-to-coaches/", views.send_mail_to_coaches, name="send_mail_to_coaches"
+    ),
     path("handovers/pmo/", views.get_pmo_handovers, name="get_handovers"),
     path(
         "update-reminder-in-batch/<int:batch_id>/",
         views.update_reminder_in_batch,
         name="update_reminder_in_batch",
+    ),
+    path("action-items/add/", views.add_action_item, name="add_action_item"),
+    path(
+        "action-items/edit/<int:pk>/", views.edit_action_item, name="edit_action_item"
+    ),
+    path("batches/learner/<int:pk>/", views.learner_batches, name="learner_batches"),
+    path(
+        "batch/action-items/<int:batch_id>/<int:learner_id>/<int:competency_id>/<int:behavior_id>/",
+        views.learner_action_items_in_batch,
+        name="learner_action_items_in_batch",
+    ),
+    path(
+        "batch/competencies-and-behaviours/<int:batch_id>/<int:learner_id>/",
+        views.batch_competencies_and_behaviours,
+        name="batch_competencies_and_behaviours",
     ),
 ]
