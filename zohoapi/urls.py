@@ -178,7 +178,6 @@ urlpatterns = [
     ),
     path(
         "coching-purchase-order/update/<int:purchase_order_id>/<int:project_id>/",
-        
         views.coching_purchase_order_update,
     ),
     path(
@@ -217,7 +216,6 @@ urlpatterns = [
         "expense-coaching-purchase-order/create/<int:project_id>/<int:coach_id>/",
         views.expense_coaching_purchase_order_create,
     ),
-    
     path(
         "expense-purchase-order/update/<int:facilitator_id>/<int:batch_or_project_id>/",
         views.expense_purchase_order_update,
@@ -242,6 +240,27 @@ urlpatterns = [
         views.get_all_sales_orders_of_project,
         name="get_all_sales_orders_of_project",
     ),
+    path(
+        "get-ctt-sales-orders/",
+        views.get_ctt_sales_orders,
+        name="get_ctt_sales_orders/",
+    ),
+    path(
+        "get-ctt-client-invoices/",
+        views.get_ctt_client_invoices,
+        name="get_ctt_client_invoices/",
+    ),
+    path(
+        "ctt-purchase-orders/",
+        views.get_ctt_purchase_orders,
+        name="get_ctt_purchase_orders/",
+    ),
+     path(
+        "get-ctt-invoices/",
+        views.get_ctt_invoices,
+        name="get_ctt_invoices/",
+    ),
+ 
     path(
         "get-so-data-of-project/<int:project_id>/<str:project_type>/",
         views.get_so_data_of_project,
@@ -340,7 +359,7 @@ urlpatterns = [
     path(
         "get-total-revenue-and-cost",
         views.get_total_revenue_and_cost,
-        name="get_total_revenue_and_cost"
+        name="get_total_revenue_and_cost",
     ),
     path(
         "create-vendor/",
@@ -368,7 +387,7 @@ urlpatterns = [
         name="get_so_for_the_project",
     ),
     path(
-        "get-handovers-so/<int:sales_id>/",
+        "get-handovers-so/<int:user_id>/<str:user_type>/",
         views.get_handovers_so,
         name="get_handovers_so",
     ),

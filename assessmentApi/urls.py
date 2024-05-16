@@ -331,4 +331,8 @@ urlpatterns = [
         "learner-assessment-result-image/<int:learner_id>/",
         views.get_learner_assessment_result_image,
     ),
+    path(
+        "add-user-as-a-participant-of-assessment/",
+        views.add_user_as_a_participant_of_assessment,
+    ),
 ]
