@@ -1933,6 +1933,8 @@ def get_ongoing_projects(request):
             project_data["latest_update"] = (
                 latest_update.message if latest_update else None
             )
+            handover = HandoverDetails.objects.filter(caas_project__id=project_data["id"]).first()
+            project_data["is_handover_present"] = True if handover else False
         return Response(serializer.data)
     except Exception as e:
         print(str(e))

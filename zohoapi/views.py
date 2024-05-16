@@ -29,7 +29,16 @@ from itertools import chain
 from rest_framework.views import APIView
 import string
 import random
-from django.db.models import Q, Prefetch
+from django.db.models import (
+    Q,
+    Prefetch,
+    Sum,
+    F,
+    Q,
+    ExpressionWrapper,
+    FloatField,
+)
+from django.db.models.functions import TruncMonth
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -4557,3 +4566,51 @@ def get_line_items(request):
 def get_latest_data(request):
     update_zoho_data()
     return Response({"message": "Success"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_ctt_revenue_data(request):
+    try:
+        # Filter sales orders containing "CTT" in their sales order number
+        sales_orders = SalesOrder.objects.filter(
+            Q(salesorder_number__icontains="CTT")
+            | Q(salesorder_number__icontains="ctt")
+            | Q(salesorder_number__icontains="Ctt")
+        )
+        data = {}
+        total = 0
+        for sales_order in sales_orders:
+            so_date = sales_order.created_date.strftime("%m/%Y")
+            if so_date not in data:
+                data[so_date] = {"total_amount": 0, "total_invoiced": 0}
+
+            data[so_date]["total_amount"] += (
+                sales_order.total * sales_order.exchange_rate
+            )
+            total += sales_order.total * sales_order.exchange_rate
+            client_invoices = ClientInvoice.objects.filter(sales_order=sales_order)
+
+            for client_invoice in client_invoices:
+                ci_date = client_invoice.created_date.strftime("%m/%Y")
+                if ci_date not in data:
+                    data[ci_date] = {"total_amount": 0, "total_invoiced": 0}
+
+                data[ci_date]["total_invoiced"] += (
+                    client_invoice.total * client_invoice.exchange_rate
+                )
+
+        result = [
+            {
+                "month": month,
+                "total_amount": round(values["total_amount"], 2),
+                "total_invoiced": round(values["total_invoiced"], 2),
+            }
+            for month, values in data.items()
+        ]
+
+        return Response({"result": result, "total": round(total, 2)})
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"})
