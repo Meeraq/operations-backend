@@ -555,6 +555,9 @@ class AssessmentView(APIView):
             serializer = AssessmentSerializer(data=request.data)
             if serializer.is_valid():
                 serializer.save()
+                assessment = Assessment.objects.filter(assessment=serializer.data["id"])
+                assessment.unique_id = uuid.uuid4()
+                assessment.save()
                 return Response(
                     {"message": "Assessment created successfully."},
                     status=status.HTTP_201_CREATED,
@@ -570,6 +573,13 @@ class AssessmentView(APIView):
                 post_assessment_id,
             ) = create_pre_post_assessments(request)
             if created:
+                if pre_assessment_id or post_assessment_id:
+                    pre_assessment = Assessment.objects.get(id=pre_assessment_id)
+                    post_assessment = Assessment.objects.get(id=post_assessment_id)
+                    pre_assessment.unique_id = uuid.uuid4()
+                    post_assessment.unique_id = uuid.uuid4()
+                    pre_assessment.save()
+                    post_assessment.save()
                 return Response(
                     {"message": "Assessment created successfully."},
                     status=status.HTTP_201_CREATED,
@@ -705,7 +715,7 @@ class AssessmentStatusChange(APIView):
                     and assessment.status == "ongoing"
                     and not assessment.initial_reminder
                 ):
-                    send_assessment_invitation_mail.delay(assessment.id)
+                    send_assessment_invitation_mail(assessment.id)
                     assessment.initial_reminder = True
                     assessment.save()
                     # for hr in assessment.hr.all():
@@ -4887,9 +4897,7 @@ class GetProjectWiseReport(APIView):
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
 
             response = HttpResponse(pdf, content_type="application/pdf")
-            response["Content-Disposition"] = (
-                f'attachment; filename={f"Report.pdf"}'
-            )
+            response["Content-Disposition"] = f'attachment; filename={f"Report.pdf"}'
 
             return response
 
@@ -4908,7 +4916,9 @@ class AssessmentsResponseStatusDownload(APIView):
             response_data_for_assessments = {}
             for assessment_id in assessment_ids:
                 assessment = Assessment.objects.get(id=assessment_id)
-                response_data = getParticipantsResponseStatusForAssessment(assessment,True)
+                response_data = getParticipantsResponseStatusForAssessment(
+                    assessment, True
+                )
                 response_data_for_assessments[assessment.name] = response_data
             return Response(response_data_for_assessments)
         except Exception as e:
@@ -5170,3 +5180,33 @@ def get_learner_assessment_result_image(request, learner_id):
                 )
 
     return Response({"assessment_exists": False, "graph": None})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def add_user_as_a_participant_of_assessment(request):
+    try:
+        participant = request.data.get("participants")
+        unique_id = request.data.get("assessment_id")
+        assessment = Assessment.objects.get(unique_id=unique_id)
+
+        serializer = add_multiple_participants(
+            participant, assessment.id, assessment, True
+        )
+        participant_unique_id = ParticipantUniqueId.objects.filter(
+            assessment=assessment, participant__email=participant["email"]
+        ).first()
+        return Response(
+            {
+                "message": "Assessment Registeration Successfull.",
+                "participant_unique_id": participant_unique_id.unique_id,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Unable to Login."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
