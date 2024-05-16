@@ -169,6 +169,7 @@ class Assessment(models.Model):
     )
     initial_reminder = models.BooleanField(blank=True, default=False)
     reminders = models.JSONField(default=dict, blank=True)
+    unique_id = models.CharField(max_length=225, default="")
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

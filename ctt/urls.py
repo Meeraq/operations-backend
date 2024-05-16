@@ -54,4 +54,9 @@ urlpatterns = [
         views.get_ctt_salesperson_individual,
         name="get_ctt_salesperson_individual",
     ),
+    path(
+        "get_card_data_for_dashboard_ctt/",
+        views.get_card_data_for_dashboard_ctt,
+        name="get_card_data_for_dashboard_ctt",
+    ),
 ]
