@@ -5200,12 +5200,7 @@ def add_user_as_a_participant_of_assessment(request):
         participant_resp_exists = ParticipantResponse.objects.filter(
             assessment=assessment, participant__email=participant["email"]
         ).exists()
-        serializer = add_multiple_participants(
-            participant, assessment.id, assessment, True
-        )
-        participant_unique_id = ParticipantUniqueId.objects.filter(
-            assessment=assessment, participant__email=participant["email"]
-        ).first()
+
         if participant_resp_exists:
             return Response(
                 {"error": "User has already taken the assessment."},
@@ -5218,11 +5213,21 @@ def add_user_as_a_participant_of_assessment(request):
             ).exists()
             and not participant_resp_exists
         ):
+            participant_unique_id = ParticipantUniqueId.objects.filter(
+                assessment=assessment, participant__email=participant["email"]
+            ).first()
             return Response(
                 {
                     "participant_unique_id": participant_unique_id.unique_id,
                 },
             )
+
+        serializer = add_multiple_participants(
+            participant, assessment.id, assessment, True
+        )
+        participant_unique_id = ParticipantUniqueId.objects.filter(
+            assessment=assessment, participant__email=participant["email"]
+        ).first()
 
         return Response(
             {
