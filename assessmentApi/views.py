@@ -5190,15 +5190,43 @@ def add_user_as_a_participant_of_assessment(request):
         unique_id = request.data.get("assessment_id")
         assessment = Assessment.objects.get(unique_id=unique_id)
 
+        if assessment.status == "draft" or assessment.status == "completed":
+            return Response(
+                {
+                    "error": "Assessment is not accessible. Contact pmocoaching@meeraq.com."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        participant_resp_exists = ParticipantResponse.objects.filter(
+            assessment=assessment, participant__email=participant["email"]
+        ).exists()
         serializer = add_multiple_participants(
             participant, assessment.id, assessment, True
         )
         participant_unique_id = ParticipantUniqueId.objects.filter(
             assessment=assessment, participant__email=participant["email"]
         ).first()
+        if participant_resp_exists:
+            return Response(
+                {"error": "User has already taken the assessment."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if (
+            assessment.participants_observers.filter(
+                participant__email=participant["email"]
+            ).exists()
+            and not participant_resp_exists
+        ):
+            return Response(
+                {
+                    "participant_unique_id": participant_unique_id.unique_id,
+                },
+            )
+
         return Response(
             {
-                "message": "Assessment Registeration Successfull.",
+                "message": "Assessment Registration Successful.",
                 "participant_unique_id": participant_unique_id.unique_id,
             },
             status=status.HTTP_200_OK,
@@ -5207,6 +5235,6 @@ def add_user_as_a_participant_of_assessment(request):
     except Exception as e:
         print(str(e))
         return Response(
-            {"error": "Unable to Login."},
+            {"error": "Unable to process the request."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
