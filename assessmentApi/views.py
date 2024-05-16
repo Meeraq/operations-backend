@@ -555,7 +555,7 @@ class AssessmentView(APIView):
             serializer = AssessmentSerializer(data=request.data)
             if serializer.is_valid():
                 serializer.save()
-                assessment = Assessment.objects.filter(assessment=serializer.data["id"])
+                assessment = Assessment.objects.get(id=serializer.data["id"])
                 assessment.unique_id = uuid.uuid4()
                 assessment.save()
                 return Response(
