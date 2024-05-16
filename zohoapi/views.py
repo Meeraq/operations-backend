@@ -3003,23 +3003,26 @@ def get_ctt_purchase_orders(request):
 @permission_classes([IsAuthenticated])
 def get_ctt_invoices(request):
     try:
+        # Fetch faculty emails from the 'ctt' database
+        faculty_emails = list(
+            Faculties.objects.using("ctt").values_list("email", flat=True)
+        )
 
-        faculty_emails = Faculties.objects.using("ctt").values_list("email", flat=True)
-
+        # Fetch invoices related to faculty emails
         invoices = InvoiceData.objects.filter(vendor_email__in=faculty_emails)
 
+        # Fetch related bills using prefetch_related
         prefetch_bills = Prefetch(
             "bill_set",
             queryset=Bill.objects.filter(
-                custom_field_hash__cf_invoice__in=invoices.values_list(
-                    "invoice_number", flat=True
+                custom_field_hash__cf_invoice__in=list(
+                    invoices.values_list("invoice_number", flat=True)
                 )
             ),
             to_attr="related_bills",
         )
 
         invoices = invoices.prefetch_related(prefetch_bills)
-
         invoice_serializer = InvoiceDataGetSerializer(invoices, many=True)
 
         all_invoices = []
@@ -3027,7 +3030,7 @@ def get_ctt_invoices(request):
             matching_bill = next(
                 (
                     bill
-                    for bill in invoice.instance.related_bills
+                    for bill in invoice["related_bills"]
                     if bill.vendor_id == invoice["vendor_id"]
                 ),
                 None,
