@@ -452,12 +452,8 @@ def create_handover(request):
         return Response({"error": "Failed to add handover. "}, status=500)
 
 
+PROJECT_TYPE_VALUES = {"caas": "CAAS", "skill_training": "Skill Training", "COD": "COD"}
 
-PROJECT_TYPE_VALUES = {
-    "caas" : "CAAS",
-    "skill_training" : "Skill Training",
-    "COD" : "COD"
-}
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
@@ -507,25 +503,44 @@ def update_handover(request):
                 {"project_name": project_name},
                 [],  # no bcc
             )
-        if request.query_params.get('handover', '') == 'accepted':
-            bcc_emails = ["pmocoaching@meeraq.com", "pmotraining@meeraq.com", "rajat@meeraq.com", "sujata@meeraq.com", "sales@meeraq.com"]
+        if request.query_params.get("handover", "") == "accepted":
+            bcc_emails = [
+                "pmocoaching@meeraq.com",
+                "pmotraining@meeraq.com",
+                "rajat@meeraq.com",
+                "sujata@meeraq.com",
+                "sales@meeraq.com",
+            ]
             project_name = handover_instance.project_name
             send_mail_templates(
                 "pmo_emails/accept_handover.html",
-                [handover_instance.sales.email if handover_instance.sales else "sales@meeraq.com"],
+                [
+                    (
+                        handover_instance.sales.email
+                        if handover_instance.sales
+                        else "sales@meeraq.com"
+                    )
+                ],
                 f"Handover Accepted: {PROJECT_TYPE_VALUES[handover_instance.project_type]}",
                 {
                     "project_name": project_name,
                     "project_type": PROJECT_TYPE_VALUES[handover_instance.project_type],
                     "pmo_name": "PMO",
                     "sales_name": handover_instance.sales.name,
-                    "sales_number":handover_instance.sales_order_ids
+                    "sales_number": handover_instance.sales_order_ids,
                 },
-                bcc_emails if env("ENVIRONMENT") == "PRODUCTION" else ["tech@meeraq.com", "naveen@meeraq.com"],
+                (
+                    bcc_emails
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["tech@meeraq.com", "naveen@meeraq.com"]
+                ),
             )
 
         return Response(
-            {"message": "Handover updated successfully.", "handover": serializer.data,},
+            {
+                "message": "Handover updated successfully.",
+                "handover": serializer.data,
+            },
             status=200,
         )
     else:
@@ -612,6 +627,10 @@ def get_all_Schedular_Projects(request):
             .first()
         )
         project_data["latest_update"] = latest_update.message if latest_update else None
+        handover = HandoverDetails.objects.filter(
+            schedular_project__id=project_data["id"]
+        ).first()
+        project_data["is_handover_present"] = True if handover else False
     return Response(serializer.data, status=200)
 
 
@@ -942,11 +961,20 @@ def get_schedular_batches(request):
 def get_schedular_project(request, project_id):
     try:
         project = get_object_or_404(SchedularProject, id=project_id)
+
+        # Check if a contract exists for the project
+        is_contract_present = ProjectContract.objects.filter(
+            schedular_project__id=project_id
+        ).exists()
+
         serializer = SchedularProjectSerializer(project)
-        return Response(serializer.data)
+        # Add the 'is_contract_present' field to the serializer data
+
+        return Response({**serializer.data, "is_contract_present": is_contract_present})
     except SchedularProject.DoesNotExist:
         return Response(
-            {"error": "Couldn't find project to add project structure."}, status=400
+            {"error": "Couldn't find project to add project structure."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
 
@@ -1228,7 +1256,7 @@ def update_live_session(request, live_session_id):
                 )
             else:
                 batches = SchedularBatch.objects.filter(id=main_live_session.batch.id)
-            count = 0 
+            count = 0
             for batch in batches:
 
                 live_session = LiveSession.objects.get(
@@ -1242,7 +1270,7 @@ def update_live_session(request, live_session_id):
                 serializer = LiveSessionSerializer(
                     live_session, data=data, partial=True
                 )
-                count +=1
+                count += 1
                 if serializer.is_valid():
                     update_live_session = serializer.save()
                     try:
@@ -1256,7 +1284,9 @@ def update_live_session(request, live_session_id):
                         print(str(e))
                         pass
                     current_time = timezone.now()
-                    days_difference = (update_live_session.date_time - current_time).days
+                    days_difference = (
+                        update_live_session.date_time - current_time
+                    ).days
                     if update_live_session.date_time > current_time:
                         try:
                             scheduled_for = update_live_session.date_time - timedelta(
@@ -1303,7 +1333,6 @@ def update_live_session(request, live_session_id):
                         lesson.drip_date = live_session.date_time + timedelta(
                             hours=5, minutes=30
                         )
-
 
                         lesson.save()
                 if update_live_session.batch.project.teams_enabled:
@@ -1952,7 +1981,7 @@ def update_batch(request, batch_id):
                                 return Response(
                                     {"error": "Failed to perform task."},
                                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                                )        
+                                )
                 try:
                     tasks = Task.objects.filter(
                         task="add_coach", status="pending", schedular_batch=batch
@@ -3888,7 +3917,7 @@ def add_facilitator(request):
 def get_facilitators(request):
     try:
         # Get all the Coach objects
-        all_fac =  []
+        all_fac = []
         facilitators = Facilitator.objects.filter(is_approved=True)
         for facilitator in facilitators:
             overall_answer = Answer.objects.filter(
@@ -3897,12 +3926,14 @@ def get_facilitators(request):
             )
             overall_nps = calculate_nps_from_answers(overall_answer)
             serializer = FacilitatorSerializer(facilitator)
-            all_fac.append({
-                **serializer.data,
-                "overall_nps": overall_nps,
-            })
-        # Serialize the Coach objects   
-        
+            all_fac.append(
+                {
+                    **serializer.data,
+                    "overall_nps": overall_nps,
+                }
+            )
+        # Serialize the Coach objects
+
         # Return the serialized Coach objects as the response
         return Response(all_fac, status=200)
 
@@ -4414,11 +4445,11 @@ def get_live_sessions_by_status(request):
             livesession__facilitator__id=facilitator_id
         )
         queryset = queryset.filter(batch__in=batches)
-    
+
     learner_id = request.query_params.get("learner_id", None)
     if learner_id:
         queryset = queryset.filter(batch__learners__id=learner_id)
-    
+
     res = []
     for live_session in queryset:
         session_name = get_live_session_name(live_session.session_type)
@@ -7022,9 +7053,9 @@ def get_upcoming_coaching_and_live_session_data_for_learner(request, user_id):
             "coach_name": facilitator_names,
             "session_timing": session_timing,
             "type": "Live Session",
-            "room_id":room_id,
-            "start_time":"",
-            "end_time":"",
+            "room_id": room_id,
+            "start_time": "",
+            "end_time": "",
         }
         upcoming_sessions_data.append(session_data)
 
@@ -7040,8 +7071,8 @@ def get_upcoming_coaching_and_live_session_data_for_learner(request, user_id):
             + available_session.availibility.coach.last_name
         )
         room_id = f"{available_session.availibility.coach.room_id}"
-        start_time=available_session.availibility.start_time
-        end_time=available_session.availibility.end_time
+        start_time = available_session.availibility.start_time
+        end_time = available_session.availibility.end_time
         session_data = {
             "project_name": project_name,
             "session_name": session_name,
@@ -7049,8 +7080,8 @@ def get_upcoming_coaching_and_live_session_data_for_learner(request, user_id):
             "session_timing": session_timing,
             "type": "Coaching Session",
             "room_id": room_id,
-            "start_time":start_time,
-            "end_time":end_time,
+            "start_time": start_time,
+            "end_time": end_time,
         }
 
         upcoming_sessions_data.append(session_data)
@@ -7063,8 +7094,11 @@ def get_upcoming_coaching_and_live_session_data_for_learner(request, user_id):
 def get_upcoming_assessment_data(request, user_id):
     try:
         current_time = timezone.now()
-        upcoming_assessment = Assessment.objects.filter(assessment_start_date__gt=current_time, participants_observers__participant__id=user_id).first()
-        
+        upcoming_assessment = Assessment.objects.filter(
+            assessment_start_date__gt=current_time,
+            participants_observers__participant__id=user_id,
+        ).first()
+
         if upcoming_assessment:
             assessment_data = {
                 "assessment_name": upcoming_assessment.participant_view_name,
@@ -7073,8 +7107,8 @@ def get_upcoming_assessment_data(request, user_id):
             }
             return Response(assessment_data)
         else:
-            return Response({"message": "No upcoming assessment found."}, status = 400)
-    
+            return Response({"message": "No upcoming assessment found."}, status=400)
+
     except Exception as e:
         return Response({"message": f"An error occurred: {str(e)}"})
 
@@ -7090,7 +7124,7 @@ def get_just_upcoming_session_data(request, user_id):
             learner=learner,
         ).order_by("availibility__start_time")
         upcoming_session = sessions.first()
-        
+
         # You can customize the response based on whether an upcoming session is found or not
         if upcoming_session:
             # Customize the response data according to your requirement
@@ -7101,11 +7135,18 @@ def get_just_upcoming_session_data(request, user_id):
             }
             return Response(response_data, status=status.HTTP_200_OK)
         else:
-            return Response({"message": "No upcoming sessions found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"message": "No upcoming sessions found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
     except Learner.DoesNotExist:
-        return Response({"message": "Learner not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"message": "Learner not found"}, status=status.HTTP_404_NOT_FOUND
+        )
     except Exception as e:
-        return Response({"message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {"message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @api_view(["GET"])
@@ -7116,22 +7157,27 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
         # fetch_purchase_orders(organization_id)
         if project_type == "skill_training" or project_type == "SEEQ":
             purchase_orders = PurchaseOrderGetSerializer(
-            PurchaseOrder.objects.filter(
-                Q(created_time__year__gte=2024)
-                | Q(purchaseorder_number__in=purchase_orders_allowed), Q(schedular_project__id = project_id)
-            ),
-            many=True,).data
+                PurchaseOrder.objects.filter(
+                    Q(created_time__year__gte=2024)
+                    | Q(purchaseorder_number__in=purchase_orders_allowed),
+                    Q(schedular_project__id=project_id),
+                ),
+                many=True,
+            ).data
         elif project_type == "CAAS" or project_type == "COD":
             purchase_orders = PurchaseOrderGetSerializer(
-            PurchaseOrder.objects.filter(
-                Q(created_time__year__gte=2024)
-                | Q(purchaseorder_number__in=purchase_orders_allowed), Q(caas_project__id = project_id)
-            ),
-            many=True,).data
+                PurchaseOrder.objects.filter(
+                    Q(created_time__year__gte=2024)
+                    | Q(purchaseorder_number__in=purchase_orders_allowed),
+                    Q(caas_project__id=project_id),
+                ),
+                many=True,
+            ).data
         return Response(purchase_orders)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
