@@ -4493,6 +4493,13 @@ class GetAssessmentsOfHr(APIView):
         )
         assessment_list = []
         for assessment in assessments:
+            assessment_lesson=AssessmentLesson.objects.filter(assessment_modal=assessment).first()
+            if assessment_lesson:
+                batch=assessment_lesson.lesson.course.batch.name
+                project = assessment_lesson.lesson.course.batch.project.name
+            else:
+                batch="N/A"
+                project= "N/A"
             total_responses_count = ParticipantResponse.objects.filter(
                 assessment=assessment
             ).count()
@@ -4508,6 +4515,8 @@ class GetAssessmentsOfHr(APIView):
                 "total_learners_count": assessment.participants_observers.count(),
                 "total_responses_count": total_responses_count,
                 "created_at": assessment.created_at,
+                "batch":batch,
+                "project":project,
             }
 
             assessment_list.append(assessment_data)
