@@ -255,12 +255,11 @@ urlpatterns = [
         views.get_ctt_purchase_orders,
         name="get_ctt_purchase_orders/",
     ),
-     path(
+    path(
         "get-ctt-invoices/",
         views.get_ctt_invoices,
         name="get_ctt_invoices/",
     ),
- 
     path(
         "get-so-data-of-project/<int:project_id>/<str:project_type>/",
         views.get_so_data_of_project,
@@ -408,4 +407,7 @@ urlpatterns = [
     ),
     path("line-items/", views.get_line_items, name="get_line_items"),
     path("latest-data/", views.get_latest_data, name="get_latest_data"),
+    path(
+        "get-ctt-revenue-data/", views.get_ctt_revenue_data, name="get_ctt_revenue_data"
+    ),
 ]
