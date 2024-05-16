@@ -25,7 +25,7 @@ from schedularApi.models import HandoverDetails
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 import json
-
+from itertools import chain
 from rest_framework.views import APIView
 import string
 import random
@@ -122,7 +122,7 @@ from decimal import Decimal
 from collections import defaultdict
 from api.permissions import IsInRoles
 from time import sleep
-
+from ctt.models import Faculties
 
 env = environ.Env()
 
@@ -1198,7 +1198,8 @@ def get_all_vendors(request):
             {"detail": f"Error fetching vendors: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-    
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("finance")])
 def get_zoho_vendors(request):
@@ -1440,9 +1441,13 @@ def get_invoices_by_status(request, status):
 def get_purchase_order_ids_for_project(project_id, project_type):
     purchase_orders = []
     if project_type == "skill_training" or project_type == "SEEQ":
-        purchase_orders = PurchaseOrder.objects.filter(schedular_project__id=project_id).values_list("purchaseorder_id")
+        purchase_orders = PurchaseOrder.objects.filter(
+            schedular_project__id=project_id
+        ).values_list("purchaseorder_id")
     elif project_type == "CAAS" or project_type == "COD":
-        purchase_orders = PurchaseOrder.objects.filter(caas_project__id=project_id).values_list("purchaseorder_id")
+        purchase_orders = PurchaseOrder.objects.filter(
+            caas_project__id=project_id
+        ).values_list("purchaseorder_id")
     purchase_order_ids = list(purchase_orders)
     return purchase_order_ids
 
@@ -1460,7 +1465,6 @@ def get_invoices_by_status_for_founders(request, status):
             )
         res = []
         status_counts = defaultdict(int)
-    
 
         for invoice_data in all_invoices:
             if (
@@ -1471,17 +1475,17 @@ def get_invoices_by_status_for_founders(request, status):
             # if status == "in_review":
             if not invoice_data["bill"] and invoice_data["status"] == "in_review":
                 status_counts["in_review"] += 1
-                if status == "in_review" or status == "all" :
+                if status == "in_review" or status == "all":
                     res.append(invoice_data)
             # elif status == "approved":
-            if not invoice_data["bill"] and invoice_data["status"] == "approved" :
+            if not invoice_data["bill"] and invoice_data["status"] == "approved":
                 status_counts["approved"] += 1
-                if status == "approved"or status == "all" :
+                if status == "approved" or status == "all":
                     res.append(invoice_data)
             # elif status == "rejected":
-            if not invoice_data["bill"] and invoice_data["status"] == "rejected" :
+            if not invoice_data["bill"] and invoice_data["status"] == "rejected":
                 status_counts["rejected"] += 1
-                if status == "rejected"or status == "all" :
+                if status == "rejected" or status == "all":
                     res.append(invoice_data)
             # if status == "accepted":
             if invoice_data["bill"]:
@@ -1490,12 +1494,16 @@ def get_invoices_by_status_for_founders(request, status):
                     and not invoice_data["bill"]["status"] == "paid"
                 ):
                     status_counts["accepted"] += 1
-                    if status == "accepted"  or status == "all":
+                    if status == "accepted" or status == "all":
                         res.append(invoice_data)
             # elif status == "paid":
-            if invoice_data["bill"] and invoice_data["bill"]["status"] == "paid" or status == "all":
+            if (
+                invoice_data["bill"]
+                and invoice_data["bill"]["status"] == "paid"
+                or status == "all"
+            ):
                 status_counts["paid"] += 1
-                if status == "paid"  or status == "all":
+                if status == "paid" or status == "all":
                     res.append(invoice_data)
         return Response({"invoice_counts": status_counts, "invoices": res}, status=200)
 
@@ -1840,6 +1848,7 @@ def generate_new_po_number(po_list, regex_to_match):
     new_po_number = f"{regex_to_match}{str(new_number).zfill(4)}"
     return new_po_number
 
+
 def generate_new_ctt_po_number(po_list, regex_to_match):
     # pattern to match the purchase order number
     pattern = rf"^{regex_to_match}\d+$"
@@ -1857,7 +1866,6 @@ def generate_new_ctt_po_number(po_list, regex_to_match):
     new_number = latest_number + 1
     new_po_number = f"{regex_to_match}{str(new_number).zfill(4)}"
     return new_po_number
-
 
 
 def generate_new_so_number(so_list, regex_to_match):
@@ -1934,7 +1942,7 @@ def get_po_number_to_create(request, po_type):
         # )
         # fetch_purchase_orders(organization_id)
         current_financial_year = get_current_financial_year()
-        if po_type =="meeraq":
+        if po_type == "meeraq":
             regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
             new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
         elif po_type == "others":
@@ -2066,6 +2074,7 @@ def coching_purchase_order_create(request, project_type, project_id):
         print(str(e))
         return Response(status=500)
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_purchase_order_for_outside_vendors(request):
@@ -2088,8 +2097,6 @@ def create_purchase_order_for_outside_vendors(request):
     except Exception as e:
         print(str(e))
         return Response(status=500)
-
-
 
 
 @api_view(["PUT"])
@@ -2881,7 +2888,7 @@ def get_sales_persons_sales_orders(request, sales_person_id):
 def get_so_for_project(project_id, project_type):
     try:
         sales_order_ids_set = set()
-        if project_type == "CAAS" or project_type == 'COD':
+        if project_type == "CAAS" or project_type == "COD":
             orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                 project__id=project_id
             )
@@ -2894,7 +2901,9 @@ def get_so_for_project(project_id, project_type):
             for mapping in orders_project_mapping:
                 sales_order_ids_set.update(mapping.sales_order_ids)
         sales_order_ids = list(sales_order_ids_set)
-        all_sales_orders = SalesOrderSerializer(SalesOrder.objects.filter(salesorder_id__in=sales_order_ids), many=True).data
+        all_sales_orders = SalesOrderSerializer(
+            SalesOrder.objects.filter(salesorder_id__in=sales_order_ids), many=True
+        ).data
         # for salesorder_id in sales_order_ids:
         #     access_token_sales_order = get_access_token(env("ZOHO_REFRESH_TOKEN"))
         #     if access_token_sales_order:
@@ -2917,6 +2926,96 @@ def get_all_sales_orders_of_project(request, project_id, project_type):
     try:
         all_sales_orders = get_so_for_project(project_id, project_type)
         return Response(all_sales_orders)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_ctt_sales_orders(request):
+    try:
+        all_sales_orders = SalesOrderGetSerializer(
+            SalesOrder.objects.filter(
+                Q(salesorder_number__icontains="CTT")
+                | Q(salesorder_number__icontains="ctt")
+                | Q(salesorder_number__icontains="Ctt")
+            ),
+            many=True,
+        ).data
+        return Response(all_sales_orders)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_ctt_client_invoices(request):
+    try:
+        salesorder_id = request.query_params.get("salesorder_id")
+        all_client_invoices = []
+        if salesorder_id:
+            all_client_invoices = ClientInvoiceGetSerializer(
+                ClientInvoice.objects.filter(
+                    Q(sales_order__salesorder_id=salesorder_id)
+                    | Q(sales_order__salesorder_id=salesorder_id)
+                    | Q(sales_order__salesorder_id=salesorder_id)
+                ),
+                many=True,
+            ).data
+        else:
+            all_client_invoices = ClientInvoiceGetSerializer(
+                ClientInvoice.objects.filter(
+                    Q(sales_order__salesorder_number__icontains="CTT")
+                    | Q(sales_order__salesorder_number__icontains="ctt")
+                    | Q(sales_order__salesorder_number__icontains="Ctt")
+                ),
+                many=True,
+            ).data
+        return Response(all_client_invoices)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_ctt_purchase_orders(request):
+    try:
+        purchase_orders = list(
+            chain.from_iterable(
+                [
+                    PurchaseOrder.objects.filter(zoho_vendor__email=faculty.email)
+                    for faculty in Faculties.objects.using("ctt").all()
+                ]
+            )
+        )
+        # Serialize purchase orders
+        serializer = PurchaseOrderSerializer(purchase_orders, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_ctt_invoices(request):
+    try:
+        all_bill = list(
+            chain.from_iterable(
+                [
+                    Bill.objects.filter(
+                        purchase_orders__zoho_vendor__email=faculty.email
+                    )
+                    for faculty in Faculties.objects.using("ctt").all()
+                ]
+            )
+        )
+
+        serializer = BillGetSerializer(all_bill, many=True)
+        return Response(serializer.data)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -3194,7 +3293,7 @@ def create_sales_order(request):
                     "salesperson": salesperson_name,
                     "project_type": "CTT" if ctt else project_type,
                     "total_amount": salesorder_created["total"],
-                    "currency_symbol":salesorder_created["currency_symbol"],
+                    "currency_symbol": salesorder_created["currency_symbol"],
                 },
                 (
                     (
@@ -3571,7 +3670,9 @@ def get_total_revenue_and_cost(request):
                     print("hey", sales_order_id)
                     sales_order = SalesOrder.objects.get(salesorder_id=sales_order_id)
                     for invoice in sales_order.invoices:
-                        project_total_rev += invoice["total"]*sales_order.exchange_rate
+                        project_total_rev += (
+                            invoice["total"] * sales_order.exchange_rate
+                        )
                     unique_sales_order_ids.add(sales_order_id)
 
             for purchase_order_id in project_purchase_orders_ids:
@@ -3582,7 +3683,9 @@ def get_total_revenue_and_cost(request):
                         purchaseorder_id=purchase_order_id
                     )
                     for bill in purchase_order.bills:
-                        project_total_cost += bill["total"]*purchase_order.exchange_rate
+                        project_total_cost += (
+                            bill["total"] * purchase_order.exchange_rate
+                        )
                     unique_purchase_order_ids.add(purchase_order_id)
 
             # Add the total invoiced amount to the overall total_rev
@@ -3594,7 +3697,9 @@ def get_total_revenue_and_cost(request):
                 "total_revenue": total_rev,
                 "total_cost": total_cost,
                 "profit": total_rev - total_cost,
-                "profit_percentage": (total_rev - total_cost) / total_rev * 100 if total_rev != 0 else 0,
+                "profit_percentage": (
+                    (total_rev - total_cost) / total_rev * 100 if total_rev != 0 else 0
+                ),
             }
         )
     except Exception as e:
@@ -3615,10 +3720,10 @@ def get_so_data_of_project(request, project_id, project_type):
         for sales_order in all_sales_orders:
             total += Decimal(sales_order["total"])
             currency_code = sales_order["currency_code"]
-            currency_symbol = sales_order['currency_symbol']
+            currency_symbol = sales_order["currency_symbol"]
 
             for invoice in sales_order["invoices"]:
-                print(2,type(invoice["total"]), invoice["total"])
+                print(2, type(invoice["total"]), invoice["total"])
                 invoiced_amount += int(invoice["total"])
             not_invoiced_amount += Decimal(sales_order["total"]) - int(invoiced_amount)
 
@@ -3634,7 +3739,7 @@ def get_so_data_of_project(request, project_id, project_type):
                 "paid_amount": paid_amount,
                 "currency_code": currency_code,
                 "no_of_sales_orders": len(all_sales_orders),
-                "currency_symbol": currency_symbol
+                "currency_symbol": currency_symbol,
             }
         )
     except Exception as e:
@@ -4029,6 +4134,8 @@ def get_client_invoices(request):
         salesperson_id = request.query_params.get("salesperson_id", "")
         project_id = request.query_params.get("project_id")
         project_type = request.query_params.get("project_type")
+        salesorder_id = request.query_params.get("salesorder_id")
+        clientinvoices = []
         if project_id:
             sales_order_ids_set = set()
             if project_type == "CAAS" or project_type == "COD":
@@ -4047,28 +4154,33 @@ def get_client_invoices(request):
             sales_order_ids = list(sales_order_ids_set)  # [1,2,3]
             invoices = []
             if len(sales_order_ids) > 0:
-                invoices = ClientInvoiceGetSerializer(
-                    ClientInvoice.objects.filter(sales_order__id__in=sales_order_ids),
-                    many=True,
-                ).data
+                clientinvoices = ClientInvoice.objects.filter(
+                    sales_order__id__in=sales_order_ids
+                )
+
                 # fetch_client_invoices_for_sales_orders(sales_order_ids)
         else:
-            clientinvoices = []
+
             if salesperson_id:
                 clientinvoices = ClientInvoice.objects.filter(
                     salesperson_id=salesperson_id
                 )
             else:
                 clientinvoices = ClientInvoice.objects.all()
-            invoices = ClientInvoiceGetSerializer(
-                clientinvoices,
-                many=True,
-            ).data
+
             # invoices = fetch_client_invoices_page_wise(
             #     organization_id,
             #     page,
             #     f"&salesperson_id={salesperson_id}" if salesperson_id else "",
             # )
+        if salesorder_id:
+            clientinvoices = clientinvoices.filter(
+                sales_order__salesorder_id=salesorder_id
+            )
+        invoices = ClientInvoiceGetSerializer(
+            clientinvoices,
+            many=True,
+        ).data
         return Response(invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -4223,11 +4335,19 @@ def get_so_for_the_project(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_handovers_so(request, sales_id):
+def get_handovers_so(request, user_id, user_type):
     try:
-        handovers = HandoverDetails.objects.filter(sales__id=sales_id).order_by(
-            "-created_at"
-        )
+        handovers = []
+        if user_type == "pmo":
+            handovers = HandoverDetails.objects.filter(
+                schedular_project__isnull=True,
+                caas_project__isnull=True,
+                is_drafted=False,
+            ).order_by("-created_at")
+        else:
+            handovers = HandoverDetails.objects.filter(sales__id=user_id).order_by(
+                "-created_at"
+            )
         all_sales_order_ids = []
         for handover in handovers:
             all_sales_order_ids.extend(handover.sales_order_ids)
@@ -4294,12 +4414,12 @@ def get_handovers_count(request, sales_person_id):
         drafted_count = HandoverDetails.objects.filter(
             sales__id=sales_person_id, is_drafted=True
         ).count()
-        
+
         # Count handovers where is_accepted is true
         accepted_count = HandoverDetails.objects.filter(
             sales__id=sales_person_id, is_accepted=True
         ).count()
-        
+
         # Count handovers where both is_drafted and is_accepted are false (pending)
         pending_count = HandoverDetails.objects.filter(
             sales__id=sales_person_id, is_drafted=False, is_accepted=False
@@ -4308,12 +4428,15 @@ def get_handovers_count(request, sales_person_id):
         # Calculate total count
         total_count = drafted_count + accepted_count + pending_count
 
-        return Response({
-            "drafted_count": drafted_count,
-            "accepted_count": accepted_count,
-            "pending_count": pending_count,
-            "total_count": total_count
-        }, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "drafted_count": drafted_count,
+                "accepted_count": accepted_count,
+                "pending_count": pending_count,
+                "total_count": total_count,
+            },
+            status=status.HTTP_200_OK,
+        )
     except Exception as e:
         print(str(e))
         return Response(
