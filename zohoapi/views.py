@@ -29,7 +29,7 @@ from itertools import chain
 from rest_framework.views import APIView
 import string
 import random
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from django.contrib.auth import authenticate, login, logout
 from django.core.mail import send_mail
 from django.utils import timezone
@@ -3003,19 +3003,53 @@ def get_ctt_purchase_orders(request):
 @permission_classes([IsAuthenticated])
 def get_ctt_invoices(request):
     try:
-        all_bill = list(
-            chain.from_iterable(
-                [
-                    Bill.objects.filter(
-                        purchase_orders__zoho_vendor__email=faculty.email
-                    )
-                    for faculty in Faculties.objects.using("ctt").all()
-                ]
-            )
+        # Fetch faculty emails from the 'ctt' database
+        faculty_emails = list(
+            Faculties.objects.using("ctt").values_list("email", flat=True)
         )
 
-        serializer = BillGetSerializer(all_bill, many=True)
-        return Response(serializer.data)
+        # Fetch invoices related to faculty emails
+        invoices = InvoiceData.objects.filter(vendor_email__in=faculty_emails)
+
+        # Fetch related bills using prefetch_related
+        prefetch_bills = Prefetch(
+            "bill_set",
+            queryset=Bill.objects.filter(
+                custom_field_hash__cf_invoice__in=list(
+                    invoices.values_list("invoice_number", flat=True)
+                )
+            ),
+            to_attr="related_bills",
+        )
+
+        invoices = invoices.prefetch_related(prefetch_bills)
+        invoice_serializer = InvoiceDataGetSerializer(invoices, many=True)
+
+        all_invoices = []
+        for invoice in invoice_serializer.data:
+            matching_bill = next(
+                (
+                    bill
+                    for bill in invoice["related_bills"]
+                    if bill.vendor_id == invoice["vendor_id"]
+                ),
+                None,
+            )
+            all_invoices.append(
+                {
+                    **invoice,
+                    "bill": (
+                        {
+                            "status": matching_bill.status,
+                            "currency_symbol": matching_bill.currency_symbol,
+                        }
+                        if matching_bill
+                        else None
+                    ),
+                }
+            )
+
+        return Response(all_invoices)
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
