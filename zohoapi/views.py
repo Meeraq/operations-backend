@@ -131,7 +131,7 @@ from decimal import Decimal
 from collections import defaultdict
 from api.permissions import IsInRoles
 from time import sleep
-from ctt.models import Faculties
+from ctt.models import Faculties, Batches
 
 env = environ.Env()
 
@@ -3017,33 +3017,20 @@ def get_ctt_invoices(request):
             Faculties.objects.using("ctt").values_list("email", flat=True)
         )
 
-        # Fetch invoices related to faculty emails
-        invoices = InvoiceData.objects.filter(vendor_email__in=faculty_emails)
-
-        # Fetch related bills using prefetch_related
-        prefetch_bills = Prefetch(
-            "bill_set",
-            queryset=Bill.objects.filter(
-                custom_field_hash__cf_invoice__in=list(
-                    invoices.values_list("invoice_number", flat=True)
-                )
-            ),
-            to_attr="related_bills",
+        invoices = InvoiceData.objects.filter(
+            Q(created_at__year__gte=2024)
+            | Q(purchase_order_no__in=purchase_orders_allowed),
+            vendor_email__in=faculty_emails,
         )
 
-        invoices = invoices.prefetch_related(prefetch_bills)
         invoice_serializer = InvoiceDataGetSerializer(invoices, many=True)
-
         all_invoices = []
         for invoice in invoice_serializer.data:
-            matching_bill = next(
-                (
-                    bill
-                    for bill in invoice["related_bills"]
-                    if bill.vendor_id == invoice["vendor_id"]
-                ),
-                None,
+            bills = Bill.objects.filter(
+                vendor_id=invoice["vendor_id"],
+                custom_field_hash__cf_invoice=invoice["invoice_number"],
             )
+            matching_bill = bills.first()
             all_invoices.append(
                 {
                     **invoice,
@@ -3334,8 +3321,21 @@ def create_sales_order(request):
                     "so_number": so_number,
                     "customer_name": customer_name,
                     "salesperson": salesperson_name,
-                    "project_type": "CTT" if ctt else project_type,
-                    "total_amount": salesorder_created["total"],
+                    "project_type": (
+                        "CTT"
+                        if ctt
+                        else (
+                            "Coaching as a service"
+                            if project_type == "caas"
+                            else (
+                                "Skill Training"
+                                if project_type == "skill_training"
+                                else project_type
+                            )
+                        )
+                    ),
+                    "total_amount": salesorder_created["total"]
+                    - salesorder_created["tax_total"],
                     "currency_symbol": salesorder_created["currency_symbol"],
                 },
                 (
@@ -4580,8 +4580,14 @@ def get_ctt_revenue_data(request):
         )
         data = {}
         total = 0
+        monthly_sales_order = {}
         for sales_order in sales_orders:
             so_date = sales_order.created_date.strftime("%m/%Y")
+            if so_date in monthly_sales_order:
+                monthly_sales_order[so_date] += 1
+            else:
+                monthly_sales_order[so_date] = 1
+
             if so_date not in data:
                 data[so_date] = {"total_amount": 0, "total_invoiced": 0}
 
@@ -4609,8 +4615,220 @@ def get_ctt_revenue_data(request):
             for month, values in data.items()
         ]
 
-        return Response({"result": result, "total": round(total, 2)})
+        monthly_sales_orders_total = [
+            {
+                "title": month,
+                "total": value,
+            }
+            for month, value in monthly_sales_order.items()
+        ]
 
+        return Response(
+            {
+                "result": result,
+                "total": round(total, 2),
+                "monthly_sales_orders_total": monthly_sales_orders_total,
+            }
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_sales_of_each_program(request):
+    try:
+        start_date = request.query_params.get("start_date", "")
+        end_date = request.query_params.get("end_date", "")
+        all_batches = Batches.objects.using("ctt").all().order_by("-created_at")
+        l1_batches = []
+        l2_batches = []
+        l3_batches = []
+        actc_batches = []
+
+        for batch in all_batches:
+            if batch.program.certification_level.name == "Level 1":
+                l1_batches.append(batch.name)
+            elif batch.program.certification_level.name == "Level 2":
+                l2_batches.append(batch.name)
+            elif batch.program.certification_level.name == "Level 3":
+                l3_batches.append(batch.name)
+            elif batch.program.certification_level.name == "ACTC":
+                actc_batches.append(batch.name)
+        # date_query = ""
+        # if start_date and end_date:
+        #     date_query = f"&date_start={start_date}&date_end={end_date}"
+        # query_params = f"&salesorder_number_contains=CTT{date_query}"
+        # sales_orders = fetch_sales_orders(organization_id, query_params)
+        sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT")
+        program_totals = {
+            "L1": 0,
+            "L2": 0,
+            "L3": 0,
+            "ACTC": 0,
+        }
+        program_conversions_total = {
+            "L1": 0,
+            "L2": 0,
+            "L3": 0,
+            "ACTC": 0,
+        }
+        salesperson_program_totals = defaultdict(
+            lambda: {
+                "l1": 0,
+                "l2": 0,
+                "l3": 0,
+                "actc": 0,
+            }
+        )
+        all_salespersons = set()
+        salesperson_totals = {}
+        salesperson_conversions = {}
+        monthly_sales_of_sales_person_data = {}
+        grand_total = 0
+        for order in sales_orders:
+            so_date = order.created_date.strftime("%m/%Y")
+            batch = order.custom_field_hash.get("cf_ctt_batch", "")
+            # if not batch:
+            #     continue
+
+            salesperson = order.salesperson_name
+            all_salespersons.add(salesperson)
+            salesperson_program_totals[salesperson]
+            order_total = order.total * order.exchange_rate
+            if batch in l1_batches:
+                program_totals["L1"] += order_total
+                program_conversions_total["L1"] += 1
+                salesperson_program_totals[salesperson]["l1"] += order_total
+            elif batch in l2_batches:
+                program_totals["L2"] += order_total
+                program_conversions_total["L2"] += 1
+                salesperson_program_totals[salesperson]["l2"] += order_total
+            elif batch in l3_batches:
+                program_totals["L3"] += order_total
+                program_conversions_total["L3"] += 1
+                salesperson_program_totals[salesperson]["l3"] += order_total
+            elif batch in actc_batches:
+                program_totals["ACTC"] += order_total
+                program_conversions_total["ACTC"] += 1
+                salesperson_program_totals[salesperson]["actc"] += order_total
+
+            if salesperson in salesperson_totals:
+                salesperson_totals[salesperson] += order_total
+            else:
+                salesperson_totals[salesperson] = order_total
+
+            if salesperson in salesperson_conversions:
+                salesperson_conversions[salesperson] += 1
+            else:
+                salesperson_conversions[salesperson] = 1
+
+            if so_date in monthly_sales_of_sales_person_data:
+
+                if salesperson in monthly_sales_of_sales_person_data[so_date]:
+                    monthly_sales_of_sales_person_data[so_date][salesperson] += 1
+                else:
+                    monthly_sales_of_sales_person_data[so_date][salesperson] = 1
+
+            else:
+                monthly_sales_of_sales_person_data[so_date] = {}
+                monthly_sales_of_sales_person_data[so_date][salesperson] = 1
+
+            grand_total += order_total
+
+        all_salespersons = list(all_salespersons)
+        res_list = [
+            {
+                "person": person,
+                "L1": round(values["l1"], 2),
+                "L2": round(values["l2"], 2),
+                "L3": round(values["l3"], 2),
+                "ACTC": round(values["actc"], 2),
+            }
+            for person, values in salesperson_program_totals.items()
+        ]
+
+        program_amount = [
+            {
+                "title": program,
+                "total": round(total, 2),
+            }
+            for program, total in program_totals.items()
+        ]
+
+        program_conversions = [
+            {
+                "title": program,
+                "total": round(total, 2),
+            }
+            for program, total in program_conversions_total.items()
+        ]
+
+        program_avegage = [
+            {
+                "title": program,
+                "total": (
+                    round(total / program_conversions_total[program], 2)
+                    if not program_conversions_total[program] == 0
+                    else 0
+                ),
+            }
+            for program, total in program_totals.items()
+        ]
+
+        sales_person_list = [
+            {
+                "title": person,
+                "total": round(value, 2),
+            }
+            for person, value in salesperson_totals.items()
+        ]
+
+        conversions_list = [
+            {
+                "title": person,
+                "total": round(value, 2),
+            }
+            for person, value in salesperson_conversions.items()
+        ]
+
+        salesperson_average = [
+            {
+                "title": person,
+                "total": (
+                    round(value / salesperson_conversions[person], 2)
+                    if not salesperson_conversions[person] == 0
+                    else 0
+                ),
+            }
+            for person, value in salesperson_totals.items()
+        ]
+
+        monthly_sales_of_sales_person = [
+            {
+                "month": month,
+                **{
+                    salesperson: value.get(salesperson, 0)
+                    for salesperson in all_salespersons
+                },
+            }
+            for month, value in monthly_sales_of_sales_person_data.items()
+        ]
+
+        return Response(
+            {
+                "program_totals": program_amount,
+                "program_conversions": program_conversions,
+                "program_avegage": program_avegage,
+                "salesperson_totals": sales_person_list,
+                "salesperson_conversions": conversions_list,
+                "salesperson_average": salesperson_average,
+                "salesperson_program_totals": res_list,
+                "monthly_sales_of_sales_person": monthly_sales_of_sales_person,
+            }
+        )
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"})
