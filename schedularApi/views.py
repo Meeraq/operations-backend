@@ -7378,15 +7378,21 @@ def send_mail_to_coaches(request):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def add_action_item(request):
     if request.method == 'POST':
         serializer = ActionItemSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            action_item = serializer.save()
+            status_updates = [{'status': action_item.initial_status, 'updated_at': str(timezone.now())}] if action_item.initial_status else []
+            action_item.status_updates = status_updates
+            action_item.save()
+            res_serializer = ActionItemSerializer(action_item)
+            return Response(res_serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['PUT'])
+@permission_classes([IsAuthenticated])
 def edit_action_item(request, pk):
     try:
         action_item = ActionItem.objects.get(pk=pk)
@@ -7394,11 +7400,48 @@ def edit_action_item(request, pk):
         return Response(status=status.HTTP_404_NOT_FOUND)
 
     if request.method == 'PUT':
-        serializer = ActionItemSerializer(action_item, data=request.data)
+        serializer = ActionItemSerializer(action_item, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['PUT'])
+def update_action_item_status(request, pk):
+    try:
+        action_item = ActionItem.objects.get(pk=pk)
+    except ActionItem.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'PUT':
+        new_status = request.data.get('current_status')
+        if new_status not in dict(ActionItem.STATUS_CHOICES).keys():
+            return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        action_item.current_status = new_status
+        action_item.status_updates.append({
+            "status": new_status,
+            "updated_at": str(timezone.now())
+        })
+        action_item.save()
+        serializer = ActionItemSerializer(action_item)
+        return Response(serializer.data)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_action_item(request, pk):
+    print("delete called")
+    try:
+        action_item = ActionItem.objects.get(pk=pk)
+    except ActionItem.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    print("hello")
+
+    if request.method == 'DELETE':
+        action_item.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["GET"])
@@ -7436,7 +7479,15 @@ def batch_competencies_and_behaviours(request,batch_id, learner_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def learner_action_items_in_batch(request, batch_id, learner_id, competency_id, behavior_id):
+def learner_action_items_in_batch_of_competency_and_behavior(request, batch_id, learner_id, competency_id, behavior_id):
     action_items = ActionItem.objects.filter(batch__id=batch_id, competency__id=competency_id,behavior__id=behavior_id,learner__id=learner_id).order_by('-created_at')
+    action_items_serializer = ActionItemSerializer(action_items, many=True)
+    return Response(action_items_serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def learner_action_items_in_batch(request, batch_id, learner_id):
+    action_items = ActionItem.objects.filter(batch__id=batch_id,learner__id=learner_id).order_by('-created_at')
     action_items_serializer = ActionItemSerializer(action_items, many=True)
     return Response(action_items_serializer.data, status=status.HTTP_200_OK)

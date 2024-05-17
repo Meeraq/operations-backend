@@ -566,9 +566,13 @@ class ActionItem(models.Model):
         ("consistently_achieving", "Consistently Achieving"),
     )
     text = models.TextField()
-    status = models.CharField(
+    initial_status = models.CharField(
         max_length=50, choices=STATUS_CHOICES, default="not_started"
     )
+    current_status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="not_started"
+    )
+    status_updates = models.JSONField(default=list, blank=True)
     completion_date = models.DateField(null=True, blank=True)
     learner = models.ForeignKey(
         Learner, on_delete=models.SET_NULL, null=True, blank=True, default=None

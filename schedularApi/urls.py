@@ -396,9 +396,24 @@ urlpatterns = [
     path(
         "action-items/edit/<int:pk>/", views.edit_action_item, name="edit_action_item"
     ),
+    path(
+        "action-items/update-status/<int:pk>/",
+        views.update_action_item_status,
+        name="update_action_item_status",
+    ),
+    path(
+        "action-items/delete/<int:pk>/",
+        views.delete_action_item,
+        name="delete_action_item",
+    ),
     path("batches/learner/<int:pk>/", views.learner_batches, name="learner_batches"),
     path(
         "batch/action-items/<int:batch_id>/<int:learner_id>/<int:competency_id>/<int:behavior_id>/",
+        views.learner_action_items_in_batch_of_competency_and_behavior,
+        name="learner_action_items_in_batch",
+    ),
+    path(
+        "batch/action-items/<int:batch_id>/<int:learner_id>/",
         views.learner_action_items_in_batch,
         name="learner_action_items_in_batch",
     ),
