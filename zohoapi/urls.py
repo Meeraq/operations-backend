@@ -410,4 +410,9 @@ urlpatterns = [
     path(
         "get-ctt-revenue-data/", views.get_ctt_revenue_data, name="get_ctt_revenue_data"
     ),
+     path(
+        "get-sales-of-each-program/",
+        views.get_sales_of_each_program,
+        name="get_sales_of_each_program",
+    ),
 ]

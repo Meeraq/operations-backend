@@ -59,4 +59,5 @@ urlpatterns = [
         views.get_card_data_for_dashboard_ctt,
         name="get_card_data_for_dashboard_ctt",
     ),
+   
 ]
