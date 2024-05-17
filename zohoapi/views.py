@@ -3017,33 +3017,20 @@ def get_ctt_invoices(request):
             Faculties.objects.using("ctt").values_list("email", flat=True)
         )
 
-        # Fetch invoices related to faculty emails
-        invoices = InvoiceData.objects.filter(vendor_email__in=faculty_emails)
-
-        # Fetch related bills using prefetch_related
-        prefetch_bills = Prefetch(
-            "bill_set",
-            queryset=Bill.objects.filter(
-                custom_field_hash__cf_invoice__in=list(
-                    invoices.values_list("invoice_number", flat=True)
-                )
-            ),
-            to_attr="related_bills",
+        invoices = InvoiceData.objects.filter(
+            Q(created_at__year__gte=2024)
+            | Q(purchase_order_no__in=purchase_orders_allowed),
+            vendor_email__in=faculty_emails,
         )
 
-        invoices = invoices.prefetch_related(prefetch_bills)
         invoice_serializer = InvoiceDataGetSerializer(invoices, many=True)
-
         all_invoices = []
         for invoice in invoice_serializer.data:
-            matching_bill = next(
-                (
-                    bill
-                    for bill in invoice["related_bills"]
-                    if bill.vendor_id == invoice["vendor_id"]
-                ),
-                None,
+            bills = Bill.objects.filter(
+                vendor_id=invoice["vendor_id"],
+                custom_field_hash__cf_invoice=invoice["invoice_number"],
             )
+            matching_bill = bills.first()
             all_invoices.append(
                 {
                     **invoice,
