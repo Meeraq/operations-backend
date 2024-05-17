@@ -3321,8 +3321,21 @@ def create_sales_order(request):
                     "so_number": so_number,
                     "customer_name": customer_name,
                     "salesperson": salesperson_name,
-                    "project_type": "CTT" if ctt else project_type,
-                    "total_amount": salesorder_created["total"],
+                    "project_type": (
+                        "CTT"
+                        if ctt
+                        else (
+                            "Coaching as a service"
+                            if project_type == "caas"
+                            else (
+                                "Skill Training"
+                                if project_type == "skill_training"
+                                else project_type
+                            )
+                        )
+                    ),
+                    "total_amount": salesorder_created["total"]
+                    - salesorder_created["tax_total"],
                     "currency_symbol": salesorder_created["currency_symbol"],
                 },
                 (
