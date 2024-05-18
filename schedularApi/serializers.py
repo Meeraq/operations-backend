@@ -15,6 +15,7 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
+    ActionItem,
 )
 from api.models import Coach
 from api.models import Sales
@@ -233,7 +234,7 @@ class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer)
         if obj.organisation:
             return obj.organisation.name
         return None
-    
+
     def get_pmo_name(self, obj):
         if obj.pmo:
             return obj.pmo.name
@@ -242,3 +243,27 @@ class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer)
     class Meta:
         model = HandoverDetails
         fields = "__all__"
+
+
+class ActionItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ActionItem
+        fields = "__all__"
+
+
+class ActionItemDetailedSerializer(serializers.ModelSerializer):
+    learner_name = serializers.CharField(source="learner.name", allow_null=True)
+    batch_name = serializers.CharField(source="batch.name", allow_null=True)
+    competency_name = serializers.CharField(source="competency.name", allow_null=True)
+    behavior_name = serializers.CharField(source="behavior.name", allow_null=True)
+    project_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ActionItem
+        fields = "__all__"
+
+    def get_project_name(self, obj):
+        # Assuming project is related to batch, adjust accordingly if it's related differently
+        if obj.batch and obj.batch.project:
+            return obj.batch.project.name
+        return None
