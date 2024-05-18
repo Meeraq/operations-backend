@@ -633,6 +633,10 @@ def get_all_Schedular_Projects(request):
             .first()
         )
         project_data["latest_update"] = latest_update.message if latest_update else None
+        handover = HandoverDetails.objects.filter(
+            schedular_project__id=project_data["id"]
+        ).first()
+        project_data["is_handover_present"] = True if handover else False
     return Response(serializer.data, status=200)
 
 
@@ -963,11 +967,20 @@ def get_schedular_batches(request):
 def get_schedular_project(request, project_id):
     try:
         project = get_object_or_404(SchedularProject, id=project_id)
+
+        # Check if a contract exists for the project
+        is_contract_present = ProjectContract.objects.filter(
+            schedular_project__id=project_id
+        ).exists()
+
         serializer = SchedularProjectSerializer(project)
-        return Response(serializer.data)
+        # Add the 'is_contract_present' field to the serializer data
+
+        return Response({**serializer.data, "is_contract_present": is_contract_present})
     except SchedularProject.DoesNotExist:
         return Response(
-            {"error": "Couldn't find project to add project structure."}, status=400
+            {"error": "Couldn't find project to add project structure."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
 

@@ -3179,4 +3179,6 @@ def send_nudge_reminder_on_trigger_date_at_6pm():
                     },
                     [],
                 )
+                nudge.is_sent = True
+                nudge.save()
                 sleep(5)
