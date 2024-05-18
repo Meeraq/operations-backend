@@ -418,8 +418,16 @@ urlpatterns = [
         name="learner_action_items_in_batch",
     ),
     path(
-        "batch/competencies-and-behaviours/<int:batch_id>/<int:learner_id>/",
+        "batch/competencies-and-behaviours/<int:batch_id>/",
         views.batch_competencies_and_behaviours,
         name="batch_competencies_and_behaviours",
+    ),
+    path(
+        "batch/<int:batch_id>/competency/<int:competency_id>/behavior/<int:behavior_id>/movement/",
+        views.batch_competency_behavior_movement,
+    ),
+    path(
+        "all-actions/",
+        views.get_all_action_items,
     ),
 ]

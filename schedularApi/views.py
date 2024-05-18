@@ -99,7 +99,8 @@ from .serializers import (
     HandoverDetailsSerializer,
     TaskSerializer,
     HandoverDetailsSerializerWithOrganisationName,
-    ActionItemSerializer
+    ActionItemSerializer,
+    ActionItemDetailedSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -121,7 +122,7 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
-    ActionItem
+    ActionItem,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -163,8 +164,8 @@ from assessmentApi.models import (
     ParticipantUniqueId,
     ParticipantObserverMapping,
     ParticipantResponse,
-    Competency, 
-    Behavior
+    Competency,
+    Behavior,
 )
 from io import BytesIO
 from api.serializers import LearnerSerializer
@@ -457,12 +458,8 @@ def create_handover(request):
         return Response({"error": "Failed to add handover. "}, status=500)
 
 
+PROJECT_TYPE_VALUES = {"caas": "CAAS", "skill_training": "Skill Training", "COD": "COD"}
 
-PROJECT_TYPE_VALUES = {
-    "caas" : "CAAS",
-    "skill_training" : "Skill Training",
-    "COD" : "COD"
-}
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
@@ -512,25 +509,44 @@ def update_handover(request):
                 {"project_name": project_name},
                 [],  # no bcc
             )
-        if request.query_params.get('handover', '') == 'accepted':
-            bcc_emails = ["pmocoaching@meeraq.com", "pmotraining@meeraq.com", "rajat@meeraq.com", "sujata@meeraq.com", "sales@meeraq.com"]
+        if request.query_params.get("handover", "") == "accepted":
+            bcc_emails = [
+                "pmocoaching@meeraq.com",
+                "pmotraining@meeraq.com",
+                "rajat@meeraq.com",
+                "sujata@meeraq.com",
+                "sales@meeraq.com",
+            ]
             project_name = handover_instance.project_name
             send_mail_templates(
                 "pmo_emails/accept_handover.html",
-                [handover_instance.sales.email if handover_instance.sales else "sales@meeraq.com"],
+                [
+                    (
+                        handover_instance.sales.email
+                        if handover_instance.sales
+                        else "sales@meeraq.com"
+                    )
+                ],
                 f"Handover Accepted: {PROJECT_TYPE_VALUES[handover_instance.project_type]}",
                 {
                     "project_name": project_name,
                     "project_type": PROJECT_TYPE_VALUES[handover_instance.project_type],
                     "pmo_name": "PMO",
                     "sales_name": handover_instance.sales.name,
-                    "sales_number":handover_instance.sales_order_ids
+                    "sales_number": handover_instance.sales_order_ids,
                 },
-                bcc_emails if env("ENVIRONMENT") == "PRODUCTION" else ["tech@meeraq.com", "naveen@meeraq.com"],
+                (
+                    bcc_emails
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["tech@meeraq.com", "naveen@meeraq.com"]
+                ),
             )
 
         return Response(
-            {"message": "Handover updated successfully.", "handover": serializer.data,},
+            {
+                "message": "Handover updated successfully.",
+                "handover": serializer.data,
+            },
             status=200,
         )
     else:
@@ -1233,7 +1249,7 @@ def update_live_session(request, live_session_id):
                 )
             else:
                 batches = SchedularBatch.objects.filter(id=main_live_session.batch.id)
-            count = 0 
+            count = 0
             for batch in batches:
 
                 live_session = LiveSession.objects.get(
@@ -1247,7 +1263,7 @@ def update_live_session(request, live_session_id):
                 serializer = LiveSessionSerializer(
                     live_session, data=data, partial=True
                 )
-                count +=1
+                count += 1
                 if serializer.is_valid():
                     update_live_session = serializer.save()
                     try:
@@ -1261,7 +1277,9 @@ def update_live_session(request, live_session_id):
                         print(str(e))
                         pass
                     current_time = timezone.now()
-                    days_difference = (update_live_session.date_time - current_time).days
+                    days_difference = (
+                        update_live_session.date_time - current_time
+                    ).days
                     if update_live_session.date_time > current_time:
                         try:
                             scheduled_for = update_live_session.date_time - timedelta(
@@ -1308,7 +1326,6 @@ def update_live_session(request, live_session_id):
                         lesson.drip_date = live_session.date_time + timedelta(
                             hours=5, minutes=30
                         )
-
 
                         lesson.save()
                 if update_live_session.batch.project.teams_enabled:
@@ -1957,7 +1974,7 @@ def update_batch(request, batch_id):
                                 return Response(
                                     {"error": "Failed to perform task."},
                                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                                )        
+                                )
                 try:
                     tasks = Task.objects.filter(
                         task="add_coach", status="pending", schedular_batch=batch
@@ -3893,7 +3910,7 @@ def add_facilitator(request):
 def get_facilitators(request):
     try:
         # Get all the Coach objects
-        all_fac =  []
+        all_fac = []
         facilitators = Facilitator.objects.filter(is_approved=True)
         for facilitator in facilitators:
             overall_answer = Answer.objects.filter(
@@ -3902,12 +3919,14 @@ def get_facilitators(request):
             )
             overall_nps = calculate_nps_from_answers(overall_answer)
             serializer = FacilitatorSerializer(facilitator)
-            all_fac.append({
-                **serializer.data,
-                "overall_nps": overall_nps,
-            })
-        # Serialize the Coach objects   
-        
+            all_fac.append(
+                {
+                    **serializer.data,
+                    "overall_nps": overall_nps,
+                }
+            )
+        # Serialize the Coach objects
+
         # Return the serialized Coach objects as the response
         return Response(all_fac, status=200)
 
@@ -4206,8 +4225,6 @@ def get_facilitator_field_values(request):
         for qualifications in coach.educational_qualification:
             education_qualifications.add(qualifications)
 
-        # domains.add(coach.domain)
-        # educations.add(coach.education)
     return Response(
         {
             "job_roles": list(job_roles),
@@ -4419,11 +4436,11 @@ def get_live_sessions_by_status(request):
             livesession__facilitator__id=facilitator_id
         )
         queryset = queryset.filter(batch__in=batches)
-    
+
     learner_id = request.query_params.get("learner_id", None)
     if learner_id:
         queryset = queryset.filter(batch__learners__id=learner_id)
-    
+
     res = []
     for live_session in queryset:
         session_name = get_live_session_name(live_session.session_type)
@@ -7027,9 +7044,9 @@ def get_upcoming_coaching_and_live_session_data_for_learner(request, user_id):
             "coach_name": facilitator_names,
             "session_timing": session_timing,
             "type": "Live Session",
-            "room_id":room_id,
-            "start_time":"",
-            "end_time":"",
+            "room_id": room_id,
+            "start_time": "",
+            "end_time": "",
         }
         upcoming_sessions_data.append(session_data)
 
@@ -7045,8 +7062,8 @@ def get_upcoming_coaching_and_live_session_data_for_learner(request, user_id):
             + available_session.availibility.coach.last_name
         )
         room_id = f"{available_session.availibility.coach.room_id}"
-        start_time=available_session.availibility.start_time
-        end_time=available_session.availibility.end_time
+        start_time = available_session.availibility.start_time
+        end_time = available_session.availibility.end_time
         session_data = {
             "project_name": project_name,
             "session_name": session_name,
@@ -7054,8 +7071,8 @@ def get_upcoming_coaching_and_live_session_data_for_learner(request, user_id):
             "session_timing": session_timing,
             "type": "Coaching Session",
             "room_id": room_id,
-            "start_time":start_time,
-            "end_time":end_time,
+            "start_time": start_time,
+            "end_time": end_time,
         }
 
         upcoming_sessions_data.append(session_data)
@@ -7068,8 +7085,11 @@ def get_upcoming_coaching_and_live_session_data_for_learner(request, user_id):
 def get_upcoming_assessment_data(request, user_id):
     try:
         current_time = timezone.now()
-        upcoming_assessment = Assessment.objects.filter(assessment_start_date__gt=current_time, participants_observers__participant__id=user_id).first()
-        
+        upcoming_assessment = Assessment.objects.filter(
+            assessment_start_date__gt=current_time,
+            participants_observers__participant__id=user_id,
+        ).first()
+
         if upcoming_assessment:
             assessment_data = {
                 "assessment_name": upcoming_assessment.participant_view_name,
@@ -7078,8 +7098,8 @@ def get_upcoming_assessment_data(request, user_id):
             }
             return Response(assessment_data)
         else:
-            return Response({"message": "No upcoming assessment found."}, status = 400)
-    
+            return Response({"message": "No upcoming assessment found."}, status=400)
+
     except Exception as e:
         return Response({"message": f"An error occurred: {str(e)}"})
 
@@ -7095,7 +7115,7 @@ def get_just_upcoming_session_data(request, user_id):
             learner=learner,
         ).order_by("availibility__start_time")
         upcoming_session = sessions.first()
-        
+
         # You can customize the response based on whether an upcoming session is found or not
         if upcoming_session:
             # Customize the response data according to your requirement
@@ -7106,11 +7126,18 @@ def get_just_upcoming_session_data(request, user_id):
             }
             return Response(response_data, status=status.HTTP_200_OK)
         else:
-            return Response({"message": "No upcoming sessions found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"message": "No upcoming sessions found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
     except Learner.DoesNotExist:
-        return Response({"message": "Learner not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"message": "Learner not found"}, status=status.HTTP_404_NOT_FOUND
+        )
     except Exception as e:
-        return Response({"message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {"message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @api_view(["GET"])
@@ -7121,22 +7148,27 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
         # fetch_purchase_orders(organization_id)
         if project_type == "skill_training" or project_type == "SEEQ":
             purchase_orders = PurchaseOrderGetSerializer(
-            PurchaseOrder.objects.filter(
-                Q(created_time__year__gte=2024)
-                | Q(purchaseorder_number__in=purchase_orders_allowed), Q(schedular_project__id = project_id)
-            ),
-            many=True,).data
+                PurchaseOrder.objects.filter(
+                    Q(created_time__year__gte=2024)
+                    | Q(purchaseorder_number__in=purchase_orders_allowed),
+                    Q(schedular_project__id=project_id),
+                ),
+                many=True,
+            ).data
         elif project_type == "CAAS" or project_type == "COD":
             purchase_orders = PurchaseOrderGetSerializer(
-            PurchaseOrder.objects.filter(
-                Q(created_time__year__gte=2024)
-                | Q(purchaseorder_number__in=purchase_orders_allowed), Q(caas_project__id = project_id)
-            ),
-            many=True,).data
+                PurchaseOrder.objects.filter(
+                    Q(created_time__year__gte=2024)
+                    | Q(purchaseorder_number__in=purchase_orders_allowed),
+                    Q(caas_project__id=project_id),
+                ),
+                many=True,
+            ).data
         return Response(purchase_orders)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -7376,22 +7408,31 @@ def send_mail_to_coaches(request):
         return Response({"error": "Failed to send mail!"}, status=500)
 
 
-
-@api_view(['POST'])
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_action_item(request):
-    if request.method == 'POST':
+    if request.method == "POST":
         serializer = ActionItemSerializer(data=request.data)
         if serializer.is_valid():
             action_item = serializer.save()
-            status_updates = [{'status': action_item.initial_status, 'updated_at': str(timezone.now())}] if action_item.initial_status else []
+            status_updates = (
+                [
+                    {
+                        "status": action_item.initial_status,
+                        "updated_at": str(timezone.now()),
+                    }
+                ]
+                if action_item.initial_status
+                else []
+            )
             action_item.status_updates = status_updates
             action_item.save()
             res_serializer = ActionItemSerializer(action_item)
             return Response(res_serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-@api_view(['PUT'])
+
+@api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def edit_action_item(request, pk):
     try:
@@ -7399,7 +7440,7 @@ def edit_action_item(request, pk):
     except ActionItem.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    if request.method == 'PUT':
+    if request.method == "PUT":
         serializer = ActionItemSerializer(action_item, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -7407,39 +7448,38 @@ def edit_action_item(request, pk):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['PUT'])
+@api_view(["PUT"])
 def update_action_item_status(request, pk):
     try:
         action_item = ActionItem.objects.get(pk=pk)
     except ActionItem.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
 
-    if request.method == 'PUT':
-        new_status = request.data.get('current_status')
+    if request.method == "PUT":
+        new_status = request.data.get("current_status")
         if new_status not in dict(ActionItem.STATUS_CHOICES).keys():
-            return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response(
+                {"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
         action_item.current_status = new_status
-        action_item.status_updates.append({
-            "status": new_status,
-            "updated_at": str(timezone.now())
-        })
+        action_item.status_updates.append(
+            {"status": new_status, "updated_at": str(timezone.now())}
+        )
         action_item.save()
         serializer = ActionItemSerializer(action_item)
         return Response(serializer.data)
 
 
-@api_view(['DELETE'])
+@api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_action_item(request, pk):
-    print("delete called")
     try:
         action_item = ActionItem.objects.get(pk=pk)
     except ActionItem.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
-    print("hello")
-
-    if request.method == 'DELETE':
+    
+    if request.method == "DELETE":
         action_item.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -7448,8 +7488,10 @@ def delete_action_item(request, pk):
 @permission_classes([IsAuthenticated])
 def learner_batches(request, pk):
     try:
-        batches = SchedularBatch.objects.filter(learners__id=pk, project__is_archive=False).distinct()
-        serializer = SchedularBatchSerializer(batches,many=True) 
+        batches = SchedularBatch.objects.filter(
+            learners__id=pk, project__is_archive=False
+        ).distinct()
+        serializer = SchedularBatchSerializer(batches, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -7461,12 +7503,14 @@ def learner_batches(request, pk):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def batch_competencies_and_behaviours(request,batch_id, learner_id):
+def batch_competencies_and_behaviours(request, batch_id):
     try:
         assessments = Assessment.objects.filter(
-                assessment_modal__lesson__course__batch__id=batch_id
-            )
-        competencies = Competency.objects.filter(question__questionnaire__assessment__in=assessments).distinct()
+            assessment_modal__lesson__course__batch__id=batch_id
+        )
+        competencies = Competency.objects.filter(
+            question__questionnaire__assessment__in=assessments
+        ).distinct()
         serializer = CompetencySerializerDepthOne(competencies, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
@@ -7479,8 +7523,15 @@ def batch_competencies_and_behaviours(request,batch_id, learner_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def learner_action_items_in_batch_of_competency_and_behavior(request, batch_id, learner_id, competency_id, behavior_id):
-    action_items = ActionItem.objects.filter(batch__id=batch_id, competency__id=competency_id,behavior__id=behavior_id,learner__id=learner_id).order_by('-created_at')
+def learner_action_items_in_batch_of_competency_and_behavior(
+    request, batch_id, learner_id, competency_id, behavior_id
+):
+    action_items = ActionItem.objects.filter(
+        batch__id=batch_id,
+        competency__id=competency_id,
+        behavior__id=behavior_id,
+        learner__id=learner_id,
+    ).order_by("-created_at")
     action_items_serializer = ActionItemSerializer(action_items, many=True)
     return Response(action_items_serializer.data, status=status.HTTP_200_OK)
 
@@ -7488,6 +7539,107 @@ def learner_action_items_in_batch_of_competency_and_behavior(request, batch_id, 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def learner_action_items_in_batch(request, batch_id, learner_id):
-    action_items = ActionItem.objects.filter(batch__id=batch_id,learner__id=learner_id).order_by('-created_at')
+    action_items = ActionItem.objects.filter(
+        batch__id=batch_id, learner__id=learner_id
+    ).order_by("-created_at")
     action_items_serializer = ActionItemSerializer(action_items, many=True)
     return Response(action_items_serializer.data, status=status.HTTP_200_OK)
+
+
+status_choices_dict = {
+    "not_started": 1,
+    "occasionally_doing": 2,
+    "regularly_doing": 3,
+    "actively_pursuing": 4,
+    "consistently_achieving": 5,
+}
+
+
+STATUS_CHOICES = (
+    ("not_started", "Not Started"),
+    ("occasionally_doing", "Occasionally Doing"),
+    ("regularly_doing", "Regularly Doing"),
+    ("actively_pursuing", "Actively Pursuing"),
+    ("consistently_achieving", "Consistently Achieving"),
+)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def batch_competency_behavior_movement(request, batch_id, competency_id, behavior_id):
+    # Define initial and current status integer mappings
+    initial_status_int = Case(
+        *[
+            When(initial_status=status, then=Value(status_choices_dict.get(status, 0)))
+            for status in status_choices_dict
+        ],
+        default=Value(0),  # Default value if status not found
+        output_field=IntegerField(),
+    )
+    current_status_int = Case(
+        *[
+            When(current_status=status, then=Value(status_choices_dict.get(status, 0)))
+            for status in status_choices_dict
+        ],
+        default=Value(0),  # Default value if status not found
+        output_field=IntegerField(),
+    )
+
+    # Annotate the queryset with the movement between initial and current statuses
+    movement_counts = (
+        ActionItem.objects.filter(
+            batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+        )
+        .annotate(
+            initial_status_int=initial_status_int,
+            current_status_int=current_status_int,
+            movement=F("current_status_int") - F("initial_status_int"),
+        )
+        .values("movement")
+        .annotate(count=Count("id"))
+    )
+
+    # Prepare data for response for movements
+    data = [
+        {"movement": i, "count": 0}
+        for i in range(
+            5
+        )  # Initialize with default count of 0 for all movements (0 to 4)
+    ]
+    # Update the counts from the queryset
+    for item in movement_counts:
+        movement = item["movement"]
+        data[movement]["count"] = item["count"]
+
+    status_counts_dict = {status[0]: 0 for status in STATUS_CHOICES}
+
+    # Fetch status counts from the database
+    status_counts_queryset = (
+        ActionItem.objects.filter(
+            batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+        )
+        .values("current_status")
+        .annotate(count=Count("id"))
+    )
+
+    # Update counts for existing statuses
+    for item in status_counts_queryset:
+        status_counts_dict[item["current_status"]] = item["count"]
+
+    # Prepare data for response, sorted according to STATUS_CHOICES
+    action_item_count = [
+        {"status": status, "count": status_counts_dict[status]}
+        for status, _ in STATUS_CHOICES
+    ]
+
+    return Response(
+        {"movements": data, "action_item_counts": action_item_count},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+def get_all_action_items(request):
+    action_items = ActionItem.objects.all()
+    serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
+    return Response(serialized_data)
