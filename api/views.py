@@ -1933,7 +1933,9 @@ def get_ongoing_projects(request):
             project_data["latest_update"] = (
                 latest_update.message if latest_update else None
             )
-            handover = HandoverDetails.objects.filter(caas_project__id=project_data["id"]).first()
+            handover = HandoverDetails.objects.filter(
+                caas_project__id=project_data["id"]
+            ).first()
             project_data["is_handover_present"] = True if handover else False
         return Response(serializer.data)
     except Exception as e:
@@ -2929,7 +2931,7 @@ def send_consent(request):
             message = (
                 f"Admin has requested your consent to share profile for a new project."
             )
-            
+
             if project.coach_consent_mandatory:
                 create_notification(coach_status.coach.user.user, path, message)
                 send_mail_templates(
@@ -2949,7 +2951,6 @@ def send_consent(request):
     project.save()
 
     # Send notifications and emails
-    
 
     if not project.coach_consent_mandatory:
         for coach_status in project.coaches_status.filter(
@@ -4918,7 +4919,7 @@ def create_session_request_by_learner(request, session_id):
     return Response({"message": "Session requested successfully"})
 
 
-def session_requests_of_user(user_type, user_id,project_id):
+def session_requests_of_user(user_type, user_id, project_id):
     session_requests = []
     if user_type == "pmo":
         session_requests = SessionRequestCaas.objects.filter(
@@ -4948,7 +4949,7 @@ def session_requests_of_user(user_type, user_id,project_id):
         #         # is selected and confirmed, and coach is in the project
         #         elif session.engagement and session.engagement.type=="cod" and CoachContract.objects.filter(project=session.project, coach__id=user_id, status="approved").exists() and  session.project.coaches_status.filter(coach__id = user_id , status__hr__status="select").exists():
         #             session_requests.append(session)
-        
+
         if project_id:
             session_requests = SessionRequestCaas.objects.filter(
                 Q(confirmed_availability=None)
@@ -5008,7 +5009,7 @@ def session_requests_of_user(user_type, user_id,project_id):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def get_session_requests_of_user(request, user_type, user_id):
     project_id = request.query_params.get("project")
-    session_requests = session_requests_of_user(user_type, user_id,project_id)
+    session_requests = session_requests_of_user(user_type, user_id, project_id)
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
             Engagement.objects.filter(
@@ -5315,7 +5316,7 @@ def get_upcoming_sessions_of_user(request, user_type, user_id):
     return Response(serializer.data, status=200)
 
 
-def get_upcoming_session_of_user(user_type, user_id):
+def get_upcoming_session_of_user(user_type, user_id, project_id):
     current_time = int(timezone.now().timestamp() * 1000)
     current_time_seeq = timezone.now()
     timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
@@ -5363,7 +5364,7 @@ def get_upcoming_session_of_user(user_type, user_id):
             availibility__end_time__gt=timestamp_milliseconds
         )
     if user_type == "coach":
-        project_id = request.query_params.get("project")
+
         if project_id:
             session_requests = SessionRequestCaas.objects.filter(
                 Q(is_booked=True),
@@ -5419,8 +5420,9 @@ def new_get_upcoming_sessions_of_user(request, user_type, user_id):
     # timestamp_milliseconds = str(int(current_time_seeq.timestamp() * 1000))
     # session_requests = []
     # avaliable_sessions = []
+    project_id = request.query_params.get("project")
     session_requests, available_sessions = get_upcoming_session_of_user(
-        user_type, user_id
+        user_type, user_id, project_id
     )
 
     session_requests = session_requests.annotate(
@@ -5550,7 +5552,7 @@ def get_past_sessions_of_user(request, user_type, user_id):
     return Response(serializer.data, status=200)
 
 
-def past_sessions_of_user(user_type, user_id):
+def past_sessions_of_user(user_type, user_id, project_id=None):
     current_time = int(timezone.now().timestamp() * 1000)
     current_time_seeq = timezone.now()
     timestamp_milliseconds = int(current_time_seeq.timestamp() * 1000)
@@ -5596,7 +5598,6 @@ def past_sessions_of_user(user_type, user_id):
             availibility__end_time__lt=timestamp_milliseconds
         )
     if user_type == "coach":
-        project_id = request.query_params.get("project")
 
         if project_id:
             session_requests = SessionRequestCaas.objects.filter(
@@ -5645,7 +5646,10 @@ def past_sessions_of_user(user_type, user_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def new_get_past_sessions_of_user(request, user_type, user_id):
-    session_requests, available_sessions = past_sessions_of_user(user_type, user_id)
+    project_id = request.query_params.get("project")
+    session_requests, available_sessions = past_sessions_of_user(
+        user_type, user_id, project_id
+    )
 
     session_requests = session_requests.annotate(
         engagement_status=Subquery(
@@ -5720,14 +5724,16 @@ def new_get_past_sessions_of_user(request, user_type, user_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach", "hr")])
 def get_count_sessions(request, user_type, user_id):
-    upcoming_session_requests, upcoming_available_sessions = (
-        get_upcoming_session_of_user(user_type, user_id)
-    )
-    past_session_requests, past_avilable_sessions = past_sessions_of_user(
-        user_type, user_id
-    )
     project_id = request.query_params.get("project")
-    request_session_requests = session_requests_of_user(user_type, user_id,project_id)
+    upcoming_session_requests, upcoming_available_sessions = (
+        get_upcoming_session_of_user(user_type, user_id, project_id)
+    )
+
+    past_session_requests, past_avilable_sessions = past_sessions_of_user(
+        user_type, user_id, project_id
+    )
+
+    request_session_requests = session_requests_of_user(user_type, user_id, project_id)
     upcoming_count = (
         upcoming_session_requests.count() + upcoming_available_sessions.count()
     )
@@ -6697,8 +6703,12 @@ def get_current_session(request, user_type, room_id, user_id):
                 if isinstance(nearest_session, SessionRequestCaas)
                 else nearest_session.availibility.end_time
             ),
-            "batch" : None if  isinstance(nearest_session, SessionRequestCaas) else nearest_session.coaching_session.batch.id,
-            "learner" : nearest_session.learner.id,
+            "batch": (
+                None
+                if isinstance(nearest_session, SessionRequestCaas)
+                else nearest_session.coaching_session.batch.id
+            ),
+            "learner": nearest_session.learner.id,
         }
         response_data = {
             "message": "success",
@@ -12335,5 +12345,3 @@ def get_coach_shared_links(request):
             {"error": "Failed to get coach profile shares."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-
-
