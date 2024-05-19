@@ -7114,7 +7114,7 @@ def get_upcoming_assessment_data(request, user_id):
             return Response({"message": "No upcoming assessment found."}, status=400)
 
     except Exception as e:
-        return Response({"message": f"An error occurred: {str(e)}"})
+        return Response({"message": f"An error occurred: {str(e)}"},status=400)
 
 
 @api_view(["GET"])
@@ -7135,6 +7135,8 @@ def get_just_upcoming_session_data(request, user_id):
             response_data = {
                 "session_id": upcoming_session.id,
                 "start_time": upcoming_session.availibility.start_time,
+                "session_type" : upcoming_session.coaching_session.session_type, 
+                "session_number" : upcoming_session.coaching_session.coaching_session_number
                 # Add more fields as needed
             }
             return Response(response_data, status=status.HTTP_200_OK)
