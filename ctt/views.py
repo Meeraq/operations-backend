@@ -810,9 +810,7 @@ def get_ctt_salesperson_individual(request, salesperson_id):
 def get_card_data_for_dashboard_ctt(request):
     try:
         batches = Batches.objects.using("ctt").all().count()
-        unique_users_count = (
-            BatchUsers.objects.using("ctt").count()
-        )
+        unique_users_count = BatchUsers.objects.using("ctt").count()
         faculties = Faculties.objects.using("ctt").all().count()
 
         return Response(
@@ -824,3 +822,4 @@ def get_card_data_for_dashboard_ctt(request):
         )
     except Exception as e:
         print(str(e))
+

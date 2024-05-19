@@ -99,6 +99,8 @@ from .serializers import (
     HandoverDetailsSerializer,
     TaskSerializer,
     HandoverDetailsSerializerWithOrganisationName,
+    ActionItemSerializer,
+    ActionItemDetailedSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -120,6 +122,7 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
+    ActionItem,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -161,6 +164,8 @@ from assessmentApi.models import (
     ParticipantUniqueId,
     ParticipantObserverMapping,
     ParticipantResponse,
+    Competency,
+    Behavior,
 )
 from io import BytesIO
 from api.serializers import LearnerSerializer
@@ -176,6 +181,7 @@ from django.db.models import Max
 import io
 from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
+from assessmentApi.serializers import CompetencySerializerDepthOne
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
     get_current_date_timestamps,
@@ -4232,8 +4238,6 @@ def get_facilitator_field_values(request):
         for qualifications in coach.educational_qualification:
             education_qualifications.add(qualifications)
 
-        # domains.add(coach.domain)
-        # educations.add(coach.education)
     return Response(
         {
             "job_roles": list(job_roles),
@@ -7110,7 +7114,7 @@ def get_upcoming_assessment_data(request, user_id):
             return Response({"message": "No upcoming assessment found."}, status=400)
 
     except Exception as e:
-        return Response({"message": f"An error occurred: {str(e)}"})
+        return Response({"message": f"An error occurred: {str(e)}"},status=400)
 
 
 @api_view(["GET"])
@@ -7131,6 +7135,8 @@ def get_just_upcoming_session_data(request, user_id):
             response_data = {
                 "session_id": upcoming_session.id,
                 "start_time": upcoming_session.availibility.start_time,
+                "session_type" : upcoming_session.coaching_session.session_type, 
+                "session_number" : upcoming_session.coaching_session.coaching_session_number
                 # Add more fields as needed
             }
             return Response(response_data, status=status.HTTP_200_OK)
@@ -7415,3 +7421,240 @@ def send_mail_to_coaches(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to send mail!"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_action_item(request):
+    if request.method == "POST":
+        serializer = ActionItemSerializer(data=request.data)
+        if serializer.is_valid():
+            action_item = serializer.save()
+            status_updates = (
+                [
+                    {
+                        "status": action_item.initial_status,
+                        "updated_at": str(timezone.now()),
+                    }
+                ]
+                if action_item.initial_status
+                else []
+            )
+            action_item.status_updates = status_updates
+            action_item.save()
+            res_serializer = ActionItemSerializer(action_item)
+            return Response(res_serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_action_item(request, pk):
+    try:
+        action_item = ActionItem.objects.get(pk=pk)
+    except ActionItem.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "PUT":
+        serializer = ActionItemSerializer(action_item, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+def update_action_item_status(request, pk):
+    try:
+        action_item = ActionItem.objects.get(pk=pk)
+    except ActionItem.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "PUT":
+        new_status = request.data.get("current_status")
+        if new_status not in dict(ActionItem.STATUS_CHOICES).keys():
+            return Response(
+                {"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        action_item.current_status = new_status
+        action_item.status_updates.append(
+            {"status": new_status, "updated_at": str(timezone.now())}
+        )
+        action_item.save()
+        serializer = ActionItemSerializer(action_item)
+        return Response(serializer.data)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_action_item(request, pk):
+    try:
+        action_item = ActionItem.objects.get(pk=pk)
+    except ActionItem.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    
+    if request.method == "DELETE":
+        action_item.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def learner_batches(request, pk):
+    try:
+        batches = SchedularBatch.objects.filter(
+            learners__id=pk, project__is_archive=False
+        ).distinct()
+        serializer = SchedularBatchSerializer(batches, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get batches."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def batch_competencies_and_behaviours(request, batch_id):
+    try:
+        assessments = Assessment.objects.filter(
+            assessment_modal__lesson__course__batch__id=batch_id
+        )
+        competencies = Competency.objects.filter(
+            question__questionnaire__assessment__in=assessments
+        ).distinct()
+        serializer = CompetencySerializerDepthOne(competencies, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get competencies."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def learner_action_items_in_batch_of_competency_and_behavior(
+    request, batch_id, learner_id, competency_id, behavior_id
+):
+    action_items = ActionItem.objects.filter(
+        batch__id=batch_id,
+        competency__id=competency_id,
+        behavior__id=behavior_id,
+        learner__id=learner_id,
+    ).order_by("-created_at")
+    action_items_serializer = ActionItemSerializer(action_items, many=True)
+    return Response(action_items_serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def learner_action_items_in_batch(request, batch_id, learner_id):
+    action_items = ActionItem.objects.filter(
+        batch__id=batch_id, learner__id=learner_id
+    ).order_by("-created_at")
+    action_items_serializer = ActionItemSerializer(action_items, many=True)
+    return Response(action_items_serializer.data, status=status.HTTP_200_OK)
+
+
+status_choices_dict = {
+    "not_started": 1,
+    "occasionally_doing": 2,
+    "regularly_doing": 3,
+    "actively_pursuing": 4,
+    "consistently_achieving": 5,
+}
+
+
+STATUS_CHOICES = (
+    ("not_started", "Not Started"),
+    ("occasionally_doing", "Occasionally Doing"),
+    ("regularly_doing", "Regularly Doing"),
+    ("actively_pursuing", "Actively Pursuing"),
+    ("consistently_achieving", "Consistently Achieving"),
+)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def batch_competency_behavior_movement(request, batch_id, competency_id, behavior_id):
+    # Define initial and current status integer mappings
+    initial_status_int = Case(
+        *[
+            When(initial_status=status, then=Value(status_choices_dict.get(status, 0)))
+            for status in status_choices_dict
+        ],
+        default=Value(0),  # Default value if status not found
+        output_field=IntegerField(),
+    )
+    current_status_int = Case(
+        *[
+            When(current_status=status, then=Value(status_choices_dict.get(status, 0)))
+            for status in status_choices_dict
+        ],
+        default=Value(0),  # Default value if status not found
+        output_field=IntegerField(),
+    )
+
+    # Annotate the queryset with the movement between initial and current statuses
+    movement_counts = (
+        ActionItem.objects.filter(
+            batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+        )
+        .annotate(
+            initial_status_int=initial_status_int,
+            current_status_int=current_status_int,
+            movement=F("current_status_int") - F("initial_status_int"),
+        )
+        .values("movement")
+        .annotate(count=Count("id"))
+    )
+
+    # Prepare data for response for movements
+    data = [
+        {"movement": i, "count": 0}
+        for i in range(
+            5
+        )  # Initialize with default count of 0 for all movements (0 to 4)
+    ]
+    # Update the counts from the queryset
+    for item in movement_counts:
+        movement = item["movement"]
+        data[movement]["count"] = item["count"]
+
+    status_counts_dict = {status[0]: 0 for status in STATUS_CHOICES}
+
+    # Fetch status counts from the database
+    status_counts_queryset = (
+        ActionItem.objects.filter(
+            batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+        )
+        .values("current_status")
+        .annotate(count=Count("id"))
+    )
+
+    # Update counts for existing statuses
+    for item in status_counts_queryset:
+        status_counts_dict[item["current_status"]] = item["count"]
+
+    # Prepare data for response, sorted according to STATUS_CHOICES
+    action_item_count = [
+        {"status": status, "count": status_counts_dict[status]}
+        for status, _ in STATUS_CHOICES
+    ]
+
+    return Response(
+        {"movements": data, "action_item_counts": action_item_count},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+def get_all_action_items(request):
+    action_items = ActionItem.objects.all()
+    serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
+    return Response(serialized_data)
