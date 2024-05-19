@@ -3356,22 +3356,6 @@ def create_sales_order(request):
                 ),
             )
             if status == "open":
-                line_items = salesorder_created["line_items"]
-                for line_item in line_items:
-                    custom_fields = line_item.get("item_custom_fields", [])
-                    due_date = None
-                    for field in custom_fields:
-                        if field.get("api_name") == "cf_due_date":
-                            due_date = field.get("value")
-                            break
-                    LineItems.objects.create(
-                        sales_order_id=salesorder_created["salesorder_id"],
-                        sales_order_number=salesorder_created["salesorder_number"],
-                        due_date=due_date,
-                        line_item_id=line_item["line_item_id"],
-                        client_name=salesorder_created["customer_name"],
-                        line_item_description=line_item["description"],
-                    )
                 # mark sales order as open and return message  "SO has been created successfully and  Saved as Open"
                 if update_sales_order_status_to_open(
                     salesorder_created["salesorder_id"], "open"
