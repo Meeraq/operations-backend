@@ -99,8 +99,7 @@ from .serializers import (
     HandoverDetailsSerializer,
     TaskSerializer,
     HandoverDetailsSerializerWithOrganisationName,
-    ActionItemSerializer,
-    ActionItemDetailedSerializer,
+    
 )
 from .models import (
     SchedularBatch,
@@ -122,7 +121,6 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
-    ActionItem,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -166,6 +164,8 @@ from assessmentApi.models import (
     ParticipantResponse,
     Competency,
     Behavior,
+    ActionItem,
+
 )
 from io import BytesIO
 from api.serializers import LearnerSerializer
@@ -181,7 +181,7 @@ from django.db.models import Max
 import io
 from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
-from assessmentApi.serializers import CompetencySerializerDepthOne
+from assessmentApi.serializers import CompetencySerializerDepthOne,ActionItemSerializer, ActionItemDetailedSerializer
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
     get_current_date_timestamps,
@@ -355,6 +355,7 @@ def create_project_schedular(request):
             pre_post_assessment=project_details["pre_post_assessment"],
             is_finance_enabled=project_details["finance"],
             teams_enabled=project_details["teams_enabled"],
+            project_type=project_details["project_type"],
             junior_pmo=junior_pmo,
         )
         schedularProject.save()
@@ -460,6 +461,12 @@ def create_handover(request):
 
 PROJECT_TYPE_VALUES = {"caas": "CAAS", "skill_training": "Skill Training", "COD": "COD"}
 
+PROJECT_TYPE_VALUES = {
+    "caas" : "CAAS",
+    "skill_training" : "Skill Training",
+    "COD" : "COD",
+    "assessment": "Assessment"
+}
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
@@ -624,9 +631,10 @@ def get_all_Schedular_Projects(request):
             default=True,
             output_field=BooleanField(),
         )
-    )
+    )    
     serializer = SchedularProjectSerializerArchiveCheck(projects, many=True)
     for project_data in serializer.data:
+        
         latest_update = (
             SchedularUpdate.objects.filter(project__id=project_data["id"])
             .order_by("-created_at")
@@ -4362,6 +4370,7 @@ def edit_schedular_project(request, project_id):
     project.is_finance_enabled = project_details.get("finance")
     project.junior_pmo = junior_pmo
     project.teams_enabled = request.data.get("teams_enabled")
+    project.project_type = request.data.get("project_type")
     project.save()
 
     if not project.pre_post_assessment:
@@ -7161,7 +7170,7 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
     try:
         # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data)
         # fetch_purchase_orders(organization_id)
-        if project_type == "skill_training" or project_type == "SEEQ":
+        if project_type == "skill_training" or project_type == "SEEQ" or project_type == "assessment":
             purchase_orders = PurchaseOrderGetSerializer(
                 PurchaseOrder.objects.filter(
                     Q(created_time__year__gte=2024)
@@ -7193,7 +7202,7 @@ def get_project_and_handover(request):
     project_type = request.GET.get("project_type")
     if project_id:
         try:
-            if project_type == "skill_training":
+            if project_type == "skill_training" or project_type == "assessment":
                 project = SchedularProject.objects.get(id=project_id)
                 project_serializer = SchedularProjectSerializer(project)
                 handover_details = HandoverDetails.objects.filter(
@@ -7733,3 +7742,39 @@ def get_all_action_items(request):
     action_items = ActionItem.objects.all()
     serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
     return Response(serialized_data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_assessments_of_batch(request,batch_id):
+    try:
+        batch = get_object_or_404(SchedularBatch, id=batch_id)
+        assessments = Assessment.objects.filter(batch=batch)
+        assessment_list = []
+        for assessment in assessments:
+            total_responses_count = ParticipantResponse.objects.filter(
+                assessment=assessment
+            ).count()
+            assessment_data = {
+                "id": assessment.id,
+                "name": assessment.name,
+                "organisation": (
+                    assessment.organisation.name
+                    if assessment.organisation
+                    else ""
+                ),
+                "assessment_type": assessment.assessment_type,
+                "assessment_timing": assessment.assessment_timing,
+                "assessment_start_date": assessment.assessment_start_date,
+                "assessment_end_date": assessment.assessment_end_date,
+                "status": assessment.status,
+                "total_learners_count": assessment.participants_observers.count(),
+                "total_responses_count": total_responses_count,
+                "created_at": assessment.created_at,
+            }
+            assessment_list.append(assessment_data)
+
+        return Response(assessment_list)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)
