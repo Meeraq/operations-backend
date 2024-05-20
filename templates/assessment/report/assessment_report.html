@@ -167,14 +167,14 @@
         <div style="position: relative; margin-top: 80pt; text-align: center;">
           <div style="
               position: absolute;
-              margin-left: 30%;
+              margin-left: 35%;
               transform: translateX(-50%);
           ">
               <div style="display: inline-block; margin-right: 10px;">
-                  <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: 187px; height: 60px;">
+                  <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 90px;">
               </div>
               <div style="display: inline-block;">
-                  <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo" style="width: 187px; height: 41px;">
+                  <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo" style="width: 187px; height: 41px; margin-bottom:17pt;">
               </div>
           </div>
       </div>
@@ -193,24 +193,27 @@
     <div class="page_no_overflow">
       
       <div style=" padding: 8pt; letter-spacing: normal ; margin-top: 40pt; line-height: 1.6;">
-        <div style="overflow: hidden;">
-            <div style="float: left; text-align: left;">
-              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo" style="width: 140px; height: 33px;">
-            </div>
-            <div style="float: right; text-align: right;">
-              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: 140px; height: 33px;">
-            </div>
-          </div>
+      <div style="overflow: hidden; width: 100%;">
+        <div style="float: left; text-align: left;">
+          <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo" style="width: 140px; height: 33px; margin-top: 20pt;">
+        </div>
+        <div style="float: right; text-align: right;">
+          <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 70px;">
+        </div>
+      </div>
+
           <div style="overflow: hidden;">
             <div style="float: left; text-align: left;  margin-left: 8pt;">
-              <p>  {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+              <p>  {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
-              <p>{{ name }}</p>
+               <p style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                {{ name }}
+              </p>
             </div>
           </div>
             <div
@@ -241,10 +244,10 @@
             <li>
                 Meeraq shall not accept any liability for the consequences of the use of
                 this report, howsoever arising. What any individual/management/HR chooses to
-                do — or ‘should’ choose — with the results of the   {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+                do — or ‘should’ choose — with the results of the   {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Feedback is a
                 matter for the individual/management/HR and is in no way dictated by the
                 survey itself.
@@ -267,10 +270,10 @@
                 conduct, surrounding circumstances, and the respondents' perceptions.
             </li>
             <li>
-                The   {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+                The   {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Feedback tool is Copyright © Meeraq or its licensors. All
                 brand names, product names, and titles used on www.meeraq.com are trademarks
                 or trade names of their respective holders. All Rights Reserved.
@@ -292,19 +295,19 @@
                 its' licensors.
             </li>
             <li>
-                This   {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+                This   {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Feedback survey, scoring algorithms, report generation
                 algorithms, and software code are valuable intellectual property (trade
                 secrets and confidential information) of Meeraq.
             </li>
             <li>
-                All content of this   {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+                All content of this   {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Feedback is protected by law, including
                 without limitation the copyright laws of India and other countries, and by
                 international treaty provisions.
@@ -320,10 +323,10 @@
                 report at any time without notice.
             </li>
             <li>
-                Any unauthorized use of the test and report of   {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+                Any unauthorized use of the test and report of   {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Feedback can
                 result in civil and criminal sanctions, including intellectual property
                 proceedings, the pursuit of statutory damages, and all other recourse
@@ -341,10 +344,10 @@
             <li>Meeraq is not affiliated with any other assessment company.</li>
             <li>
                 This disclaimer, and any dispute arising out of or in connection with this
-                disclaimer or the use of the   {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+                disclaimer or the use of the   {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Feedback report, shall be governed
                 by and construed in accordance with the laws of India, without regard to its
                 conflict of law principles.
@@ -359,18 +362,18 @@
     <div class="page">
         <div style="overflow: hidden;">
             <div style="float: left; text-align: left;">
-              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px; margin-top: 20pt;">
             </div>
             <div style="float: right; text-align: right;">
-              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: 140px; height: 33px;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 70px;">
             </div>
           </div>
           <div style="overflow: hidden;">
             <div style="float: left; text-align: left;  margin-left: 8pt;">
-              <p>  {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+              <p>  {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
@@ -400,18 +403,18 @@
     <div class="page">
         <div style="overflow: hidden;">
             <div style="float: left; text-align: left;">
-              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px; margin-top: 20pt;">
             </div>
             <div style="float: right; text-align: right;">
-              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: 140px; height: 33px;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 70px;">
             </div>
           </div>
           <div style="overflow: hidden;">
             <div style="float: left; text-align: left;  margin-left: 8pt;">
-              <p>  {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+              <p>  {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
@@ -466,18 +469,18 @@
    <div class="page">
         <div style="overflow: hidden;">
             <div style="float: left; text-align: left;">
-              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px; margin-top: 20pt;">
             </div>
             <div style="float: right; text-align: right;">
-              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: 140px; height: 33px;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 70px;">
             </div>
           </div>
           <div style="overflow: hidden;">
             <div style="float: left; text-align: left;  margin-left: 8pt;">
-              <p>  {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+              <p>  {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
@@ -495,17 +498,17 @@
                 font-size: 16pt;
                 font-weight: bold;  display: block;">
                 This report provides scores for
-                {% if assessment_type == '360' %}
-                  360-degree
-                {% else %}
-                  Self
-                {% endif %}
+                {% if assessment_type == 'self' %}
+            Self
+          {% else %}
+            {{assessment_type}}-degree
+          {% endif %}
                 assessment.
               </span>
              
             </div>
             <div style="border-left-style: solid; border-top-style: solid; border-bottom-style: solid;  border-color: #ffd864;  padding-left: 10pt;  padding-bottom: 10pt; "> 
-              <div style="height: 562.5pt; background-color: #2f5597; margin-right: 10pt;">
+              <div style="height: 540.5pt; background-color: #2f5597; margin-right: 10pt;">
                 <h1 style="display: block; text-align: center; padding-top: 30pt; padding-bottom: 10pt; color: white;">COMPETENCIES ASSESSED</h1>
              {% for competency in competency_array %}
                   <h3 style="display: block; text-align: center;color: white;">{{competency}}</h3>
@@ -518,28 +521,29 @@
       
         <!-- Second div -->
         <div style="float: left; width: 50%;  ">
-          <div style="height: 800pt;  border-left-style: solid;  border-color: #ffd864;   padding-right: 10pt;">
+          <div style="height: 778pt;  border-left-style: solid;  border-color: #ffd864;   padding-right: 10pt;">
             <div style="margin-bottom: 10pt; border-color: #ffd864; padding: 10pt; padding-top: 0pt; border-top-style: solid; border-right-style: solid;  border-bottom-style: solid; border-color: #ffd864; ">
              <div style="height: 250pt; background-color: #2f5597; ">
               <h1 style="display: block; text-align: center; padding-top: 30pt; padding-bottom: 15pt; color: white;">OBJECTIVES</h1>
               <p style="display: block; text-align: justify; text-justify: inter-word; color: white; padding-left: 15pt; padding-right: 15pt;">
-                  {% if assessment_type == '360' %}
-                  The 360-degree evaluation process is 
-                  intended to provide you with thorough and 
-                  constructive feedback from your observers
-                  along with self – assessment. The primary 
-                  reason to do this confidential review is to 
-                  provide you with information about your 
-                  performance for your own development and 
-                  for the benefit of the organization.
-                {% else %}
-                The self-assessment process is designed to offer comprehensive and 
+                {% if assessment_type == 'self' %}
+              The self-assessment process is designed to offer comprehensive and 
                 constructive feedback by evaluating one's own performance. Through this 
                 confidential review, the primary aim is to provide individuals with insights 
                 into their own development, enabling personal growth. This self-evaluation is
                 pivotal not only for personal improvement but also for contributing 
-                positively to the organization.
-                {% endif %}
+                positively to the organization.
+          {% else %}
+           
+                  The {{assessment_type}}-degree evaluation process is 
+                  intended to provide you with thorough and 
+                  constructive feedback from your observers
+                  along with self - assessment. The primary 
+                  reason to do this confidential review is to 
+                  provide you with information about your 
+                  performance for your own development and 
+                  for the benefit of the organization.
+          {% endif %}  
               </p>
             </div>
               </div>
@@ -548,17 +552,21 @@
                 Ratings on compentencies were provided according to the following scale.
               </h2>
             </div>
-            <div style="height:  250pt; background-color: white;  margin-left: 10pt;">
-              <h1 style="display: block; text-align: center; padding-top: 40pt; padding-bottom: 15pt; color: #6d7075;">
+            <div style="height:  230pt; background-color: white;  margin-left: 10pt;">
+              <h1 style="display: block; text-align: center; padding-top: 40pt; padding-bottom: 10pt; color: #6d7075;">
                 Rating Scale
               </h1>
-              <div style="display: block; text-align: center; padding-top: 30pt;">
+              <div style="display: block; text-align: center; padding-top: 10pt;">
                 {% if assessment_rating_type == '1-5' %}
                 <span style="border-style: solid; border-color: #6d7075; padding: 10pt 20pt 10pt 20pt;">1</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075;  padding: 10pt 20pt 10pt 20pt;" >2</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075;  padding: 10pt 20pt 10pt 20pt;">3</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075;  padding: 10pt 20pt 10pt 20pt;">4</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075; padding: 10pt 20pt 10pt 20pt;">5</span>
               {% else %}
               <span style="border-style: solid; border-color: #6d7075; padding: 5pt 10pt 5pt 10pt;">1</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075;  padding: 5pt 10pt 5pt 10pt;" >2</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075;  padding: 5pt 10pt 5pt 10pt;">3</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075;  padding: 5pt 10pt 5pt 10pt;">4</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075; padding: 5pt 10pt 5pt 10pt;">5</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075; padding: 5pt 10pt 5pt 10pt;">6</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075;  padding: 5pt 10pt 5pt 10pt;" >7</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075;  padding: 5pt 10pt 5pt 10pt;">8</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075;  padding: 5pt 10pt 5pt 10pt;">9</span><span style="border-top-style: solid; border-right-style: solid; border-bottom-style: solid; border-color: #6d7075; padding: 5pt 10pt 5pt 10pt;">10</span>
               {% endif %}
-
+          <div style="font-size:13pt; margin-top: 40pt; margin-left: 60pt; width:200pt;">
+              {% for key, value in labels.items %}
+                  {{ key }}. {{ value }}
+              {% endfor %}
+          </div>
             </div>
             </div>
           </div>
@@ -575,18 +583,18 @@
     <div class="page">
         <div style="overflow: hidden;">
             <div style="float: left; text-align: left;">
-              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px; margin-top: 20pt;">
             </div>
             <div style="float: right; text-align: right;">
-              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: 140px; height: 33px;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 70px;">
             </div>
           </div>
           <div style="overflow: hidden;">
             <div style="float: left; text-align: left;  margin-left: 8pt;">
-              <p>  {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+              <p>  {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
@@ -611,14 +619,14 @@
       </h2>
       <p style="text-align: left; margin-bottom: 15pt; margin-top: 20pt; font-size: 11pt; ">
         
-          {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+          {% if assessment_type == 'self' %}
             Self
-          {% endif %} feedback is becoming increasingly popular in linking good quality feedback with improved performance and as an essential part of personal development. It offers a simplified, manageable, and often more immediate assessment, facilitating quicker adjustments and real-time development for employees. The   {% if assessment_type == '360' %}
-            360-degree
           {% else %}
+            {{assessment_type}}-degree
+          {% endif %} feedback is becoming increasingly popular in linking good quality feedback with improved performance and as an essential part of personal development. It offers a simplified, manageable, and often more immediate assessment, facilitating quicker adjustments and real-time development for employees. The   {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} feedback approach is particularly beneficial for organizations or teams that value swift, straightforward performance evaluations without the complexities of broader input. </p>
 
       <div style="
@@ -630,10 +638,10 @@
   ">
        The Purpose of
   
-           {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+           {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %}
 
        Feedback
@@ -665,18 +673,18 @@
     <div class="page">
         <div style="overflow: hidden;">
             <div style="float: left; text-align: left;">
-              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px; margin-top: 20pt;">
             </div>
             <div style="float: right; text-align: right;">
-              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: 140px; height: 33px;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 70px;">
             </div>
           </div>
           <div style="overflow: hidden;">
             <div style="float: left; text-align: left;  margin-left: 8pt;">
-              <p>  {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+              <p>  {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
@@ -702,7 +710,7 @@
           font-size: 11pt;
         "
       >
-        The feedback is based on the questionnaires filled up by you  {% if assessment_type == '360' %}
+        The feedback is based on the questionnaires filled up by you  {% if not assessment_type == 'self' %}
         and your observers
       {% endif %}
      
@@ -747,18 +755,18 @@
     <div class="page">
         <div style="overflow: hidden;">
             <div style="float: left; text-align: left;">
-              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px; margin-top: 20pt;">
             </div>
             <div style="float: right; text-align: right;">
-              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: 140px; height: 33px;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 70px;">
             </div>
           </div>
           <div style="overflow: hidden;">
             <div style="float: left; text-align: left;  margin-left: 8pt;">
-              <p>  {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+              <p>  {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
@@ -779,10 +787,10 @@
         <p style="margin: 20pt; margin-top: 80pt; margin-bottom: 50pt; font-size: 11pt;">
           The table below summaries the self and manager scores of your    
        
-            {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+            {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %}
        
           feedback against each competency. The higher the score, the greater
@@ -804,18 +812,18 @@
     <div class="page" >
         <div style="overflow: hidden;">
             <div style="float: left; text-align: left;">
-              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px; margin-top: 20pt;">
             </div>
             <div style="float: right; text-align: right;">
-              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: 140px; height: 33px;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 70px;">
             </div>
           </div>
           <div style="overflow: hidden;">
             <div style="float: left; text-align: left;  margin-left: 8pt;">
-              <p>  {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+              <p>  {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
@@ -866,18 +874,18 @@
     <div class="page_no_overflow">
         <div style="overflow: hidden;">
             <div style="float: left; text-align: left;">
-              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+              <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px; margin-top: 20pt;">
             </div>
             <div style="float: right; text-align: right;">
-              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: 140px; height: 33px;">
+              <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 70px;">
             </div>
           </div>
           <div style="overflow: hidden;">
             <div style="float: left; text-align: left;  margin-left: 8pt;">
-              <p>  {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+              <p>  {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
@@ -964,18 +972,18 @@
             <div style="page-break-before: always"></div>
             <div style="overflow: hidden;">
                 <div style="float: left; text-align: left;">
-                  <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px;">
+                  <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"  style="width: 140px; height: 33px; margin-top: 20pt;">
                 </div>
                 <div style="float: right; text-align: right;">
-                  <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: 140px; height: 33px;">
+                  <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 70px;">
                 </div>
               </div>
               <div style="overflow: hidden;">
                 <div style="float: left; text-align: left; margin-left: 8pt;">
-                  <p>  {% if assessment_type == '360' %}
-            360-degree
-          {% else %}
+                  <p>  {% if assessment_type == 'self' %}
             Self
+          {% else %}
+            {{assessment_type}}-degree
           {% endif %} Report</p>
                 </div>
                 <div style="float: right; text-align: right;">

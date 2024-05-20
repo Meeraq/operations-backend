@@ -430,4 +430,9 @@ urlpatterns = [
         "all-actions/",
         views.get_all_action_items,
     ),
+    path(
+        "get-batch-wise-assessment-data/<int:batch_id>/",
+        views.get_all_assessments_of_batch,
+        name="get_all_assessments_of_batch",
+    ),
 ]

@@ -286,7 +286,9 @@ class Nudge(models.Model):
         SchedularBatch, on_delete=models.CASCADE, null=True, blank=True, default=None
     )
     trigger_date = models.DateField(default=None, blank=True, null=True)
-    learner_ids = models.JSONField(default=list, blank=True) # nudge completed by learners 
+    learner_ids = models.JSONField(
+        default=list, blank=True
+    )  # nudge completed by learners
     is_sent = models.BooleanField(default=False)
     is_switched_on = models.BooleanField(default=True)
     unique_id = models.CharField(max_length=225, blank=True)
@@ -302,6 +304,7 @@ class FacilitatorLesson(models.Model):
 
 
 class Feedback(models.Model):
+    name = models.CharField(max_length=225, blank=True, null=True, default="Feedback")
     questions = models.ManyToManyField(Question)
     unique_id = models.CharField(
         max_length=225,
@@ -323,3 +326,32 @@ class CoachingSessionsFeedbackResponse(models.Model):
     learner = models.ForeignKey(Learner, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(auto_now=True)
+
+
+class CttFeedback(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("ongoing", "Ongoing"),
+        ("completed", "Completed"),
+    ]
+    name = models.CharField(max_length=225, blank=True, null=True, default="Feedback")
+    questions = models.ManyToManyField(Question)
+    unique_id = models.CharField(
+        max_length=225,
+        blank=True,
+    )
+    status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="draft")
+    ctt_batch = models.IntegerField(blank=True, null=True)
+    session_number = models.IntegerField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class CttFeedbackResponse(models.Model):
+    ctt_feedback = models.ForeignKey(
+        CttFeedback, on_delete=models.CASCADE, blank=True, null=True
+    )
+    ctt_user = models.IntegerField(blank=True, null=True)
+    answers = models.ManyToManyField(Answer)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

@@ -12226,24 +12226,46 @@ def coach_profile_sharable_email(request):
             coach_profile_share.coaches.add(coach_id)
 
         coach_profile_share.save()
-
-        for email in emails:
-            print("emails", email)
-            print("id", unique_id)
-            send_mail_templates(
-                "coach_profile_share.html",
-                [email],
-                "Meeraq Coaching | Shared Coach Profiles!",
-                {
-                    "profiles_id": unique_id,
-                },
-                [],
-            )
+        # for email in emails:
+        #     send_mail_templates(
+        #         "coach_profile_share.html",
+        #         [email],
+        #         "Meeraq Coaching | Shared Coach Profiles!",
+        #         {
+        #             "profiles_id": unique_id,
+        #         },
+        #         [],
+        #     )
         return Response({"message": "Coach Profile Shared successfully."})
 
     except Exception as e:
         print(str(e))
         return Response({"message": str(e)}, status=500)
+
+
+@api_view(["PUT"])
+def update_coach_profile_share(request, pk):
+    try:
+        instance = CoachProfileShare.objects.get(pk=pk)
+    except CoachProfileShare.DoesNotExist:
+        return Response(
+            {"error": "CoachProfileShare not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    emails = request.data.get("emails", [])
+    masked_coach_profile = request.data.get("masked_coach_profile", False)
+    unique_id = request.data.get("unique_id", "")
+    coaches = request.data.get("coaches", [])
+    name = request.data.get("name", "")
+    instance.masked_coach_profile = masked_coach_profile
+    instance.emails = emails
+    instance.unique_id = unique_id
+    instance.name = name
+    instance.coaches.clear()
+    for coach_id in coaches:
+        instance.coaches.add(coach_id)
+    instance.save()
+    serializer = CoachProfileShareSerializer(instance)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
