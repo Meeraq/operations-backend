@@ -120,6 +120,9 @@ class Assessment(models.Model):
     ASSESSMENT_TYPES = [
         ("self", "Self"),
         ("360", "360"),
+        ("270", "270"),
+        ("90", "90"),
+        ("180", "180"),
     ]
     RATING_CHOICES = [
         ("1-5", "1-5"),
