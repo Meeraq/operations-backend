@@ -121,6 +121,9 @@ class Assessment(models.Model):
     ASSESSMENT_TYPES = [
         ("self", "Self"),
         ("360", "360"),
+        ("270", "270"),
+        ("90", "90"),
+        ("180", "180"),
     ]
     RATING_CHOICES = [
         ("1-5", "1-5"),
@@ -170,6 +173,7 @@ class Assessment(models.Model):
     )
     initial_reminder = models.BooleanField(blank=True, default=False)
     reminders = models.JSONField(default=dict, blank=True)
+    unique_id = models.CharField(max_length=225, default="")
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
