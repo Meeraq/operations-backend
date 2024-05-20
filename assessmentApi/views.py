@@ -558,6 +558,21 @@ class AssessmentView(APIView):
                 assessment = Assessment.objects.get(id=serializer.data["id"])
                 assessment.unique_id = uuid.uuid4()
                 assessment.save()
+                if assessment and assessment.batch:
+                    learner_data = []
+                    for learner in assessment.batch.learners.all():
+                        learner_data.append(
+                            {
+                                "email": learner.email,
+                                "first_name": learner.name,
+                                "last_name": "",
+                                "phone": learner.phone,
+                            }
+                        )
+                    for learner in learner_data:
+                        add_multiple_participants(
+                            learner, assessment.id, assessment, True
+                        )
                 return Response(
                     {"message": "Assessment created successfully."},
                     status=status.HTTP_201_CREATED,

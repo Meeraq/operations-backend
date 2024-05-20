@@ -28,11 +28,17 @@ class SchedularProject(models.Model):
         ("ongoing", "Ongoing"),
         ("completed", "Completed"),
     ]
-
+    project_type_choice = [
+        ("skill_training", "Skill Training"),
+        ("assessment", "Assessment"),
+    ]
     name = models.CharField(max_length=100, unique=True, default=None)
     project_structure = models.JSONField(default=list, blank=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     hr = models.ManyToManyField(HR, blank=True)
+    project_type = models.CharField(
+        max_length=50, choices=project_type_choice, default="skill_training"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
     is_project_structure_finalized = models.BooleanField(default=False)
@@ -261,7 +267,7 @@ class CoachContract(models.Model):
     )
     name_inputed = models.CharField(max_length=100, blank=True)
     project = models.ForeignKey(
-        Project, on_delete=models.CASCADE, blank=True, null=True
+        Project, on_delete=models.CASCADE, blank=True,  null=True
     )
     schedular_project = models.ForeignKey(
         SchedularProject, on_delete=models.CASCADE, blank=True, null=True
@@ -358,6 +364,8 @@ class HandoverDetails(models.Model):
         ("caas", "CAAS"),
         ("skill_training", "Skill Training"),
         ("COD", "COD"),
+        ("assessment", "Assessment"),
+    
     ]
     DELIVERY_MODE_CHOICES = [
         ("online", "Online"),
@@ -442,6 +450,7 @@ class HandoverDetails(models.Model):
     details_of_delivery = models.TextField(blank=True, null=True)
     pre_post_assessment_details = models.TextField(blank=True, null=True)
     other_feedback = models.TextField(blank=True, null=True)
+    assessment_details = models.TextField(blank=True, null=True)
 
     class Meta:
         verbose_name = "Handover Detail"
