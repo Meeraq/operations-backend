@@ -99,8 +99,7 @@ from .serializers import (
     HandoverDetailsSerializer,
     TaskSerializer,
     HandoverDetailsSerializerWithOrganisationName,
-    ActionItemSerializer,
-    ActionItemDetailedSerializer,
+    
 )
 from .models import (
     SchedularBatch,
@@ -122,7 +121,6 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
-    ActionItem,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -166,6 +164,8 @@ from assessmentApi.models import (
     ParticipantResponse,
     Competency,
     Behavior,
+    ActionItem,
+
 )
 from io import BytesIO
 from api.serializers import LearnerSerializer
@@ -181,7 +181,7 @@ from django.db.models import Max
 import io
 from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
-from assessmentApi.serializers import CompetencySerializerDepthOne
+from assessmentApi.serializers import CompetencySerializerDepthOne,ActionItemSerializer, ActionItemDetailedSerializer
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
     get_current_date_timestamps,

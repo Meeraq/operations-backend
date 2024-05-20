@@ -246,3 +246,38 @@ class ParticipantReleasedResults(models.Model):
     assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+class ActionItem(models.Model):
+    STATUS_CHOICES = (
+        ("not_started", "Not Started"),
+        ("occasionally_doing", "Occasionally Doing"),
+        ("regularly_doing", "Regularly Doing"),
+        ("actively_pursuing", "Actively Pursuing"),
+        ("consistently_achieving", "Consistently Achieving"),
+    )
+    text = models.TextField()
+    initial_status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="not_started"
+    )
+    current_status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="not_started"
+    )
+    status_updates = models.JSONField(default=list, blank=True)
+    completion_date = models.DateField(null=True, blank=True)
+    learner = models.ForeignKey(
+        Learner, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    batch = models.ForeignKey(
+        SchedularBatch, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    competency = models.ForeignKey(
+        Competency, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    behavior = models.ForeignKey(
+        Behavior, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.learner.name if self.learner else None} {self.id}"
