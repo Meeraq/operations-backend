@@ -7578,10 +7578,19 @@ STATUS_CHOICES = (
     ("consistently_achieving", "Consistently Achieving"),
 )
 
+MOVEMENT_TYPES = {
+    0: "No Movement",
+    1: "Limited Movement",
+    2: "Some Movement",
+    3: "Significant Movement",
+    4: "Excellent Movement"
+}
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def batch_competency_behavior_movement(request, batch_id, competency_id, behavior_id):
+    ############### Movement based on current ########################
+
     # Define initial and current status integer mappings
     initial_status_int = Case(
         *[
@@ -7626,6 +7635,8 @@ def batch_competency_behavior_movement(request, batch_id, competency_id, behavio
         movement = item["movement"]
         data[movement]["count"] = item["count"]
 
+    ############### Action Item Count ########################
+
     status_counts_dict = {status[0]: 0 for status in STATUS_CHOICES}
 
     # Fetch status counts from the database
@@ -7646,10 +7657,74 @@ def batch_competency_behavior_movement(request, batch_id, competency_id, behavio
         {"status": status, "count": status_counts_dict[status]}
         for status, _ in STATUS_CHOICES
     ]
+    ############### Action Item Count - END ########################
+
+    ################ Date Wise Movement ############################
+
+    first_created_item = ActionItem.objects.filter(batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id).order_by('created_at').first()
+    last_updated_item = ActionItem.objects.filter(batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id).order_by('-updated_at').first()
+
+    formatted_data = []
+    if first_created_item and last_updated_item:
+        # Get start and end dates
+        start_date = first_created_item.created_at.date()
+        end_date = last_updated_item.updated_at.date()  # Set the end date as the current date
+
+        # Calculate the number of days between start and end dates
+        date_difference = (end_date - start_date).days
+
+        # Calculate step value for the date range
+        if date_difference < 4:
+            step = 1  # Keep dates equal to the number of days if difference is less than 4
+        else:
+            step = date_difference // 4
+
+        # Get dates evenly spaced between start and end dates
+        date_range = [start_date + timedelta(days=i*step) for i in range(min(date_difference, 4) + 1)]
+        
+        # Include the current date as the last date in the range
+        if end_date not in date_range:
+            date_range.append(end_date)
+
+        # Prepare data structure to store movement counts for each date
+        date_data = {}
+
+        for date in date_range:
+            # Get action items created before or on the mapped date
+            filtered_items = ActionItem.objects.filter(created_at__date__lte=date, batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id)
+
+            # Get the most recent status for each action item on the mapped date
+            status_data = {}
+            for item in filtered_items:
+                latest_status = None
+                for update in item.status_updates:
+                    update_date = datetime.strptime(update['updated_at'], "%Y-%m-%d %H:%M:%S.%f+00:00").date()
+                    if update_date <= date:
+                        latest_status = update['status']
+                    else:
+                        break  # Break the loop if update date is after the mapped date
+                if latest_status:
+                    status_data[item.id] = latest_status
+
+            # Calculate movement counts
+            movement_counts = {i: 0 for i in range(5)}
+            for status in status_data.values():
+                movement = status_choices_dict.get(status, 0) - status_choices_dict.get('not_started', 0)
+                movement_counts[movement] += 1
+
+            # Store movement count data for the current date
+            date_data[date.strftime("%d-%m-%Y")] = movement_counts
+
+        formatted_data = []
+        for date, counts in date_data.items():
+            formatted_counts = {MOVEMENT_TYPES[i]: count for i, count in counts.items()}
+            formatted_counts["date"] = date
+            formatted_data.append(formatted_counts)
+    ################ Date Wise Movement - END ############################
 
     return Response(
-        {"movements": data, "action_item_counts": action_item_count},
-        status=status.HTTP_200_OK,
+        {"movements": data, "action_item_counts": action_item_count, "date_wise_movement" : formatted_data},
+        status=200,
     )
 
 

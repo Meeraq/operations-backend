@@ -40,6 +40,8 @@ from .views import (
     GetAssignmentsResponses,
     UpdateAssignmentLessonFile,
     FacilitatorWiseFeedback,
+    GetCttFeedbackForm,
+    CttFeedbackEmailValidation,
 )
 import environ
 
@@ -193,6 +195,10 @@ urlpatterns = [
         "submit-feedback/<int:feedback_lesson_id>/<int:learner_id>/",
         views.submit_feedback_answers,
     ),
+    path(
+        "submit-ctt-feedback/<int:feedback_id>/<int:user_id>/",
+        views.submit_ctt_feedback_answers,
+    ),
     path("certificates/", CertificateListAPIView.as_view()),
     path(
         "get-courses-for-certificates/",
@@ -302,8 +308,17 @@ urlpatterns = [
         name="update-downloadable-lesson",
     ),
     path(
+        "ctt-feedback-email-validation/",
+        CttFeedbackEmailValidation.as_view(),
+        name="ctt-feedback-email-validation",
+    ),
+    path(
         "get-feedback-form/<str:unique_id>/",
         GetFeedbackForm.as_view(),
+    ),
+    path(
+        "get-ctt-feedback-form/<str:unique_id>/",
+        GetCttFeedbackForm.as_view(),
     ),
     path(
         "feedback-lesson-edit-allowed/<str:feedback_lesson_id>/",
@@ -328,6 +343,10 @@ urlpatterns = [
     path(
         "feedback-report-download/<str:feedback_id>/",
         views.get_all_feedbacks_download_report,
+    ),
+    path(
+        "ctt-feedback-report-download/<str:feedback_id>/",
+        views.ctt_feedbacks_download_report,
     ),
     path(
         "feedback/reports/project/consolidated/download/<int:project_id>/",
@@ -390,6 +409,10 @@ urlpatterns = [
         views.get_feedback,
     ),
     path(
+        "get-all-feedbacks/",
+        views.get_all_feedback,
+    ),
+    path(
         "submit-session-feedback/<int:feedback_id>/<int:learner_id>/",
         views.submit_feedback,
     ),
@@ -428,5 +451,17 @@ urlpatterns = [
     path(
         "update-completion-nudge-status/<int:nudge_id>/",
         views.update_completion_nudge_status,
+    ),
+    path(
+        "create-ctt-feedback/",
+        views.create_ctt_feedback,
+    ),
+    path(
+        "get-ctt-feedbacks/",
+        views.get_ctt_feedback,
+    ),
+    path(
+        "update-ctt-feedback-status/",
+        views.update_ctt_feedback_status,
     ),
 ]
