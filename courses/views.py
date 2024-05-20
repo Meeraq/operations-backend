@@ -38,6 +38,7 @@ from .models import (
     CoachingSessionsFeedbackResponse,
     CttFeedback,
     CttFeedbackResponse,
+    CourseCompetencyAssignment,
 )
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -76,6 +77,8 @@ from .serializers import (
     FeedbackDepthOneSerializer,
     LessonSerializerForLiveSessionDateTime,
     CttFeedbackDepthOneSerializer,
+    CourseCompetencyAssignmentSerializer,
+    CourseCompetencyAssignmentDepthOneSerializer,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
@@ -103,6 +106,8 @@ from assessmentApi.models import (
     Assessment as AssessmentModal,
     ParticipantResponse,
     ParticipantUniqueId,
+    Competency,
+    Behavior,
 )
 from rest_framework.decorators import api_view, permission_classes
 from django.db import transaction
@@ -4426,3 +4431,145 @@ def update_ctt_feedback_status(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update status"}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def add_competency_to_course(request, course_id):
+    try:
+        course = Course.objects.get(id=course_id)
+    except Course.DoesNotExist:
+        return Response({"error": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Check if competency_id and selected_behaviors are provided in the request data
+    if "competency_id" not in request.data or "selected_behaviors" not in request.data:
+        return Response(
+            {"error": "Competency ID and selected behaviors are required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    competency_id = request.data["competency_id"]
+    selected_behaviors = request.data["selected_behaviors"]
+
+    try:
+        competency = Competency.objects.get(id=competency_id)
+    except Competency.DoesNotExist:
+        return Response(
+            {"error": "Competency not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Check if all selected behaviors belong to the specified competency
+    invalid_behaviors = [
+        behavior_id
+        for behavior_id in selected_behaviors
+        if behavior_id not in competency.behaviors.values_list("id", flat=True)
+    ]
+    if invalid_behaviors:
+        return Response(
+            {
+                "error": f"Behaviors with IDs {invalid_behaviors} do not belong to the specified competency"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Create CourseCompetencyAssignment instance
+    course_competency_assignment_data = {
+        "course": course_id,
+        "competency": competency_id,
+        "selected_behaviors": selected_behaviors,
+    }
+
+    serializer = CourseCompetencyAssignmentSerializer(
+        data=course_competency_assignment_data
+    )
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def edit_competency_assignment(request, course_id, assignment_id):
+    try:
+        course = Course.objects.get(id=course_id)
+    except Course.DoesNotExist:
+        return Response({"error": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        assignment = CourseCompetencyAssignment.objects.get(
+            id=assignment_id, course=course
+        )
+    except CourseCompetencyAssignment.DoesNotExist:
+        return Response(
+            {"error": "Assignment not found for the specified course"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check if competency_id and selected_behaviors are provided in the request data
+    if "competency_id" not in request.data or "selected_behaviors" not in request.data:
+        return Response(
+            {"error": "Competency ID and selected behaviors are required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    competency_id = request.data["competency_id"]
+    selected_behaviors = request.data["selected_behaviors"]
+
+    try:
+        competency = Competency.objects.get(id=competency_id)
+    except Competency.DoesNotExist:
+        return Response(
+            {"error": "Competency not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Check if all selected behaviors belong to the specified competency
+    invalid_behaviors = [
+        behavior_id
+        for behavior_id in selected_behaviors
+        if behavior_id not in competency.behaviors.values_list("id", flat=True)
+    ]
+    if invalid_behaviors:
+        return Response(
+            {
+                "error": f"Behaviors with IDs {invalid_behaviors} do not belong to the specified competency"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Update CourseCompetencyAssignment instance
+    assignment.competency = competency
+    assignment.selected_behaviors.set(selected_behaviors)
+    assignment.save()
+
+    serializer = CourseCompetencyAssignmentSerializer(assignment)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def get_course_competency_assignments(request,course_id):
+    try:
+        assignments = CourseCompetencyAssignment.objects.filter(course__id = course_id)
+        serializer = CourseCompetencyAssignmentDepthOneSerializer(
+            assignments, many=True
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def delete_course_competency(request, course_competency_id):
+    try:
+        # Retrieve the course competency object
+        course_competency = CourseCompetencyAssignment.objects.get(pk=course_competency_id)
+    except CourseCompetencyAssignment.DoesNotExist:
+        # If the course competency does not exist, return a 404 response
+        return Response({"error": "Course competency not found"}, status=status.HTTP_404_NOT_FOUND)
+    # Delete the course competency
+    course_competency.delete()
+    # Return a success response
+    return Response({"message": "Course competency deleted successfully"}, status=status.HTTP_204_NO_CONTENT)

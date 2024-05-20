@@ -10,7 +10,7 @@ import os
 from django.core.exceptions import ValidationError
 from django_celery_beat.models import PeriodicTask
 import uuid
-from assessmentApi.models import Assessment as AssessmentModal
+from assessmentApi.models import Assessment as AssessmentModal, Competency, Behavior
 from api.models import SessionRequestCaas
 
 # Create your models here.
@@ -355,3 +355,14 @@ class CttFeedbackResponse(models.Model):
     answers = models.ManyToManyField(Answer)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class CourseCompetencyAssignment(models.Model):
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+    selected_behaviors = models.ManyToManyField(Behavior, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.course.name} - {self.competency.name}"

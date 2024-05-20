@@ -13,6 +13,7 @@ from .models import (
     ObserverTypes,
     ParticipantReleasedResults,
     ParticipantObserverMapping,
+    Behavior
 )
 
 
@@ -22,6 +23,16 @@ class CompetencySerializerDepthOne(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+
+class CompetencySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Competency
+        fields = "__all__"
+
+class BehaviorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Behavior
+        fields = "__all__"
 
 class QuestionSerializer(serializers.ModelSerializer):
     class Meta:

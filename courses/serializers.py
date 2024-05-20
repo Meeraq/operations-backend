@@ -26,6 +26,7 @@ from .models import (
     FacilitatorLesson,
     Feedback,
     CttFeedback,
+    CourseCompetencyAssignment,
 )
 from schedularApi.models import LiveSession
 from django.core.files.storage import default_storage
@@ -208,7 +209,7 @@ class VideoSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Video
-        fields = ['id', 'name', 'video', 'file_size_mb']
+        fields = ["id", "name", "video", "file_size_mb"]
 
     def get_file_size_mb(self, obj):
         if obj.video:  # Assuming 'video' is the attribute for the video FileField
@@ -218,7 +219,7 @@ class VideoSerializer(serializers.ModelSerializer):
 
     def get_video_file_size(self, video_field):
         # Check if it's a FieldFile
-        if hasattr(video_field, 'size'):
+        if hasattr(video_field, "size"):
             try:
                 # Convert file size from bytes to MB
                 file_size_mb = video_field.size / (1024 * 1024)
@@ -263,6 +264,7 @@ class CertificateSerializerDepthOne(serializers.ModelSerializer):
         fields = "__all__"
         depth = 1
 
+
 class ResourcesSerializer(serializers.ModelSerializer):
     file_size_kb = serializers.SerializerMethodField()
 
@@ -272,7 +274,7 @@ class ResourcesSerializer(serializers.ModelSerializer):
 
     def get_file_size_kb(self, obj):
         try:
-            if obj.pdf_file and hasattr(obj.pdf_file, 'size'):
+            if obj.pdf_file and hasattr(obj.pdf_file, "size"):
                 return obj.pdf_file.size / 1024.0
         except Exception as e:  # Catching more general exceptions
             # Handle exceptions appropriately, like logging or returning a specific error message
@@ -297,7 +299,7 @@ class FileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = File
-        fields = ['id', 'name', 'file', 'file_size_mb']
+        fields = ["id", "name", "file", "file_size_mb"]
 
     def get_file_size_mb(self, obj):
         if obj.file:
@@ -392,7 +394,16 @@ class CourseEnrollmentWithNamesSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CourseEnrollment
-        fields = ['id', 'course', 'learner', 'learner_name', 'course_name', 'enrollment_date', 'completed_lessons', 'is_certificate_allowed']
+        fields = [
+            "id",
+            "course",
+            "learner",
+            "learner_name",
+            "course_name",
+            "enrollment_date",
+            "completed_lessons",
+            "is_certificate_allowed",
+        ]
 
     def get_learner_name(self, obj):
         return obj.learner.name
@@ -401,9 +412,20 @@ class CourseEnrollmentWithNamesSerializer(serializers.ModelSerializer):
         return obj.course.name
 
 
-
 class CttFeedbackDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = CttFeedback
         fields = "__all__"
- 
+
+
+class CourseCompetencyAssignmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CourseCompetencyAssignment
+        fields = "__all__"
+
+
+class CourseCompetencyAssignmentDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CourseCompetencyAssignment
+        depth = 1
+        fields = "__all__"

@@ -145,6 +145,7 @@ from courses.models import (
     Lesson,
     Certificate,
     Answer,
+    CourseCompetencyAssignment
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import (
@@ -181,7 +182,7 @@ from django.db.models import Max
 import io
 from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
-from assessmentApi.serializers import CompetencySerializerDepthOne
+from assessmentApi.serializers import CompetencySerializerDepthOne,CompetencySerializer,BehaviorSerializer
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
     get_current_date_timestamps,
@@ -7520,14 +7521,15 @@ def learner_batches(request, pk):
 @permission_classes([IsAuthenticated])
 def batch_competencies_and_behaviours(request, batch_id):
     try:
-        assessments = Assessment.objects.filter(
-            assessment_modal__lesson__course__batch__id=batch_id
-        )
-        competencies = Competency.objects.filter(
-            question__questionnaire__assessment__in=assessments
-        ).distinct()
-        serializer = CompetencySerializerDepthOne(competencies, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        competency_assignments = CourseCompetencyAssignment.objects.filter(course__batch__id=batch_id)
+        res = []
+        for competency_assignment in competency_assignments:
+            competency_serializer = CompetencySerializer(competency_assignment.competency) 
+            behaviors_serializer = BehaviorSerializer(competency_assignment.selected_behaviors, many=True)
+            data = competency_serializer.data
+            data['behaviors'] = behaviors_serializer.data
+            res.append(data)
+        return Response(res, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response(
