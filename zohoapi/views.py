@@ -1979,6 +1979,8 @@ def get_so_number_to_create(request, brand):
                 regex_to_match = f"Meeraq/{current_financial_year}/CH/"
             elif project_type == "skill_training":
                 regex_to_match = f"Meeraq/{current_financial_year}/SST/"
+            elif project_type == "assessment":
+                regex_to_match = f"Meeraq/{current_financial_year}/ASMT/"
             else:
                 return Response(
                     {"error": "Select project type to generate the SO number"},
@@ -2887,7 +2889,7 @@ def get_so_for_project(project_id, project_type):
             )
             for mapping in orders_project_mapping:
                 sales_order_ids_set.update(mapping.sales_order_ids)
-        elif project_type == "SEEQ" or project_type == "skill_training":
+        elif project_type == "SEEQ" or project_type == "skill_training" or project_type == "assessment":
             orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                 schedular_project__id=project_id
             )
@@ -3138,7 +3140,7 @@ def create_sales_order(request):
                     orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
                         Q(project=project)
                     )
-                elif project_type == "skill_training":
+                elif project_type == "skill_training" or project_type == "assessment":
                     schedular_project = SchedularProject.objects.get(id=project_id)
                     orders_and_project_mapping = OrdersAndProjectMapping.objects.filter(
                         Q(schedular_project=schedular_project)
@@ -4225,9 +4227,13 @@ def get_so_for_the_project(request):
 @permission_classes([IsAuthenticated])
 def get_handovers_so(request, sales_id):
     try:
-        handovers = HandoverDetails.objects.filter(sales__id=sales_id).order_by(
-            "-created_at"
-        )
+        userType = request.query_params.get("userType")
+        if userType == "sales":
+            handovers = HandoverDetails.objects.filter(sales__id=sales_id).order_by(
+                "-created_at"
+            )
+        else:
+            handovers = HandoverDetails.objects.all()
         all_sales_order_ids = []
         for handover in handovers:
             all_sales_order_ids.extend(handover.sales_order_ids)

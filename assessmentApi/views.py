@@ -555,6 +555,22 @@ class AssessmentView(APIView):
             serializer = AssessmentSerializer(data=request.data)
             if serializer.is_valid():
                 serializer.save()
+                assessment = Assessment.objects.get(id=serializer.data["id"])
+                if assessment and assessment.batch:
+                    learner_data = []
+                    for learner in assessment.batch.learners.all():
+                        learner_data.append(
+                            {
+                                "email": learner.email,
+                                "first_name": learner.name,
+                                "last_name": "",
+                                "phone": learner.phone,
+                            }
+                        )
+                    for learner in learner_data:
+                        add_multiple_participants(
+                            learner, assessment.id, assessment, True
+                        )
                 return Response(
                     {"message": "Assessment created successfully."},
                     status=status.HTTP_201_CREATED,
@@ -705,7 +721,7 @@ class AssessmentStatusChange(APIView):
                     and assessment.status == "ongoing"
                     and not assessment.initial_reminder
                 ):
-                    send_assessment_invitation_mail.delay(assessment.id)
+                    send_assessment_invitation_mail(assessment.id)
                     assessment.initial_reminder = True
                     assessment.save()
                     # for hr in assessment.hr.all():
@@ -4887,9 +4903,7 @@ class GetProjectWiseReport(APIView):
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
 
             response = HttpResponse(pdf, content_type="application/pdf")
-            response["Content-Disposition"] = (
-                f'attachment; filename={f"Report.pdf"}'
-            )
+            response["Content-Disposition"] = f'attachment; filename={f"Report.pdf"}'
 
             return response
 
@@ -4908,7 +4922,9 @@ class AssessmentsResponseStatusDownload(APIView):
             response_data_for_assessments = {}
             for assessment_id in assessment_ids:
                 assessment = Assessment.objects.get(id=assessment_id)
-                response_data = getParticipantsResponseStatusForAssessment(assessment,True)
+                response_data = getParticipantsResponseStatusForAssessment(
+                    assessment, True
+                )
                 response_data_for_assessments[assessment.name] = response_data
             return Response(response_data_for_assessments)
         except Exception as e:
