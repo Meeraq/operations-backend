@@ -2224,7 +2224,7 @@ class GetObserverTypes(APIView):
             )
 
 
-def calculate_average(question_with_answers, assessment_type):
+def calculate_average(question_with_answers, assessment):
     competency_averages = []
 
     for competency_data in question_with_answers:
@@ -2235,12 +2235,26 @@ def calculate_average(question_with_answers, assessment_type):
         total_observer_responses = {}
 
         for question in questions:
+            participant_response = None
+            present_que = assessment.questionnaire.questions.filter(
+                self_question=question["question"]
+            ).first()
+            if not present_que.reverse_question:
+                label_count = sum(
+                    1 for key in present_que.label.keys() if present_que.label[key]
+                )
+
+                swap_dict = swap_positions(label_count)
+                participant_response = swap_dict[question["participant_response"]]
+            else:
+                participant_response = question["participant_response"]
+
             total_observers = (
                 len(question.keys()) - 2
             )  # two columns substracted question and participant response for number of observer
-            if assessment_type == "self":
+            if assessment.assessment_type == "self":
                 total_observers = 1
-            total_participant_responses += question["participant_response"]
+            total_participant_responses += participant_response
 
             # Sum observer responses for each question
             for key, value in question.items():
@@ -2499,7 +2513,24 @@ def get_total_observer_types(participant_observer, participant_id):
     return observer_types_total
 
 
-def get_data_for_score_analysis(question_with_answer):
+def get_data_for_score_analysis(question_with_answer, assessment):
+
+    for competency in question_with_answer:
+        for question in competency["questions"]:
+            present_que = assessment.questionnaire.questions.filter(
+                self_question=question["question"]
+            ).first()
+            if not present_que.reverse_question:
+                label_count = sum(
+                    1 for key in present_que.label.keys() if present_que.label[key]
+                )
+
+                swap_dict = swap_positions(label_count)
+
+                question["participant_response"] = float(
+                    swap_dict[question["participant_response"]]
+                )
+
     res = []
 
     for competency in question_with_answer:
@@ -2706,16 +2737,21 @@ class DownloadParticipantResultReport(APIView):
 
                 question_with_answers.append(competency_object)
 
-            averages = calculate_average(
-                question_with_answers, assessment.assessment_type
-            )
+            averages = calculate_average(question_with_answers, assessment)
 
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
-            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+
+            data_for_score_analysis = get_data_for_score_analysis(
+                question_with_answers, assessment
+            )
+
+            labels = {
+                str(len(labels) - int(key) + 1): value for key, value in labels.items()
+            }
 
             html_message = html_for_pdf_preview(
                 "assessment/report/assessment_report.html",
@@ -2860,15 +2896,19 @@ class DownloadParticipantResultReport(APIView):
 
                 question_with_answers.append(competency_object)
 
-            averages = calculate_average(
-                question_with_answers, assessment.assessment_type
-            )
+            averages = calculate_average(question_with_answers, assessment)
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
-            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+            data_for_score_analysis = get_data_for_score_analysis(
+                question_with_answers, assessment
+            )
+
+            labels = {
+                str(len(labels) - int(key) + 1): value for key, value in labels.items()
+            }
 
             pdf = generate_report_for_participant(
                 "assessment/report/assessment_report.html",
@@ -3070,16 +3110,20 @@ class DownloadWordReport(APIView):
 
                 question_with_answers.append(competency_object)
 
-            averages = calculate_average(
-                question_with_answers, assessment.assessment_type
-            )
+            averages = calculate_average(question_with_answers, assessment)
 
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
-            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+            data_for_score_analysis = get_data_for_score_analysis(
+                question_with_answers, assessment
+            )
+
+            labels = {
+                str(len(labels) - int(key) + 1): value for key, value in labels.items()
+            }
 
             word_generate_report_for_participant(
                 "assessment/report/assessment_report.html",
