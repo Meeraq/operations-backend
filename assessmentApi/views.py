@@ -2284,16 +2284,16 @@ def generate_graph(data, assessment_type):
     bar_width = 0.1
     competency_names = [competency["competency_name"] for competency in data]
     num_competencies = len(competency_names)
-    num_graphs = int(np.ceil(num_competencies / 5.0))
+    num_graphs = int(np.ceil(num_competencies / 7.0))
 
     encoded_images = []  # Array to store base64 encoded images
 
     for i in range(num_graphs):
-        start_index = i * 5
-        end_index = min((i + 1) * 5, num_competencies)
+        start_index = i * 7
+        end_index = min((i + 1) * 7, num_competencies)
         subset_data = data[start_index:end_index]
 
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(13, 6))
         index = np.arange(len(subset_data))
         participant_responses = [
             comp["average_participant_response"] for comp in subset_data
@@ -2426,7 +2426,7 @@ def html_for_pdf_preview(file_name, user_email, email_subject, content, body_mes
         print(str(e))
 
 
-def process_question_data(question_with_answer):
+def process_question_data(question_with_answer, assessment):
     processed_data = []
 
     for competency_data in question_with_answer:
@@ -2439,7 +2439,9 @@ def process_question_data(question_with_answer):
 
         for question in questions:
 
-            present_que = Question.objects.get(self_question=question["question"])
+            present_que = assessment.questionnaire.questions.filter(
+                self_question=question["question"]
+            ).first()
             if not present_que.reverse_question:
                 label_count = sum(
                     1 for key in present_que.label.keys() if present_que.label[key]
@@ -2619,12 +2621,14 @@ class DownloadParticipantResultReport(APIView):
             # Group questions by competency
             competency_array = []
             assessment_rating_type = None
-            for competency in assessment.questionnaire.questions.values(
-                "competency"
-            ).distinct():
+            for competency in (
+                assessment.questionnaire.questions.filter(response_type="rating_type")
+                .values("competency")
+                .distinct()
+            ):
                 competency_id = competency["competency"]
                 competency_questions = assessment.questionnaire.questions.filter(
-                    competency__id=competency_id
+                    competency__id=competency_id, response_type="rating_type"
                 )
                 competency_name_for_object = Competency.objects.get(
                     id=competency_id
@@ -2637,6 +2641,7 @@ class DownloadParticipantResultReport(APIView):
                     competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
+
                     question_object = None
                     labels = question.label
                     question_object = {
@@ -2647,6 +2652,7 @@ class DownloadParticipantResultReport(APIView):
                             )
                         ),
                     }
+
                     assessment_rating_type = question.rating_type
                     count = 1
                     observer_types_total = get_total_observer_types(
@@ -2707,7 +2713,7 @@ class DownloadParticipantResultReport(APIView):
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
-                question_with_answers
+                question_with_answers, assessment
             )
             data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
 
@@ -2768,12 +2774,14 @@ class DownloadParticipantResultReport(APIView):
             # Group questions by competency
             assessment_rating_type = None
             competency_array = []
-            for competency in assessment.questionnaire.questions.values(
-                "competency"
-            ).distinct():
+            for competency in (
+                assessment.questionnaire.questions.filter(response_type="rating_type")
+                .values("competency")
+                .distinct()
+            ):
                 competency_id = competency["competency"]
                 competency_questions = assessment.questionnaire.questions.filter(
-                    competency__id=competency_id
+                    competency__id=competency_id, response_type="rating_type"
                 )
                 competency_name_for_object = Competency.objects.get(
                     id=competency_id
@@ -2787,6 +2795,7 @@ class DownloadParticipantResultReport(APIView):
                     competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
+
                     question_object = None
                     labels = question.label
                     question_object = {
@@ -2802,6 +2811,7 @@ class DownloadParticipantResultReport(APIView):
                     observer_types_total = get_total_observer_types(
                         participant_observer, participant_id
                     )
+
                     # Collect observer responses
                     for observer in participant_observer.observers.all():
                         observer_response = ObserverResponse.objects.get(
@@ -2853,11 +2863,10 @@ class DownloadParticipantResultReport(APIView):
             averages = calculate_average(
                 question_with_answers, assessment.assessment_type
             )
-
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
-                question_with_answers
+                question_with_answers, assessment
             )
             data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
 
@@ -2977,12 +2986,14 @@ class DownloadWordReport(APIView):
             # Group questions by competency
             competency_array = []
             assessment_rating_type = None
-            for competency in assessment.questionnaire.questions.values(
-                "competency"
-            ).distinct():
+            for competency in (
+                assessment.questionnaire.questions.filter(response_type="rating_type")
+                .values("competency")
+                .distinct()
+            ):
                 competency_id = competency["competency"]
                 competency_questions = assessment.questionnaire.questions.filter(
-                    competency__id=competency_id
+                    competency__id=competency_id, response_type="rating_type"
                 )
                 competency_name_for_object = Competency.objects.get(
                     id=competency_id
@@ -2995,6 +3006,7 @@ class DownloadWordReport(APIView):
                     competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
+
                     question_object = None
 
                     question_object = {
@@ -3065,7 +3077,7 @@ class DownloadWordReport(APIView):
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
-                question_with_answers
+                question_with_answers, assessment
             )
             data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
 
