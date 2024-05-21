@@ -3054,11 +3054,15 @@ class CttFeedbackEmailValidation(APIView):
 
             ctt_feedback = CttFeedback.objects.get(unique_id=unique_id)
 
-            user = Users.objects.using("ctt").filter(email=email).first()
+            batch_user = (
+                BatchUsers.objects.using("ctt")
+                .filter(user__email=email, batch__id=ctt_feedback.ctt_batch)
+                .first()
+            )
 
-            if user:
+            if batch_user:
                 feedback_response = CttFeedbackResponse.objects.filter(
-                    ctt_feedback=ctt_feedback, ctt_user=user.id
+                    ctt_feedback=ctt_feedback, ctt_user=batch_user.user.id
                 ).first()
                 if not feedback_response:
                     ctt_batch = Batches.objects.using("ctt").get(
@@ -3082,7 +3086,7 @@ class CttFeedbackEmailValidation(APIView):
                             "message": "Validation Successful",
                             "participant_exists": True,
                             "feedback": data,
-                            "participant_id": user.id,
+                            "participant_id": batch_user.user.id,
                         },
                         status=status.HTTP_200_OK,
                     )

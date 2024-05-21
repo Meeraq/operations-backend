@@ -169,7 +169,7 @@ def get_live_session_name(session_type):
         session_name = "Kickoff Session"
     elif session_type == "virtual_session":
         session_name = "Virtual Session"
-    elif  session_type == "pre_study":
+    elif session_type == "pre_study":
         session_name = "Pre Study"
     return session_name
 
@@ -876,7 +876,12 @@ def send_assessment_invitation_mail(assessment_id):
                         [],
                     )
                     sleep(3)
-            if assessment.assessment_type == "360":
+            if (
+                assessment.assessment_type == "360"
+                or assessment.assessment_type == "90"
+                or assessment.assessment_type == "270"
+                or assessment.assessment_type == "180"
+            ):
                 for observer in participant_observers.observers.all():
                     observer_response = ObserverResponse.objects.filter(
                         observer=observer, assessment=assessment

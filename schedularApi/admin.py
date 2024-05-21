@@ -17,7 +17,6 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
-    ActionItem,
 )
 
 # Register your models here.
@@ -39,4 +38,3 @@ admin.site.register(FacilitatorPricing)
 admin.site.register(Expense)
 admin.site.register(HandoverDetails)
 admin.site.register(Task)
-admin.site.register(ActionItem)
