@@ -555,6 +555,24 @@ class AssessmentView(APIView):
             serializer = AssessmentSerializer(data=request.data)
             if serializer.is_valid():
                 serializer.save()
+                assessment = Assessment.objects.get(id=serializer.data["id"])
+                assessment.unique_id = uuid.uuid4()
+                assessment.save()
+                if assessment and assessment.batch:
+                    learner_data = []
+                    for learner in assessment.batch.learners.all():
+                        learner_data.append(
+                            {
+                                "email": learner.email,
+                                "first_name": learner.name,
+                                "last_name": "",
+                                "phone": learner.phone,
+                            }
+                        )
+                    for learner in learner_data:
+                        add_multiple_participants(
+                            learner, assessment.id, assessment, True
+                        )
                 return Response(
                     {"message": "Assessment created successfully."},
                     status=status.HTTP_201_CREATED,
@@ -570,6 +588,13 @@ class AssessmentView(APIView):
                 post_assessment_id,
             ) = create_pre_post_assessments(request)
             if created:
+                if pre_assessment_id or post_assessment_id:
+                    pre_assessment = Assessment.objects.get(id=pre_assessment_id)
+                    post_assessment = Assessment.objects.get(id=post_assessment_id)
+                    pre_assessment.unique_id = uuid.uuid4()
+                    post_assessment.unique_id = uuid.uuid4()
+                    pre_assessment.save()
+                    post_assessment.save()
                 return Response(
                     {"message": "Assessment created successfully."},
                     status=status.HTTP_201_CREATED,
@@ -2199,7 +2224,7 @@ class GetObserverTypes(APIView):
             )
 
 
-def calculate_average(question_with_answers, assessment_type):
+def calculate_average(question_with_answers, assessment):
     competency_averages = []
 
     for competency_data in question_with_answers:
@@ -2210,12 +2235,26 @@ def calculate_average(question_with_answers, assessment_type):
         total_observer_responses = {}
 
         for question in questions:
+            participant_response = None
+            present_que = assessment.questionnaire.questions.filter(
+                self_question=question["question"]
+            ).first()
+            if not present_que.reverse_question:
+                label_count = sum(
+                    1 for key in present_que.label.keys() if present_que.label[key]
+                )
+
+                swap_dict = swap_positions(label_count)
+                participant_response = swap_dict[question["participant_response"]]
+            else:
+                participant_response = question["participant_response"]
+
             total_observers = (
                 len(question.keys()) - 2
             )  # two columns substracted question and participant response for number of observer
-            if assessment_type == "self":
+            if assessment.assessment_type == "self":
                 total_observers = 1
-            total_participant_responses += question["participant_response"]
+            total_participant_responses += participant_response
 
             # Sum observer responses for each question
             for key, value in question.items():
@@ -2259,16 +2298,16 @@ def generate_graph(data, assessment_type):
     bar_width = 0.1
     competency_names = [competency["competency_name"] for competency in data]
     num_competencies = len(competency_names)
-    num_graphs = int(np.ceil(num_competencies / 5.0))
+    num_graphs = int(np.ceil(num_competencies / 7.0))
 
     encoded_images = []  # Array to store base64 encoded images
 
     for i in range(num_graphs):
-        start_index = i * 5
-        end_index = min((i + 1) * 5, num_competencies)
+        start_index = i * 7
+        end_index = min((i + 1) * 7, num_competencies)
         subset_data = data[start_index:end_index]
 
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(13, 6))
         index = np.arange(len(subset_data))
         participant_responses = [
             comp["average_participant_response"] for comp in subset_data
@@ -2401,7 +2440,7 @@ def html_for_pdf_preview(file_name, user_email, email_subject, content, body_mes
         print(str(e))
 
 
-def process_question_data(question_with_answer):
+def process_question_data(question_with_answer, assessment):
     processed_data = []
 
     for competency_data in question_with_answer:
@@ -2411,10 +2450,27 @@ def process_question_data(question_with_answer):
             "competency_name": competency_name,
             "total_participant_responses": 0,
         }
+
         for question in questions:
-            competency_average["total_participant_responses"] += question[
-                "participant_response"
-            ]
+
+            present_que = assessment.questionnaire.questions.filter(
+                self_question=question["question"]
+            ).first()
+            if not present_que.reverse_question:
+                label_count = sum(
+                    1 for key in present_que.label.keys() if present_que.label[key]
+                )
+
+                swap_dict = swap_positions(label_count)
+
+                competency_average["total_participant_responses"] += swap_dict[
+                    question["participant_response"]
+                ]
+
+            else:
+                competency_average["total_participant_responses"] += question[
+                    "participant_response"
+                ]
 
             for key, value in question.items():
                 if key != "question" and key != "participant_response":
@@ -2457,8 +2513,26 @@ def get_total_observer_types(participant_observer, participant_id):
     return observer_types_total
 
 
-def get_data_for_score_analysis(question_with_answer):
+def get_data_for_score_analysis(question_with_answer, assessment):
+
+    for competency in question_with_answer:
+        for question in competency["questions"]:
+            present_que = assessment.questionnaire.questions.filter(
+                self_question=question["question"]
+            ).first()
+            if not present_que.reverse_question:
+                label_count = sum(
+                    1 for key in present_que.label.keys() if present_que.label[key]
+                )
+
+                swap_dict = swap_positions(label_count)
+
+                question["participant_response"] = float(
+                    swap_dict[question["participant_response"]]
+                )
+
     res = []
+
     for competency in question_with_answer:
         unique_columns = []
         rows = []
@@ -2567,7 +2641,7 @@ class DownloadParticipantResultReport(APIView):
             )
 
             question_with_answers = []
-
+            labels = None
             frequency_analysis_data = get_frequency_analysis_data(
                 assessment.questionnaire.questions,
                 participant_response,
@@ -2578,12 +2652,14 @@ class DownloadParticipantResultReport(APIView):
             # Group questions by competency
             competency_array = []
             assessment_rating_type = None
-            for competency in assessment.questionnaire.questions.values(
-                "competency"
-            ).distinct():
+            for competency in (
+                assessment.questionnaire.questions.filter(response_type="rating_type")
+                .values("competency")
+                .distinct()
+            ):
                 competency_id = competency["competency"]
                 competency_questions = assessment.questionnaire.questions.filter(
-                    competency__id=competency_id
+                    competency__id=competency_id, response_type="rating_type"
                 )
                 competency_name_for_object = Competency.objects.get(
                     id=competency_id
@@ -2596,14 +2672,18 @@ class DownloadParticipantResultReport(APIView):
                     competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
-                    question_object = None
 
+                    question_object = None
+                    labels = question.label
                     question_object = {
                         "question": question.self_question,
-                        "participant_response": participant_response.participant_response.get(
-                            str(question.id)
+                        "participant_response": float(
+                            participant_response.participant_response.get(
+                                str(question.id)
+                            )
                         ),
                     }
+
                     assessment_rating_type = question.rating_type
                     count = 1
                     observer_types_total = get_total_observer_types(
@@ -2629,6 +2709,18 @@ class DownloadParticipantResultReport(APIView):
                             .type.type
                         )
 
+                        if not question.reverse_question:
+                            label_count = sum(
+                                1
+                                for key in question.label.keys()
+                                if question.label[key]
+                            )
+
+                            swap_dict = swap_positions(label_count)
+                            observer_question_response = swap_dict[
+                                observer_question_response
+                            ]
+
                         if observer_type in question_object:
                             existing_responses = question_object[observer_type]
                             new_response = observer_question_response
@@ -2645,16 +2737,21 @@ class DownloadParticipantResultReport(APIView):
 
                 question_with_answers.append(competency_object)
 
-            averages = calculate_average(
-                question_with_answers, assessment.assessment_type
-            )
+            averages = calculate_average(question_with_answers, assessment)
 
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
-                question_with_answers
+                question_with_answers, assessment
             )
-            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+
+            data_for_score_analysis = get_data_for_score_analysis(
+                question_with_answers, assessment
+            )
+
+            labels = {
+                str(len(labels) - int(key) + 1): value for key, value in labels.items()
+            }
 
             html_message = html_for_pdf_preview(
                 "assessment/report/assessment_report.html",
@@ -2672,6 +2769,7 @@ class DownloadParticipantResultReport(APIView):
                     "image_base64_array": graph_images,
                     "competency_array": competency_array,
                     "assessment_rating_type": assessment_rating_type,
+                    "labels": labels,
                 },
                 f"This new report generated for {participant.name}",
             )
@@ -2708,15 +2806,18 @@ class DownloadParticipantResultReport(APIView):
                 participant_id,
                 assessment_id,
             )
+            labels = None
             # Group questions by competency
             assessment_rating_type = None
             competency_array = []
-            for competency in assessment.questionnaire.questions.values(
-                "competency"
-            ).distinct():
+            for competency in (
+                assessment.questionnaire.questions.filter(response_type="rating_type")
+                .values("competency")
+                .distinct()
+            ):
                 competency_id = competency["competency"]
                 competency_questions = assessment.questionnaire.questions.filter(
-                    competency__id=competency_id
+                    competency__id=competency_id, response_type="rating_type"
                 )
                 competency_name_for_object = Competency.objects.get(
                     id=competency_id
@@ -2730,12 +2831,15 @@ class DownloadParticipantResultReport(APIView):
                     competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
-                    question_object = None
 
+                    question_object = None
+                    labels = question.label
                     question_object = {
                         "question": question.self_question,
-                        "participant_response": participant_response.participant_response.get(
-                            str(question.id)
+                        "participant_response": float(
+                            participant_response.participant_response.get(
+                                str(question.id)
+                            )
                         ),
                     }
                     assessment_rating_type = question.rating_type
@@ -2743,6 +2847,7 @@ class DownloadParticipantResultReport(APIView):
                     observer_types_total = get_total_observer_types(
                         participant_observer, participant_id
                     )
+
                     # Collect observer responses
                     for observer in participant_observer.observers.all():
                         observer_response = ObserverResponse.objects.get(
@@ -2763,6 +2868,18 @@ class DownloadParticipantResultReport(APIView):
                             .type.type
                         )
 
+                        if not question.reverse_question:
+                            label_count = sum(
+                                1
+                                for key in question.label.keys()
+                                if question.label[key]
+                            )
+
+                            swap_dict = swap_positions(label_count)
+                            observer_question_response = swap_dict[
+                                observer_question_response
+                            ]
+
                         if observer_type in question_object:
                             existing_responses = question_object[observer_type]
                             new_response = observer_question_response
@@ -2779,16 +2896,19 @@ class DownloadParticipantResultReport(APIView):
 
                 question_with_answers.append(competency_object)
 
-            averages = calculate_average(
-                question_with_answers, assessment.assessment_type
-            )
-
+            averages = calculate_average(question_with_answers, assessment)
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
-                question_with_answers
+                question_with_answers, assessment
             )
-            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+            data_for_score_analysis = get_data_for_score_analysis(
+                question_with_answers, assessment
+            )
+
+            labels = {
+                str(len(labels) - int(key) + 1): value for key, value in labels.items()
+            }
 
             pdf = generate_report_for_participant(
                 "assessment/report/assessment_report.html",
@@ -2804,6 +2924,7 @@ class DownloadParticipantResultReport(APIView):
                     "image_base64_array": graph_images,
                     "competency_array": competency_array,
                     "assessment_rating_type": assessment_rating_type,
+                    "labels": labels,
                 },
             )
             # pdf_path = "graphsAndReports/Report.pdf"
@@ -2894,7 +3015,7 @@ class DownloadWordReport(APIView):
             )
 
             question_with_answers = []
-
+            labels = None
             frequency_analysis_data = get_frequency_analysis_data(
                 assessment.questionnaire.questions,
                 participant_response,
@@ -2905,12 +3026,14 @@ class DownloadWordReport(APIView):
             # Group questions by competency
             competency_array = []
             assessment_rating_type = None
-            for competency in assessment.questionnaire.questions.values(
-                "competency"
-            ).distinct():
+            for competency in (
+                assessment.questionnaire.questions.filter(response_type="rating_type")
+                .values("competency")
+                .distinct()
+            ):
                 competency_id = competency["competency"]
                 competency_questions = assessment.questionnaire.questions.filter(
-                    competency__id=competency_id
+                    competency__id=competency_id, response_type="rating_type"
                 )
                 competency_name_for_object = Competency.objects.get(
                     id=competency_id
@@ -2923,12 +3046,15 @@ class DownloadWordReport(APIView):
                     competency_array.append(competency_name_for_object)
 
                 for question in competency_questions:
+
                     question_object = None
 
                     question_object = {
                         "question": question.self_question,
-                        "participant_response": participant_response.participant_response.get(
-                            str(question.id)
+                        "participant_response": float(
+                            participant_response.participant_response.get(
+                                str(question.id)
+                            )
                         ),
                     }
                     assessment_rating_type = question.rating_type
@@ -2956,6 +3082,18 @@ class DownloadWordReport(APIView):
                             .type.type
                         )
 
+                        if not question.reverse_question:
+                            label_count = sum(
+                                1
+                                for key in question.label.keys()
+                                if question.label[key]
+                            )
+
+                            swap_dict = swap_positions(label_count)
+                            observer_question_response = swap_dict[
+                                observer_question_response
+                            ]
+
                         if observer_type in question_object:
                             existing_responses = question_object[observer_type]
                             new_response = observer_question_response
@@ -2972,16 +3110,20 @@ class DownloadWordReport(APIView):
 
                 question_with_answers.append(competency_object)
 
-            averages = calculate_average(
-                question_with_answers, assessment.assessment_type
-            )
+            averages = calculate_average(question_with_answers, assessment)
 
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
-                question_with_answers
+                question_with_answers, assessment
             )
-            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+            data_for_score_analysis = get_data_for_score_analysis(
+                question_with_answers, assessment
+            )
+
+            labels = {
+                str(len(labels) - int(key) + 1): value for key, value in labels.items()
+            }
 
             word_generate_report_for_participant(
                 "assessment/report/assessment_report.html",
@@ -2997,6 +3139,7 @@ class DownloadWordReport(APIView):
                     "image_base64_array": graph_images,
                     "competency_array": competency_array,
                     "assessment_rating_type": assessment_rating_type,
+                    "labels": labels,
                 },
             )
             pdf_path = "graphsAndReports/Report.pdf"
@@ -4197,7 +4340,12 @@ def getParticipantsResponseStatusForAssessment(assessment, multiple=False):
                 }
                 response_data.append(data)
             return response_data
-        elif assessment.assessment_type == "360":
+        elif (
+            assessment.assessment_type == "360"
+            or assessment.assessment_type == "90"
+            or assessment.assessment_type == "270"
+            or assessment.assessment_type == "180"
+        ):
             if not multiple:
                 response_data = {"Participants": [], "Observers": []}
             for participant_observers in assessment.participants_observers.all():
@@ -4348,7 +4496,12 @@ class DownloadParticipantResponseStatusData(APIView):
                 )
 
                 return response
-            elif assessment.assessment_type == "360":
+            elif (
+                assessment.assessment_type == "360"
+                or assessment.assessment_type == "90"
+                or assessment.assessment_type == "270"
+                or assessment.assessment_type == "180"
+            ):
                 participants_df = pd.DataFrame(response_data["Participants"])
                 observers_df = pd.DataFrame(response_data["Observers"])
                 excel_writer = BytesIO()
@@ -4896,9 +5049,7 @@ class GetProjectWiseReport(APIView):
             pdf = pdfkit.from_string(email_message, False, configuration=pdfkit_config)
 
             response = HttpResponse(pdf, content_type="application/pdf")
-            response["Content-Disposition"] = (
-                f'attachment; filename={f"Report.pdf"}'
-            )
+            response["Content-Disposition"] = f'attachment; filename={f"Report.pdf"}'
 
             return response
 
@@ -4917,7 +5068,9 @@ class AssessmentsResponseStatusDownload(APIView):
             response_data_for_assessments = {}
             for assessment_id in assessment_ids:
                 assessment = Assessment.objects.get(id=assessment_id)
-                response_data = getParticipantsResponseStatusForAssessment(assessment,True)
+                response_data = getParticipantsResponseStatusForAssessment(
+                    assessment, True
+                )
                 response_data_for_assessments[assessment.name] = response_data
             return Response(response_data_for_assessments)
         except Exception as e:
@@ -5179,3 +5332,66 @@ def get_learner_assessment_result_image(request, learner_id):
                 )
 
     return Response({"assessment_exists": False, "graph": None})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def add_user_as_a_participant_of_assessment(request):
+    try:
+        participant = request.data.get("participants")
+        unique_id = request.data.get("assessment_id")
+        assessment = Assessment.objects.get(unique_id=unique_id)
+
+        if assessment.status == "draft" or assessment.status == "completed":
+            return Response(
+                {
+                    "error": "Assessment is not accessible. Contact pmocoaching@meeraq.com."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        participant_resp_exists = ParticipantResponse.objects.filter(
+            assessment=assessment, participant__email=participant["email"]
+        ).exists()
+
+        if participant_resp_exists:
+            return Response(
+                {"error": "User has already taken the assessment."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if (
+            assessment.participants_observers.filter(
+                participant__email=participant["email"]
+            ).exists()
+            and not participant_resp_exists
+        ):
+            participant_unique_id = ParticipantUniqueId.objects.filter(
+                assessment=assessment, participant__email=participant["email"]
+            ).first()
+            return Response(
+                {
+                    "participant_unique_id": participant_unique_id.unique_id,
+                },
+            )
+
+        serializer = add_multiple_participants(
+            participant, assessment.id, assessment, True
+        )
+        participant_unique_id = ParticipantUniqueId.objects.filter(
+            assessment=assessment, participant__email=participant["email"]
+        ).first()
+
+        return Response(
+            {
+                "message": "Assessment Registration Successful.",
+                "participant_unique_id": participant_unique_id.unique_id,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Unable to process the request."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

@@ -14,6 +14,7 @@ from .models import (
     AssessmentNotification,
     ParticipantUniqueId,
     ParticipantReleasedResults,
+    ActionItem
 )
 
 # Register your models here.
@@ -33,3 +34,4 @@ admin.site.register(Behavior)
 admin.site.register(AssessmentNotification)
 admin.site.register(ParticipantUniqueId)
 admin.site.register(ParticipantReleasedResults)
+admin.site.register(ActionItem)

@@ -276,7 +276,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "send_feedback_lesson_reminders": {
         "task": "schedularApi.tasks.send_feedback_lesson_reminders",
-        "schedule": crontab(hour=13, minute=0),  # 8 AM
+        "schedule": crontab(hour=13, minute=0),  # 8 PM
     },
     "send_reminder_to_book_slots_to_coachee": {
         "task": "schedularApi.tasks.send_reminder_to_book_slots_to_coachee",
