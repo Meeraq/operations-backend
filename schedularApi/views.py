@@ -508,10 +508,12 @@ def create_gmsheet(request):
         gm_sheet_serializer = GmSheetSerializer(data=gmsheet_data)
         if gm_sheet_serializer.is_valid():
             gm_sheet = gm_sheet_serializer.save()
-            offerings_data = gmsheet_data.get('offerings')
+            offerings_data = request.data.get('offerings')
             if offerings_data:
+                print("***********")
                 for offering_data in offerings_data:
                     offering_data['gm_sheet'] = gm_sheet.id
+                    print(offering_data)
                     offering_serializer = OfferingSerializer(data=offering_data)
                     if offering_serializer.is_valid():
                         offering_serializer.save()
@@ -546,43 +548,53 @@ def add_values_to_field(request):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 @api_view(['PUT'])
-@transaction.atomic
-def update_gmsheet(request, pk):
+def update_is_accepted_status(request, pk):
     try:
         gm_sheet = GmSheet.objects.get(pk=pk)
     except GmSheet.DoesNotExist:
-        return Response({'error': 'GM Sheet does not exist'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({'error': 'GmSheet not found'}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == 'PUT':
-        gmsheet_data = request.data.get('gmsheet')
-        gm_sheet_serializer = GmSheetSerializer(gm_sheet, data=gmsheet_data, partial=True)
+        data = {}
+
+        # Check if is_accepted is present in request data
+        if 'is_accepted' in request.data:
+            data['is_accepted'] = request.data.get('is_accepted')
+
+        # Check if deal_status is present in request data
+        if 'deal_status' in request.data:
+            data['deal_status'] = request.data.get('deal_status')
+
+        gm_sheet_serializer = GmSheetSerializer(gm_sheet, data=data, partial=True)
         if gm_sheet_serializer.is_valid():
-            updated_gmsheet = gm_sheet_serializer.save()
-
-            # Update or create offerings
-            offerings_data = gmsheet_data.get('offerings')
-            if offerings_data:
-                for offering_data in offerings_data:
-                    offering_id = offering_data.get('id')  # If exists, update, else create new
-                    if offering_id:
-                        try:
-                            offering = Offering.objects.get(pk=offering_id, gm_sheet=gm_sheet)
-                        except Offering.DoesNotExist:
-                            return Response({'error': f'Offering with ID {offering_id} does not exist for this GM Sheet'}, 
-                                            status=status.HTTP_400_BAD_REQUEST)
-                    else:
-                        offering_data['gm_sheet'] = gm_sheet.id
-                        offering = None
-
-                    offering_serializer = OfferingSerializer(offering, data=offering_data, partial=True)
-                    if offering_serializer.is_valid():
-                        offering_serializer.save()
-                    else:
-                        return Response(offering_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
+            gm_sheet_serializer.save()
             return Response(gm_sheet_serializer.data, status=status.HTTP_200_OK)
         return Response(gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+@api_view(['PUT'])
+@transaction.atomic
+def update_gmsheet(request, id):
+    try:
+
+        gm_sheet = GmSheet.objects.get(id=id)
+        gmsheet_data = request.data.get('gmsheet')
+        gm_sheet_serializer = GmSheetSerializer(gm_sheet, data=gmsheet_data, partial=True)
+        if gm_sheet_serializer.is_valid():
+            gm_sheet = gm_sheet_serializer.save()
+
+            # Handle offerings update
+            offerings_data = request.data.get('offerings',[])
+        
+            for offering_data in offerings_data:
+                offering_id = offering_data.get('id')
+                if offering_id:
+                    offering_instance = Offering.objects.get(id=offering_id, gm_sheet=gm_sheet)
+                    offering_serializer = OfferingSerializer(offering_instance, data=offering_data, partial=True)
+
+        return Response({"message":"Update Successfully"}, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({'error': 'Failed to upate data'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
@@ -7240,9 +7252,11 @@ def delete_gmsheet(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])    
 def get_offerings_by_gmsheet_id(request, gmsheet_id):
+    print(gmsheet_id)
     offerings = Offering.objects.filter(gm_sheet=gmsheet_id)
+    print(offerings)
     serializer = OfferingSerializer(offerings, many=True)
-    return JsonResponse(serializer.data, safe=False)
+    return Response(serializer.data)
 
 
 @api_view(["GET"])

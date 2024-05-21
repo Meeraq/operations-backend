@@ -324,7 +324,7 @@ class GmSheet(models.Model):
     ]
     client_name = models.TextField(blank=True, null=True)
     project_type = models.CharField(
-        max_length=255, choices=PROJECT_TYPE_CHOICES, blank=True, null=True
+        max_length=255,  blank=True, null=True
     )
     product_type= models.CharField(
         max_length=255, blank=True, null=True
@@ -340,6 +340,11 @@ class GmSheet(models.Model):
         max_length=255, choices=DEAL_STATUS_CHOICES, default="pending"
     )
     benchmark = models.ForeignKey(Benchmark, null=True, on_delete=models.SET_NULL)
+    participant_level = models.CharField(max_length=255, blank=True, null=True)
+    start_date = models.DateField(null=True, blank=True) 
+
+    def _str_(self):
+        return f"{self.client_name} for {self.product_type}"
 
 class StandardizedFieldGmSheet(models.Model):
     FIELD_CHOICES = (
@@ -354,10 +359,16 @@ class StandardizedFieldGmSheet(models.Model):
         return f"{self.field}"
     
 class Offering(models.Model):
+    MODE_CHOICES = [
+        ("in_person", "In Person"),
+        ("virtual", "Virtual"),
+        ("hybrid", "Hybrid"),
+    ]
     gm_sheet = models.ForeignKey(GmSheet, on_delete=models.CASCADE)
-    mode = models.CharField(max_length=100, blank=True,null=True,default="")
+    mode = models.CharField(max_length=100, choices=MODE_CHOICES,blank=True,null=True,default="")
     revenue_structure = models.JSONField(default=list, blank=True, null=True)
     cost_structure = models.JSONField(default=list, blank=True, null=True)
+    gross_margin = models.CharField(max_length=100,blank=True,null=True)
 
 class StandardizedFieldGmSheet(models.Model):
     FIELD_CHOICES = (
