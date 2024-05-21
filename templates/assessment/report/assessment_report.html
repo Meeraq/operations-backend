@@ -375,7 +375,7 @@
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
-              <p>{{ name }}</p>
+              <p style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 200px;">{{ name }}</p>
             </div>
           </div>
       <div style="margin-top: 30pt;">
@@ -416,7 +416,7 @@
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
-              <p>{{ name }}</p>
+                 <p style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 200px;">{{ name }}</p>
             </div>
           </div>
       <div>
@@ -482,7 +482,7 @@
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
-              <p>{{ name }}</p>
+                 <p style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 200px;">{{ name }}</p>
             </div>
           </div>
       <div>
@@ -562,7 +562,7 @@
               {% endif %}
          <div style="font-size:13pt; margin-top: 40pt; margin-left: 60pt; width:200pt;">
             {% for key, value in labels.items %}
-                {{ key }}. {{ value }}
+                {{ value }} = {{ key }}
             {% endfor %}
         </div>
             </div>
@@ -596,7 +596,7 @@
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
-              <p>{{ name }}</p>
+                 <p style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 200px;">{{ name }}</p>
             </div>
           </div>
       <div style="text-align: center; font-size: 23pt; margin-top: 28pt; font-weight: bold;">
@@ -686,7 +686,7 @@
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
-              <p>{{ name }}</p>
+                 <p style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 200px;">{{ name }}</p>
             </div>
           </div>
       <div
@@ -768,7 +768,7 @@
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
-              <p>{{ name }}</p>
+                 <p style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 200px;">{{ name }}</p>
             </div>
           </div>
       <div>
@@ -825,7 +825,7 @@
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
-              <p>{{ name }}</p>
+                 <p style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 200px;">{{ name }}</p>
             </div>
           </div>
       <div
@@ -887,7 +887,7 @@
           {% endif %} Report</p>
             </div>
             <div style="float: right; text-align: right;">
-              <p>{{ name }}</p>
+                 <p style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 200px;">{{ name }}</p>
             </div>
           </div>
       <div style="
@@ -985,7 +985,7 @@
           {% endif %} Report</p>
                 </div>
                 <div style="float: right; text-align: right;">
-                  <p>{{ name }}</p>
+                     <p style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 200px;">{{ name }}</p>
                 </div>
               </div>
         {% endfor %}
