@@ -4582,13 +4582,14 @@ class GetAllAssessments(APIView):
             assessment_lesson = AssessmentLesson.objects.filter(
                 assessment_modal=assessment
             ).first()
-
+            if assessment.batch is not None:
+                organisation = assessment.batch.project.organisation.name
+            else:
+                organisation = assessment.organisation.name if assessment.organisation else ""
             assessment_data = {
                 "id": assessment.id,
                 "name": assessment.name,
-                "organisation": (
-                    assessment.organisation.name if assessment.organisation else ""
-                ),
+                "organisation": organisation,
                 "assessment_type": assessment.assessment_type,
                 "assessment_timing": assessment.assessment_timing,
                 "assessment_start_date": assessment.assessment_start_date,

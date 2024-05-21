@@ -11099,7 +11099,7 @@ def archive_project(request):
     try:
         project_id = request.data.get("project_id")
         project_type = request.data.get("project_type")
-        if project_type == "SEEQ":
+        if project_type == "skill_training" or project_type == "assessment":
             project = SchedularProject.objects.get(id=project_id)
         elif project_type == "CAAS":
             project = Project.objects.get(id=project_id)

@@ -7759,8 +7759,8 @@ def get_all_assessments_of_batch(request,batch_id):
                 "id": assessment.id,
                 "name": assessment.name,
                 "organisation": (
-                    assessment.organisation.name
-                    if assessment.organisation
+                    batch.project.organisation.name
+                    if batch.project
                     else ""
                 ),
                 "assessment_type": assessment.assessment_type,
