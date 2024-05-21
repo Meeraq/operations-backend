@@ -2041,8 +2041,16 @@ def coching_purchase_order_create(request, project_type, project_id):
     try:
         engagements = json.loads(request.data.get("engagements", []))
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-        caas_project = project_id if project_type != "skill_training" else None
-        schedular_project = project_id if project_type == "skill_training" else None
+        caas_project = (
+            project_id
+            if project_type != "skill_training" and project_type != "assessment"
+            else None
+        )
+        schedular_project = (
+            project_id
+            if project_type == "skill_training" or project_type == "assessment"
+            else None
+        )
         coach = request.data.get("coach", None)
         facilitator = request.data.get("facilitator", None)
         if not access_token:
@@ -2098,9 +2106,34 @@ def create_purchase_order_for_outside_vendors(request):
         api_url = f"{base_url}/purchaseorders?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.post(api_url, headers=auth_header, data=request.data)
+        project_id = request.query_params.get("project_id")
+        project_type = request.query_params.get("project_type")
+        schedular_project = (
+            project_id
+            if project_type == "skill_training" or project_type == "assessment"
+            else None
+        )
         if response.status_code == 201:
             purchaseorder_created = response.json().get("purchaseorder")
             create_or_update_po(purchaseorder_created["purchaseorder_id"])
+            try:
+                purchase_order = PurchaseOrder.objects.get(
+                    purchaseorder_id=purchaseorder_created["purchaseorder_id"]
+                )
+                serializer = PurchaseOrderSerializer(
+                    purchase_order,
+                    data={
+                        "schedular_project": schedular_project,
+                    },
+                    partial=True,
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                else:
+                    print(serializer.errors)
+            except Exception as e:
+                print(str(e))
+                pass
             return Response({"message": "Purchase Order created successfully."})
         else:
             print(response.json())
@@ -2905,7 +2938,11 @@ def get_so_for_project(project_id, project_type):
             )
             for mapping in orders_project_mapping:
                 sales_order_ids_set.update(mapping.sales_order_ids)
-        elif project_type == "SEEQ" or project_type == "skill_training" or project_type == "assessment":
+        elif (
+            project_type == "SEEQ"
+            or project_type == "skill_training"
+            or project_type == "assessment"
+        ):
             orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                 schedular_project__id=project_id
             )
