@@ -575,26 +575,42 @@ def update_is_accepted_status(request, pk):
 @transaction.atomic
 def update_gmsheet(request, id):
     try:
-
         gm_sheet = GmSheet.objects.get(id=id)
         gmsheet_data = request.data.get('gmsheet')
         gm_sheet_serializer = GmSheetSerializer(gm_sheet, data=gmsheet_data, partial=True)
+        
         if gm_sheet_serializer.is_valid():
             gm_sheet = gm_sheet_serializer.save()
-
+            
             # Handle offerings update
-            offerings_data = request.data.get('offerings',[])
-        
+            offerings_data = request.data.get('offerings', [])
+            
             for offering_data in offerings_data:
                 offering_id = offering_data.get('id')
                 if offering_id:
-                    offering_instance = Offering.objects.get(id=offering_id, gm_sheet=gm_sheet)
-                    offering_serializer = OfferingSerializer(offering_instance, data=offering_data, partial=True)
-
-        return Response({"message":"Update Successfully"}, status=status.HTTP_200_OK)
+                    try:
+                        offering_instance = Offering.objects.get(id=offering_id, gm_sheet=gm_sheet)
+                        offering_serializer = OfferingSerializer(offering_instance, data=offering_data, partial=True)
+                        if offering_serializer.is_valid():
+                            offering_serializer.save()
+                        else:
+                            return Response(offering_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                    except Offering.DoesNotExist:
+                        return Response({'error': 'Offering not found'}, status=status.HTTP_404_NOT_FOUND)
+                else:
+                    offering_serializer = OfferingSerializer(data=offering_data)
+                    if offering_serializer.is_valid():
+                        offering_serializer.save(gm_sheet=gm_sheet)
+                    else:
+                        return Response(offering_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response({"message": "Update Successfully"}, status=status.HTTP_200_OK)
+        else:
+            return Response(gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
     except Exception as e:
         print(str(e))
-        return Response({'error': 'Failed to upate data'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': 'Failed to update data'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
