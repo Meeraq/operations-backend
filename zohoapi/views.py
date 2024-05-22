@@ -3364,13 +3364,14 @@ def create_sales_order(request):
                 ):
                     return Response(
                         {
-                            "message": "SO has been created successfully and marked as Open"
+                            "message": "SO has been created successfully and marked as Open",
+                            "salesorder"  : salesorder_created
                         }
                     )
 
             # add the mapping for sales order here
             return Response(
-                {"message": "SO has been created successfully and Saved as Draft"}
+                {"message": "SO has been created successfully and Saved as Draft","salesorder" : salesorder_created}
             )
         else:
             print(response.json())
