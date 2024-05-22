@@ -23,9 +23,24 @@ from .models import (
     UserAssignments,
     Assignments,
     MentorCoachSessions,
+    Users,
 )
 from zohoapi.models import SalesOrder, ClientInvoice
 from datetime import datetime, timedelta
+from decimal import Decimal
+from django.db.models import (
+    Count,
+    Prefetch,
+    OuterRef,
+    Subquery,
+    Case,
+    When,
+    Value,
+    F,
+    Q,
+    CharField,
+    Sum,
+)
 
 
 def get_month_start_end_dates():
@@ -62,7 +77,7 @@ def get_current_financial_year_dates():
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_batches(request):
-    batches = Batches.objects.using("ctt").all()
+    batches = Batches.objects.using("ctt").all().order_by("-created_at")
     serializer = BatchSerializer(batches, many=True)
     return Response(serializer.data)
 
@@ -70,7 +85,7 @@ def get_batches(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def batch_details(request):
-    batches = Batches.objects.using("ctt").all()
+    batches = Batches.objects.using("ctt").all().order_by("-created_at")
     data = []
     index = 1
     for batch in batches:
@@ -94,6 +109,7 @@ def batch_details(request):
         ]
 
         batch_data = {
+            "id": batch.id,
             "index": index,
             "batch_name": batch.name,
             "program_name": batch.program.name,
@@ -116,6 +132,7 @@ def participant_details(request):
         batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
         data = []
         index = 1
+
         for batch_user in batch_users:
             try:
                 batch_name = batch_user.batch.name
@@ -138,9 +155,20 @@ def participant_details(request):
                     zoho_customer__email=batch_user.user.email,
                     custom_field_hash__cf_ctt_batch=batch_user.batch.name,
                 )
+                sales_order = salesorders.first()
                 payment_status = None
-
+                total = 0
+                invoiced_amount = 0
+                paid_amount = 0
+                currency_code = None
                 for sales_order in salesorders:
+                    total += sales_order.total
+                    currency_code = sales_order.currency_code
+                    for invoice in sales_order.invoices:
+                        invoiced_amount += invoice["total"]
+                        if invoice["status"] == "paid":
+                            paid_amount += invoice["total"]
+
                     if sales_order.invoiced_status != "invoiced":
                         if sales_order.invoiced_status == "partially_invoiced":
                             payment_status = "Partially Invoiced"
@@ -150,6 +178,8 @@ def participant_details(request):
                             break
                     else:
                         payment_status = "Invoiced"
+
+                pending_amount = invoiced_amount - paid_amount
 
                 user_data = {
                     "index": index,
@@ -162,6 +192,12 @@ def participant_details(request):
                     "program": program_name,
                     "assignment_completion": assignment_completion,
                     "total_assignments_in_batch": total_assignments_in_batch,
+                    "program_start_date": batch_user.batch.start_date,
+                    "total": total,
+                    "invoiced_amount": invoiced_amount,
+                    "pending_amount": pending_amount,
+                    "paid_amount": paid_amount,
+                    "currency_code": currency_code,
                     "certificate_status": certificate_status,
                     "organisation": organization_name,
                     "payment_status": payment_status,
@@ -262,7 +298,7 @@ def participant_so_and_invoices_in_batch(request, email):
 def sales_persons_finances(request):
     start_date = request.query_params.get("start_date", "")
     end_date = request.query_params.get("end_date", "")
-    all_batches = Batches.objects.using("ctt").all()
+    all_batches = Batches.objects.using("ctt").all().order_by("-created_at")
     l1_batches = []
     l2_batches = []
     l3_batches = []
@@ -297,6 +333,8 @@ def sales_persons_finances(request):
             "quarterly": 0,
             "yearly": 0,
             "actc": 0,
+            "total": 0,
+            "salesperson": "",
         }
     )
     for order in sales_orders:
@@ -304,32 +342,33 @@ def sales_persons_finances(request):
         if not batch:
             continue
         salesperson = order.salesperson_name
-        # amount = order["total"]
+        salesperson_id = order.salesperson_id
+        salesperson_totals[salesperson_id]["salesperson"] = salesperson
+        salesperson_totals[salesperson_id]["total"] += 1
+
         if batch in l1_batches:
-            salesperson_totals[salesperson]["l1"] += 1
+            salesperson_totals[salesperson_id]["l1"] += 1
         elif batch in l2_batches:
-            salesperson_totals[salesperson]["l2"] += 1
+            salesperson_totals[salesperson_id]["l2"] += 1
         elif batch in l3_batches:
-            salesperson_totals[salesperson]["l3"] += 1
+            salesperson_totals[salesperson_id]["l3"] += 1
         elif batch in actc_batches:
-            salesperson_totals[salesperson]["actc"] += 1
+            salesperson_totals[salesperson_id]["actc"] += 1
 
         if month_start_date.date() <= order.date <= month_end_date.date():
-            salesperson_totals[salesperson]["monthly"] += 1
+            salesperson_totals[salesperson_id]["monthly"] += 1
         if quarter_start_date.date() <= order.date <= quarter_end_date.date():
-            salesperson_totals[salesperson]["quarterly"] += 1
+            salesperson_totals[salesperson_id]["quarterly"] += 1
         if (
             financial_year_start_date.date()
             <= order.date
             <= financial_year_end_date.date()
         ):
-            salesperson_totals[salesperson]["yearly"] += 1
-    
-    res_dict = dict(salesperson_totals)
-    
+            salesperson_totals[salesperson_id]["yearly"] += 1
+
     res_list = [
-        {"index": index, "salesperson": salesperson, **totals}
-        for index, (salesperson, totals) in enumerate(
+        {"index": index, "salesperson_id": salesperson_id, **totals}
+        for index, (salesperson_id, totals) in enumerate(
             salesperson_totals.items(), start=1
         )
     ]
@@ -378,59 +417,110 @@ def participant_finances(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_faculties(request):
-    batch_faculties = BatchFaculty.objects.using("ctt").all()
+    batch_faculties = (
+        BatchFaculty.objects.using("ctt")
+        .select_related("faculty", "batch", "batch__program")
+        .all()
+    )
+
+    batch_ids = batch_faculties.values_list("batch_id", flat=True)
+
+    participant_counts = (
+        BatchUsers.objects.using("ctt")
+        .filter(batch_id__in=batch_ids)
+        .values("batch_id")
+        .annotate(count=Count("id"))
+    )
+    total_assignments_counts = (
+        Assignments.objects.using("ctt")
+        .filter(batch_id__in=batch_ids)
+        .values("batch_id")
+        .annotate(count=Count("id"))
+    )
+    assignments_counts = (
+        UserAssignments.objects.using("ctt")
+        .filter(assignment__batch_id__in=batch_ids)
+        .values("assignment__batch_id")
+        .annotate(count=Count("id"))
+    )
+    mentor_coaching_counts = (
+        MentorCoachSessions.objects.using("ctt")
+        .filter(batch_id__in=batch_ids)
+        .values("batch_id")
+        .annotate(count=Count("id"))
+    )
+    current_date = timezone.now().date()
+    total_sessions_counts = (
+        Sessions.objects.using("ctt")
+        .filter(batch_id__in=batch_ids)
+        .values("batch_id")
+        .annotate(count=Count("id"))
+    )
+    completed_sessions_counts = (
+        Sessions.objects.using("ctt")
+        .filter(batch_id__in=batch_ids, date__lt=current_date)
+        .values("batch_id")
+        .annotate(count=Count("id"))
+    )
+    salesorders_counts = (
+        SalesOrder.objects.filter(
+            invoiced_status="invoiced",
+            custom_field_hash__cf_ctt_batch__in=[
+                bf.batch.name for bf in batch_faculties
+            ],
+        )
+        .values("custom_field_hash__cf_ctt_batch")
+        .annotate(count=Count("id"))
+    )
+
+    participant_counts_dict = {
+        item["batch_id"]: item["count"] for item in participant_counts
+    }
+    total_assignments_counts_dict = {
+        item["batch_id"]: item["count"] for item in total_assignments_counts
+    }
+    assignments_counts_dict = {
+        item["assignment__batch_id"]: item["count"] for item in assignments_counts
+    }
+    mentor_coaching_counts_dict = {
+        item["batch_id"]: item["count"] for item in mentor_coaching_counts
+    }
+    total_sessions_counts_dict = {
+        item["batch_id"]: item["count"] for item in total_sessions_counts
+    }
+    completed_sessions_counts_dict = {
+        item["batch_id"]: item["count"] for item in completed_sessions_counts
+    }
+    salesorders_counts_dict = {
+        item["custom_field_hash__cf_ctt_batch"]: item["count"]
+        for item in salesorders_counts
+    }
+
     res = []
     index = 1
     for batch_faculty in batch_faculties:
+        batch_id = batch_faculty.batch.id
+        batch_name = batch_faculty.batch.name
+
         obj = {
             "index": index,
             "id": batch_faculty.id,
-            "name": batch_faculty.faculty.first_name
-            + " "
-            + batch_faculty.faculty.last_name,
+            "name": f"{batch_faculty.faculty.first_name} {batch_faculty.faculty.last_name}",
             "email": batch_faculty.faculty.email,
             "phone": batch_faculty.faculty.phone,
             "batch": batch_faculty.batch.name,
             "program": batch_faculty.batch.program.name,
+            "participant_count": participant_counts_dict.get(batch_id, 0),
+            "total_assignments": total_assignments_counts_dict.get(batch_id, 0),
+            "assignments_count": assignments_counts_dict.get(batch_id, 0),
+            "mentor_coaching_sessions": mentor_coaching_counts_dict.get(batch_id, 0),
+            "total_sessions_count": total_sessions_counts_dict.get(batch_id, 0),
+            "completed_sessions_count": completed_sessions_counts_dict.get(batch_id, 0),
+            "salesorders": salesorders_counts_dict.get(batch_name, 0),
         }
         index += 1
-        # assignment completion status
-        participant_count = (
-            BatchUsers.objects.using("ctt").filter(batch=batch_faculty.batch).count()
-        )
-        total_assignments = (
-            Assignments.objects.using("ctt").filter(batch=batch_faculty.batch).count()
-        )
-        assignments_count = (
-            UserAssignments.objects.using("ctt")
-            .filter(assignment__batch=batch_faculty.batch)
-            .count()
-        )
-        obj["participant_count"] = participant_count
-        obj["assignments_count"] = assignments_count
-        obj["total_assignments"] = total_assignments
-        # mentor coaching status
-        mentor_coaching_sessions = (
-            MentorCoachSessions.objects.using("ctt")
-            .filter(batch=batch_faculty.batch)
-            .count()
-        )
-        obj["mentor_coaching_sessions"] = mentor_coaching_sessions
-        # session completion status
-        current_date = timezone.now().date()
-        total_sessions = Sessions.objects.using("ctt").filter(batch=batch_faculty.batch)
-        total_sessions_count = total_sessions.count()
-        completed_sessions_count = total_sessions.filter(date__lt=current_date).count()
-        obj["total_sessions_count"] = total_sessions_count
-        obj["completed_sessions_count"] = completed_sessions_count
-
-        # batch payment status
-        salesorders = SalesOrder.objects.filter(
-            invoiced_status="invoiced",
-            custom_field_hash__cf_ctt_batch=batch_faculty.batch.name,
-        ).count()
-        obj["salesorders"] = salesorders
         res.append(obj)
+
     return Response(res)
 
 
@@ -438,7 +528,7 @@ def get_faculties(request):
 @permission_classes([IsAuthenticated])
 def get_all_faculties(request):
     try:
-        faculties = Faculties.objects.using("ctt").all()
+        faculties = Faculties.objects.using("ctt").all().order_by("-created_at")
         serializer = FacultiesSerializer(faculties, many=True)
         return Response(serializer.data)
     except Exception as e:
@@ -450,50 +540,76 @@ def get_all_faculties(request):
 @permission_classes([IsAuthenticated])
 def get_all_finance(request):
     try:
-        batch_users = BatchUsers.objects.using("ctt").all()
+        batch_users = (
+            BatchUsers.objects.using("ctt")
+            .select_related("user", "batch__program")
+            .all()
+            .order_by("-created_at")
+        )
+
+        # Convert batch_users emails to a list to avoid subquery across different databases
+        user_emails = list(batch_users.values_list("user__email", flat=True))
+
+        salesorders = SalesOrder.objects.filter(
+            zoho_customer__email__in=user_emails
+        ).select_related("zoho_customer")
+
         data = []
         index = 1
+        # user_assignments = UserAssignments.objects.using("ctt").all()
+        assignments = Assignments.objects.using("ctt").all()
         for batch_user in batch_users:
-            salesorders = SalesOrder.objects.filter(
-                zoho_customer__email=batch_user.user.email,
-                custom_field_hash__cf_ctt_batch=batch_user.batch.name,
+            user_email = batch_user.user.email
+            batch_name = batch_user.batch.name
+            user_salesorders = [
+                so
+                for so in salesorders
+                if so.zoho_customer.email == user_email
+                and so.custom_field_hash.get("cf_ctt_batch") == batch_name
+            ]
+
+            total = sum(Decimal(str(so.total or 0)) for so in user_salesorders)
+            invoiced_amount = sum(
+                Decimal(str(invoice["total"]))
+                for so in user_salesorders
+                for invoice in so.invoices
+            )
+            paid_amount = sum(
+                Decimal(str(invoice["total"]))
+                for so in user_salesorders
+                for invoice in so.invoices
+                if invoice.get("status") == "paid"
+            )
+            sales_persons = {so.salesperson_name for so in user_salesorders}
+            currency_code = (
+                user_salesorders[0].currency_code if user_salesorders else None
             )
 
-            total = 0
-            invoiced_amount = 0
-            paid_amount = 0
-            currency_code = None
-            sales_persons = set()
-            all_invoices_paid = []
+            pending_amount = total - paid_amount
 
-            for sales_order in salesorders:
-                total += sales_order.total
-                currency_code = sales_order.currency_code
-                sales_persons.add(sales_order.salesperson_name)
-
-                for invoice in sales_order.invoices:
-                    invoiced_amount += invoice["total"]
-
-                    if invoice["status"] == "paid":
-                        paid_amount += invoice["total"]
-                        all_invoices_paid.append(True)
-                    else:
-                        all_invoices_paid.append(False)
-
-            pending_amount = invoiced_amount - paid_amount
-
-            if all(all_invoices_paid) and len(all_invoices_paid) > 0:
-                payment_status = "Paid"
-            elif any(all_invoices_paid) and len(all_invoices_paid) > 0:
-                payment_status = "Partially Paid"
-            else:
+            if not user_salesorders:
+                payment_status = "N/A"
+            elif paid_amount == 0:
                 payment_status = "Not Paid"
+            elif total == paid_amount:
+                payment_status = "Paid"
+            else:
+                payment_status = "Partially Paid"
+
+            # assignment_completion = user_assignments.filter(
+            #     user=batch_user.user, assignment__batch=batch_user.batch
+            # ).count()
+            total_assignments_in_batch = assignments.filter(
+                batch=batch_user.batch
+            ).count()
+
+            certificate_status = (
+                "released" if batch_user.certificate else "not released"
+            )
 
             temp = {
                 "index": index,
-                "participant_name": batch_user.user.first_name
-                + " "
-                + batch_user.user.last_name,
+                "participant_name": f"{batch_user.user.first_name} {batch_user.user.last_name}",
                 "participant_email": batch_user.user.email,
                 "participant_id": batch_user.user.id,
                 "participant_phone": batch_user.user.phone,
@@ -508,7 +624,11 @@ def get_all_finance(request):
                 "pending_amount": pending_amount,
                 "paid_amount": paid_amount,
                 "currency_code": currency_code,
-                "no_of_sales_orders": len(salesorders),
+                # "assignment_completion": assignment_completion,
+                "total_assignments_in_batch": total_assignments_in_batch,
+                "no_of_sales_orders": len(user_salesorders),
+                "organisation": batch_user.user.current_organisation_name,
+                "certificate_status": certificate_status,
             }
             index += 1
             data.append(temp)
@@ -523,32 +643,183 @@ def get_all_finance(request):
 @permission_classes([IsAuthenticated])
 def get_all_client_invoice_of_participant_for_batch(request, participant_id, batch_id):
     try:
-        batch_users = BatchUsers.objects.using("ctt").all()
         data = []
-
-        for batch_user in batch_users:
-            salesorders = SalesOrder.objects.filter(
-                zoho_customer__email=batch_user.user.email,
-                custom_field_hash__cf_ctt_batch=batch_user.batch.name,
-            )
-            for sales_order in salesorders:
-                client_invoices = ClientInvoice.objects.filter(sales_order=sales_order)
-                for client_invoice in client_invoices:
-                    payment_status = (
-                        "Paid" if client_invoice.status == "paid" else "Not Paid"
-                    )
-
-                    temp = {
-                        "invoice_number": client_invoice.invoice_number,
-                        "so_number": sales_order.salesorder_number,
-                        "due_date": client_invoice.due_date_formatted,
-                        "date": client_invoice.date_formatted,
-                        "payment_status": payment_status,
-                    }
-
-                    data.append(temp)
-
+        user = Users.objects.using("ctt").get(id=participant_id)
+        batch = Batches.objects.using("ctt").get(id=batch_id)
+        client_invoices = ClientInvoice.objects.filter(
+            custom_field_hash__cf_ctt_batch=batch.name, zoho_customer__email=user.email
+        )
+        for client_invoice in client_invoices:
+            payment_status = "Paid" if client_invoice.status == "paid" else "Not Paid"
+            temp = {
+                "invoice_number": client_invoice.invoice_number,
+                "so_number": (
+                    client_invoice.sales_order.salesorder_number
+                    if client_invoice.sales_order
+                    else None
+                ),
+                "due_date": client_invoice.due_date,
+                "date": client_invoice.date,
+                "payment_status": payment_status,
+            }
+            data.append(temp)
         return Response(data)
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_participants_of_that_batch(request, batch_id):
+    try:
+        batch_users = BatchUsers.objects.using("ctt").filter(batch_id=batch_id)
+        data = []
+        index = 1
+        for batch_user in batch_users:
+            batch_name = batch_user.batch.name
+            batch_start_date = batch_user.batch.start_date
+            program_name = batch_user.batch.program.name
+            assignment_completion = (
+                UserAssignments.objects.using("ctt")
+                .filter(user=batch_user.user, assignment__batch=batch_user.batch)
+                .count()
+            )
+            total_assignments_in_batch = (
+                Assignments.objects.using("ctt").filter(batch=batch_user.batch).count()
+            )
+            certificate_status = (
+                "released" if batch_user.certificate else "not released"
+            )
+            organization_name = batch_user.user.current_organisation_name
+            salesorders = SalesOrder.objects.filter(
+                zoho_customer__email=batch_user.user.email,
+                custom_field_hash__cf_ctt_batch=batch_user.batch.name,
+            )
+            payment_status = None
+
+            for sales_order in salesorders:
+                if sales_order.invoiced_status != "invoiced":
+                    if sales_order.invoiced_status == "partially_invoiced":
+                        payment_status = "Partially Invoiced"
+                        break
+                    elif sales_order.invoiced_status == "not_invoiced":
+                        payment_status = "Not Invoiced"
+                        break
+                else:
+                    payment_status = "Invoiced"
+
+            user_data = {
+                "index": index,
+                "name": f"{batch_user.user.first_name} {batch_user.user.last_name}",
+                "email": batch_user.user.email,
+                "phone_number": batch_user.user.phone,
+                "batch": batch_name,
+                "program": program_name,
+                "assignment_completion": assignment_completion,
+                "total_assignments_in_batch": total_assignments_in_batch,
+                "certificate_status": certificate_status,
+                "organisation": organization_name,
+                "payment_status": payment_status,
+            }
+
+            index += 1
+            data.append(user_data)
+        return Response(data)
+    except BatchUsers.DoesNotExist:
+        return Response(
+            {"message": "Batch users not found for the given batch ID"}, status=404
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_ctt_salesperson_individual(request, salesperson_id):
+    try:
+        batch_users = BatchUsers.objects.using("ctt").all().order_by("-created_at")
+        data = []
+        index = 1
+        for batch_user in batch_users:
+            salesorders = SalesOrder.objects.filter(
+                zoho_customer__email=batch_user.user.email,
+                custom_field_hash__cf_ctt_batch=batch_user.batch.name,
+                salesperson_id=salesperson_id,
+            )
+            if salesorders.exists():
+                total = 0
+                invoiced_amount = 0
+                paid_amount = 0
+                currency_code = None
+                sales_persons = set()
+                all_invoices_paid = []
+
+                for sales_order in salesorders:
+                    total += Decimal(str(sales_order.total))
+                    currency_code = sales_order.currency_code
+                    sales_persons.add(sales_order.salesperson_name)
+                    for invoice in sales_order.invoices:
+                        invoiced_amount += Decimal(str(invoice["total"]))
+                        if invoice["status"] == "paid":
+                            paid_amount += Decimal(str(invoice["total"]))
+                            all_invoices_paid.append(True)
+                        else:
+                            all_invoices_paid.append(False)
+
+                pending_amount = total - paid_amount
+                if salesorders.count() == 0:
+                    payment_status = "N/A"
+                else:
+                    if paid_amount == 0:
+                        payment_status = "Not Paid"
+                    elif total == paid_amount:
+                        payment_status = "Paid"
+                    else:
+                        payment_status = "Partially Paid"
+
+                temp = {
+                    "index": index,
+                    "participant_name": batch_user.user.first_name
+                    + " "
+                    + batch_user.user.last_name,
+                    "participant_email": batch_user.user.email,
+                    "participant_id": batch_user.user.id,
+                    "participant_phone": batch_user.user.phone,
+                    "batch_name": batch_user.batch.name,
+                    "batch_id": batch_user.batch.id,
+                    "program_name": batch_user.batch.program.name,
+                    "payment_status": payment_status,
+                    "program_start_date": batch_user.batch.start_date,
+                    "salesperson_name": list(sales_persons),
+                    "total": total,
+                    "invoiced_amount": invoiced_amount,
+                    "pending_amount": pending_amount,
+                    "paid_amount": paid_amount,
+                    "currency_code": currency_code,
+                    "no_of_sales_orders": len(salesorders),
+                }
+                index += 1
+                data.append(temp)
+        return Response(data)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_card_data_for_dashboard_ctt(request):
+    try:
+        batches = Batches.objects.using("ctt").all().count()
+        unique_users_count = BatchUsers.objects.using("ctt").count()
+        faculties = Faculties.objects.using("ctt").all().count()
+
+        return Response(
+            {
+                "total_number_of_batches": batches,
+                "total_number_of_participants": unique_users_count,
+                "total_number_of_faculty": faculties,
+            }
+        )
+    except Exception as e:
+        print(str(e))
+

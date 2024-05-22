@@ -68,6 +68,7 @@ urlpatterns = [
     ),
     path("add/vendor/", views.add_vendor),
     path("vendors/", views.get_all_vendors),
+    path("zoho-vendors/", views.get_zoho_vendors),
     path(
         "get-all-purchase-orders/",
         views.get_all_purchase_orders,
@@ -82,6 +83,11 @@ urlpatterns = [
         "get-all-invoices/",
         views.get_all_invoices,
         name="get_all_invoices",
+    ),
+    path(
+        "get-invoice/<int:invoice_id>/",
+        views.get_invoice,
+        name="get_invoice",
     ),
     path(
         "pmo/invoices/",
@@ -128,18 +134,18 @@ urlpatterns = [
         views.get_vendor_details_from_zoho,
         name="get_vendor_details_from_zoho",
     ),
-    path(
-        "purchase-order/create/<str:user_type>/<int:facilitator_pricing_id>/",
-        views.create_purchase_order,
-        name="create_purchase_order",
-    ),
+    # path(
+    #     "purchase-order/create/<str:user_type>/<int:facilitator_pricing_id>/",
+    #     views.create_purchase_order,
+    #     name="create_purchase_order",
+    # ),
     path(
         "purchase-order/update/<str:user_type>/<int:facilitator_pricing_id>/",
         views.update_purchase_order,
         name="update_purchase_order",
     ),
     path(
-        "po-number/meeraq/",
+        "po-number/<str:po_type>/",
         views.get_po_number_to_create,
         name="get_po_number_to_create",
     ),
@@ -159,11 +165,19 @@ urlpatterns = [
         name="update_purchase_order_status",
     ),
     path(
-        "coching-purchase-order/create/<int:coach_id>/<int:project_id>/",
+        "purchase-order/create/<str:project_type>/<int:project_id>/",
         views.coching_purchase_order_create,
     ),
     path(
-        "coching-purchase-order/update/<int:coach_id>/<int:project_id>/",
+        "purchase-order/outside/create/",
+        views.create_purchase_order_for_outside_vendors,
+    ),
+    path(
+        "purchase-order/outside/create/",
+        views.create_purchase_order_for_outside_vendors,
+    ),
+    path(
+        "coching-purchase-order/update/<int:purchase_order_id>/<int:project_id>/",
         views.coching_purchase_order_update,
     ),
     path(
@@ -199,6 +213,10 @@ urlpatterns = [
         views.expense_purchase_order_create,
     ),
     path(
+        "expense-coaching-purchase-order/create/<int:project_id>/<int:coach_id>/",
+        views.expense_coaching_purchase_order_create,
+    ),
+    path(
         "expense-purchase-order/update/<int:facilitator_id>/<int:batch_or_project_id>/",
         views.expense_purchase_order_update,
     ),
@@ -221,6 +239,26 @@ urlpatterns = [
         "get-all-sales-orders-for-project/<int:project_id>/<str:project_type>/",
         views.get_all_sales_orders_of_project,
         name="get_all_sales_orders_of_project",
+    ),
+    path(
+        "get-ctt-sales-orders/",
+        views.get_ctt_sales_orders,
+        name="get_ctt_sales_orders/",
+    ),
+    path(
+        "get-ctt-client-invoices/",
+        views.get_ctt_client_invoices,
+        name="get_ctt_client_invoices/",
+    ),
+    path(
+        "ctt-purchase-orders/",
+        views.get_ctt_purchase_orders,
+        name="get_ctt_purchase_orders/",
+    ),
+    path(
+        "get-ctt-invoices/",
+        views.get_ctt_invoices,
+        name="get_ctt_invoices/",
     ),
     path(
         "get-so-data-of-project/<int:project_id>/<str:project_type>/",
@@ -318,6 +356,11 @@ urlpatterns = [
         name="update_sales_order_status",
     ),
     path(
+        "get-total-revenue-and-cost",
+        views.get_total_revenue_and_cost,
+        name="get_total_revenue_and_cost",
+    ),
+    path(
         "create-vendor/",
         views.create_vendor,
         name="create_vendor",
@@ -343,7 +386,7 @@ urlpatterns = [
         name="get_so_for_the_project",
     ),
     path(
-        "get-handovers-so/<int:sales_id>/",
+        "get-handovers-so/<int:user_id>/<str:user_type>/",
         views.get_handovers_so,
         name="get_handovers_so",
     ),
@@ -364,5 +407,12 @@ urlpatterns = [
     ),
     path("line-items/", views.get_line_items, name="get_line_items"),
     path("latest-data/", views.get_latest_data, name="get_latest_data"),
-
+    path(
+        "get-ctt-revenue-data/", views.get_ctt_revenue_data, name="get_ctt_revenue_data"
+    ),
+     path(
+        "get-sales-of-each-program/",
+        views.get_sales_of_each_program,
+        name="get_sales_of_each_program",
+    ),
 ]
