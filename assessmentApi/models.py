@@ -1,5 +1,6 @@
 from django.db import models
 from api.models import Learner, Profile, Organisation, HR
+from schedularApi.models import SchedularBatch
 from django.contrib.auth.models import User
 
 # Create your models here.
@@ -35,6 +36,7 @@ class Question(models.Model):
     RESPONSE_CHOICES = [
         ("correct_answer", "Correct Answer"),
         ("rating_type", "Rating Type"),
+        ("descriptive", "Descriptive"),
     ]
 
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
@@ -119,6 +121,9 @@ class Assessment(models.Model):
     ASSESSMENT_TYPES = [
         ("self", "Self"),
         ("360", "360"),
+        ("270", "270"),
+        ("90", "90"),
+        ("180", "180"),
     ]
     RATING_CHOICES = [
         ("1-5", "1-5"),
@@ -168,6 +173,8 @@ class Assessment(models.Model):
     )
     initial_reminder = models.BooleanField(blank=True, default=False)
     reminders = models.JSONField(default=dict, blank=True)
+    unique_id = models.CharField(max_length=225, default="")
+    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE, blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -239,3 +246,38 @@ class ParticipantReleasedResults(models.Model):
     assessment = models.ForeignKey(Assessment, on_delete=models.CASCADE, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+class ActionItem(models.Model):
+    STATUS_CHOICES = (
+        ("not_started", "Not Started"),
+        ("occasionally_doing", "Occasionally Doing"),
+        ("regularly_doing", "Regularly Doing"),
+        ("actively_pursuing", "Actively Pursuing"),
+        ("consistently_achieving", "Consistently Achieving"),
+    )
+    text = models.TextField()
+    initial_status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="not_started"
+    )
+    current_status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="not_started"
+    )
+    status_updates = models.JSONField(default=list, blank=True)
+    completion_date = models.DateField(null=True, blank=True)
+    learner = models.ForeignKey(
+        Learner, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    batch = models.ForeignKey(
+        SchedularBatch, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    competency = models.ForeignKey(
+        Competency, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    behavior = models.ForeignKey(
+        Behavior, on_delete=models.SET_NULL, null=True, blank=True, default=None
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.learner.name if self.learner else None} {self.id}"

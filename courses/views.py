@@ -4,6 +4,9 @@ from collections import defaultdict
 # Create your views here.
 import boto3
 import requests
+import io
+from pdfminer.pdfparser import PDFParser
+from pdfminer.pdfdocument import PDFDocument
 from rest_framework import generics, serializers, status
 from datetime import timedelta, time, datetime, date
 from .models import (
@@ -33,11 +36,15 @@ from .models import (
     FacilitatorLesson,
     Feedback,
     CoachingSessionsFeedbackResponse,
+    CttFeedback,
+    CttFeedbackResponse,
 )
 from rest_framework.response import Response
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .serializers import (
+    CourseEnrollmentWithNamesSerializer,
     CourseSerializer,
     CourseTemplateSerializer,
     TextLessonCreateSerializer,
@@ -68,6 +75,7 @@ from .serializers import (
     FacilitatorSerializer,
     FeedbackDepthOneSerializer,
     LessonSerializerForLiveSessionDateTime,
+    CttFeedbackDepthOneSerializer,
 )
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
@@ -78,6 +86,7 @@ from schedularApi.models import (
     SchedularBatch,
     SchedularProject,
     LiveSession as LiveSessionSchedular,
+    Task,
 )
 from schedularApi.serializers import (
     LiveSessionSerializer as LiveSessionSchedularSerializer,
@@ -89,6 +98,7 @@ from schedularApi.serializers import SchedularBatchSerializer
 from assessmentApi.serializers import (
     AssessmentSerializerDepthOne as AssessmentModalSerializerDepthOne,
 )
+from ctt.models import Batches, Users, BatchUsers
 from assessmentApi.models import (
     Assessment as AssessmentModal,
     ParticipantResponse,
@@ -109,7 +119,7 @@ import environ
 import uuid
 import logging
 from rest_framework.permissions import AllowAny, IsAuthenticated
-
+from django.http import JsonResponse
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -207,87 +217,6 @@ def add_question_to_feedback_lesson(feedback_lesson, questions):
             question = question_serializer.save()
             feedback_lesson.questions.add(question)
     feedback_lesson.save()
-
-
-def create_learner(learner_name, learner_email, learner_phone=None):
-    try:
-        with transaction.atomic():
-            learner_email = learner_email.strip().lower()
-            temp_password = "".join(
-                random.choices(
-                    string.ascii_uppercase + string.ascii_lowercase + string.digits,
-                    k=8,
-                )
-            )
-            user = User.objects.create_user(
-                username=learner_email,
-                password=temp_password,
-                email=learner_email,
-            )
-            user.save()
-            learner_role, created = Role.objects.get_or_create(name="learner")
-            profile = Profile.objects.create(user=user)
-            profile.roles.add(learner_role)
-            profile.save()
-
-            phone = learner_phone if learner_phone else None
-            learner = None
-            if phone:
-                learner = Learner.objects.create(
-                    user=profile,
-                    name=learner_name,
-                    email=learner_email,
-                    phone=phone,
-                )
-            else:
-                learner = Learner.objects.create(
-                    user=profile,
-                    name=learner_name,
-                    email=learner_email,
-                )
-
-            return learner
-
-    except Exception as e:
-        return None
-
-
-def create_or_get_learner(learner_data):
-    try:
-        # check if the same email user exists or not
-        phone = learner_data.get("phone", None)
-        user = User.objects.filter(username=learner_data["email"]).first()
-        if user:
-            if user.profile.roles.all().filter(name="learner").exists():
-                learner = Learner.objects.get(user=user.profile)
-                learner.name = learner_data["name"].strip()
-
-                if learner_data["phone"]:
-                    learner.phone = learner_data["phone"]
-
-                learner.save()
-                return learner
-            else:
-                learner_role, created = Role.objects.get_or_create(name="learner")
-                learner_profile = user.profile
-                learner_profile.roles.add(learner_role)
-                learner_role.save()
-
-                learner, created = Learner.objects.get_or_create(
-                    user=learner_profile,
-                    defaults={
-                        "name": learner_data["name"],
-                        "email": learner_data["email"],
-                        "phone": phone,
-                    },
-                )
-                return learner
-        else:
-            learner = create_learner(learner_data["name"], learner_data["email"], phone)
-            return learner
-    except Exception as e:
-        # Handle specific exceptions or log the error
-        print(f"Error processing participant: {str(e)}")
 
 
 def get_feedback_lesson_name(lesson_name):
@@ -654,7 +583,19 @@ def create_new_nudge(request):
     if serializer.is_valid():
         nudge_instance = serializer.save()
         nudge_instance.is_switched_on = True
+        nudge_instance.unique_id = uuid.uuid4()
         nudge_instance.save()
+        # complete add nudge task
+        try:
+            tasks = Task.objects.filter(
+                task="add_nudges",
+                status="pending",
+                schedular_batch=nudge_instance.batch,
+            )
+            tasks.update(status="completed")
+        except Exception as e:
+            print(str(e))
+            pass
         nudges_start_date = nudge_instance.batch.nudge_start_date
         today_date = datetime.today().date()
         if nudges_start_date and nudges_start_date <= today_date:
@@ -730,6 +671,18 @@ def add_nudges_date_frequency_to_batch(request, batch_id):
         )
         batch.nudge_periodic_task = periodic_task
         batch.save()
+        # complete tasks for nudge
+        try:
+            tasks = Task.objects.filter(
+                task="add_nudge_date_and_frequency",
+                status="pending",
+                schedular_batch=batch,
+            )
+            tasks.update(status="completed")
+        except Exception as e:
+            print(str(e))
+            pass
+
         return Response({"message": "Updated successfully"}, status=201)
     except Course.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
@@ -1562,6 +1515,37 @@ def submit_feedback_answers(request, feedback_lesson_id, learner_id):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def submit_ctt_feedback_answers(request, feedback_id, user_id):
+    try:
+        ctt_feedback = get_object_or_404(CttFeedback, id=feedback_id)
+        user = Users.objects.using("ctt").get(id=user_id)
+    except (
+        FeedbackLesson.DoesNotExist,
+        Learner.DoesNotExist,
+    ) as e:
+        return Response(
+            {"error": "Failed to submit feedback."}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    answers_data = request.data
+    serializer = AnswerSerializer(data=answers_data, many=True)
+
+    if serializer.is_valid():
+        answers = serializer.save()
+        feedback_response = CttFeedbackResponse.objects.create(
+            ctt_feedback=ctt_feedback, ctt_user=user.id
+        )
+        feedback_response.answers.set(answers)
+        feedback_response.save()
+        return Response(
+            {"detail": "Feedback submitted successfully"}, status=status.HTTP_200_OK
+        )
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 class CertificateListAPIView(APIView):
     permission_classes = [IsAuthenticated, IsInRoles("pmo")]
 
@@ -1641,9 +1625,18 @@ class GetFilteredCoursesForCertificate(APIView):
             )
 
         available_courses = all_courses.exclude(id__in=courses_in_certificates)
-
         serializer = CourseSerializer(available_courses, many=True)
-        return Response(serializer.data)
+        all_data = []
+        for data in serializer.data:
+            course = Course.objects.get(id=data.get("id"))
+            all_data.append(
+                {
+                    **data,
+                    "project": course.batch.project.name,
+                    "organisation": course.batch.project.organisation.name,
+                }
+            )
+        return Response(all_data)
 
 
 class AssignCoursesToCertificate(APIView):
@@ -1838,15 +1831,15 @@ from .models import Video
 from .serializers import VideoSerializer
 
 
-@api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "facilitator", "hr")])
-def get_all_videos(request):
-    videos = Video.objects.all()  # Retrieve all videos from the database
+# @api_view(["GET"])
+# @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "facilitator", "hr")])
+# def get_all_videos(request):
+#     videos = Video.objects.all()  # Retrieve all videos from the database
 
-    # Serialize the video queryset
-    serializer = VideoSerializer(videos, many=True)
+#     # Serialize the video queryset
+#     serializer = VideoSerializer(videos, many=True)
 
-    return Response(serializer.data)
+#     return Response(serializer.data)
 
 
 # views.py
@@ -1887,9 +1880,10 @@ def create_video_lesson(request):
             }
             video_lesson_serializer = VideoLessonSerializer(data=video_lesson_data)
             if video_lesson_serializer.is_valid():
-                video_lesson_serializer.save()
+                instance = video_lesson_serializer.save()
+                serializer_depth_one = VideoLessonSerializerDepthOne(instance)
                 return Response(
-                    video_lesson_serializer.data, status=status.HTTP_201_CREATED
+                    serializer_depth_one.data, status=status.HTTP_201_CREATED
                 )
             return Response(
                 video_lesson_serializer.errors, status=status.HTTP_400_BAD_REQUEST
@@ -2012,6 +2006,21 @@ class GetLaserCoachingTime(APIView):
                 {"error": "Failed to retrieve certificates for the given course."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+    def get_remote_file_size(self, url):
+        # This function gets the file size of a remote file in MB
+        # You'll need to implement this based on your specific requirements
+        # Here's a basic example using requests library
+        import requests
+
+        response = requests.head(url)
+        if response.status_code == 200:
+            content_length = response.headers.get("content-length")
+            if content_length:
+                file_size_bytes = int(content_length)
+                file_size_mb = file_size_bytes / (1024 * 1024)  # Convert bytes to MB
+                return round(file_size_mb, 2)  # Round to 2 decimal places
+        return None
 
 
 @api_view(["GET"])
@@ -2506,6 +2515,7 @@ class AssignCourseTemplateToBatch(APIView):
                     status="draft",
                     course_template=course_template,
                     batch=batch,
+                    course_image=course_template.course_image,
                 )
                 # Duplicate lessons
                 original_lessons = Lesson.objects.filter(
@@ -2676,18 +2686,21 @@ def get_resources(request):
 def create_resource(request):
     pdf_name = request.data.get("pdfName")  # Extracting pdfName from request data
     pdf_file = request.data.get("pdfFile")  # Extracting pdfFile from request data
+    # Calculate the file size
+    file_size = len(pdf_file.read())
+    # Convert to KB
+    file_size_kb = file_size / 1024.0
 
     # Create a dictionary containing the data for the Resources model instance
     resource_data = {
         "name": pdf_name,
         "pdf_file": pdf_file,
+        "file_size_kb": file_size_kb,  # Add the file size to the data
     }
 
-    # Assuming you have a serializer for the Resources model
     serializer = ResourcesSerializer(data=resource_data)
 
     if serializer.is_valid():
-        # Save the validated data to create a new Resources instance
         serializer.save()
         return Response(serializer.data, status=201)  # Return the serialized data
     else:
@@ -2753,8 +2766,13 @@ def create_pdf_lesson(request):
                 pdf_lesson_instance = PdfLesson.objects.create(
                     lesson=lesson_instance, content=content, pdf=resources
                 )
-
-                return Response({"message": "PDF lesson created successfully."})
+                serializer_depth_one = PdfLessonSerializer(pdf_lesson_instance)
+                return Response(
+                    {
+                        "message": "PDF lesson created successfully.",
+                        "data": serializer_depth_one.data,
+                    }
+                )
 
             elif course_template_id:
                 course_template_instance = CourseTemplate.objects.get(
@@ -2786,7 +2804,10 @@ def create_pdf_lesson(request):
         return Response({"message": "Course Template does not exist."})
     except Exception as e:
         print(str(e))
-        return Response({"message": "Failed to create pdf lesson."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"message": "Failed to create pdf lesson."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 @api_view(["PUT"])
@@ -3032,6 +3053,76 @@ class FeedbackEmailValidation(APIView):
             )
 
 
+class CttFeedbackEmailValidation(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        try:
+            unique_id = request.data.get("unique_id")
+            email = request.data.get("email").strip().lower()
+
+            ctt_feedback = CttFeedback.objects.get(unique_id=unique_id)
+
+            batch_user = (
+                BatchUsers.objects.using("ctt")
+                .filter(user__email=email, batch__id=ctt_feedback.ctt_batch)
+                .first()
+            )
+
+            if batch_user:
+                feedback_response = CttFeedbackResponse.objects.filter(
+                    ctt_feedback=ctt_feedback, ctt_user=batch_user.user.id
+                ).first()
+                if not feedback_response:
+                    ctt_batch = Batches.objects.using("ctt").get(
+                        id=ctt_feedback.ctt_batch
+                    )
+                    data = {
+                        "id": ctt_feedback.id,
+                        "name": ctt_feedback.name,
+                        "batch_id": ctt_batch.id,
+                        "batch_name": ctt_batch.name,
+                        "status": ctt_feedback.status,
+                        "questions": QuestionSerializer(
+                            ctt_feedback.questions, many=True
+                        ).data,
+                        "session_number": ctt_feedback.session_number,
+                        "unique_id": ctt_feedback.unique_id,
+                    }
+
+                    return Response(
+                        {
+                            "message": "Validation Successful",
+                            "participant_exists": True,
+                            "feedback": data,
+                            "participant_id": batch_user.user.id,
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                else:
+                    return Response(
+                        {"error": "Already Responded."},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    )
+
+            return Response(
+                {"error": "User does not exist."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        except FeedbackLesson.DoesNotExist:
+            return Response(
+                {"error": "FeedbackLesson not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to validate email."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
 class GetFeedbackForm(APIView):
     permission_classes = [AllowAny]
 
@@ -3043,6 +3134,29 @@ class GetFeedbackForm(APIView):
                 {
                     "lesson_name": feedback_lesson.lesson.name,
                     "lesson_status": feedback_lesson.lesson.status,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            print(str(e))
+            return Response(
+                {"error": "Failed to get feedback lesson details."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class GetCttFeedbackForm(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, unique_id):
+        try:
+            ctt_feedback = CttFeedback.objects.get(unique_id=unique_id)
+
+            return Response(
+                {
+                    "name": ctt_feedback.name,
+                    "status": ctt_feedback.status,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -3392,6 +3506,58 @@ def get_all_feedbacks_download_report(request, feedback_id):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+def ctt_feedbacks_download_report(request, feedback_id):
+    try:
+        ctt_feedback = CttFeedback.objects.get(id=feedback_id)
+        data = []
+        # Populate the list of dictionaries with data from FeedbackLesson and FeedbackLessonResponse
+        for response in CttFeedbackResponse.objects.filter(ctt_feedback=ctt_feedback):
+            user = Users.objects.using("ctt").get(id=response.ctt_user)
+            participant_name = user.first_name + " " + user.last_name
+            participant_email = user.email
+            temp_data = {
+                "Participant": participant_name,
+                "Participant Email": participant_email,
+            }
+            if response:
+                for answer in response.answers.all():
+                    question_text = answer.question.text
+                    answer_value = (
+                        answer.text_answer if answer.text_answer else answer.rating
+                    )
+                    temp_data[question_text] = answer_value
+            else:
+                # If participant did not provide feedback, populate with empty values
+                for question in ctt_feedback.questions.all():
+                    temp_data[question.text] = "-"
+            data.append(temp_data)
+
+        # Create a DataFrame from the list of dictionaries
+        df = pd.DataFrame(data)
+
+        # Save the DataFrame to an Excel file in-memory
+        excel_data = BytesIO()
+        df.to_excel(excel_data, index=False)
+        excel_data.seek(0)
+
+        # Create the response with the Excel file
+        response = HttpResponse(
+            excel_data.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f"attachment; filename=Feedback_Report.xlsx"
+
+        return response
+
+    except Exception as e:
+        return Response(
+            {"error": "Failed to download feedback"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
 def get_consolidated_feedback_download_report(request, live_session_id):
     # Create a new workbook and add a worksheet
     live_session = LiveSession.objects.get(id=live_session_id)
@@ -3638,7 +3804,8 @@ def duplicate_nudge(request, nudge_id, batch_id):
             file=original_nudge.file,
             order=order,
             batch=batch,
-            is_sent=False,  # Assuming the duplicated nudge is not sent yet
+            is_sent=False,
+            unique_id=str(uuid.uuid4()),
         )
         return Response({"message": "Nudge duplicated successfully."})
     except Nudge.DoesNotExist:
@@ -3679,26 +3846,26 @@ class GetAllNudgesOfSchedularProjects(APIView):
         try:
             hr_id = request.query_params.get("hr", None)
             data = []
-            courses = None
             if project_id == "all":
-                courses = Course.objects.all()
-            else:
-                courses = Course.objects.filter(batch__project__id=int(project_id))
-            if hr_id:
-                courses = courses.filter(batch__project__hr__id=hr_id)
-            for course in courses:
-                today_date = date.today()
                 nudges = Nudge.objects.filter(
-                    batch__id=course.batch.id,
                     is_sent=False,
                     batch__project__nudges=True,
                     batch__project__status="ongoing",
                     trigger_date__isnull=False,
                 )
-                if hr_id:
-                    nudges = nudges.filter(is_switched_on=True)
-                nudges = NudgeSerializer(nudges, many=True).data
-                data = list(data) + list(nudges)
+            else:
+                nudges = Nudge.objects.filter(
+                    batch__project__id=project_id,
+                    is_sent=False,
+                    batch__project__nudges=True,
+                    batch__project__status="ongoing",
+                    trigger_date__isnull=False,
+                )
+            if hr_id:
+                nudges = nudges.filter(
+                    batch__project__hr__id=hr_id, is_switched_on=True
+                )
+            data = NudgeSerializer(nudges, many=True).data
             return Response(data)
         except Exception as e:
             print(str(e))
@@ -3951,6 +4118,14 @@ def submit_feedback(request, feedback_id, learner_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach")])
+def get_all_feedback(request):
+    feedback = Feedback.objects.all()
+    serializer = FeedbackDepthOneSerializer(feedback, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo", "learner", "coach")])
 def get_feedback(request, feedback_id):
     feedback = Feedback.objects.get(id=feedback_id)
     serializer = FeedbackDepthOneSerializer(feedback)
@@ -4112,3 +4287,166 @@ def update_nudge_status(request, nudge_id):
     nudge.save()
     nudge_serializer = NudgeSerializer(nudge)
     return Response(nudge_serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_released_certificates_for_learner(request, learner_id):
+    course_enrollments = CourseEnrollment.objects.filter(
+        is_certificate_allowed=True, learner__id=learner_id
+    )
+    serializer = CourseEnrollmentWithNamesSerializer(course_enrollments, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("learner")])
+def get_all_nudges_for_that_learner(request, learner_id):
+    try:
+        nudges = Nudge.objects.filter(
+            is_sent=True, is_switched_on=True, batch__learners__id=learner_id
+        )
+        serializer = NudgeSerializer(nudges, many=True)
+        return Response({"nudges": serializer.data})
+    except Nudge.DoesNotExist:
+        return JsonResponse(
+            {"error": "No nudges found for the specified learner"}, status=404
+        )
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_nudge_data(request, nudge_id):
+    try:
+        print("nudeg_iud", nudge_id)
+        nudge = Nudge.objects.get(unique_id=nudge_id)
+        serializer = NudgeSerializer(nudge)
+        return Response({"nudge": serializer.data})
+    except Nudge.DoesNotExist:
+        return JsonResponse({"error": "Nudge not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def update_completion_nudge_status(request, nudge_id):
+    try:
+        nudge = Nudge.objects.get(pk=nudge_id)
+    except Nudge.DoesNotExist:
+        return Response(
+            {"error": "Nudge does not exist"}, status=status.HTTP_404_NOT_FOUND
+        )
+    learner_id = request.data.get("learner_id", None)
+    if learner_id:
+        existing_learner_ids = set(nudge.learner_ids)
+        existing_learner_ids.add(int(learner_id))
+        nudge.learner_ids = list(existing_learner_ids)
+    nudge.save()
+    return Response(
+        {"message": f"Nudge {nudge_id} completion status updated successfully"},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_nudge(request, nudge_id):
+    try:
+        nudge = Nudge.objects.get(id=nudge_id)
+        nudge.delete()
+        return Response({"message": "Nudge deleted successfully"})
+    except Exception as e:
+        print(str(e))
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_ctt_feedback(request):
+    try:
+        questions = request.data.get("questions")
+        name = request.data.get("name")
+        session_number = request.data.get("session")
+        batch_id = request.data.get("batch")
+
+        question_ids = []
+        for question in questions:
+            options = question.get("options", [])
+            question_instance = Question.objects.create(
+                text=question.get("text"),
+                options=options,
+                type=question.get("type"),
+            )
+            question_ids.append(question_instance.id)
+
+        unique_id = uuid.uuid4()
+
+        ctt_feedback = CttFeedback.objects.create(
+            name=name,
+            unique_id=unique_id,
+            ctt_batch=batch_id,
+            session_number=session_number,
+        )
+
+        # Add questions to the CttFeedback instance
+        ctt_feedback.questions.set(question_ids)
+        ctt_feedback.save()
+        return Response({"message": "Feedback created successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to create feedback"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_ctt_feedback(request):
+    try:
+        ctt_feedbacks = CttFeedback.objects.all()
+        all_feedback = []
+        for ctt_feedback in ctt_feedbacks:
+            ctt_batch = Batches.objects.using("ctt").get(id=ctt_feedback.ctt_batch)
+            total_users = (
+                BatchUsers.objects.using("ctt").filter(batch=ctt_batch).count()
+            )
+            feedback_responses = CttFeedbackResponse.objects.filter(
+                ctt_feedback=ctt_feedback
+            ).count()
+            data = {
+                "id": ctt_feedback.id,
+                "name": ctt_feedback.name,
+                "batch_id": ctt_batch.id,
+                "batch_name": ctt_batch.name,
+                "status": ctt_feedback.status,
+                "questions": QuestionSerializer(ctt_feedback.questions, many=True).data,
+                "session_number": ctt_feedback.session_number,
+                "total_responded": feedback_responses,
+                "total_participant": total_users,
+                "unique_id": ctt_feedback.unique_id,
+            }
+
+            all_feedback.append(data)
+        return Response(all_feedback)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to get data"}, status=500)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def update_ctt_feedback_status(request):
+    try:
+        feedback_id = request.data.get("feedback_id")
+        status = request.data.get("status")
+
+        ctt_feedback = CttFeedback.objects.get(id=feedback_id)
+        ctt_feedback.status = status
+
+        ctt_feedback.save()
+
+        return Response({"message": "Status updated successfully!"}, status=200)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update status"}, status=500)
