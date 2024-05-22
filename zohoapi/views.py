@@ -1210,7 +1210,7 @@ def get_all_vendors(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsInRoles("finance")])
+@permission_classes([IsAuthenticated, IsInRoles("finance", "ctt_pmo")])
 def get_zoho_vendors(request):
     try:
         vendors = ZohoVendor.objects.all()
@@ -2905,7 +2905,11 @@ def get_so_for_project(project_id, project_type):
             )
             for mapping in orders_project_mapping:
                 sales_order_ids_set.update(mapping.sales_order_ids)
-        elif project_type == "SEEQ" or project_type == "skill_training" or project_type == "assessment":
+        elif (
+            project_type == "SEEQ"
+            or project_type == "skill_training"
+            or project_type == "assessment"
+        ):
             orders_project_mapping = OrdersAndProjectMapping.objects.filter(
                 schedular_project__id=project_id
             )
@@ -2989,21 +2993,20 @@ def get_ctt_client_invoices(request):
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_ctt_purchase_orders(request):
     try:
-        purchase_orders = list(
-            chain.from_iterable(
-                [
-                    PurchaseOrder.objects.filter(zoho_vendor__email=faculty.email)
-                    for faculty in Faculties.objects.using("ctt").all()
-                ]
-            )
-        )
+        # Fetch all faculty emails from the "ctt" database
+        faculty_emails =list(Faculties.objects.using("ctt").values_list("email", flat=True)) 
+        # Fetch purchase orders where zoho_vendor__email matches faculty emails or where is_guest_ctt is True
+        purchase_orders = PurchaseOrder.objects.filter(
+            Q(zoho_vendor__email__in=faculty_emails) | Q(is_guest_ctt=True)
+        ).distinct()
+        
         # Serialize purchase orders
         serializer = PurchaseOrderSerializer(purchase_orders, many=True)
+        
         return Response(serializer.data)
     except Exception as e:
         print(str(e))

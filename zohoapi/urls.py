@@ -173,10 +173,6 @@ urlpatterns = [
         views.create_purchase_order_for_outside_vendors,
     ),
     path(
-        "purchase-order/outside/create/",
-        views.create_purchase_order_for_outside_vendors,
-    ),
-    path(
         "coching-purchase-order/update/<int:purchase_order_id>/<int:project_id>/",
         views.coching_purchase_order_update,
     ),
