@@ -340,7 +340,7 @@ CELERY_BEAT_SCHEDULE = {
     # },
     "invoice_due_email_reminder": {
         "task": "schedularApi.tasks.invoice_due_email_reminder",
-        "schedule": crontab(hour=3, minute=30),
+        "schedule": crontab(hour=3, minute=30),  # 9:00 AM
     },
     "send_live_session_reminder_to_facilitator_one_day_before": {
         "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_one_day_before",

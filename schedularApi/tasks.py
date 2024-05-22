@@ -2731,10 +2731,10 @@ def invoice_due_email_reminder():
                     line_item_data.append(line_item)
         send_mail_templates(
              "due_invoice_email_reminder.html",
-             ["finance@meeraq.com","kumar@meeraq.com","raju@coachtotransformation.com"],
+             ["finance@meeraq.com","kumar@meeraq.com","raju@coachtotransformation.com"] if env("ENVIRONMENT") == "PRODUCTION" else ["tech@meeraq.com"],
              "Invoices due today",
              {'line_item_data' : line_item_data},
-             ["rajat@meeraq.com","sujata@meeraq.com"]
+             ["rajat@meeraq.com","sujata@meeraq.com"] if env("ENVIRONMENT") == "PRODUCTION" else ["naveen@meeraq.com"]
         )           
     except Exception as e:
         print(str(e))
