@@ -3721,7 +3721,7 @@ def generate_graph_for_participant_for_post_assessment(
                             )
 
                     if participant_response_value:
-                        if question.reverse_question:
+                        if not question.reverse_question:
                             competency_object[question.competency.name] = (
                                 competency_object[question.competency.name]
                                 + (swap_dict[participant_response_value] / label_count)
