@@ -560,6 +560,8 @@ def get_all_faculties(request):
 @permission_classes([IsAuthenticated])
 def get_all_finance(request):
     try:
+        salesperson_id = request.query_params.get("salesperson_id", None)
+
         batch_users = (
             BatchUsers.objects.using("ctt")
             .select_related("user", "batch__program")
@@ -569,10 +571,14 @@ def get_all_finance(request):
 
         # Convert batch_users emails to a list to avoid subquery across different databases
         user_emails = list(batch_users.values_list("user__email", flat=True))
-
-        salesorders = SalesOrder.objects.filter(
-            zoho_customer__email__in=user_emails
-        ).select_related("zoho_customer")
+        if salesperson_id:
+            salesorders = SalesOrder.objects.filter(
+                zoho_customer__email__in=user_emails, salesperson_id=salesperson_id
+            ).select_related("zoho_customer")
+        else:
+            salesorders = SalesOrder.objects.filter(
+                zoho_customer__email__in=user_emails
+            ).select_related("zoho_customer")
 
         data = []
         index = 1
@@ -626,7 +632,6 @@ def get_all_finance(request):
             certificate_status = (
                 "released" if batch_user.certificate else "not released"
             )
-
             temp = {
                 "index": index,
                 "participant_name": f"{batch_user.user.first_name} {batch_user.user.last_name}",
@@ -644,14 +649,18 @@ def get_all_finance(request):
                 "pending_amount": pending_amount,
                 "paid_amount": paid_amount,
                 "currency_code": currency_code,
-                # "assignment_completion": assignment_completion,
                 "total_assignments_in_batch": total_assignments_in_batch,
                 "no_of_sales_orders": len(user_salesorders),
                 "organisation": batch_user.user.current_organisation_name,
                 "certificate_status": certificate_status,
             }
             index += 1
-            data.append(temp)
+            # assuming that the user is the salespersons user only if sales order exists
+            if salesperson_id:
+                if len(user_salesorders) > 0:
+                    data.append(temp)
+            else:
+                data.append(temp)
 
         return Response(data)
     except Exception as e:
