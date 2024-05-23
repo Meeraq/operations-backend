@@ -55,9 +55,14 @@ urlpatterns = [
         name="get_ctt_salesperson_individual",
     ),
     path(
-        "get_card_data_for_dashboard_ctt/",
+        "get-card-data-for-dashboard-ctt/",
         views.get_card_data_for_dashboard_ctt,
         name="get_card_data_for_dashboard_ctt",
+    ),
+      path(
+        "get-all-ctt-faculties/",
+        views.get_all_ctt_faculties,
+        name="get_all_ctt_faculties",
     ),
    
 ]

@@ -1607,6 +1607,7 @@ class PurchaseOrder(models.Model):
     can_mark_as_unbill = models.BooleanField(default=False)
     salesorders = models.JSONField(default=list, null=True, blank=True)
     bills = models.JSONField(default=list, null=True, blank=True)
+    is_guest_ctt = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_time"]

@@ -338,6 +338,10 @@ CELERY_BEAT_SCHEDULE = {
     #     "task": "schedularApi.tasks.send_nudges",
     #     "schedule": crontab(hour=3, minute=0, day_of_week="*"),  # 8:30 AM IST
     # },
+    "invoice_due_email_reminder": {
+        "task": "schedularApi.tasks.invoice_due_email_reminder",
+        "schedule": crontab(hour=3, minute=30),  # 9:00 AM
+    },
     "send_live_session_reminder_to_facilitator_one_day_before": {
         "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_one_day_before",
         "schedule": crontab(hour=10, minute=30),  # 4 PM
