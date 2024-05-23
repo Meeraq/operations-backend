@@ -3400,10 +3400,20 @@ class GetAssessmentsOfBatch(APIView):
                     total_responses_count = ParticipantResponse.objects.filter(
                         assessment=assessment
                     ).count()
+
+                    assessment_lesson = Assessment.objects.filter(
+                        assessment_modal=assessment
+                    ).first()
+
                     assessment_data = {
                         "id": assessment.id,
                         "name": assessment.name,
                         "participant_view_name": assessment.participant_view_name,
+                        "organisation": (
+                            assessment.organisation.name
+                            if assessment.organisation
+                            else ""
+                        ),
                         "assessment_type": assessment.assessment_type,
                         "assessment_timing": assessment.assessment_timing,
                         "assessment_start_date": assessment.assessment_start_date,
@@ -3411,19 +3421,14 @@ class GetAssessmentsOfBatch(APIView):
                         "status": assessment.status,
                         "total_learners_count": assessment.participants_observers.count(),
                         "total_responses_count": total_responses_count,
-                        "created_at": assessment.created_at,
-                        "whatsapp_reminder": assessment.whatsapp_reminder,
-                        "email_reminder": assessment.email_reminder,
-                        "reminders": assessment.reminders,
-                        "batch_name": batch.name,
-                        "questionnaire": assessment.questionnaire.id,
-                        "organisation": assessment.organisation.id,
-                        "hr": list(assessment.hr.all().values_list("id", flat=True)),
-                        "pre_assessment": (
-                            assessment.pre_assessment.id
-                            if assessment.assessment_timing == "post"
+                        "batch_name": batch.name, 
+                        "project_name": batch.project.name,
+                        "project_id": (
+                            assessment_lesson.lesson.course.batch.project.id
+                            if assessment_lesson
                             else None
                         ),
+                        "created_at": assessment.created_at,
                     }
 
                     assessment_list.append(assessment_data)

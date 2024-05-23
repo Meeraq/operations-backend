@@ -431,7 +431,7 @@ urlpatterns = [
         views.get_all_action_items,
     ),
     path(
-        "get-batch-wise-assessment-data/<int:batch_id>/",
+        "get-batch-wise-assessment-data/<str:type>/<int:pk>/",
         views.get_all_assessments_of_batch,
         name="get_all_assessments_of_batch",
     ),
