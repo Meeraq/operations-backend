@@ -2333,7 +2333,9 @@ def generate_graph(data, assessment_type):
             color="#3b64ad",
         )
 
-        plt.title(f"Average Responses by Competency (Graph {i + 1})")
+        plt.title(
+            f"Average Responses by Competency {f'(Graph {i + 1})' if num_graphs > 1 else ''}"
+        )
         plt.xlabel("Competency")
         plt.ylabel("Average Response")
         plt.xticks(
@@ -2527,9 +2529,11 @@ def get_data_for_score_analysis(question_with_answer, assessment):
 
                 swap_dict = swap_positions(label_count)
 
-                question["participant_response"] = float(
-                    swap_dict[question["participant_response"]]
-                )
+                question["participant_response"] = swap_dict[
+                    question["participant_response"]
+                ]
+            if assessment.number_of_observers == 1:
+                question["Peers"] = int(question["Peers"])
 
     res = []
 
@@ -2677,10 +2681,8 @@ class DownloadParticipantResultReport(APIView):
                     labels = question.label
                     question_object = {
                         "question": question.self_question,
-                        "participant_response": float(
-                            participant_response.participant_response.get(
-                                str(question.id)
-                            )
+                        "participant_response": participant_response.participant_response.get(
+                            str(question.id)
                         ),
                     }
 
@@ -2836,10 +2838,8 @@ class DownloadParticipantResultReport(APIView):
                     labels = question.label
                     question_object = {
                         "question": question.self_question,
-                        "participant_response": float(
-                            participant_response.participant_response.get(
-                                str(question.id)
-                            )
+                        "participant_response": participant_response.participant_response.get(
+                            str(question.id)
                         ),
                     }
                     assessment_rating_type = question.rating_type
@@ -3051,10 +3051,8 @@ class DownloadWordReport(APIView):
 
                     question_object = {
                         "question": question.self_question,
-                        "participant_response": float(
-                            participant_response.participant_response.get(
-                                str(question.id)
-                            )
+                        "participant_response": participant_response.participant_response.get(
+                            str(question.id)
                         ),
                     }
                     assessment_rating_type = question.rating_type
