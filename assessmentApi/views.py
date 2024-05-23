@@ -4641,7 +4641,7 @@ class GetAssessmentsOfHr(APIView):
     def get(self, request, hr_id):
         assessments = Assessment.objects.filter(
             Q(hr__id=hr_id), Q(status="ongoing") | Q(status="completed")
-        )
+        ).order_by("-created_at")
         assessment_list = []
         for assessment in assessments:
             total_responses_count = ParticipantResponse.objects.filter(
@@ -4659,6 +4659,8 @@ class GetAssessmentsOfHr(APIView):
                 "total_learners_count": assessment.participants_observers.count(),
                 "total_responses_count": total_responses_count,
                 "created_at": assessment.created_at,
+                "project" : assessment.batch.project.name if assessment.batch  else None,
+                "batch" : assessment.batch.name if assessment.batch  else None,
             }
 
             assessment_list.append(assessment_data)
