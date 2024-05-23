@@ -1952,13 +1952,13 @@ def get_po_number_to_create(request, po_type):
         # fetch_purchase_orders(organization_id)
         current_financial_year = get_current_financial_year()
         if po_type == "meeraq":
-            regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
+            regex_to_match = f"Meeraq/PO/{current_financial_year}/T/{ '' if env('ENVIRONMENT') == 'PRODUCTION' else 'Testing/'}"
             new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
         elif po_type == "others":
-            regex_to_match = f"Meeraq/PO/{current_financial_year}/OTH/"
+            regex_to_match = f"Meeraq/PO/{current_financial_year}/OTH/{ '' if env('ENVIRONMENT') == 'PRODUCTION' else 'Testing/'}"
             new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
         elif po_type == "ctt":
-            regex_to_match = f"CTT/PO/{current_financial_year}/"
+            regex_to_match = f"CTT/PO/{current_financial_year}/{ '' if env('ENVIRONMENT') == 'PRODUCTION' else 'Testing/'}"
             new_po_number = generate_new_ctt_po_number(purchase_orders, regex_to_match)
         return Response({"new_po_number": new_po_number})
     except Exception as e:
@@ -1989,15 +1989,15 @@ def get_so_number_to_create(request, brand):
         current_financial_year = get_current_financial_year()
         regex_to_match = None
         if brand == "ctt":
-            regex_to_match = f"CTT/{current_financial_year}/SO/"
+            regex_to_match = f"CTT/{current_financial_year}/SO/{ '' if env('ENVIRONMENT') == 'PRODUCTION' else 'Testing/'}"
         elif brand == "meeraq":
             project_type = request.query_params.get("project_type")
             if project_type == "caas":
-                regex_to_match = f"Meeraq/{current_financial_year}/CH/"
+                regex_to_match = f"Meeraq/{current_financial_year}/CH/{ '' if env('ENVIRONMENT') == 'PRODUCTION' else 'Testing/'}"
             elif project_type == "skill_training":
-                regex_to_match = f"Meeraq/{current_financial_year}/SST/"
+                regex_to_match = f"Meeraq/{current_financial_year}/SST/{ '' if env('ENVIRONMENT') == 'PRODUCTION' else 'Testing/'}"
             elif project_type == "assessment":
-                regex_to_match = f"Meeraq/{current_financial_year}/ASMT/"
+                regex_to_match = f"Meeraq/{current_financial_year}/ASMT/{ '' if env('ENVIRONMENT') == 'PRODUCTION' else 'Testing/'}"
             else:
                 return Response(
                     {"error": "Select project type to generate the SO number"},
@@ -3437,13 +3437,16 @@ def create_sales_order(request):
                     return Response(
                         {
                             "message": "SO has been created successfully and marked as Open",
-                            "salesorder"  : salesorder_created
+                            "salesorder": salesorder_created,
                         }
                     )
 
             # add the mapping for sales order here
             return Response(
-                {"message": "SO has been created successfully and Saved as Draft","salesorder" : salesorder_created}
+                {
+                    "message": "SO has been created successfully and Saved as Draft",
+                    "salesorder": salesorder_created,
+                }
             )
         else:
             print(response.json())
@@ -4598,7 +4601,7 @@ def get_line_items(request):
                 associated_mapping = order_mappings.filter(
                     sales_order_ids__contains=sales_order.salesorder_id
                 ).first()
-                
+
                 if associated_mapping:
                     if associated_mapping.project is not None:
                         line_item["project_type"] = "Coaching"
