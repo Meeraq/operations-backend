@@ -8672,7 +8672,7 @@ class StandardizedFieldRequestAPI(APIView):
 
 
 class StandardFieldAddValue(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","finance")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo","finance","leader")]
 
     def post(self, request):
         try:

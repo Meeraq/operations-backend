@@ -314,6 +314,7 @@ class Assets(models.Model):
     update_at = models.DateTimeField(auto_now=True)
     description = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="idle")
+    updates = models.JSONField(default=list, blank=True)
 
 
 class Benchmark(models.Model):
