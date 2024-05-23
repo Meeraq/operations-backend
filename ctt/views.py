@@ -321,12 +321,17 @@ def sales_persons_finances(request):
             l3_batches.append(batch.name)
         elif batch.program.certification_level.name == "ACTC":
             actc_batches.append(batch.name)
-    date_query = ""
+
     if start_date and end_date:
-        date_query = f"&date_start={start_date}&date_end={end_date}"
+        sales_orders = SalesOrder.objects.filter(
+            salesorder_number__startswith="CTT",
+            date__gte=start_date,
+            date__lte=end_date,
+        )
+    else:
+        sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT")
     # query_params = f"&salesorder_number_contains=CTT{date_query}"
     # sales_orders = fetch_sales_orders(organization_id, query_params)
-    sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT")
     salesperson_totals = defaultdict(
         lambda: {
             "l1": 0,
