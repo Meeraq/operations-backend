@@ -653,13 +653,16 @@ class Goal(models.Model):
     engagement = models.ForeignKey(
         Engagement, on_delete=models.CASCADE, blank=True, null=True
     )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateField(auto_now=True)
 
 
 class Competency(models.Model):
     goal = models.ForeignKey(Goal, on_delete=models.CASCADE)
     name = models.TextField()
     scoring = models.JSONField(default=list, blank=True)
-    created_at = models.DateField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class ActionItem(models.Model):
@@ -671,6 +674,8 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class ProfileEditActivity(models.Model):
@@ -776,8 +781,10 @@ class StandardizedFieldRequest(models.Model):
         ("accepted", "Accepted"),
         ("rejected", "Rejected"),
     )
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True , null=True)
-    facilitator = models.ForeignKey(Facilitator, on_delete=models.CASCADE, blank=True , null=True)
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True, null=True)
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.CASCADE, blank=True, null=True
+    )
     learner = models.ForeignKey(
         Learner, on_delete=models.CASCADE, blank=True, null=True
     )
@@ -841,9 +848,6 @@ class Template(models.Model):
 
     def __str__(self):
         return self.title
-
-
-
 
 
 class UserToken(models.Model):
