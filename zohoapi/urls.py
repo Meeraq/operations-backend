@@ -242,6 +242,11 @@ urlpatterns = [
         name="get_ctt_sales_orders/",
     ),
     path(
+        "get-ctt-client-invoices-for-participant/<str:participant_email>/<str:batch_name>/",
+        views.get_ctt_client_invoices_for_participant,
+        name="get_ctt_client_invoices_for_participant",
+    ),
+    path(
         "get-ctt-client-invoices/",
         views.get_ctt_client_invoices,
         name="get_ctt_client_invoices/",
@@ -406,7 +411,7 @@ urlpatterns = [
     path(
         "get-ctt-revenue-data/", views.get_ctt_revenue_data, name="get_ctt_revenue_data"
     ),
-     path(
+    path(
         "get-sales-of-each-program/",
         views.get_sales_of_each_program,
         name="get_sales_of_each_program",
