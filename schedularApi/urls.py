@@ -29,6 +29,10 @@ urlpatterns = [
     path("handover/create/", views.create_handover),
     path("handover/update/", views.update_handover),
     path("handover/<int:handover_id>/salesorders/", views.get_handover_salesorders),
+    path('create-assets/', views.create_asset),
+    path('assets/', views.get_all_assets),
+    path('delete-asset/', views.delete_asset, name='delete_asset'),
+    path('update-asset/', views.update_asset, name='update_asset'),
     path(
         "schedular-batches/",
         views.get_schedular_batches,

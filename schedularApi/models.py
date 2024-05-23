@@ -301,6 +301,20 @@ class Expense(models.Model):
     def __str__(self):
         return f"{self.name}"
 
+class Assets(models.Model):
+    STATUS_CHOICES = [
+        ("idle", "Idle"),
+        ("assigned", "Assigned"),
+        ("lost", "Lost"),
+        ("damaged", "Damaged"),
+    ]
+    name = models.CharField(max_length=255, default="",blank=True)
+    category = models.CharField(max_length=255, default="",blank=True)
+    assigned_to = models.CharField(max_length=255, default="",blank=True)
+    update_at = models.DateTimeField(auto_now=True)
+    description = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="idle")
+
 
 class Benchmark(models.Model):
     year = models.CharField(max_length=9, blank=True, null=True)

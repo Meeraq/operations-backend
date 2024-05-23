@@ -15,6 +15,7 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
+    Assets,
     GmSheet,
     Offering,
     StandardizedFieldGmSheet,
@@ -221,6 +222,10 @@ class HandoverDetailsSerializer(serializers.ModelSerializer):
         model = HandoverDetails
         fields = "__all__"
 
+class AssetsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Assets
+        fields = '__all__'
 
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:

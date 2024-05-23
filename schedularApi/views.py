@@ -99,6 +99,7 @@ from .serializers import (
     StandardizedFieldGmSheetSerializer,
     OfferingSerializer,
     HandoverDetailsSerializerWithOrganisationName,
+    AssetsSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -122,6 +123,7 @@ from .models import (
     GmSheet,
     StandardizedFieldGmSheet,
     Benchmark,
+    Assets,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -697,6 +699,54 @@ def get_project_handover(request, project_type, project_id):
     serializer = HandoverDetailsSerializer(handover)
     return Response(serializer.data)
 
+@api_view(['POST'])
+def create_asset(request):
+    serializer = AssetsSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+def get_all_assets(request):
+    if request.method == 'GET':
+        assets = Assets.objects.all()
+        serializer = AssetsSerializer(assets, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+@api_view(['DELETE'])
+def delete_asset(request):
+    id = request.data.get('id')
+    if not id:
+        return Response({'error': 'ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        asset = Assets.objects.get(pk=id)
+    except Assets.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    asset.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+@api_view(['PUT'])
+def update_asset(request):
+    payload = request.data
+    values = payload.get('values')
+    asset_id = payload.get('id')
+
+    if not asset_id:
+        return Response({"error": "Asset ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        asset = Assets.objects.get(id=asset_id)
+    except Assets.DoesNotExist:
+        return Response({"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = AssetsSerializer(asset, data=values, partial=True)  # Use partial=True for partial updates
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(["GET"])
 @permission_classes(
