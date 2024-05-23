@@ -2772,6 +2772,9 @@ class DownloadParticipantResultReport(APIView):
                     "competency_array": competency_array,
                     "assessment_rating_type": assessment_rating_type,
                     "labels": labels,
+                    "comment_page_number": (
+                        10 + (len(competency_array))
+                    ),  # this is for page number thats why 10 + is there
                 },
                 f"This new report generated for {participant.name}",
             )
@@ -2925,6 +2928,9 @@ class DownloadParticipantResultReport(APIView):
                     "competency_array": competency_array,
                     "assessment_rating_type": assessment_rating_type,
                     "labels": labels,
+                    "comment_page_number": (
+                        10 + (len(competency_array))
+                    ),  # this is for page number thats why 10+ is there
                 },
             )
             # pdf_path = "graphsAndReports/Report.pdf"
@@ -3138,6 +3144,9 @@ class DownloadWordReport(APIView):
                     "competency_array": competency_array,
                     "assessment_rating_type": assessment_rating_type,
                     "labels": labels,
+                    "comment_page_number": (
+                        10 + (len(competency_array))
+                    ),  # this is for page number thats why 10+ is there
                 },
             )
             pdf_path = "graphsAndReports/Report.pdf"
