@@ -9,6 +9,7 @@ urlpatterns = [
         name="get-all-schedular-projects",
     ),
     path('create-benchmark/', views.create_benchmark, name='create_benchmark'),
+    path('edit-benchmark/', views.edit_benchmark, name='edit_benchmark'),
     path('get-benchmark/', views.get_all_benchmarks),
     path('create-gmsheet/', views.create_gmsheet, name='create_gmsheet'),
     path('update-gmsheet/<int:id>/', views.update_gmsheet),

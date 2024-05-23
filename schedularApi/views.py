@@ -469,6 +469,35 @@ def get_current_or_next_year(request):
         next_year = f"{current_year}-{str(current_year + 1)[2:]}"
         return Response({'year': next_year}, status=status.HTTP_200_OK)
     
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("leader")])
+def edit_benchmark(request):
+            try:
+                benchmarks_data = request.data.get('lineItems')
+                updated_benchmarks = []
+
+                with transaction.atomic():
+                    for benchmark_data in benchmarks_data:
+                        benchmark_id = benchmark_data.get('id')
+                        if not benchmark_id:
+                            return Response({"error": "Benchmark ID is required for updating"}, status=400)
+
+                        try:
+                            benchmark = Benchmark.objects.get(id=benchmark_id)
+                        except Benchmark.DoesNotExist:
+                            return Response({"error": f"Benchmark with ID {benchmark_id} does not exist"}, status=404)
+
+                        serializer = BenchmarkSerializer(benchmark, data=benchmark_data, partial=True)
+                        if serializer.is_valid():
+                            serializer.save()
+                            updated_benchmarks.append(serializer.data)
+                        else:
+                            return Response(serializer.errors, status=400)
+
+                return Response(updated_benchmarks, status=200)  # Return the updated benchmarks
+            except Exception as e:
+                return Response({"error": str(e)}, status=500)
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("leader")])
 def create_benchmark(request):
