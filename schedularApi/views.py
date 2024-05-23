@@ -7778,3 +7778,38 @@ def get_all_assessments_of_batch(request,batch_id):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_past_live_session_facilitator(request,user_id):
+    print("hello")
+    try:
+        status = request.query_params.get("status")
+        print("status",status)
+        facilitator = Facilitator.objects.get(id=user_id)
+        if status == "Upcoming":
+            live_sessions = LiveSession.objects.filter(
+                facilitator=facilitator, date_time__gt=timezone.now()
+            ).order_by("date_time")
+        elif status == "Past":
+            live_sessions = LiveSession.objects.filter(
+                facilitator=facilitator, date_time__lt=timezone.now()
+            ).order_by("-date_time")
+        # For upcoming live sessions
+        live_session_data = []
+        for session in live_sessions:
+            session_name = get_live_session_name(session.session_type)
+            session_data = {
+                "batch_name": session.batch.name,
+                "project_name": session.batch.project.name,
+                "session_name": f"{session_name} {session.live_session_number}",
+                "date_time": session.date_time,
+                "meeting_link": session.meeting_link,
+            }
+            live_session_data.append(session_data)
+
+        return Response({"live_session_data": live_session_data})
+    except ObjectDoesNotExist:
+        return Response({"error": "Facilitator not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)

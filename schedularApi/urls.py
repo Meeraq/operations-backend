@@ -435,4 +435,8 @@ urlpatterns = [
         views.get_all_assessments_of_batch,
         name="get_all_assessments_of_batch",
     ),
+    path(
+        "get-upcoming-past-live-session-facilitator/<int:user_id>/",
+        views.get_upcoming_past_live_session_facilitator,
+    ),
 ]
