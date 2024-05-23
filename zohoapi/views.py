@@ -3331,8 +3331,10 @@ def edit_sales_order(request, sales_order_id):
             create_or_update_so(sales_order["salesorder_id"])
             return Response({"message": "Sales order updated successfully."})
         else:
+            print(response.json())
             return Response({"error": response.json()}, status=response.status_code)
     except Exception as e:
+        print(str(e))
         return Response({"error": str(e)}, status=500)
 
 
