@@ -809,7 +809,7 @@ def add_multiple_so(data):
         sleep(1)
 
 
-def create_po_with_line_items(purchase_order_id):
+def create_po_with_line_items(purchase_order_id, is_guest_ctt=False):
     try:
         purchaseorder = get_purchase_order(purchase_order_id)
         if "shipment_date" in purchaseorder and not purchaseorder["shipment_date"]:
@@ -818,6 +818,7 @@ def create_po_with_line_items(purchase_order_id):
         serializer = PurchaseOrderSerializer(data=purchaseorder)
         if serializer.is_valid():
             po_instance = serializer.save()
+            po_instance.is_guest_ctt = is_guest_ctt
             for line_item in purchaseorder["line_items"]:
                 line_item_serializer = PurchaseOrderLineItemSerializer(data=line_item)
                 if line_item_serializer.is_valid():
@@ -1520,9 +1521,9 @@ def create_or_update_so(so_id):
         update_so_with_line_items(so_id)
 
 
-def create_or_update_po(po_id):
+def create_or_update_po(po_id, is_guest_ctt=False):
     if not PurchaseOrder.objects.filter(purchaseorder_id=po_id).exists():
-        create_po_with_line_items(po_id)
+        create_po_with_line_items(po_id, is_guest_ctt)
     else:
         update_po_with_line_items(po_id)
 

@@ -126,7 +126,7 @@ from schedularApi.models import (
     SchedularProject,
     Task,
 )
-from api.models import Facilitator
+from api.models import Facilitator, CTTPmo
 from decimal import Decimal
 from collections import defaultdict
 from api.permissions import IsInRoles
@@ -1839,7 +1839,7 @@ def get_current_financial_year():
     return financial_year
 
 
-def generate_new_po_number(po_list, regex_to_match):
+def generate_new_po_number(po_list, regex_to_match, production=True):
     # pattern to match the purchase order number
     pattern = rf"^{regex_to_match}\d+$"
     # Filter out purchase orders with the desired format
@@ -1850,7 +1850,10 @@ def generate_new_po_number(po_list, regex_to_match):
     # Finding the latest number for each year
     for po in filtered_pos:
         print(po["purchaseorder_number"].split("/"))
-        _, _, _, _, po_number = po["purchaseorder_number"].split("/")
+        if production:
+            _, _, _, _, po_number = po["purchaseorder_number"].split("/")
+        else:
+            _, _, _, _, _, po_number = po["purchaseorder_number"].split("/")
         latest_number = max(latest_number, int(po_number))
     # Generating the new purchase order number
     new_number = latest_number + 1
@@ -1858,7 +1861,7 @@ def generate_new_po_number(po_list, regex_to_match):
     return new_po_number
 
 
-def generate_new_ctt_po_number(po_list, regex_to_match):
+def generate_new_ctt_po_number(po_list, regex_to_match, production=True):
     # pattern to match the purchase order number
     pattern = rf"^{regex_to_match}\d+$"
     # Filter out purchase orders with the desired format
@@ -1869,7 +1872,10 @@ def generate_new_ctt_po_number(po_list, regex_to_match):
     # Finding the latest number for each year
     for po in filtered_pos:
         print(po["purchaseorder_number"].split("/"))
-        _, _, _, po_number = po["purchaseorder_number"].split("/")
+        if production:
+            _, _, _, po_number = po["purchaseorder_number"].split("/")
+        else:
+            _, _, _, _, po_number = po["purchaseorder_number"].split("/")
         latest_number = max(latest_number, int(po_number))
     # Generating the new purchase order number
     new_number = latest_number + 1
@@ -1877,7 +1883,7 @@ def generate_new_ctt_po_number(po_list, regex_to_match):
     return new_po_number
 
 
-def generate_new_so_number(so_list, regex_to_match):
+def generate_new_so_number(so_list, regex_to_match, production):
     # pattern to match the sales order number
     pattern = rf"^{regex_to_match}\d+$"
     # Filter out sales orders with the desired format
@@ -1886,7 +1892,10 @@ def generate_new_so_number(so_list, regex_to_match):
     # Finding the latest number for each year
     for so in filtered_sos:
         print(so["salesorder_number"].split("/"))
-        _, _, _, so_number = so["salesorder_number"].split("/")
+        if production:
+            _, _, _, so_number = so["salesorder_number"].split("/")
+        else:
+            _, _, _, _, so_number = so["salesorder_number"].split("/")
         latest_number = max(latest_number, int(so_number))
     # Generating the new sales order number
     new_number = latest_number + 1
@@ -1950,16 +1959,25 @@ def get_po_number_to_create(request, po_type):
         #     PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data
         # )
         # fetch_purchase_orders(organization_id)
+        production = True if env("ENVIRONMENT") == "PRODUCTION" else False
         current_financial_year = get_current_financial_year()
         if po_type == "meeraq":
-            regex_to_match = f"Meeraq/PO/{current_financial_year}/T/"
-            new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
+            regex_to_match = f"Meeraq/PO/{current_financial_year}/T/{ '' if production else 'Testing/'}"
+            new_po_number = generate_new_po_number(
+                purchase_orders, regex_to_match, production
+            )
         elif po_type == "others":
-            regex_to_match = f"Meeraq/PO/{current_financial_year}/OTH/"
-            new_po_number = generate_new_po_number(purchase_orders, regex_to_match)
+            regex_to_match = f"Meeraq/PO/{current_financial_year}/OTH/{ '' if production else 'Testing/'}"
+            new_po_number = generate_new_po_number(
+                purchase_orders, regex_to_match, production
+            )
         elif po_type == "ctt":
-            regex_to_match = f"CTT/PO/{current_financial_year}/"
-            new_po_number = generate_new_ctt_po_number(purchase_orders, regex_to_match)
+            regex_to_match = (
+                f"CTT/PO/{current_financial_year}/{ '' if production else 'Testing/'}"
+            )
+            new_po_number = generate_new_ctt_po_number(
+                purchase_orders, regex_to_match, production
+            )
         return Response({"new_po_number": new_po_number})
     except Exception as e:
         print(str(e))
@@ -1988,16 +2006,19 @@ def get_so_number_to_create(request, brand):
         sales_orders = SalesOrderGetSerializer(SalesOrder.objects.all(), many=True).data
         current_financial_year = get_current_financial_year()
         regex_to_match = None
+        production = True if env("ENVIRONMENT") == "PRODUCTION" else False
         if brand == "ctt":
-            regex_to_match = f"CTT/{current_financial_year}/SO/"
+            regex_to_match = (
+                f"CTT/{current_financial_year}/SO/{ '' if production else 'Testing/'}"
+            )
         elif brand == "meeraq":
             project_type = request.query_params.get("project_type")
             if project_type == "caas":
-                regex_to_match = f"Meeraq/{current_financial_year}/CH/"
+                regex_to_match = f"Meeraq/{current_financial_year}/CH/{ '' if production else 'Testing/'}"
             elif project_type == "skill_training":
-                regex_to_match = f"Meeraq/{current_financial_year}/SST/"
+                regex_to_match = f"Meeraq/{current_financial_year}/SST/{ '' if production else 'Testing/'}"
             elif project_type == "assessment":
-                regex_to_match = f"Meeraq/{current_financial_year}/ASMT/"
+                regex_to_match = f"Meeraq/{current_financial_year}/ASMT/{ '' if production else 'Testing/'}"
             else:
                 return Response(
                     {"error": "Select project type to generate the SO number"},
@@ -2005,7 +2026,7 @@ def get_so_number_to_create(request, brand):
                 )
         else:
             return Response({"error": "Invalid brand"}, status=400)
-        new_po_number = generate_new_so_number(sales_orders, regex_to_match)
+        new_po_number = generate_new_so_number(sales_orders, regex_to_match, production)
         return Response({"new_so_number": new_po_number})
     except Exception as e:
         print(str(e))
@@ -2041,8 +2062,16 @@ def coching_purchase_order_create(request, project_type, project_id):
     try:
         engagements = json.loads(request.data.get("engagements", []))
         access_token = get_access_token(env("ZOHO_REFRESH_TOKEN"))
-        caas_project = project_id if project_type != "skill_training" else None
-        schedular_project = project_id if project_type == "skill_training" else None
+        caas_project = (
+            project_id
+            if project_type != "skill_training" and project_type != "assessment"
+            else None
+        )
+        schedular_project = (
+            project_id
+            if project_type == "skill_training" or project_type == "assessment"
+            else None
+        )
         coach = request.data.get("coach", None)
         facilitator = request.data.get("facilitator", None)
         if not access_token:
@@ -2098,9 +2127,36 @@ def create_purchase_order_for_outside_vendors(request):
         api_url = f"{base_url}/purchaseorders?organization_id={organization_id}"
         auth_header = {"Authorization": f"Bearer {access_token}"}
         response = requests.post(api_url, headers=auth_header, data=request.data)
+        project_id = request.query_params.get("project_id")
+        project_type = request.query_params.get("project_type")
+        schedular_project = (
+            project_id
+            if project_type == "skill_training" or project_type == "assessment"
+            else None
+        )
         if response.status_code == 201:
             purchaseorder_created = response.json().get("purchaseorder")
-            create_or_update_po(purchaseorder_created["purchaseorder_id"])
+
+            try:
+                purchase_order = PurchaseOrder.objects.get(
+                    purchaseorder_id=purchaseorder_created["purchaseorder_id"]
+                )
+                serializer = PurchaseOrderSerializer(
+                    purchase_order,
+                    data={
+                        "schedular_project": schedular_project,
+                    },
+                    partial=True,
+                )
+                if serializer.is_valid():
+                    po_instance = serializer.save()
+                    ctt_pmo = CTTPmo.objects.filter(emai=request.user.username).first()
+                    po_instance.is_guest_ctt = True if ctt_pmo else False
+                else:
+                    print(serializer.errors)
+            except Exception as e:
+                print(str(e))
+                pass
             return Response({"message": "Purchase Order created successfully."})
         else:
             print(response.json())
@@ -3406,13 +3462,16 @@ def create_sales_order(request):
                     return Response(
                         {
                             "message": "SO has been created successfully and marked as Open",
-                            "salesorder"  : salesorder_created
+                            "salesorder": salesorder_created,
                         }
                     )
 
             # add the mapping for sales order here
             return Response(
-                {"message": "SO has been created successfully and Saved as Draft","salesorder" : salesorder_created}
+                {
+                    "message": "SO has been created successfully and Saved as Draft",
+                    "salesorder": salesorder_created,
+                }
             )
         else:
             print(response.json())
@@ -4567,7 +4626,7 @@ def get_line_items(request):
                 associated_mapping = order_mappings.filter(
                     sales_order_ids__contains=sales_order.salesorder_id
                 ).first()
-                
+
                 if associated_mapping:
                     if associated_mapping.project is not None:
                         line_item["project_type"] = "Coaching"
