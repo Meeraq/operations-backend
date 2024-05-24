@@ -230,7 +230,7 @@ from django.http import HttpResponse
 import environ
 from time import sleep
 from django.db.models import Max
-
+from openai import OpenAI
 
 env = environ.Env()
 
@@ -12383,3 +12383,24 @@ def get_coach_shared_links(request):
             {"error": "Failed to get coach profile shares."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def rewrite(request):
+    coaching_experience = request.data.get("coaching_experience", "")
+    client = OpenAI()
+    completion = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "Hi! I'm Meeraq's AI assistant. We help individuals and organizations unlock their full potential through personalized learning and development programs. Ask me anything about soft skills training, our approach, or how we can empower your team. Write the experiences such that the profiles are impressive to the meeraq's client",
+            },
+            {
+                "role": "user",
+                "content": f"Refine the provided coaching professional's experience profile. Ensure the revised content maintains the structure and format. Also dont add any conversational text for the user, just provide the final output experience. Here is the experience {coaching_experience}",
+            },
+        ],
+    )
+    return Response(completion.choices[0].message.content, status=status.HTTP_200_OK)
