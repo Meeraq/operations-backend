@@ -413,18 +413,6 @@ class GmSheet(models.Model):
     def _str_(self):
         return f"{self.client_name} for {self.product_type}"
 
-class StandardizedFieldGmSheet(models.Model):
-    FIELD_CHOICES = (
-        ("project_type", "Project Type"),
-    )
-    field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
-    values = models.JSONField(default=list, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def _str_(self):
-        return f"{self.field}"
-    
 class Offering(models.Model):
     MODE_CHOICES = [
         ("in_person", "In Person"),
@@ -437,17 +425,7 @@ class Offering(models.Model):
     cost_structure = models.JSONField(default=list, blank=True, null=True)
     gross_margin = models.CharField(max_length=100,blank=True,null=True)
 
-class StandardizedFieldGmSheet(models.Model):
-    FIELD_CHOICES = (
-        ("project_type", "Project Type"),
-    )
-    field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
-    values = models.JSONField(default=list, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
-    def _str_(self):
-        return f"{self.field}"
     
 class HandoverDetails(models.Model):
     PROJECT_TYPE_CHOICES = [

@@ -100,7 +100,6 @@ from .serializers import (
     TaskSerializer,
     BenchmarkSerializer,
     GmSheetSerializer,
-    StandardizedFieldGmSheetSerializer,
     OfferingSerializer,
     HandoverDetailsSerializerWithOrganisationName,
     AssetsSerializer,
@@ -127,7 +126,6 @@ from .models import (
     Task,
     Offering,
     GmSheet,
-    StandardizedFieldGmSheet,
     Benchmark,
     Assets,
 )
@@ -618,29 +616,6 @@ def create_gmsheet(request):
         # Handle any exceptions here
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-@api_view(["POST"])
-def add_values_to_field(request):
-    if request.method == "POST":
-        field_name = request.data.get("field")
-        value = request.data.get("value")
-
-        # Check if the field already exists
-        field_gm_sheet, created = StandardizedFieldGmSheet.objects.get_or_create(
-            field=field_name
-        )
-
-        # If the field doesn't exist, it has been created now, so add the value
-        if created:
-            field_gm_sheet.values.append(value)
-            field_gm_sheet.save()
-            serializer = StandardizedFieldGmSheetSerializer(field_gm_sheet)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-        # If the field already exists, add the value to its existing list of values
-        field_gm_sheet.values.append(value)
-        field_gm_sheet.save()
-        serializer = StandardizedFieldGmSheetSerializer(field_gm_sheet)
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(["PUT"])
