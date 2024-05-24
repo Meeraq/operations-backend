@@ -573,6 +573,7 @@ def get_all_benchmarks(request):
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
+
 @api_view(["POST"])
 @transaction.atomic
 def create_gmsheet(request):
@@ -604,17 +605,22 @@ def create_gmsheet(request):
                         "projectName": gm_sheet.project_name,
                         "clientName": gm_sheet.client_name,
                         "startdate": gm_sheet.start_date,
-                        "projectType": gm_sheet.project_type, 
-                        "salesName":gm_sheet.sales.name
+                        "projectType": gm_sheet.project_type,
+                        "salesName": gm_sheet.sales.name,
                     },
                     [],  # No BCC
                 )
 
-                return Response(gm_sheet_serializer.data, status=status.HTTP_201_CREATED)
-            return Response(gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    gm_sheet_serializer.data, status=status.HTTP_201_CREATED
+                )
+            return Response(
+                gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+            )
     except Exception as e:
         # Handle any exceptions here
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
@@ -633,17 +639,21 @@ def update_is_accepted_status(request, pk):
         # Call send_mail_templates if is_accepted is True
         if data["is_accepted"]:
             template_name = "gm_sheet_approved.html"
-            recipient_email = "ashi@meeraq.com"  # Update with the recipient's email address
+            recipient_email = (
+                "ashi@meeraq.com"  # Update with the recipient's email address
+            )
             subject = "GM Sheet approved"
             context_data = {
                 "projectName": gm_sheet.project_name,
                 "clientName": gm_sheet.client_name,
                 "startdate": gm_sheet.start_date,
                 "projectType": gm_sheet.project_type,
-                "salesName":gm_sheet.sales.name,
+                "salesName": gm_sheet.sales.name,
             }
             bcc_list = []  # No BCC
-            send_mail_templates(template_name, recipient_email, subject, context_data, bcc_list)
+            send_mail_templates(
+                template_name, recipient_email, subject, context_data, bcc_list
+            )
 
     # Check if deal_status is present in request data
     if "deal_status" in request.data:
@@ -701,7 +711,7 @@ def update_gmsheet(request, id):
                     if offering_serializer.is_valid():
                         offering_serializer.save()
                     else:
-                        print('he2',offering_serializer.errors)
+                        print("he2", offering_serializer.errors)
                         return Response(
                             offering_serializer.errors,
                             status=status.HTTP_400_BAD_REQUEST,
@@ -711,7 +721,7 @@ def update_gmsheet(request, id):
                 {"message": "Update Successfully"}, status=status.HTTP_200_OK
             )
         else:
-            print('hey',gm_sheet_serializer.errors)
+            print("hey", gm_sheet_serializer.errors)
             return Response(
                 gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST
             )
@@ -849,7 +859,15 @@ def get_project_handover(request, project_type, project_id):
 def create_asset(request):
     serializer = AssetsSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        instance = serializer.save()
+        # Set default values for update_entry
+        update_entry = {
+            "date": str(datetime.now()),
+            "status": instance.status,
+            "assigned_to": instance.assigned_to,
+        }
+        instance.updates.append(update_entry)
+        instance.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -857,7 +875,7 @@ def create_asset(request):
 @api_view(["GET"])
 def get_all_assets(request):
     if request.method == "GET":
-        assets = Assets.objects.all()
+        assets = Assets.objects.all().order_by("-update_at")
         serializer = AssetsSerializer(assets, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -882,31 +900,56 @@ def update_asset(request):
     payload = request.data
     values = payload.get("values")
     asset_id = payload.get("id")
-
     if not asset_id:
         return Response(
             {"error": "Asset ID is required"}, status=status.HTTP_400_BAD_REQUEST
         )
-
     try:
         asset = Assets.objects.get(id=asset_id)
     except Assets.DoesNotExist:
         return Response({"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND)
-
     serializer = AssetsSerializer(
         asset, data=values, partial=True
     )  # Use partial=True for partial updates
     if serializer.is_valid():
         instance = serializer.save()
         update_entry = {
-            "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "date": str(datetime.now()),
             "status": instance.status,
-            "assigned_to": instance.status.assigned_to,
+            "assigned_to": instance.assigned_to,
         }
         instance.updates.append(update_entry)
         instance.save()
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+def update_status(request):
+    if request.method == "PUT":
+        asset_id = request.data.get("id")
+        if asset_id is None:
+            return Response(
+                {"error": "Asset ID is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            asset = Assets.objects.get(pk=asset_id)
+        except Assets.DoesNotExist:
+            return Response(
+                {"error": "Asset does not exist"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        new_status = request.data.get("status")
+        if new_status not in [choice[0] for choice in Assets.STATUS_CHOICES]:
+            return Response(
+                {"error": "Invalid status value"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        asset.status = new_status
+        if new_status == "idle":
+            asset.assigned_to = ""
+        asset.save()
+        return Response({"success": "Status updated successfully"})
 
 
 @api_view(["GET"])

@@ -12,6 +12,7 @@ urlpatterns = [
     path('edit-benchmark/', views.edit_benchmark, name='edit_benchmark'),
     path('get-benchmark/', views.get_all_benchmarks),
     path('create-gmsheet/', views.create_gmsheet, name='create_gmsheet'),
+    path('update-status/', views.update_status, name='update-status'),
     path('update-gmsheet/<int:id>/', views.update_gmsheet),
     path('accept-gmsheet/<int:pk>/', views.update_is_accepted_status, name='update_is_accepted_status'),
     path('delete-gmsheet/', views.delete_gmsheet, name='delete_gmsheet'),
