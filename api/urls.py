@@ -24,6 +24,8 @@ from .views import (
     UserTokenAvaliableCheck,
     SessionData,
     DownloadCoachContract,
+    ProjectContractListWithDepth,
+    GetCoachContractFromProject,
     AddRegisteredFacilitator,
     UpdateUserRoles,
 )
@@ -182,6 +184,10 @@ urlpatterns = [
     path(
         "new/sessions/past/<str:user_type>/<int:user_id>/",
         views.new_get_past_sessions_of_user,
+    ),
+     path(
+        "get-session-count/<str:user_type>/<int:user_id>/",
+        views.get_count_sessions,
     ),
     path("learners/<str:user_type>/<int:user_id>/", views.get_coachee_of_user),
     path("learner/<int:learner_id>/", views.get_learner_data),
@@ -349,9 +355,14 @@ urlpatterns = [
     path("create-project-contract/", views.create_project_contract),
     path("get-project-contracts/", ProjectContractAPIView.as_view()),
     path("coach-contracts/", CoachContractList.as_view()),
+    path("project-contracts-with-depth/", ProjectContractListWithDepth.as_view()),
     path("coach-contracts/<int:pk>/", CoachContractDetail.as_view()),
     path("handle-assign/", AssignCoachContractAndProjectContract.as_view()),
     path("project-contracts/<int:project_id>/", ProjectContractDetailView.as_view()),
+    path(
+        "get-coach-contracts-of-project/<int:project_id>/",
+        GetCoachContractFromProject.as_view(),
+    ),
     path("update-contract/", UpdateCoachContract.as_view()),
     path("send-contract-reminder/", SendContractReminder.as_view()),
     path(
@@ -446,6 +457,10 @@ urlpatterns = [
         "get-coaches-in-project-is-vendor/<int:project_id>/",
         views.get_coaches_in_project_is_vendor,
     ),
+    path(
+        "coachee-selected-coach-ids/<int:project_id>/",
+        views.get_coachee_selected_coach_ids,
+    ),
     path("update-user-roles/", UpdateUserRoles.as_view()),
     path("tasks/", views.get_tasks),
     path("tasks/skill-training/", views.get_skill_training_tasks),
@@ -464,11 +479,11 @@ urlpatterns = [
         "get-facilitator-summary-data/<int:facilitator_id>/",
         views.get_facilitator_summary_data,
     ),
-     path(
+    path(
         "expenses/<int:project_id>/<int:coach_id>/",
         views.get_expenses_for_coaching_project,
     ),
-      path(
+    path(
         "get-coach-with-vendor-id-in-project/<int:project_id>/",
         views.get_coach_with_vendor_id_in_project,
     ),
@@ -548,12 +563,29 @@ urlpatterns = [
         views.get_available_credits_without_project_structure,
     ),
     path(
+
         "get-available-credits-of-all-cod-projects/",
         views.get_available_credits_of_all_cod_projects,
+    ),
+    path(
+        "projects/<str:project_type>/<int:project_id>/finalized-coaches-and-facilitators/",
+        views.get_finalized_coaches_and_facilitators_of_project_with_vendor_details,
     ),
     path(
         "get-schedular-projects-of-hr/<int:hr_id>/",
         views.get_schedular_projects_of_hr,
     ),
-    
+    path("sharable-emails/", views.get_sharable_emails),
+    path("coach-profile-sharable-email/", views.coach_profile_sharable_email),
+    path(
+        "coach-profile-share-email-validation/",
+        views.coach_profile_share_email_validation,
+    ),
+    path(
+        "get-coach-profile-sharing-form/<str:unique_id>/",
+        views.get_coach_profile_sharing_form,
+    ),
+    path("get-coach-profile-shared-with/", views.get_coach_profile_shared_with),
+    path("coach-share-links/", views.get_coach_shared_links),
+    path("coach-profile-share/edit/<int:pk>/",views.update_coach_profile_share)
 ]

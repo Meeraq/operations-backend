@@ -13,6 +13,7 @@ from api.models import (
     Engagement,
     Goal,
     Sales,
+    Project,
 )
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -25,11 +26,17 @@ class SchedularProject(models.Model):
         ("ongoing", "Ongoing"),
         ("completed", "Completed"),
     ]
-
+    project_type_choice = [
+        ("skill_training", "Skill Training"),
+        ("assessment", "Assessment"),
+    ]
     name = models.CharField(max_length=100, unique=True, default=None)
     project_structure = models.JSONField(default=list, blank=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
     hr = models.ManyToManyField(HR, blank=True)
+    project_type = models.CharField(
+        max_length=50, choices=project_type_choice, default="skill_training"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, blank=True)
     is_project_structure_finalized = models.BooleanField(default=False)
@@ -146,6 +153,7 @@ class LiveSession(models.Model):
         ("in_person_session", "In Person Session"),
         ("kickoff_session", "Kickoff Session"),
         ("virtual_session", "Virtual Session"),
+        ("pre_study", "Pre Study"),
     ]
 
     batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
@@ -225,6 +233,53 @@ class SchedularUpdate(models.Model):
 
     def __str__(self):
         return f"{self.project.name} update by {self.pmo.name}"
+
+
+class ProjectContract(models.Model):
+    template_id = models.IntegerField(null=True)
+    title = models.CharField(max_length=100, blank=True)
+    content = models.TextField(blank=True)
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, blank=True, null=True
+    )
+    schedular_project = models.ForeignKey(
+        SchedularProject, on_delete=models.CASCADE, blank=True, null=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, blank=True)
+    reminder_timestamp = models.CharField(max_length=30, blank=True)
+
+    def __str__(self):
+        return f"Contract {self.title} for Project {self.project.name if self.project else self.schedular_project.name}"
+
+
+class CoachContract(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    project_contract = models.ForeignKey(
+        ProjectContract, on_delete=models.CASCADE, blank=True
+    )
+    name_inputed = models.CharField(max_length=100, blank=True)
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, blank=True,  null=True
+    )
+    schedular_project = models.ForeignKey(
+        SchedularProject, on_delete=models.CASCADE, blank=True, null=True
+    )
+    status = models.CharField(
+        max_length=50, choices=STATUS_CHOICES, default="pending", blank=True
+    )
+    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
+    send_date = models.DateField(auto_now_add=True, blank=True)
+    response_date = models.DateField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True, blank=True)
+
+    def __str__(self):
+        return f"{self.coach.first_name}'s Contract for {self.project.name if self.project else self.schedular_project.name}"
 
 
 class CoachPricing(models.Model):
@@ -399,6 +454,8 @@ class HandoverDetails(models.Model):
         ("caas", "CAAS"),
         ("skill_training", "Skill Training"),
         ("COD", "COD"),
+        ("assessment", "Assessment"),
+    
     ]
     DELIVERY_MODE_CHOICES = [
         ("online", "Online"),
@@ -417,7 +474,12 @@ class HandoverDetails(models.Model):
         ("meeraq", "Meeraq"),
         ("faculty", "Faculty"),
     ]
-
+    INVOICE_STATUS_CHOICES = [
+        ("yes", "Yes"),
+        ("no", "No"),
+        ("billed", "Billed"),
+        ("partially_billed", "Partially Billed"),
+    ]
     schedular_project = models.OneToOneField(
         SchedularProject,
         on_delete=models.SET_NULL,
@@ -430,6 +492,7 @@ class HandoverDetails(models.Model):
     )
     sales = models.ForeignKey(Sales, on_delete=models.SET_NULL, blank=True, null=True)
     organisation = models.ForeignKey(Organisation, null=True, on_delete=models.SET_NULL)
+    pmo = models.ForeignKey(Pmo, null=True, on_delete=models.SET_NULL)
     hr = models.ManyToManyField(HR, blank=True)
     project_type = models.CharField(
         max_length=255, choices=PROJECT_TYPE_CHOICES, blank=True, null=True
@@ -448,7 +511,9 @@ class HandoverDetails(models.Model):
     po_number = models.CharField(max_length=255, blank=True, null=True)
     participant_count = models.IntegerField(default=0, blank=True, null=True)
     coach_fee = models.CharField(max_length=255, blank=True, null=True)
-    invoice_status = models.BooleanField(default=False, blank=True)
+    invoice_status = models.CharField(
+        max_length=255, choices=INVOICE_STATUS_CHOICES, blank=True, null=True
+    )
     reporting_requirements = models.TextField(blank=True, null=True)
     coach_names = models.TextField(blank=True, null=True)
     poc_contact_details = models.TextField(blank=True, null=True)
@@ -466,8 +531,16 @@ class HandoverDetails(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     project_name = models.CharField(max_length=255, blank=True, null=True)
     is_accepted = models.BooleanField(default=False, blank=True)
+    is_drafted = models.BooleanField(default=False, blank=True)
     gm_sheet = models.FileField(upload_to="gm_sheets/", blank=True, null=True)
     proposals = models.FileField(upload_to="proposals/", blank=True, null=True)
+    nudge_details = models.TextField(blank=True, null=True)
+    billing_instructions = models.TextField(blank=True, null=True)
+    course_name = models.TextField(blank=True, null=True)
+    details_of_delivery = models.TextField(blank=True, null=True)
+    pre_post_assessment_details = models.TextField(blank=True, null=True)
+    other_feedback = models.TextField(blank=True, null=True)
+    assessment_details = models.TextField(blank=True, null=True)
 
     class Meta:
         verbose_name = "Handover Detail"
@@ -496,6 +569,13 @@ class Task(models.Model):
     caas_project = models.ForeignKey(
         Project,
         on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        default=None,
+    )
+    request = models.ForeignKey(
+        RequestAvailibilty,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
         default=None,
@@ -575,13 +655,3 @@ class Task(models.Model):
     def __str__(self):
         return self.task
 
-
-#  }
-
-
-# initialValues
-#  form.setFieldsValue({ "name" : "", })
-
-# useState
-# setLineITems([])
-# set costLineItems()

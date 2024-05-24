@@ -29,7 +29,7 @@ from api.views import (
     create_task,
     get_live_session_name,
 )
-
+from datetime import datetime, timedelta
 from schedularApi.serializers import AvailabilitySerializer
 from datetime import timedelta, time, datetime, date
 import pytz
@@ -59,7 +59,7 @@ from assessmentApi.models import Assessment, ParticipantResponse
 import environ
 from time import sleep
 import requests
-from zohoapi.models import Vendor, PoReminder
+from zohoapi.models import Vendor, PoReminder,SalesOrder,SalesOrderLineItem,OrdersAndProjectMapping
 from zohoapi.views import (
     filter_purchase_order_data,
 )
@@ -157,7 +157,21 @@ def timestamp_to_datetime(timestamp):
     return datetime.utcfromtimestamp(int(timestamp) / 1000.0)
 
 
-
+def get_live_session_name(session_type):
+    session_name = None
+    if session_type == "live_session":
+        session_name = "Live Session"
+    elif session_type == "check_in_session":
+        session_name = "Check In Session"
+    elif session_type == "in_person_session":
+        session_name = "In Person Session"
+    elif session_type == "kickoff_session":
+        session_name = "Kickoff Session"
+    elif session_type == "virtual_session":
+        session_name = "Virtual Session"
+    elif session_type == "pre_study":
+        session_name = "Pre Study"
+    return session_name
 
 
 def get_nudges_of_course(course):
@@ -853,7 +867,7 @@ def send_assessment_invitation_mail(assessment_id):
                     send_mail_templates(
                         "assessment/assessment_initial_reminder.html",
                         [participant.email],
-                        "Meeraq - Welcome to Assessment Platform !",
+                        "Meeraq - Welcome to Meeraq Assessment!",
                         {
                             "assessment_name": assessment.participant_view_name,
                             "participant_name": participant.name.title(),
@@ -861,10 +875,38 @@ def send_assessment_invitation_mail(assessment_id):
                         },
                         [],
                     )
+                    sleep(3)
+            if (
+                assessment.assessment_type == "360"
+                or assessment.assessment_type == "90"
+                or assessment.assessment_type == "270"
+                or assessment.assessment_type == "180"
+            ):
+                for observer in participant_observers.observers.all():
+                    observer_response = ObserverResponse.objects.filter(
+                        observer=observer, assessment=assessment
+                    ).first()
+                    if not observer_response:
+                        observer_unique_id = ObserverUniqueId.objects.filter(
+                            observer=observer, assessment=assessment
+                        ).first()
+                        observer_link = f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{observer_unique_id.unique_id}"
+                        send_mail_templates(
+                            "assessment/assessment_email_to_observer.html",
+                            [observer.email],
+                            "Welcome to Meeraq Assessment!",
+                            {
+                                "assessment_name": assessment.participant_view_name,
+                                "participant_name": participant.name.title(),
+                                "observer_name": observer.name.title(),
+                                "link": observer_link,
+                            },
+                            [],
+                        )
+                        sleep(3)
         except Exception as e:
             print(str(e))
             pass
-        sleep(5)
 
 
 @shared_task
@@ -1646,42 +1688,42 @@ def get_file_extension(url):
 
 
 # runs every day at 8:30 AM
-@shared_task
-def send_nudges():
-    today_date = date.today()
-    nudges = Nudge.objects.filter(
-        trigger_date=today_date,
-        is_sent=False,
-        is_switched_on=True,
-        batch__project__nudges=True,
-        batch__project__status="ongoing",
-    )
-    for nudge in nudges:
-        subject = f"New Nudge: {nudge.name}"
-        message = nudge.content
-        email_message = render_to_string(
-            "nudge/nudge_wrapper.html", {"message": mark_safe(message)}
-        )
-        if nudge.file:
-            attachment_path = nudge.file.url
-            file_content = get_file_content(nudge.file.url)
+# @shared_task
+# def send_nudges():
+#     today_date = date.today()
+#     nudges = Nudge.objects.filter(
+#         trigger_date=today_date,
+#         is_sent=False,
+#         is_switched_on=True,
+#         batch__project__nudges=True,
+#         batch__project__status="ongoing",
+#     )
+#     for nudge in nudges:
+#         subject = f"New Nudge: {nudge.name}"
+#         message = nudge.content
+#         email_message = render_to_string(
+#             "nudge/nudge_wrapper.html", {"message": mark_safe(message)}
+#         )
+#         if nudge.file:
+#             attachment_path = nudge.file.url
+#             file_content = get_file_content(nudge.file.url)
 
-        for learner in nudge.batch.learners.all():
-            email = EmailMessage(
-                subject,
-                email_message,
-                settings.DEFAULT_FROM_EMAIL,
-                [learner.email],
-            )
-            if nudge.file:
-                extension = get_file_extension(nudge.file.url)
-                file_name = f"Attatchment.{extension}"
-                email.attach(file_name, file_content, f"application/{extension}")
-            email.content_subtype = "html"
-            email.send()
-            sleep(5)
-        nudge.is_sent = True
-        nudge.save()
+#         for learner in nudge.batch.learners.all():
+#             email = EmailMessage(
+#                 subject,
+#                 email_message,
+#                 settings.DEFAULT_FROM_EMAIL,
+#                 [learner.email],
+#             )
+#             if nudge.file:
+#                 extension = get_file_extension(nudge.file.url)
+#                 file_name = f"Attatchment.{extension}"
+#                 email.attach(file_name, file_content, f"application/{extension}")
+#             email.content_subtype = "html"
+#             email.send()
+#             sleep(5)
+#         nudge.is_sent = True
+#         nudge.save()
 
 
 @shared_task
@@ -2132,9 +2174,7 @@ def send_tomorrow_action_items_data():
                 )
                 nudges = NudgeSerializer(nudges, many=True).data
                 for nudge in nudges:
-                    nudge["nudge_scheduled_for"] = nudge["trigger_date"].strftime(
-                        "%d-%m-%Y %H:%M"
-                    )
+                    nudge["nudge_scheduled_for"] = str(nudge["trigger_date"])
                     projects_data[project.name]["nudges"].append(nudge)
 
         assessments = Assessment.objects.filter(
@@ -2392,6 +2432,7 @@ def send_mail_templates_dynamic_smtp_config(
     except Exception as e:
         print(f"Error occurred while sending emails: {str(e)}")
 
+
 @shared_task
 def send_emails_in_bulk(content_of_mails):
     smtp_configs = json.loads(env("SMTP_EMAILS"))  # List of SMTP configurations
@@ -2414,8 +2455,6 @@ def send_emails_in_bulk(content_of_mails):
             )
             sleep(3)
         start_idx = end_idx
-
-
 
 
 @shared_task
@@ -2664,6 +2703,41 @@ def schedule_assessment_reminders():
                         one_off=True,
                     )
 
+@shared_task
+def invoice_due_email_reminder():
+    try:  
+        current_date = datetime.now().date()
+        line_items = SalesOrderLineItem.objects.filter(
+            custom_field_hash__cf_due_date__isnull=False, is_invoiced=False
+        )
+        line_item_data = []
+        for item in line_items:
+            due_date = datetime.strptime(
+                item.custom_field_hash["cf_due_date"], "%d/%m/%Y"
+            ).date()
+            if due_date <= current_date:
+                sales_order = SalesOrder.objects.filter(
+                    so_line_items__line_item_id=item.line_item_id
+                ).first()
+                if sales_order:
+                    line_item = {
+                        "sales_order_id": sales_order.salesorder_id,
+                        "sales_order_number": sales_order.salesorder_number,
+                        "line_item_id": item.line_item_id,
+                        "client_name": sales_order.customer_name,
+                        "line_item_description": item.description,
+                        "due_date": item.custom_field_hash["cf_due_date"],
+                    }
+                    line_item_data.append(line_item)
+        send_mail_templates(
+             "due_invoice_email_reminder.html",
+             ["finance@meeraq.com","kumar@meeraq.com","raju@coachtotransformation.com"] if env("ENVIRONMENT") == "PRODUCTION" else ["tech@meeraq.com"],
+             "Invoices due today",
+             {'line_item_data' : line_item_data},
+             ["rajat@meeraq.com","sujata@meeraq.com"] if env("ENVIRONMENT") == "PRODUCTION" else ["naveen@meeraq.com"]
+        )           
+    except Exception as e:
+        print(str(e))
 
 @shared_task
 def send_live_session_link_whatsapp_to_facilitators_30_min_before(id):
@@ -2840,6 +2914,7 @@ def create_batch_calendar(batch):
             "live_session",
             "check_in_session",
             "in_person_session",
+            "pre_study",
             "kickoff_session",
             "virtual_session",
         ]:
@@ -2953,11 +3028,10 @@ def add_batch_to_project(data):
                 batch = SchedularBatch.objects.filter(
                     name=batch_name, project=project
                 ).first()
-                
+
                 if not batch:
                     # If batch does not exist, create a new batch
                     batch = SchedularBatch.objects.create(
-                       
                         name=batch_name, project=project
                     )
                     batch.email_reminder = project.email_reminder
@@ -3040,9 +3114,6 @@ def add_batch_to_project(data):
                     except Exception as e:
                         print(str(e))
                         pass
-                 
-                 
-                    
 
                     # Create Live Sessions and Coaching Sessions based on project structure
 
@@ -3098,3 +3169,56 @@ def add_batch_to_project(data):
 
     except Exception as e:
         print(str(e))
+
+
+@shared_task
+def send_nudge_reminder_on_trigger_date_at_6pm():
+    today = datetime.now().date()
+    nudges = Nudge.objects.filter(
+        trigger_date=today,
+        is_sent=False,
+        is_switched_on=True,
+        batch__project__nudges=True,
+        batch__project__status="ongoing",
+    )
+    for nudge in nudges:
+        learners = nudge.batch.learners.all() if nudge.batch else []
+        for learner in learners:
+            if learner.id not in nudge.learner_ids:
+                nudge_id = nudge.unique_id
+                send_whatsapp_message_template(
+                    learner.phone,
+                    {
+                        "broadcast_name": "send_nudge_reminder_on_trigger_date_at_6pm",
+                        "parameters": [
+                            {
+                                "name": "learner_name",
+                                "value": learner.name,
+                            },
+                            {
+                                "name": "nudge_name",
+                                "value": nudge.name,
+                            },
+                            {
+                                "name": "nudge_id",
+                                "value": nudge_id,
+                            },
+                        ],
+                        "template_name": "nudge_reminder_at6",
+                    },
+                )
+                link = f"{env('CAAS_APP_URL')}/view-nudge/{nudge_id}"
+                send_mail_templates(
+                    "coachee_emails/nudge_reminder.html",
+                    [learner.email],
+                    f"Meeraq: Your Monthly Nudge: {nudge.name} ",
+                    {
+                        "learner_name": learner.name.title(),
+                        "nudge_name": nudge.name.title(),
+                        "link": link,
+                    },
+                    [],
+                )
+                nudge.is_sent = True
+                nudge.save()
+                sleep(5)

@@ -20,7 +20,6 @@ from django.core.mail import EmailMessage
 from django.core.mail import EmailMessage, BadHeaderError
 from django_celery_beat.models import PeriodicTask
 
-
 import environ
 
 env = environ.Env()
@@ -190,6 +189,7 @@ class Finance(models.Model):
     def __str__(self):
         return self.name
 
+
 class Sales(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
     name = models.CharField(max_length=50)
@@ -203,6 +203,7 @@ class Sales(models.Model):
 
     def __str__(self):
         return self.name
+
 
 class Leader(models.Model):
     user = models.OneToOneField(Profile, on_delete=models.CASCADE, blank=True)
@@ -368,7 +369,7 @@ class Learner(models.Model):
     name = models.CharField(max_length=100)
     email = models.EmailField()
     phone = models.CharField(max_length=25, blank=True)
-    area_of_expertise = models.CharField(max_length=100, blank=True)
+    area_of_expertise = models.JSONField(default=list, blank=True)
     years_of_experience = models.IntegerField(default=0, blank=True)
     job_roles = models.JSONField(default=list, blank=True)
     active_inactive = models.BooleanField(default=True)
@@ -652,13 +653,16 @@ class Goal(models.Model):
     engagement = models.ForeignKey(
         Engagement, on_delete=models.CASCADE, blank=True, null=True
     )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateField(auto_now=True)
 
 
 class Competency(models.Model):
     goal = models.ForeignKey(Goal, on_delete=models.CASCADE)
     name = models.TextField()
     scoring = models.JSONField(default=list, blank=True)
-    created_at = models.DateField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class ActionItem(models.Model):
@@ -670,6 +674,8 @@ class ActionItem(models.Model):
     name = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_done")
     competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class ProfileEditActivity(models.Model):
@@ -721,10 +727,23 @@ class AddGoalActivity(models.Model):
         return f"{self.user} added a goal."
 
 
+class CoachProfileShare(models.Model):
+    name = models.CharField(max_length=200, null=True, blank=True)
+    emails = models.JSONField(default=list, blank=True)
+    masked_coach_profile = models.BooleanField(default=False)
+    unique_id = models.CharField(max_length=225, unique=True, blank=True)
+    coaches = models.ManyToManyField(Coach, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class CoachProfileTemplate(models.Model):
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     templates = models.JSONField(default=dict, blank=True)
+    coach_profile_share = models.ForeignKey(
+        CoachProfileShare, on_delete=models.CASCADE, blank=True, null=True, default=None
+    )
 
     def __str__(self):
         return f"{self.coach} template."
@@ -765,9 +784,6 @@ class StandardizedFieldRequest(models.Model):
         ("rejected", "Rejected"),
     )
     coach = models.ForeignKey(Coach, on_delete=models.CASCADE, blank=True, null=True)
-    facilitator = models.ForeignKey(
-        Facilitator, on_delete=models.CASCADE, blank=True, null=True
-    )
     facilitator = models.ForeignKey(
         Facilitator, on_delete=models.CASCADE, blank=True, null=True
     )
@@ -834,43 +850,6 @@ class Template(models.Model):
 
     def __str__(self):
         return self.title
-
-
-class ProjectContract(models.Model):
-    template_id = models.IntegerField(null=True)
-    title = models.CharField(max_length=100, blank=True)
-    content = models.TextField(blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True, blank=True)
-    updated_at = models.DateTimeField(auto_now=True, blank=True)
-    reminder_timestamp = models.CharField(max_length=30, blank=True)
-
-    def __str__(self):
-        return f"Contract '{self.title}' for Project '{self.project.name}'"
-
-
-class CoachContract(models.Model):
-    STATUS_CHOICES = [
-        ("pending", "Pending"),
-        ("approved", "Approved"),
-        ("rejected", "Rejected"),
-    ]
-
-    project_contract = models.ForeignKey(
-        ProjectContract, on_delete=models.CASCADE, blank=True
-    )
-    name_inputed = models.CharField(max_length=100, blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
-    status = models.CharField(
-        max_length=50, choices=STATUS_CHOICES, default="pending", blank=True
-    )
-    coach = models.ForeignKey(Coach, on_delete=models.CASCADE)
-    send_date = models.DateField(auto_now_add=True, blank=True)
-    response_date = models.DateField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True, blank=True)
-
-    def __str__(self):
-        return f"{self.coach.first_name}'s Contract for {self.project.name}"
 
 
 class UserToken(models.Model):
@@ -962,7 +941,7 @@ class APILog(models.Model):
 
 
 class TableHiddenColumn(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE,blank=True,null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, blank=True, null=True)
     table_name = models.CharField(max_length=225, blank=True)
     hidden_columns = models.JSONField(default=list, blank=True)
     created_at = models.DateField(auto_now_add=True)

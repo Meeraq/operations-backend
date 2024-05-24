@@ -15,6 +15,7 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
+    
     Assets,
     GmSheet,
     Offering,
@@ -22,6 +23,7 @@ from .models import (
     Benchmark,
 )
 from api.models import Coach
+from api.models import Sales
 
 
 class SchedularProjectSerializer(serializers.ModelSerializer):
@@ -231,32 +233,42 @@ class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = "__all__"
+
 class BenchmarkSerializer(serializers.ModelSerializer):
     class Meta:
         model = Benchmark
         fields = "__all__"
 
-
 class GmSheetSerializer(serializers.ModelSerializer):
     class Meta:
         model = GmSheet
         fields = '__all__'
+
 class OfferingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Offering
         fields = '__all__'
+
 class StandardizedFieldGmSheetSerializer(serializers.ModelSerializer):
     class Meta:
         model = StandardizedFieldGmSheet
         fields = '__all__'
+
 class HandoverDetailsSerializerWithOrganisationName(serializers.ModelSerializer):
     organisation_name = serializers.SerializerMethodField()
+    pmo_name = serializers.SerializerMethodField()
 
     def get_organisation_name(self, obj):
         if obj.organisation:
             return obj.organisation.name
         return None
 
+    def get_pmo_name(self, obj):
+        if obj.pmo:
+            return obj.pmo.name
+        return None
+
     class Meta:
         model = HandoverDetails
-        fields = '__all__'
+        fields = "__all__"
+

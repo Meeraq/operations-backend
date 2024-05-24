@@ -28,8 +28,6 @@ from .models import (
     SessionRequestedActivity,
     PastSessionActivity,
     Template,
-    ProjectContract,
-    CoachContract,
     Update,
     UserToken,
     CalendarEvent,
@@ -44,7 +42,10 @@ from .models import (
     Sales,
     TableHiddenColumn,
     CTTPmo,
+    CoachProfileShare,
 )
+
+from schedularApi.models import ProjectContract, CoachContract
 
 # Register your models here.
 
@@ -92,3 +93,4 @@ admin.site.register(Finance)
 admin.site.register(Sales)
 admin.site.register(TableHiddenColumn)
 admin.site.register(CTTPmo)
+admin.site.register(CoachProfileShare)

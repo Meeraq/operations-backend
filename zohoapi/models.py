@@ -1,6 +1,6 @@
 from django.db import models
 from django.utils import timezone
-from api.models import Profile, validate_pdf_extension, Project
+from api.models import Profile, validate_pdf_extension, Project,Engagement, Coach, Facilitator
 from django.contrib.auth.models import User
 from schedularApi.models import SchedularProject
 
@@ -1436,6 +1436,22 @@ class PurchaseOrder(models.Model):
         ZohoVendor, on_delete=models.SET_NULL, blank=True, null=True, default=None
     )
     po_line_items = models.ManyToManyField(PurchaseOrderLineItem, blank=True)
+    schedular_project = models.ForeignKey(
+        SchedularProject,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+    )
+    caas_project = models.ForeignKey(
+        Project, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    coach = models.ForeignKey(
+        Coach, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    engagements = models.ManyToManyField(Engagement, blank=True)
     purchaseorder_id = models.CharField(max_length=100, null=True, blank=True)
     branch_id = models.CharField(max_length=100, null=True, blank=True)
     branch_name = models.CharField(max_length=100, null=True, blank=True)
@@ -1591,6 +1607,7 @@ class PurchaseOrder(models.Model):
     can_mark_as_unbill = models.BooleanField(default=False)
     salesorders = models.JSONField(default=list, null=True, blank=True)
     bills = models.JSONField(default=list, null=True, blank=True)
+    is_guest_ctt = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_time"]

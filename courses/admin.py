@@ -24,7 +24,9 @@ from .models import (
     AssignmentLesson,
     AssignmentLessonResponse,
     Feedback, 
-    CoachingSessionsFeedbackResponse
+    CoachingSessionsFeedbackResponse,
+    CttFeedback,
+    CttFeedbackResponse,
 )
 
 # Register your models here.
@@ -53,3 +55,5 @@ admin.site.register(AssignmentLesson)
 admin.site.register(AssignmentLessonResponse)
 admin.site.register(Feedback)
 admin.site.register(CoachingSessionsFeedbackResponse)
+admin.site.register(CttFeedback)
+admin.site.register(CttFeedbackResponse)
