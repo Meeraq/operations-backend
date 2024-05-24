@@ -230,7 +230,7 @@ from django.http import HttpResponse
 import environ
 from time import sleep
 from django.db.models import Max
-
+from openai import OpenAI
 
 env = environ.Env()
 
@@ -6420,7 +6420,7 @@ def delete_competency(request, competency_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_engagement_competency(request, engagement_id):
-    competentcy = Competency.objects.filter(goal__engagement__id=engagement_id)
+    competentcy = Competency.objects.filter(goal__engagement__id=engagement_id).order_by("-created_at")
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
     return Response(serializer.data, status=200)
 
@@ -6492,7 +6492,9 @@ def get_engagement_action_items(request, engagement_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_action_items_by_competency(request, competency_id):
-    action_items = ActionItem.objects.filter(competency__id=competency_id)
+    action_items = ActionItem.objects.filter(competency__id=competency_id).order_by(
+        "-created_at"
+    )
     serializer = GetActionItemDepthOneSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
 
@@ -11651,7 +11653,9 @@ def get_goal_detail(request, goal_id):
 @permission_classes([IsAuthenticated])
 def get_competency_action_items(request, comp_id):
     try:
-        action_items = ActionItem.objects.filter(competency__id=comp_id)
+        action_items = ActionItem.objects.filter(competency__id=comp_id).order_by(
+            "-created_at"
+        )
         serializer = ActionItemSerializer(action_items, many=True)
         return Response(serializer.data)
 
@@ -12367,3 +12371,24 @@ def get_coach_shared_links(request):
             {"error": "Failed to get coach profile shares."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def rewrite(request):
+    coaching_experience = request.data.get("coaching_experience", "")
+    client = OpenAI()
+    completion = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "Hi! I'm Meeraq's AI assistant. We help individuals and organizations unlock their full potential through personalized learning and development programs. Ask me anything about soft skills training, our approach, or how we can empower your team. Write the experiences such that the profiles are impressive to the meeraq's client",
+            },
+            {
+                "role": "user",
+                "content": f"Refine the provided coaching professional's experience profile. Ensure the revised content maintains the structure and format. Also dont add any conversational text for the user, just provide the final output experience. Here is the experience {coaching_experience}",
+            },
+        ],
+    )
+    return Response(completion.choices[0].message.content, status=status.HTTP_200_OK)
