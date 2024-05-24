@@ -2532,8 +2532,13 @@ def get_data_for_score_analysis(question_with_answer, assessment):
                 question["participant_response"] = swap_dict[
                     question["participant_response"]
                 ]
-            if assessment.number_of_observers == 1:
-                question["Peers"] = int(question["Peers"])
+            print(question)
+            if assessment.number_of_observers == 1 and "Peers" in question:
+                try:
+                    peers_value = int(question["Peers"])
+                    question["Peers"] = peers_value
+                except Exception as e:
+                    print("The value for 'Peers' is not an integer")
 
     res = []
 
