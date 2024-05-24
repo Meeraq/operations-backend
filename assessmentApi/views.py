@@ -2532,13 +2532,6 @@ def get_data_for_score_analysis(question_with_answer, assessment):
                 question["participant_response"] = swap_dict[
                     question["participant_response"]
                 ]
-            print(question)
-            if assessment.number_of_observers == 1 and "Peers" in question:
-                try:
-                    peers_value = int(question["Peers"])
-                    question["Peers"] = peers_value
-                except Exception as e:
-                    print("The value for 'Peers' is not an integer")
 
     res = []
 
@@ -2631,6 +2624,21 @@ def get_frequency_analysis_data(
         question_with_labels.append(competency_object)
 
     return question_with_labels
+
+
+def convert_numeric_values_to_int(data):
+    new_data = []
+    for item in data:
+        new_item = item.copy()
+        new_item['questions'] = []
+        for question in item.get('questions', []):
+            new_question = question.copy()
+            for key, value in new_question.items():
+                if isinstance(value, (int, float)):
+                    new_question[key] = int(value)
+            new_item['questions'].append(new_question)
+        new_data.append(new_item)
+    return new_data
 
 
 class DownloadParticipantResultReport(APIView):
@@ -2751,6 +2759,11 @@ class DownloadParticipantResultReport(APIView):
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
+            
+            if assessment.number_of_observers == 1:
+                question_with_answers = convert_numeric_values_to_int(
+                    question_with_answers
+                )
 
             data_for_score_analysis = get_data_for_score_analysis(
                 question_with_answers, assessment
@@ -2911,6 +2924,12 @@ class DownloadParticipantResultReport(APIView):
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
+            
+            if assessment.number_of_observers == 1:
+                question_with_answers = convert_numeric_values_to_int(
+                    question_with_answers
+                )
+            
             data_for_score_analysis = get_data_for_score_analysis(
                 question_with_answers, assessment
             )
@@ -3128,6 +3147,12 @@ class DownloadWordReport(APIView):
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
+
+            if assessment.number_of_observers == 1:
+                question_with_answers = convert_numeric_values_to_int(
+                    question_with_answers
+                )
+
             data_for_score_analysis = get_data_for_score_analysis(
                 question_with_answers, assessment
             )
