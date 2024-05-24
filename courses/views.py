@@ -2398,9 +2398,7 @@ def get_feedback_report(request, feedback_id):
             if ratings:
                 if data["type"] == "rating_0_to_10":
                     # Calculate NPS
-
                     data["nps"] = calculate_nps(ratings)
-
                 else:
                     # Calculate average rating
                     data["average_rating"] = sum(ratings) / len(ratings)
@@ -2409,7 +2407,6 @@ def get_feedback_report(request, feedback_id):
                     data["nps"] = 0  # Default NPS value if no ratings
                 else:
                     data["average_rating"] = 0  # default rating 0 if not ratings
-
         return Response(question_data.values())
     except FeedbackLesson.DoesNotExist:
         return Response(
@@ -3400,10 +3397,20 @@ class GetAssessmentsOfBatch(APIView):
                     total_responses_count = ParticipantResponse.objects.filter(
                         assessment=assessment
                     ).count()
+
+                    assessment_lesson = Assessment.objects.filter(
+                        assessment_modal=assessment
+                    ).first()
+
                     assessment_data = {
                         "id": assessment.id,
                         "name": assessment.name,
                         "participant_view_name": assessment.participant_view_name,
+                        "organisation": (
+                            assessment.organisation.name
+                            if assessment.organisation
+                            else ""
+                        ),
                         "assessment_type": assessment.assessment_type,
                         "assessment_timing": assessment.assessment_timing,
                         "assessment_start_date": assessment.assessment_start_date,
@@ -3411,19 +3418,14 @@ class GetAssessmentsOfBatch(APIView):
                         "status": assessment.status,
                         "total_learners_count": assessment.participants_observers.count(),
                         "total_responses_count": total_responses_count,
-                        "created_at": assessment.created_at,
-                        "whatsapp_reminder": assessment.whatsapp_reminder,
-                        "email_reminder": assessment.email_reminder,
-                        "reminders": assessment.reminders,
                         "batch_name": batch.name,
-                        "questionnaire": assessment.questionnaire.id,
-                        "organisation": assessment.organisation.id,
-                        "hr": list(assessment.hr.all().values_list("id", flat=True)),
-                        "pre_assessment": (
-                            assessment.pre_assessment.id
-                            if assessment.assessment_timing == "post"
+                        "project_name": batch.project.name,
+                        "project_id": (
+                            assessment_lesson.lesson.course.batch.project.id
+                            if assessment_lesson
                             else None
                         ),
+                        "created_at": assessment.created_at,
                     }
 
                     assessment_list.append(assessment_data)
@@ -4412,6 +4414,70 @@ def get_ctt_feedback(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_ctt_feedback_report(request, feedback_id):
+    try:
+        ctt_feedback = CttFeedback.objects.get(id=feedback_id)
+        questions_serializer = QuestionSerializer(ctt_feedback.questions, many=True)
+        question_data = {
+            question["id"]: {
+                **question,
+                "descriptive_answers": [],
+                "ratings": [],
+                "selected_options": [],
+            }
+            for question in questions_serializer.data
+        }
+        feedback_lesson_responses = CttFeedbackResponse.objects.filter(
+            ctt_feedback=ctt_feedback
+        )
+        for response in feedback_lesson_responses:
+            for answer in response.answers.all():
+                question_id = answer.question.id
+                if answer.question.type.startswith("rating"):
+                    question_data[question_id]["ratings"].append(answer.rating)
+                elif answer.question.type == "descriptive_answer":
+                    question_data[question_id]["descriptive_answers"].append(
+                        answer.text_answer
+                    )
+                elif  answer.question.type == "single_correct_answer":
+                    print(answer.selected_options, answer.text_answer)
+                    question_data[question_id]["selected_options"].append(
+                        [answer.text_answer]
+                    )
+                elif (
+                   answer.question.type == "multiple_correct_answer"
+                ):
+                    question_data[question_id]["selected_options"].append(
+                        answer.selected_options
+                    )
+
+        for question_id, data in question_data.items():
+            # Calculate average rating for each question
+            ratings = data["ratings"]
+            if ratings:
+                if data["type"] == "rating_0_to_10":
+                    # Calculate NPS
+                    data["nps"] = calculate_nps(ratings)
+                else:
+                    # Calculate average rating
+                    data["average_rating"] = sum(ratings) / len(ratings)
+            else:
+                if data["type"] == "rating_0_to_10":
+                    data["nps"] = 0  # Default NPS value if no ratings
+                else:
+                    data["average_rating"] = 0  # default rating 0 if not ratings
+        return Response(question_data.values())
+    except CttFeedback.DoesNotExist:
+        print("")
+        return Response(
+            {"error": "Feedback lesson not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["PUT"])

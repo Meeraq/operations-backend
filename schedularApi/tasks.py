@@ -29,7 +29,7 @@ from api.views import (
     create_task,
     get_live_session_name,
 )
-
+from datetime import datetime, timedelta
 from schedularApi.serializers import AvailabilitySerializer
 from datetime import timedelta, time, datetime, date
 import pytz
@@ -59,7 +59,13 @@ from assessmentApi.models import Assessment, ParticipantResponse
 import environ
 from time import sleep
 import requests
-from zohoapi.models import Vendor, PoReminder
+from zohoapi.models import (
+    Vendor,
+    PoReminder,
+    SalesOrder,
+    SalesOrderLineItem,
+    OrdersAndProjectMapping,
+)
 from zohoapi.views import (
     filter_purchase_order_data,
 )
@@ -2702,6 +2708,55 @@ def schedule_assessment_reminders():
                         clocked=clocked_schedule,
                         one_off=True,
                     )
+
+
+@shared_task
+def invoice_due_email_reminder():
+    try:
+        current_date = datetime.now().date()
+        line_items = SalesOrderLineItem.objects.filter(
+            custom_field_hash__cf_due_date__isnull=False, is_invoiced=False
+        )
+        line_item_data = []
+        for item in line_items:
+            due_date = datetime.strptime(
+                item.custom_field_hash["cf_due_date"], "%d/%m/%Y"
+            ).date()
+            if due_date <= current_date:
+                sales_order = SalesOrder.objects.filter(
+                    so_line_items__line_item_id=item.line_item_id
+                ).first()
+                if sales_order:
+                    line_item = {
+                        "sales_order_id": sales_order.salesorder_id,
+                        "sales_order_number": sales_order.salesorder_number,
+                        "line_item_id": item.line_item_id,
+                        "client_name": sales_order.customer_name,
+                        "line_item_description": item.description,
+                        "due_date": item.custom_field_hash["cf_due_date"],
+                    }
+                    line_item_data.append(line_item)
+        send_mail_templates(
+            "due_invoice_email_reminder.html",
+            (
+                [
+                    "finance@meeraq.com",
+                    "kumar@coachtotransformation.com",
+                    "raju@coachtotransformation.com",
+                ]
+                if env("ENVIRONMENT") == "PRODUCTION"
+                else ["tech@meeraq.com"]
+            ),
+            "Invoices due today",
+            {"line_item_data": line_item_data},
+            (
+                ["rajat@meeraq.com", "sujata@meeraq.com"]
+                if env("ENVIRONMENT") == "PRODUCTION"
+                else ["naveen@meeraq.com"]
+            ),
+        )
+    except Exception as e:
+        print(str(e))
 
 
 @shared_task
