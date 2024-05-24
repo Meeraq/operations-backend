@@ -416,4 +416,9 @@ urlpatterns = [
         views.get_sales_of_each_program,
         name="get_sales_of_each_program",
     ),
+    path(
+        "get-line-items-detail-in-excel/",
+        views.get_line_items_detail_in_excel,
+        name="get_line_items_detail_in_excel",
+    ),
 ]

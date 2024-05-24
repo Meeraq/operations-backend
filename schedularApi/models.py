@@ -450,6 +450,7 @@ class HandoverDetails(models.Model):
     pre_post_assessment_details = models.TextField(blank=True, null=True)
     other_feedback = models.TextField(blank=True, null=True)
     assessment_details = models.TextField(blank=True, null=True)
+    session_details = models.TextField(blank=True, null=True)
 
     class Meta:
         verbose_name = "Handover Detail"
