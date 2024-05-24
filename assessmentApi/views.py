@@ -2775,6 +2775,7 @@ class DownloadParticipantResultReport(APIView):
                     "comment_page_number": (
                         10 + (len(competency_array))
                     ),  # this is for page number thats why 10 + is there
+                    "issue_date": timezone.now().strftime("%d %B %Y"),
                 },
                 f"This new report generated for {participant.name}",
             )
@@ -2931,6 +2932,7 @@ class DownloadParticipantResultReport(APIView):
                     "comment_page_number": (
                         10 + (len(competency_array))
                     ),  # this is for page number thats why 10+ is there
+                    "issue_date": timezone.now().strftime("%d %B %Y"),
                 },
             )
             # pdf_path = "graphsAndReports/Report.pdf"
@@ -3147,6 +3149,7 @@ class DownloadWordReport(APIView):
                     "comment_page_number": (
                         10 + (len(competency_array))
                     ),  # this is for page number thats why 10+ is there
+                    "issue_date": timezone.now().strftime("%d %B %Y"),
                 },
             )
             pdf_path = "graphsAndReports/Report.pdf"
@@ -4592,7 +4595,9 @@ class GetAllAssessments(APIView):
             if assessment.batch is not None:
                 organisation = assessment.batch.project.organisation.name
             else:
-                organisation = assessment.organisation.name if assessment.organisation else ""
+                organisation = (
+                    assessment.organisation.name if assessment.organisation else ""
+                )
             assessment_data = {
                 "id": assessment.id,
                 "name": assessment.name,
@@ -4654,13 +4659,15 @@ class GetAssessmentsOfHr(APIView):
         ).order_by("-created_at")
         assessment_list = []
         for assessment in assessments:
-            assessment_lesson=AssessmentLesson.objects.filter(assessment_modal=assessment).first()
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
             if assessment_lesson:
-                batch=assessment_lesson.lesson.course.batch.name
+                batch = assessment_lesson.lesson.course.batch.name
                 project = assessment_lesson.lesson.course.batch.project.name
             else:
-                batch="N/A"
-                project= "N/A"
+                batch = "N/A"
+                project = "N/A"
             total_responses_count = ParticipantResponse.objects.filter(
                 assessment=assessment
             ).count()
@@ -4676,8 +4683,8 @@ class GetAssessmentsOfHr(APIView):
                 "total_learners_count": assessment.participants_observers.count(),
                 "total_responses_count": total_responses_count,
                 "created_at": assessment.created_at,
-                "project" : assessment.batch.project.name if assessment.batch  else None,
-                "batch" : assessment.batch.name if assessment.batch  else None,
+                "project": assessment.batch.project.name if assessment.batch else None,
+                "batch": assessment.batch.name if assessment.batch else None,
             }
 
             assessment_list.append(assessment_data)
