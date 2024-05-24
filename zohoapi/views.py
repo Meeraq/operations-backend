@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.permissions import AllowAny, IsAuthenticated
+import pandas as pd
 from api.models import (
     Coach,
     OTP,
@@ -4920,3 +4921,52 @@ def get_sales_of_each_program(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"})
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_line_items_detail_in_excel(request):
+    line_items = SalesOrderLineItem.objects.filter(salesorder__isnull=False)
+    data = line_items.values(
+        "description",
+        "salesorder__salesorder_number",
+        "rate",
+        "quantity",
+        "quantity_invoiced",
+        "tax_percentage",
+        "item_total",
+    )
+    df = pd.DataFrame(data)
+    df = df.rename(
+        columns={
+            "description": "Items and description",
+            "salesorder__salesorder_number": "Sales Order Number",
+            "rate": "Rate",
+            "quantity": "Quantity",
+            "quantity_invoiced": "Quantity Invoiced",
+            "tax_percentage": "Tax Percentage",
+            "item_total": "Item Total",
+        }
+    )
+
+    # Convert Quantity and Quantity Invoiced columns to floating-point numbers
+    df["Quantity"] = df["Quantity"].astype(float)
+    df["Quantity Invoiced"] = df["Quantity Invoiced"].astype(float)
+
+    # Round the floating-point numbers to integers
+    df["Quantity"] = df["Quantity"].round(0).astype(int)
+    df["Quantity Invoiced"] = df["Quantity Invoiced"].round(0).astype(int)
+
+    # Save the DataFrame to an Excel file in-memory
+    excel_data = BytesIO()
+    df.to_excel(excel_data, index=False)
+    excel_data.seek(0)
+
+    # Create the response with the Excel file
+    response = HttpResponse(
+        excel_data.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f"attachment; filename=line_items_details.xlsx"
+
+    return response
