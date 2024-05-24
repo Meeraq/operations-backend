@@ -151,8 +151,10 @@
             color: #1f3864;
             font-size: 20pt;
             font-weight: bold;
+            padding-top: 20pt;
           "
-          >{{organisation_name}}</span
+          >          <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="display: block; margin: 0 auto; width: auto; height: 120px;">
+          </span
         >
         <div
           style="
@@ -164,7 +166,10 @@
             margin-right: 2pt;
           "
         ></div>
-        <div style="position: relative; margin-top: 80pt; text-align: center;">
+        <div style=" margin-top: 30pt; ">
+          <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo"style="display: block; margin: 0 auto; width: auto; height: 41px;">
+        </div>
+        <!-- <div style="position: relative; margin-top: 80pt; text-align: center;">
           <div style="
               position: absolute;
               margin-left: 35%;
@@ -173,12 +178,10 @@
               <div style="display: inline-block; margin-right: 10px;">
                   <img src="data:image/png;base64, {{image_organisation_base64}}" alt="Company Logo" style="width: auto; height: 90px;">
               </div>
-              <div style="display: inline-block;">
-                  <img src="https://caas.meeraq.com/static/media/meeraq_logo_color.e1c1aa37665449a47653.png" alt="Meeraq Logo" style="width: 187px; height: 41px; margin-bottom:17pt;">
-              </div>
+             
           </div>
       </div>
-      
+       -->
       </div>
       <div
         style="
@@ -187,7 +190,11 @@
           margin: 0pt;
           padding: 0pt;
         "
-      ></div>
+      ><div 
+      style="text-align: center;
+      color: white;
+      padding-top: 35pt;
+      font-size: 18pt;">{{issue_date}}</div></div>
     </div>
     <div style="page-break-before: always"></div>
     <div class="page_no_overflow">
@@ -432,30 +439,28 @@
         </div>
         <div style="margin-top: 65pt ; font-size: 11pt;">
           <ul class="custom-list">
-            <!-- // <li class="custom-list-item">Overview ----------------------------------------------------------------------------------------------------------------------------------- 5</li>
-            // <li class="custom-list-item">Objective ----------------------------------------------------------------------------------------------------------------------------------- 5</li>
-            // <li class="custom-list-item">Competencies Assessed ----------------------------------------------------------------------------------------------------------------- 5</li>
-            // <li class="custom-list-item">
-            //     Rating scale used -------------------------------------------------------------------------------------------------------------------------- 5
-            // </li> -->
-            <!-- <li class="custom-list-item">Introduction to the assessment report------------------------------------------------------------------------------------------------- 5</li>
-            <li class="custom-list-item">Rating Methodology----------------------------------------------------------------------------------------------------------------------- 6</li>
-            <li class="custom-list-item">Your Scores --------------------------------------------------------------------------------------------------------------------------------- 7</li> -->
-            <!-- <li class="custom-list-item">Assessment – Overview ------------------------------------------------------------------------------------------------------------------ </li>
-            <li class="custom-list-item">Detailed Ratings on Behaviour ---------------------------------------------------------------------------------------------------------- 10</li> -->
-             <!-- <li class="custom-list-item">Comments----------------------------------------------------------------------------------------------------------------------------------</li> -->
+              <li class="custom-list-item">Overview ----------------------------------------------------------------------------------------------------------------------------------- 5</li>
+             <li class="custom-list-item">Objective ----------------------------------------------------------------------------------------------------------------------------------- 5</li>
+             <li class="custom-list-item">Competencies Assessed ----------------------------------------------------------------------------------------------------------------- 5</li>
+             <li class="custom-list-item">
+                 Rating scale used -------------------------------------------------------------------------------------------------------------------------- 5
+             </li> 
+            <li class="custom-list-item">Introduction to the assessment report------------------------------------------------------------------------------------------------- 6</li>
+            <li class="custom-list-item">Rating Methodology----------------------------------------------------------------------------------------------------------------------- 7</li>
+            <li class="custom-list-item">Your Scores --------------------------------------------------------------------------------------------------------------------------------- 8</li> 
+             <li class="custom-list-item">Assessment - Overview ------------------------------------------------------------------------------------------------------------------ 9</li>
+            <li class="custom-list-item">Detailed Ratings on Behaviour ---------------------------------------------------------------------------------------------------------- 10</li>
+             <li class="custom-list-item">Comments----------------------------------------------------------------------------------------------------------------------------------- {{comment_page_number}}</li> 
           
-              <li class="custom-list-item">Overview</li>
-              <li class="custom-list-item">Objective</li>
-              <li class="custom-list-item">Competencies Assessed</li>
-              <li class="custom-list-item">
-                Introduction to the assessment report
-              </li>
-              <li class="custom-list-item">Rating Methodology</li>
-              <li class="custom-list-item">Your Scores</li>
-              <li class="custom-list-item">Assessment – Overview</li>
-              <li class="custom-list-item">Detailed Ratings on Behaviour</li>
-              <li class="custom-list-item">Comments</li>
+              <!-- <li class="custom-list-item">Overview --------------------------------------------------------------------------------------------------------- 5</li>
+              <li class="custom-list-item">Objective--------------------------------------------------------------------------------------------------------- 5</li>
+              <li class="custom-list-item">Competencies Assessed--------------------------------------------------------------------------------------------- 5</li>
+              <li class="custom-list-item">Introduction to the assessment report----------------------------------------------------------------------------- 6</li>
+              <li class="custom-list-item">Rating Methodology------------------------------------------------------------------------------------------------ 7</li>
+              <li class="custom-list-item">Your Scores------------------------------------------------------------------------------------------------------- 8</li>
+              <li class="custom-list-item">Assessment - Overview--------------------------------------------------------------------------------------------- 9</li>
+              <li class="custom-list-item">Detailed Ratings on Behaviour------------------------------------------------------------------------------------- 10</li>
+              <li class="custom-list-item">Comments---------------------------------------------------------------------------------------------------------- {{comment_page_number}}</li> -->
 
             </ul>
         </div>
@@ -919,7 +924,7 @@
             <table class="tableStyle">
                 <tr>
                   {% for column in competency.unique_columns %}
-                  <th>
+                  <th {% if column == 'participant_response' or column == 'Peers' %} style="width: 100px;" {% endif %}>
                       {% if column == 'question' %} Questions {% elif column == 'participant_response' %} Self {% else %} {{ column }} {% endif %}
                   </th>
               {% endfor %}
@@ -1047,7 +1052,7 @@
           </tr>  
            </table>
 
-           <!-- <div style="text-align: center; margin-top: 50%;">19</div> -->
+           <div style="text-align: center; margin-top: 50%;">{{comment_page_number}}</div>
   </div>
  
     

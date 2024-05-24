@@ -99,7 +99,6 @@ from .serializers import (
     HandoverDetailsSerializer,
     TaskSerializer,
     HandoverDetailsSerializerWithOrganisationName,
-    
 )
 from .models import (
     SchedularBatch,
@@ -165,7 +164,6 @@ from assessmentApi.models import (
     Competency,
     Behavior,
     ActionItem,
-
 )
 from io import BytesIO
 from api.serializers import LearnerSerializer
@@ -181,7 +179,11 @@ from django.db.models import Max
 import io
 from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
-from assessmentApi.serializers import CompetencySerializerDepthOne,ActionItemSerializer, ActionItemDetailedSerializer
+from assessmentApi.serializers import (
+    CompetencySerializerDepthOne,
+    ActionItemSerializer,
+    ActionItemDetailedSerializer,
+)
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
     get_current_date_timestamps,
@@ -462,11 +464,12 @@ def create_handover(request):
 PROJECT_TYPE_VALUES = {"caas": "CAAS", "skill_training": "Skill Training", "COD": "COD"}
 
 PROJECT_TYPE_VALUES = {
-    "caas" : "CAAS",
-    "skill_training" : "Skill Training",
-    "COD" : "COD",
-    "assessment": "Assessment"
+    "caas": "CAAS",
+    "skill_training": "Skill Training",
+    "COD": "COD",
+    "assessment": "Assessment",
 }
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "sales")])
@@ -631,10 +634,10 @@ def get_all_Schedular_Projects(request):
             default=True,
             output_field=BooleanField(),
         )
-    )    
+    )
     serializer = SchedularProjectSerializerArchiveCheck(projects, many=True)
     for project_data in serializer.data:
-        
+
         latest_update = (
             SchedularUpdate.objects.filter(project__id=project_data["id"])
             .order_by("-created_at")
@@ -7123,7 +7126,7 @@ def get_upcoming_assessment_data(request, user_id):
             return Response({"message": "No upcoming assessment found."}, status=400)
 
     except Exception as e:
-        return Response({"message": f"An error occurred: {str(e)}"},status=400)
+        return Response({"message": f"An error occurred: {str(e)}"}, status=400)
 
 
 @api_view(["GET"])
@@ -7144,8 +7147,8 @@ def get_just_upcoming_session_data(request, user_id):
             response_data = {
                 "session_id": upcoming_session.id,
                 "start_time": upcoming_session.availibility.start_time,
-                "session_type" : upcoming_session.coaching_session.session_type, 
-                "session_number" : upcoming_session.coaching_session.coaching_session_number
+                "session_type": upcoming_session.coaching_session.session_type,
+                "session_number": upcoming_session.coaching_session.coaching_session_number,
                 # Add more fields as needed
             }
             return Response(response_data, status=status.HTTP_200_OK)
@@ -7170,7 +7173,11 @@ def get_all_project_purchase_orders_for_finance(request, project_id, project_typ
     try:
         # filter_purchase_order_data(PurchaseOrderGetSerializer(PurchaseOrder.objects.all(), many=True).data)
         # fetch_purchase_orders(organization_id)
-        if project_type == "skill_training" or project_type == "SEEQ" or project_type == "assessment":
+        if (
+            project_type == "skill_training"
+            or project_type == "SEEQ"
+            or project_type == "assessment"
+        ):
             purchase_orders = PurchaseOrderGetSerializer(
                 PurchaseOrder.objects.filter(
                     Q(created_time__year__gte=2024)
@@ -7502,7 +7509,7 @@ def delete_action_item(request, pk):
         action_item = ActionItem.objects.get(pk=pk)
     except ActionItem.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
-    
+
     if request.method == "DELETE":
         action_item.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -7592,8 +7599,9 @@ MOVEMENT_TYPES = {
     1: "Limited Movement",
     2: "Some Movement",
     3: "Significant Movement",
-    4: "Excellent Movement"
+    4: "Excellent Movement",
 }
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -7670,27 +7678,46 @@ def batch_competency_behavior_movement(request, batch_id, competency_id, behavio
 
     ################ Date Wise Movement ############################
 
-    first_created_item = ActionItem.objects.filter(batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id).order_by('created_at').first()
-    last_updated_item = ActionItem.objects.filter(batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id).order_by('-updated_at').first()
+    first_created_item = (
+        ActionItem.objects.filter(
+            batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+        )
+        .order_by("created_at")
+        .first()
+    )
+    last_updated_item = (
+        ActionItem.objects.filter(
+            batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+        )
+        .order_by("-updated_at")
+        .first()
+    )
 
     formatted_data = []
     if first_created_item and last_updated_item:
         # Get start and end dates
         start_date = first_created_item.created_at.date()
-        end_date = last_updated_item.updated_at.date()  # Set the end date as the current date
+        end_date = (
+            last_updated_item.updated_at.date()
+        )  # Set the end date as the current date
 
         # Calculate the number of days between start and end dates
         date_difference = (end_date - start_date).days
 
         # Calculate step value for the date range
         if date_difference < 4:
-            step = 1  # Keep dates equal to the number of days if difference is less than 4
+            step = (
+                1  # Keep dates equal to the number of days if difference is less than 4
+            )
         else:
             step = date_difference // 4
 
         # Get dates evenly spaced between start and end dates
-        date_range = [start_date + timedelta(days=i*step) for i in range(min(date_difference, 4) + 1)]
-        
+        date_range = [
+            start_date + timedelta(days=i * step)
+            for i in range(min(date_difference, 4) + 1)
+        ]
+
         # Include the current date as the last date in the range
         if end_date not in date_range:
             date_range.append(end_date)
@@ -7700,16 +7727,23 @@ def batch_competency_behavior_movement(request, batch_id, competency_id, behavio
 
         for date in date_range:
             # Get action items created before or on the mapped date
-            filtered_items = ActionItem.objects.filter(created_at__date__lte=date, batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id)
+            filtered_items = ActionItem.objects.filter(
+                created_at__date__lte=date,
+                batch__id=batch_id,
+                competency__id=competency_id,
+                behavior__id=behavior_id,
+            )
 
             # Get the most recent status for each action item on the mapped date
             status_data = {}
             for item in filtered_items:
                 latest_status = None
                 for update in item.status_updates:
-                    update_date = datetime.strptime(update['updated_at'], "%Y-%m-%d %H:%M:%S.%f+00:00").date()
+                    update_date = datetime.strptime(
+                        update["updated_at"], "%Y-%m-%d %H:%M:%S.%f+00:00"
+                    ).date()
                     if update_date <= date:
-                        latest_status = update['status']
+                        latest_status = update["status"]
                     else:
                         break  # Break the loop if update date is after the mapped date
                 if latest_status:
@@ -7718,7 +7752,9 @@ def batch_competency_behavior_movement(request, batch_id, competency_id, behavio
             # Calculate movement counts
             movement_counts = {i: 0 for i in range(5)}
             for status in status_data.values():
-                movement = status_choices_dict.get(status, 0) - status_choices_dict.get('not_started', 0)
+                movement = status_choices_dict.get(status, 0) - status_choices_dict.get(
+                    "not_started", 0
+                )
                 movement_counts[movement] += 1
 
             # Store movement count data for the current date
@@ -7732,7 +7768,11 @@ def batch_competency_behavior_movement(request, batch_id, competency_id, behavio
     ################ Date Wise Movement - END ############################
 
     return Response(
-        {"movements": data, "action_item_counts": action_item_count, "date_wise_movement" : formatted_data},
+        {
+            "movements": data,
+            "action_item_counts": action_item_count,
+            "date_wise_movement": formatted_data,
+        },
         status=200,
     )
 
@@ -7746,10 +7786,13 @@ def get_all_action_items(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_all_assessments_of_batch(request,batch_id):
+def get_all_assessments_of_batch(request, type, pk):
     try:
-        batch = get_object_or_404(SchedularBatch, id=batch_id)
-        assessments = Assessment.objects.filter(batch=batch)
+        assessments = []
+        if type == "project":
+            assessments = Assessment.objects.filter(batch__project__id=pk)
+        elif type == "batch":
+            assessments = Assessment.objects.filter(batch__id=pk)
         assessment_list = []
         for assessment in assessments:
             total_responses_count = ParticipantResponse.objects.filter(
@@ -7758,10 +7801,9 @@ def get_all_assessments_of_batch(request,batch_id):
             assessment_data = {
                 "id": assessment.id,
                 "name": assessment.name,
+                "participant_view_name": assessment.participant_view_name,
                 "organisation": (
-                    assessment.organisation.name
-                    if assessment.organisation
-                    else ""
+                    assessment.organisation.name if assessment.organisation else ""
                 ),
                 "assessment_type": assessment.assessment_type,
                 "assessment_timing": assessment.assessment_timing,
@@ -7771,6 +7813,7 @@ def get_all_assessments_of_batch(request,batch_id):
                 "total_learners_count": assessment.participants_observers.count(),
                 "total_responses_count": total_responses_count,
                 "created_at": assessment.created_at,
+                "batch_name": assessment.batch.name,
             }
             assessment_list.append(assessment_data)
 

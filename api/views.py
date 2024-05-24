@@ -6420,7 +6420,9 @@ def delete_competency(request, competency_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_engagement_competency(request, engagement_id):
-    competentcy = Competency.objects.filter(goal__engagement__id=engagement_id).order_by("-created_at")
+    competentcy = Competency.objects.filter(
+        goal__engagement__id=engagement_id
+    ).order_by("-created_at")
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
     return Response(serializer.data, status=200)
 
@@ -6492,7 +6494,9 @@ def get_engagement_action_items(request, engagement_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_action_items_by_competency(request, competency_id):
-    action_items = ActionItem.objects.filter(competency__id=competency_id).order_by("-created_at")
+    action_items = ActionItem.objects.filter(competency__id=competency_id).order_by(
+        "-created_at"
+    )
     serializer = GetActionItemDepthOneSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
 
@@ -9113,7 +9117,9 @@ class ProjectContractListWithDepth(APIView):
 
     def get(self, request, format=None):
         try:
+
             contracts = ProjectContract.objects.all()
+
             data = []
             for contract in contracts:
                 if contract.project:
@@ -9124,11 +9130,13 @@ class ProjectContractListWithDepth(APIView):
                 coach_contracts = CoachContract.objects.filter(
                     project_contract=contract
                 )
+
                 coaches_selected_count = coach_contracts.count()
                 pending_contracts = []
                 approved_contracts = []
                 rejected_contracts = []
                 for coach_contract in coach_contracts:
+
                     contract_object = {
                         "name": coach_contract.coach.first_name
                         + " "
@@ -9140,6 +9148,7 @@ class ProjectContractListWithDepth(APIView):
                             else None
                         ),
                     }
+
                     if coach_contract.status == "pending":
                         pending_contracts.append(contract_object)
                     elif coach_contract.status == "approved":
@@ -9155,11 +9164,11 @@ class ProjectContractListWithDepth(APIView):
                     "project_id": project.id,
                     "project_name": project.name,
                     "organisation_name": project.organisation.name,
-                    "organisation_image": (
-                        project.organisation.image_url
-                        if project.organisation.image_url
-                        else None
-                    ),
+                    # "organisation_image": (
+                    #     project.organisation.image_url
+                    #     if project.organisation.image_url
+                    #     else None
+                    # ),
                     "created_at": contract.created_at,
                     "updated_at": contract.updated_at,
                     "reminder_timestamp": contract.reminder_timestamp,
@@ -9178,6 +9187,7 @@ class ProjectContractListWithDepth(APIView):
                     "approved_contracts_count": len(approved_contracts),
                     "rejected_contracts_count": len(rejected_contracts),
                 }
+
                 data.append(temp)
             return Response(data)
         except Exception as e:
@@ -11099,7 +11109,7 @@ def archive_project(request):
     try:
         project_id = request.data.get("project_id")
         project_type = request.data.get("project_type")
-        if project_type == "SEEQ":
+        if project_type == "skill_training" or project_type == "assessment":
             project = SchedularProject.objects.get(id=project_id)
         elif project_type == "CAAS":
             project = Project.objects.get(id=project_id)
@@ -11651,7 +11661,9 @@ def get_goal_detail(request, goal_id):
 @permission_classes([IsAuthenticated])
 def get_competency_action_items(request, comp_id):
     try:
-        action_items = ActionItem.objects.filter(competency__id=comp_id).order_by("-created_at")
+        action_items = ActionItem.objects.filter(competency__id=comp_id).order_by(
+            "-created_at"
+        )
         serializer = ActionItemSerializer(action_items, many=True)
         return Response(serializer.data)
 
