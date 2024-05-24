@@ -459,7 +459,11 @@ def create_handover(request):
         res_serializer = HandoverDetailsSerializer(handover_instance)
         return Response(
             {
-                "message": "The Handover has been saved as draft successfully" if handover_instance.is_drafted  else "Handover created successfully. Please contact the PMO team for acceptance of the handover.",
+                "message": (
+                    "The Handover has been saved as draft successfully"
+                    if handover_instance.is_drafted
+                    else "Handover created successfully. Please contact the PMO team for acceptance of the handover."
+                ),
                 "handover": res_serializer.data,
             },
             status=status.HTTP_200_OK,
@@ -467,8 +471,6 @@ def create_handover(request):
     else:
         print(serializer.errors)
         return Response({"error": "Failed to add handover. "}, status=500)
-
-
 
 
 PROJECT_TYPE_VALUES = {"caas": "CAAS", "skill_training": "Skill Training", "COD": "COD"}
@@ -599,7 +601,11 @@ def create_gmsheet(request):
                 # Sending email notification
                 send_mail_templates(
                     "leader_emails/gm_sheet_created.html",
-                    "ashi@meeraq.com",  # Update with the recipient's email address
+                    (
+                        ["sujata@meeraq.com"]
+                        if env("ENVIRONMENT") == "PRODUCTION"
+                        else ["naveen@meeraq.com"]
+                    ),  # Update with the recipient's email address
                     "New GM Sheet created",
                     {
                         "projectName": gm_sheet.project_name,
@@ -622,8 +628,6 @@ def create_gmsheet(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-
 @api_view(["PUT"])
 def update_is_accepted_status(request, pk):
     try:
@@ -639,9 +643,7 @@ def update_is_accepted_status(request, pk):
         # Call send_mail_templates if is_accepted is True
         if data["is_accepted"]:
             template_name = "gm_sheet_approved.html"
-            recipient_email = (
-                "ashi@meeraq.com"  # Update with the recipient's email address
-            )
+
             subject = "GM Sheet approved"
             context_data = {
                 "projectName": gm_sheet.project_name,
@@ -652,7 +654,15 @@ def update_is_accepted_status(request, pk):
             }
             bcc_list = []  # No BCC
             send_mail_templates(
-                template_name, recipient_email, subject, context_data, bcc_list
+                template_name,
+                (
+                    [gm_sheet.sales.email]
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["naveen@meeraq.com"]
+                ),
+                subject,
+                context_data,
+                bcc_list,
             )
 
     # Check if deal_status is present in request data
@@ -7883,7 +7893,7 @@ def send_mail_to_coaches(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to send mail!"}, status=500)
-  
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -8271,11 +8281,10 @@ def get_all_assessments_of_batch(request, type, pk):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def get_upcoming_past_live_session_facilitator(request,user_id):
+def get_upcoming_past_live_session_facilitator(request, user_id):
     print("hello")
     try:
         status = request.query_params.get("status")
-        print("status",status)
         facilitator = Facilitator.objects.get(id=user_id)
         if status == "Upcoming":
             live_sessions = LiveSession.objects.filter(
