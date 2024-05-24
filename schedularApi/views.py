@@ -98,7 +98,11 @@ from .serializers import (
     SchedularProjectSerializerArchiveCheck,
     HandoverDetailsSerializer,
     TaskSerializer,
+    BenchmarkSerializer,
+    GmSheetSerializer,
+    OfferingSerializer,
     HandoverDetailsSerializerWithOrganisationName,
+    AssetsSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -120,6 +124,10 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
+    Offering,
+    GmSheet,
+    Benchmark,
+    Assets,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -461,6 +469,8 @@ def create_handover(request):
         return Response({"error": "Failed to add handover. "}, status=500)
 
 
+
+
 PROJECT_TYPE_VALUES = {"caas": "CAAS", "skill_training": "Skill Training", "COD": "COD"}
 
 PROJECT_TYPE_VALUES = {
@@ -469,6 +479,259 @@ PROJECT_TYPE_VALUES = {
     "COD": "COD",
     "assessment": "Assessment",
 }
+
+
+from django.utils import timezone
+
+
+@api_view(["GET"])
+def get_current_or_next_year(request):
+    try:
+        latest_benchmark = Benchmark.objects.latest("created_at")
+        if latest_benchmark:
+            current_year = int(latest_benchmark.year.split("-")[0])
+            print("curr", current_year)
+            next_year = f"{current_year + 1}-{str(current_year + 2)[2:]}"
+            print(next_year)
+            return Response({"year": next_year})
+    except Benchmark.DoesNotExist:
+        # If no benchmark exists, return the current year
+        current_year = timezone.now().year
+        next_year = f"{current_year}-{str(current_year + 1)[2:]}"
+        return Response({"year": next_year}, status=status.HTTP_200_OK)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("leader")])
+def edit_benchmark(request):
+    try:
+        benchmarks_data = request.data.get("lineItems")
+        updated_benchmarks = []
+
+        with transaction.atomic():
+            for benchmark_data in benchmarks_data:
+                benchmark_id = benchmark_data.get("id")
+                if not benchmark_id:
+                    return Response(
+                        {"error": "Benchmark ID is required for updating"}, status=400
+                    )
+
+                try:
+                    benchmark = Benchmark.objects.get(id=benchmark_id)
+                except Benchmark.DoesNotExist:
+                    return Response(
+                        {"error": f"Benchmark with ID {benchmark_id} does not exist"},
+                        status=404,
+                    )
+
+                serializer = BenchmarkSerializer(
+                    benchmark, data=benchmark_data, partial=True
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                    updated_benchmarks.append(serializer.data)
+                else:
+                    return Response(serializer.errors, status=400)
+
+        return Response(updated_benchmarks, status=200)  # Return the updated benchmarks
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("leader")])
+def create_benchmark(request):
+    try:
+        benchmarks_data = request.data.get("lineItems")
+        created_benchmarks = []
+
+        with transaction.atomic():
+            for benchmark_data in benchmarks_data:
+                serializer = BenchmarkSerializer(data=benchmark_data)
+                if serializer.is_valid():
+                    serializer.save()
+                    created_benchmarks.append(serializer.data)
+                else:
+                    # If any benchmark data is invalid, return the errors
+                    return Response(serializer.errors, status=400)
+
+        return Response(created_benchmarks, status=201)  # Return the created benchmarks
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes(
+    [IsAuthenticated]
+)  # Assuming authenticated users can access all benchmarks
+def get_all_benchmarks(request):
+    if request.method == "GET":
+        try:
+            benchmarks = Benchmark.objects.all()
+            serializer = BenchmarkSerializer(benchmarks, many=True)
+            return Response(serializer.data, status=200)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@transaction.atomic
+def create_gmsheet(request):
+    try:
+        if request.method == "POST":
+            gmsheet_data = request.data.get("gmsheet")
+            gm_sheet_serializer = GmSheetSerializer(data=gmsheet_data)
+            if gm_sheet_serializer.is_valid():
+                gm_sheet = gm_sheet_serializer.save()
+                offerings_data = request.data.get("offerings")
+                if offerings_data:
+                    for offering_data in offerings_data:
+                        offering_data["gm_sheet"] = gm_sheet.id
+                        offering_serializer = OfferingSerializer(data=offering_data)
+                        if offering_serializer.is_valid():
+                            offering_serializer.save()
+                        else:
+                            return Response(
+                                offering_serializer.errors,
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
+                # Sending email notification
+                send_mail_templates(
+                    "leader_emails/gm_sheet_created.html",
+                    "ashi@meeraq.com",  # Update with the recipient's email address
+                    "New GM Sheet created",
+                    {
+                        "projectName": gm_sheet.project_name,
+                        "clientName": gm_sheet.client_name,
+                        "startdate": gm_sheet.start_date,
+                        "projectType": gm_sheet.project_type,
+                        "salesName": gm_sheet.sales.name,
+                    },
+                    [],  # No BCC
+                )
+
+                return Response(
+                    gm_sheet_serializer.data, status=status.HTTP_201_CREATED
+                )
+            return Response(
+                gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+            )
+    except Exception as e:
+        # Handle any exceptions here
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+@api_view(["PUT"])
+def update_is_accepted_status(request, pk):
+    try:
+        gm_sheet = GmSheet.objects.get(pk=pk)
+    except GmSheet.DoesNotExist:
+        return Response(
+            {"error": "GmSheet not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    data = {}
+    # Check if is_accepted is present in request data
+    if "is_accepted" in request.data:
+        data["is_accepted"] = request.data.get("is_accepted")
+        # Call send_mail_templates if is_accepted is True
+        if data["is_accepted"]:
+            template_name = "gm_sheet_approved.html"
+            recipient_email = (
+                "ashi@meeraq.com"  # Update with the recipient's email address
+            )
+            subject = "GM Sheet approved"
+            context_data = {
+                "projectName": gm_sheet.project_name,
+                "clientName": gm_sheet.client_name,
+                "startdate": gm_sheet.start_date,
+                "projectType": gm_sheet.project_type,
+                "salesName": gm_sheet.sales.name,
+            }
+            bcc_list = []  # No BCC
+            send_mail_templates(
+                template_name, recipient_email, subject, context_data, bcc_list
+            )
+
+    # Check if deal_status is present in request data
+    if "deal_status" in request.data:
+        data["deal_status"] = request.data.get("deal_status")
+
+    gm_sheet_serializer = GmSheetSerializer(gm_sheet, data=data, partial=True)
+    if gm_sheet_serializer.is_valid():
+        gm_sheet_serializer.save()
+        return Response(gm_sheet_serializer.data, status=status.HTTP_200_OK)
+    return Response(gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+@transaction.atomic
+def update_gmsheet(request, id):
+    try:
+        gm_sheet = GmSheet.objects.get(id=id)
+        gmsheet_data = request.data.get("gmsheet")
+        gm_sheet_serializer = GmSheetSerializer(
+            gm_sheet, data=gmsheet_data, partial=True
+        )
+
+        if gm_sheet_serializer.is_valid():
+            gm_sheet = gm_sheet_serializer.save()
+
+            # Handle offerings update
+            offerings_data = request.data.get("offerings", [])
+
+            for offering_data in offerings_data:
+                offering_id = offering_data.get("id")
+                if offering_id:
+                    try:
+                        offering_instance = Offering.objects.get(
+                            id=offering_id, gm_sheet=gm_sheet
+                        )
+                        offering_serializer = OfferingSerializer(
+                            offering_instance, data=offering_data, partial=True
+                        )
+                        if offering_serializer.is_valid():
+                            offering_serializer.save()
+                        else:
+                            print(offering_serializer.errors)
+                            return Response(
+                                offering_serializer.errors,
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                    except Offering.DoesNotExist:
+                        return Response(
+                            {"error": "Offering not found"},
+                            status=status.HTTP_404_NOT_FOUND,
+                        )
+                else:
+                    offering_data["gm_sheet"] = gm_sheet.id
+                    offering_serializer = OfferingSerializer(data=offering_data)
+                    if offering_serializer.is_valid():
+                        offering_serializer.save()
+                    else:
+                        print("he2", offering_serializer.errors)
+                        return Response(
+                            offering_serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+            return Response(
+                {"message": "Update Successfully"}, status=status.HTTP_200_OK
+            )
+        else:
+            print("hey", gm_sheet_serializer.errors)
+            return Response(
+                gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+            )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to update data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["POST"])
@@ -590,6 +853,103 @@ def get_project_handover(request, project_type, project_id):
         handover = HandoverDetails.objects.get(caas_project=project_id)
     serializer = HandoverDetailsSerializer(handover)
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+def create_asset(request):
+    serializer = AssetsSerializer(data=request.data)
+    if serializer.is_valid():
+        instance = serializer.save()
+        # Set default values for update_entry
+        update_entry = {
+            "date": str(datetime.now()),
+            "status": instance.status,
+            "assigned_to": instance.assigned_to,
+        }
+        instance.updates.append(update_entry)
+        instance.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+def get_all_assets(request):
+    if request.method == "GET":
+        assets = Assets.objects.all().order_by("-update_at")
+        serializer = AssetsSerializer(assets, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["DELETE"])
+def delete_asset(request):
+    id = request.data.get("id")
+    if not id:
+        return Response({"error": "ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        asset = Assets.objects.get(pk=id)
+    except Assets.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    asset.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["PUT"])
+def update_asset(request):
+    payload = request.data
+    values = payload.get("values")
+    asset_id = payload.get("id")
+    if not asset_id:
+        return Response(
+            {"error": "Asset ID is required"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    try:
+        asset = Assets.objects.get(id=asset_id)
+    except Assets.DoesNotExist:
+        return Response({"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = AssetsSerializer(
+        asset, data=values, partial=True
+    )  # Use partial=True for partial updates
+    if serializer.is_valid():
+        instance = serializer.save()
+        update_entry = {
+            "date": str(datetime.now()),
+            "status": instance.status,
+            "assigned_to": instance.assigned_to,
+        }
+        instance.updates.append(update_entry)
+        instance.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+def update_status(request):
+    if request.method == "PUT":
+        asset_id = request.data.get("id")
+        if asset_id is None:
+            return Response(
+                {"error": "Asset ID is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            asset = Assets.objects.get(pk=asset_id)
+        except Assets.DoesNotExist:
+            return Response(
+                {"error": "Asset does not exist"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        new_status = request.data.get("status")
+        if new_status not in [choice[0] for choice in Assets.STATUS_CHOICES]:
+            return Response(
+                {"error": "Invalid status value"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        asset.status = new_status
+        if new_status == "idle":
+            asset.assigned_to = ""
+        asset.save()
+        return Response({"success": "Status updated successfully"})
 
 
 @api_view(["GET"])
@@ -7383,6 +7743,92 @@ def get_pmo_handovers(request):
         )
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def max_gmsheet_number(request):
+    try:
+        # Get the latest gmsheet_number
+        latest_gmsheet = GmSheet.objects.latest("created_at")
+        latest_number = int(
+            latest_gmsheet.gmsheet_number[3:]
+        )  # Extract the number part and convert to integer
+        next_number = latest_number + 1
+        next_gmsheet_number = (
+            f"PRO{next_number:03}"  # Format the next number to match 'PRO001' format
+        )
+    except GmSheet.DoesNotExist:
+        # If no GmSheet objects exist, create the first gmsheet_number as 'PRO001'
+        next_gmsheet_number = "PRO001"
+        # GmSheet.objects.create(gmsheet_number=next_gmsheet_number)
+
+    return JsonResponse({"max_number": next_gmsheet_number})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_gmsheet_by_sales(request, sales_person_id):
+    try:
+        gmsheet = GmSheet.objects.filter(sales__id=sales_person_id).order_by(
+            "-created_at"
+        )
+        serializer = GmSheetSerializer(gmsheet, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get GM Sheets for the specified salesperson."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_gmsheet(request):
+    try:
+        gmsheet_id = request.data.get("gmSheetId")
+        gmsheet = GmSheet.objects.get(id=gmsheet_id)
+        gmsheet.delete()
+        return Response(
+            {"success": "GM Sheet deleted successfully."},
+            status=status.HTTP_204_NO_CONTENT,
+        )
+    except GmSheet.DoesNotExist:
+        return Response(
+            {"error": "GM Sheet does not exist."}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to delete GM Sheet."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_offerings_by_gmsheet_id(request, gmsheet_id):
+    print(gmsheet_id)
+    offerings = Offering.objects.filter(gm_sheet=gmsheet_id)
+    print(offerings)
+    serializer = OfferingSerializer(offerings, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_gmsheet(request):
+    try:
+        gmsheet = GmSheet.objects.all().order_by("-created_at")
+        serializer = GmSheetSerializer(gmsheet, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get GM Sheet."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminder_in_batch(request, batch_id):
@@ -7437,7 +7883,7 @@ def send_mail_to_coaches(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to send mail!"}, status=500)
-
+  
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -7821,6 +8267,7 @@ def get_all_assessments_of_batch(request, type, pk):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])

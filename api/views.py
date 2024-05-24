@@ -1030,6 +1030,9 @@ FIELD_NAME_VALUES = {
     "city": "City",
     "country": "Country",
     "topic": "Topic",
+    "project_type":"Project Type",
+    "product_type":"Product Type",
+    "category" : "Category"
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -8757,20 +8760,21 @@ class StandardizedFieldRequestAPI(APIView):
 
 
 class StandardFieldAddValue(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo","finance","leader")]
 
     def post(self, request):
         try:
             with transaction.atomic():
                 # Extracting data from request body
                 field_name = request.data.get("field_name")
+                print(field_name)
                 option_value = request.data.get("optionValue").strip()
 
                 # Get or create the StandardizedField instance for the given field_name
                 standardized_field, created = StandardizedField.objects.get_or_create(
                     field=field_name
                 )
-
+                print(standardized_field, option_value, standardized_field.values)
                 # Check if the option_value already exists in the values list of the standardized_field
                 if option_value not in standardized_field.values:
                     # Add the option_value to the values list and save the instance
@@ -8789,7 +8793,7 @@ class StandardFieldAddValue(APIView):
                 )
 
         except Exception as e:
-            print(str(e))
+            print('hello',str(e))
             # Return error response if any exception occurs
             return Response(
                 {"error": "Failed to add value."},
