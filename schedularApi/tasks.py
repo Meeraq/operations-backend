@@ -59,7 +59,13 @@ from assessmentApi.models import Assessment, ParticipantResponse
 import environ
 from time import sleep
 import requests
-from zohoapi.models import Vendor, PoReminder,SalesOrder,SalesOrderLineItem,OrdersAndProjectMapping
+from zohoapi.models import (
+    Vendor,
+    PoReminder,
+    SalesOrder,
+    SalesOrderLineItem,
+    OrdersAndProjectMapping,
+)
 from zohoapi.views import (
     filter_purchase_order_data,
 )
@@ -2703,9 +2709,10 @@ def schedule_assessment_reminders():
                         one_off=True,
                     )
 
+
 @shared_task
 def invoice_due_email_reminder():
-    try:  
+    try:
         current_date = datetime.now().date()
         line_items = SalesOrderLineItem.objects.filter(
             custom_field_hash__cf_due_date__isnull=False, is_invoiced=False
@@ -2730,14 +2737,27 @@ def invoice_due_email_reminder():
                     }
                     line_item_data.append(line_item)
         send_mail_templates(
-             "due_invoice_email_reminder.html",
-             ["finance@meeraq.com","kumar@meeraq.com","raju@coachtotransformation.com"] if env("ENVIRONMENT") == "PRODUCTION" else ["tech@meeraq.com"],
-             "Invoices due today",
-             {'line_item_data' : line_item_data},
-             ["rajat@meeraq.com","sujata@meeraq.com"] if env("ENVIRONMENT") == "PRODUCTION" else ["naveen@meeraq.com"]
-        )           
+            "due_invoice_email_reminder.html",
+            (
+                [
+                    "finance@meeraq.com",
+                    "kumar@coachtotransformation.com",
+                    "raju@coachtotransformation.com",
+                ]
+                if env("ENVIRONMENT") == "PRODUCTION"
+                else ["tech@meeraq.com"]
+            ),
+            "Invoices due today",
+            {"line_item_data": line_item_data},
+            (
+                ["rajat@meeraq.com", "sujata@meeraq.com"]
+                if env("ENVIRONMENT") == "PRODUCTION"
+                else ["naveen@meeraq.com"]
+            ),
+        )
     except Exception as e:
         print(str(e))
+
 
 @shared_task
 def send_live_session_link_whatsapp_to_facilitators_30_min_before(id):

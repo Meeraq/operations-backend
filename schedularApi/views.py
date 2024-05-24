@@ -451,7 +451,7 @@ def create_handover(request):
         res_serializer = HandoverDetailsSerializer(handover_instance)
         return Response(
             {
-                "message": "Handover created successfully. Please contact the PMO team for acceptance of the handover.",
+                "message": "The Handover has been saved as draft successfully" if handover_instance.is_drafted  else "Handover created successfully. Please contact the PMO team for acceptance of the handover.",
                 "handover": res_serializer.data,
             },
             status=status.HTTP_200_OK,
