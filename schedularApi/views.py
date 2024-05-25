@@ -599,7 +599,7 @@ def create_gmsheet(request):
                 # Sending email notification
                 send_mail_templates(
                     "leader_emails/gm_sheet_created.html",
-                    "ashi@meeraq.com",  # Update with the recipient's email address
+                    ["sujata@meeraq.com"],  # Update with the recipient's email address
                     "New GM Sheet created",
                     {
                         "projectName": gm_sheet.project_name,
@@ -639,9 +639,7 @@ def update_is_accepted_status(request, pk):
         # Call send_mail_templates if is_accepted is True
         if data["is_accepted"]:
             template_name = "gm_sheet_approved.html"
-            recipient_email = (
-                "ashi@meeraq.com"  # Update with the recipient's email address
-            )
+            recipient_email = [gm_sheet.sales.email]
             subject = "GM Sheet approved"
             context_data = {
                 "projectName": gm_sheet.project_name,
@@ -948,8 +946,20 @@ def update_status(request):
         asset.status = new_status
         if new_status == "idle":
             asset.assigned_to = ""
+
+        # Append the update to the updates field
+        update_entry = {
+            "date": str(datetime.now()),
+            "status": new_status,
+            "assigned_to": asset.assigned_to,
+        }
+        if not hasattr(asset, 'updates'):
+            asset.updates = []  # Initialize if 'updates' field does not exist
+        asset.updates.append(update_entry)
+
         asset.save()
         return Response({"success": "Status updated successfully"})
+    return Response({"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @api_view(["GET"])
