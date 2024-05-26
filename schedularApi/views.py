@@ -103,6 +103,7 @@ from .serializers import (
     OfferingSerializer,
     HandoverDetailsSerializerWithOrganisationName,
     AssetsSerializer,
+    GmSheetDetailedSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -7844,7 +7845,7 @@ def get_offerings_by_gmsheet_id(request, gmsheet_id):
 def get_all_gmsheet(request):
     try:
         gmsheet = GmSheet.objects.all().order_by("-created_at")
-        serializer = GmSheetSerializer(gmsheet, many=True)
+        serializer = GmSheetDetailedSerializer(gmsheet, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
