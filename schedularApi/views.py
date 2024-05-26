@@ -640,7 +640,7 @@ def update_is_accepted_status(request, pk):
         # Call send_mail_templates if is_accepted is True
         if data["is_accepted"]:
             template_name = "gm_sheet_approved.html"
-
+           
             subject = "GM Sheet approved"
             context_data = {
                 "projectName": gm_sheet.project_name,
@@ -955,8 +955,20 @@ def update_status(request):
         asset.status = new_status
         if new_status == "idle":
             asset.assigned_to = ""
+
+        # Append the update to the updates field
+        update_entry = {
+            "date": str(datetime.now()),
+            "status": new_status,
+            "assigned_to": asset.assigned_to,
+        }
+        if not hasattr(asset, 'updates'):
+            asset.updates = []  # Initialize if 'updates' field does not exist
+        asset.updates.append(update_entry)
+
         asset.save()
         return Response({"success": "Status updated successfully"})
+    return Response({"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @api_view(["GET"])
