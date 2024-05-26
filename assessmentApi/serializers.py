@@ -13,7 +13,9 @@ from .models import (
     ObserverTypes,
     ParticipantReleasedResults,
     ParticipantObserverMapping,
-    ActionItem
+    ActionItem,
+    Behavior,
+    BatchCompetencyAssignment,
 )
 
 
@@ -22,6 +24,18 @@ class CompetencySerializerDepthOne(serializers.ModelSerializer):
         model = Competency
         fields = "__all__"
         depth = 1
+
+
+class CompetencySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Competency
+        fields = "__all__"
+
+
+class BehaviorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Behavior
+        fields = "__all__"
 
 
 class QuestionSerializer(serializers.ModelSerializer):
@@ -133,8 +147,6 @@ class ParticipantObserverMappingSerializerDepthOne(serializers.ModelSerializer):
         depth = 1
 
 
-
-
 class ActionItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionItem
@@ -157,3 +169,16 @@ class ActionItemDetailedSerializer(serializers.ModelSerializer):
         if obj.batch and obj.batch.project:
             return obj.batch.project.name
         return None
+
+
+class BatchCompetencyAssignmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BatchCompetencyAssignment
+        fields = "__all__"
+
+
+class BatchCompetencyAssignmentDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BatchCompetencyAssignment
+        depth = 1
+        fields = "__all__"

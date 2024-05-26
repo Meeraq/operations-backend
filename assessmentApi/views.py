@@ -23,6 +23,7 @@ from .models import (
     AssessmentNotification,
     ParticipantUniqueId,
     ParticipantReleasedResults,
+    BatchCompetencyAssignment
 )
 from .serializers import (
     CompetencySerializerDepthOne,
@@ -41,6 +42,9 @@ from .serializers import (
     AssessmentNotificationSerializer,
     ParticipantReleasedResultsSerializerDepthOne,
     ParticipantObserverMappingSerializerDepthOne,
+    BatchCompetencyAssignmentSerializer,
+    BatchCompetencyAssignmentDepthOneSerializer
+
 )
 from django.db import transaction, IntegrityError
 import json
@@ -5440,3 +5444,161 @@ def add_user_as_a_participant_of_assessment(request):
             {"error": "Unable to process the request."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def add_competency_to_batch(request, batch_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Check if competency_id and selected_behaviors are provided in the request data
+    if "competency_id" not in request.data or "selected_behaviors" not in request.data:
+        return Response(
+            {"error": "Competency ID and selected behaviors are required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    competency_id = request.data["competency_id"]
+    selected_behaviors = request.data["selected_behaviors"]
+    add_to_all_batches = request.data.get("add_to_all", None)
+
+    try:
+        competency = Competency.objects.get(id=competency_id)
+    except Competency.DoesNotExist:
+        return Response(
+            {"error": "Competency not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Check if all selected behaviors belong to the specified competency
+    invalid_behaviors = [
+        behavior_id
+        for behavior_id in selected_behaviors
+        if behavior_id not in competency.behaviors.values_list("id", flat=True)
+    ]
+    if invalid_behaviors:
+        return Response(
+            {
+                "error": f"Behaviors with IDs {invalid_behaviors} do not belong to the specified competency"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Create BatchCompetencyAssignment instance
+    batch_competency_assignment_data = {
+        "batch": batch_id,
+        "competency": competency_id,
+        "selected_behaviors": selected_behaviors,
+    }
+
+    serializer = BatchCompetencyAssignmentSerializer(
+        data=batch_competency_assignment_data
+    )
+    if serializer.is_valid():
+        instance = serializer.save()
+        if add_to_all_batches:
+            batches = SchedularBatch.objects.filter(project=instance.batch.project).exclude(id=instance.batch.id)
+            for batch in batches:
+                batch_competency_assignment_data = {
+                    "batch": batch.id,
+                    "competency": competency_id,
+                    "selected_behaviors": selected_behaviors,
+                }
+                existing_batch_competency = BatchCompetencyAssignment.objects.filter(competency__id = competency_id, batch__id=batch.id)
+                if not existing_batch_competency.exists():
+                    serializer = BatchCompetencyAssignmentSerializer(
+                        data=batch_competency_assignment_data
+                    )
+                    if serializer.is_valid():
+                        serializer.save()
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    else:
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def edit_competency_assignment(request, batch_id, assignment_id):
+    try:
+        batch = SchedularBatch.objects.get(id=batch_id)
+    except SchedularBatch.DoesNotExist:
+        return Response({"error": "Batch not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        assignment = BatchCompetencyAssignment.objects.get(
+            id=assignment_id, batch=batch
+        )
+    except BatchCompetencyAssignment.DoesNotExist:
+        return Response(
+            {"error": "Assignment not found for the specified batch"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check if competency_id and selected_behaviors are provided in the request data
+    if "competency_id" not in request.data or "selected_behaviors" not in request.data:
+        return Response(
+            {"error": "Competency ID and selected behaviors are required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    competency_id = request.data["competency_id"]
+    selected_behaviors = request.data["selected_behaviors"]
+
+    try:
+        competency = Competency.objects.get(id=competency_id)
+    except Competency.DoesNotExist:
+        return Response(
+            {"error": "Competency not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Check if all selected behaviors belong to the specified competency
+    invalid_behaviors = [
+        behavior_id
+        for behavior_id in selected_behaviors
+        if behavior_id not in competency.behaviors.values_list("id", flat=True)
+    ]
+    if invalid_behaviors:
+        return Response(
+            {
+                "error": f"Behaviors with IDs {invalid_behaviors} do not belong to the specified competency"
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Update CourseCompetencyAssignment instance
+    assignment.competency = competency
+    assignment.selected_behaviors.set(selected_behaviors)
+    assignment.save()
+
+    serializer = BatchCompetencyAssignmentSerializer(assignment)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def get_batch_competency_assignments(request,batch_id):
+    try:
+        assignments = BatchCompetencyAssignment.objects.filter(batch__id=batch_id)
+        serializer = BatchCompetencyAssignmentDepthOneSerializer(
+            assignments, many=True
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated, IsInRoles("pmo")])
+def delete_batch_competency(request, batch_competency_id):
+    try:
+        # Retrieve the Batch competency object
+        batch_competency = BatchCompetencyAssignment.objects.get(pk=batch_competency_id)
+    except BatchCompetencyAssignment.DoesNotExist:
+        # If the Batch competency does not exist, return a 404 response
+        return Response({"error": "Batch competency not found"}, status=status.HTTP_404_NOT_FOUND)
+    # Delete the Batch competency
+    batch_competency.delete()
+    # Return a success response
+    return Response({"message": "Batch competency deleted successfully"}, status=status.HTTP_204_NO_CONTENT)

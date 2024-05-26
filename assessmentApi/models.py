@@ -174,7 +174,9 @@ class Assessment(models.Model):
     initial_reminder = models.BooleanField(blank=True, default=False)
     reminders = models.JSONField(default=dict, blank=True)
     unique_id = models.CharField(max_length=225, default="")
-    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE, blank=True, null=True)
+    batch = models.ForeignKey(
+        SchedularBatch, on_delete=models.CASCADE, blank=True, null=True
+    )
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -247,6 +249,7 @@ class ParticipantReleasedResults(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+
 class ActionItem(models.Model):
     STATUS_CHOICES = (
         ("not_started", "Not Started"),
@@ -281,3 +284,14 @@ class ActionItem(models.Model):
 
     def __str__(self):
         return f"{self.learner.name if self.learner else None} {self.id}"
+
+
+class BatchCompetencyAssignment(models.Model):
+    batch = models.ForeignKey(SchedularBatch, on_delete=models.CASCADE)
+    competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
+    selected_behaviors = models.ManyToManyField(Behavior, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.batch.name} - {self.competency.name}"
