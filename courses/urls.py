@@ -457,6 +457,10 @@ urlpatterns = [
         views.create_ctt_feedback,
     ),
     path(
+        "edit-ctt-feedback/<int:feedback_id>/",
+        views.edit_ctt_feedback,
+    ),
+    path(
         "get-ctt-feedbacks/",
         views.get_ctt_feedback,
     ),
