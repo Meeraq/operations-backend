@@ -172,6 +172,7 @@ from assessmentApi.models import (
     Competency,
     Behavior,
     ActionItem,
+    BatchCompetencyAssignment
 )
 from io import BytesIO
 from api.serializers import LearnerSerializer
@@ -187,11 +188,7 @@ from django.db.models import Max
 import io
 from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
-from assessmentApi.serializers import (
-    CompetencySerializerDepthOne,
-    ActionItemSerializer,
-    ActionItemDetailedSerializer,
-)
+from assessmentApi.serializers import CompetencySerializerDepthOne,ActionItemSerializer, ActionItemDetailedSerializer,CompetencySerializer,BehaviorSerializer
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
     get_current_date_timestamps,
@@ -459,7 +456,11 @@ def create_handover(request):
         res_serializer = HandoverDetailsSerializer(handover_instance)
         return Response(
             {
-                "message": "Handover created successfully. Please contact the PMO team for acceptance of the handover.",
+                "message": (
+                    "The Handover has been saved as draft successfully"
+                    if handover_instance.is_drafted
+                    else "Handover created successfully. Please contact the PMO team for acceptance of the handover."
+                ),
                 "handover": res_serializer.data,
             },
             status=status.HTTP_200_OK,
@@ -467,8 +468,6 @@ def create_handover(request):
     else:
         print(serializer.errors)
         return Response({"error": "Failed to add handover. "}, status=500)
-
-
 
 
 PROJECT_TYPE_VALUES = {"caas": "CAAS", "skill_training": "Skill Training", "COD": "COD"}
@@ -599,7 +598,11 @@ def create_gmsheet(request):
                 # Sending email notification
                 send_mail_templates(
                     "leader_emails/gm_sheet_created.html",
-                    ["sujata@meeraq.com"],  # Update with the recipient's email address
+                    (
+                        ["sujata@meeraq.com"]
+                        if env("ENVIRONMENT") == "PRODUCTION"
+                        else ["naveen@meeraq.com"]
+                    ),  # Update with the recipient's email address
                     "New GM Sheet created",
                     {
                         "projectName": gm_sheet.project_name,
@@ -622,8 +625,6 @@ def create_gmsheet(request):
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-
 @api_view(["PUT"])
 def update_is_accepted_status(request, pk):
     try:
@@ -639,7 +640,7 @@ def update_is_accepted_status(request, pk):
         # Call send_mail_templates if is_accepted is True
         if data["is_accepted"]:
             template_name = "gm_sheet_approved.html"
-            recipient_email = [gm_sheet.sales.email]
+           
             subject = "GM Sheet approved"
             context_data = {
                 "projectName": gm_sheet.project_name,
@@ -650,7 +651,15 @@ def update_is_accepted_status(request, pk):
             }
             bcc_list = []  # No BCC
             send_mail_templates(
-                template_name, recipient_email, subject, context_data, bcc_list
+                template_name,
+                (
+                    [gm_sheet.sales.email]
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["naveen@meeraq.com"]
+                ),
+                subject,
+                context_data,
+                bcc_list,
             )
 
     # Check if deal_status is present in request data
@@ -7893,7 +7902,7 @@ def send_mail_to_coaches(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to send mail!"}, status=500)
-  
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -7992,14 +8001,15 @@ def learner_batches(request, pk):
 @permission_classes([IsAuthenticated])
 def batch_competencies_and_behaviours(request, batch_id):
     try:
-        assessments = Assessment.objects.filter(
-            assessment_modal__lesson__course__batch__id=batch_id
-        )
-        competencies = Competency.objects.filter(
-            question__questionnaire__assessment__in=assessments
-        ).distinct()
-        serializer = CompetencySerializerDepthOne(competencies, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        competency_assignments = BatchCompetencyAssignment.objects.filter(batch__id=batch_id)
+        res = []
+        for competency_assignment in competency_assignments:
+            competency_serializer = CompetencySerializer(competency_assignment.competency) 
+            behaviors_serializer = BehaviorSerializer(competency_assignment.selected_behaviors, many=True)
+            data = competency_serializer.data
+            data['behaviors'] = behaviors_serializer.data
+            res.append(data)
+        return Response(res, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response(
@@ -8029,7 +8039,17 @@ def learner_action_items_in_batch(request, batch_id, learner_id):
     action_items = ActionItem.objects.filter(
         batch__id=batch_id, learner__id=learner_id
     ).order_by("-created_at")
-    action_items_serializer = ActionItemSerializer(action_items, many=True)
+    action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
+    return Response(action_items_serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def action_items_in_batch(request, batch_id):
+    action_items = ActionItem.objects.filter(
+        batch__id=batch_id
+    ).order_by("-created_at")
+    action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
     return Response(action_items_serializer.data, status=status.HTTP_200_OK)
 
 
@@ -8234,8 +8254,18 @@ def batch_competency_behavior_movement(request, batch_id, competency_id, behavio
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_action_items(request):
     action_items = ActionItem.objects.all()
+    serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
+    return Response(serialized_data)
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_action_items_hr(request, hr_id):
+    action_items = ActionItem.objects.filter(batch__project__hr=hr_id)
     serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
     return Response(serialized_data)
 
@@ -8277,3 +8307,107 @@ def get_all_assessments_of_batch(request, type, pk):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_past_live_session_facilitator(request, user_id):
+    print("hello")
+    try:
+        status = request.query_params.get("status")
+        facilitator = Facilitator.objects.get(id=user_id)
+        if status == "Upcoming":
+            live_sessions = LiveSession.objects.filter(
+                facilitator=facilitator, date_time__gt=timezone.now()
+            ).order_by("date_time")
+        elif status == "Past":
+            live_sessions = LiveSession.objects.filter(
+                facilitator=facilitator, date_time__lt=timezone.now()
+            ).order_by("-date_time")
+        # For upcoming live sessions
+        live_session_data = []
+        for session in live_sessions:
+            session_name = get_live_session_name(session.session_type)
+            session_data = {
+                "batch_name": session.batch.name,
+                "project_name": session.batch.project.name,
+                "session_name": f"{session_name} {session.live_session_number}",
+                "date_time": session.date_time,
+                "meeting_link": session.meeting_link,
+            }
+            live_session_data.append(session_data)
+
+        return Response({"live_session_data": live_session_data})
+    except ObjectDoesNotExist:
+        return Response({"error": "Facilitator not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def batch_competency_movement(request, batch_id, competency_id):
+    # Define initial and current status integer mappings
+    initial_status_int = Case(
+        *[
+            When(initial_status=status, then=Value(status_choices_dict.get(status, 0)))
+            for status in status_choices_dict
+        ],
+        default=Value(0),  # Default value if status not found
+        output_field=IntegerField(),
+    )
+    current_status_int = Case(
+        *[
+            When(current_status=status, then=Value(status_choices_dict.get(status, 0)))
+            for status in status_choices_dict
+        ],
+        default=Value(0),  # Default value if status not found
+        output_field=IntegerField(),
+    )
+
+    # Fetch behaviors associated with the competency
+    competency_behaviors = []
+    batch_competency_assignment =  BatchCompetencyAssignment.objects.filter(batch__id=batch_id, competency__id=competency_id).first()
+    if batch_competency_assignment:
+        competency_behaviors = batch_competency_assignment.selected_behaviors.all()
+    # Competency.objects.get(id=competency_id).behaviors.all()
+
+    # Annotate the queryset with the movement between initial and current statuses
+    movement_counts = (
+        ActionItem.objects.filter(
+            batch__id=batch_id, competency__id=competency_id, behavior__in=competency_behaviors
+        )
+        .annotate(
+            initial_status_int=initial_status_int,
+            current_status_int=current_status_int,
+            movement=F("current_status_int") - F("initial_status_int"),
+        )
+        .values("behavior__name", "movement")
+        .annotate(count=Count("id"))
+    )
+
+    print(movement_counts)
+
+    # Prepare data for response
+    data = [
+        {
+            "movement": i,
+            **{behavior.name: 0 for behavior in competency_behaviors}
+        }
+        for i in range(5)  # Initialize with default count of 0 for all movements (0 to 4)
+    ]
+    
+    # Update the counts from the queryset
+    for item in movement_counts:
+        behavior_name = item["behavior__name"]
+        movement = item["movement"]
+        count = item["count"]
+        # if only +ve movement exist 
+        if movement >= 0:
+            data[movement][behavior_name] += count
+        # if someone does negative movemtn than assuming it as 0 movement
+        else:
+            data[0][behavior_name] += count
+
+    return Response(data)

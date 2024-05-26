@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from rest_framework.response import Response
 from django.contrib.auth.models import User
 from rest_framework.permissions import AllowAny, IsAuthenticated
+import pandas as pd
 from api.models import (
     Coach,
     OTP,
@@ -1300,7 +1301,7 @@ def fetch_invoices(organization_id):
     return all_invoices
 
 
-def fetch_invoices_db(organization_id):
+def fetch_invoices_db():
     # all_bills = BillGetSerializer(Bill.objects.all(), many=True).data
     invoices = InvoiceData.objects.filter(
         Q(created_at__year__gte=2024) | Q(purchase_order_no__in=purchase_orders_allowed)
@@ -1321,6 +1322,7 @@ def fetch_invoices_db(organization_id):
                     {
                         "status": matching_bill.status,
                         "currency_symbol": matching_bill.currency_symbol,
+                        "exchange_rate":matching_bill.exchange_rate,
                     }
                     if matching_bill
                     else None
@@ -1334,7 +1336,7 @@ def fetch_invoices_db(organization_id):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_all_invoices(request):
     try:
-        all_invoices = fetch_invoices_db(organization_id)
+        all_invoices = fetch_invoices_db()
         project_id = request.query_params.get("project_id")
         project_type = request.query_params.get("projectType")
         if project_id and project_type:
@@ -1375,7 +1377,7 @@ def get_invoice(request, invoice_id):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_invoices_for_pmo(request):
     try:
-        all_invoices = fetch_invoices_db(organization_id)
+        all_invoices = fetch_invoices_db()
         pmos_allowed = json.loads(env("PMOS_ALLOWED_TO_VIEW_ALL_INVOICES_AND_POS"))
         if not request.user.username in pmos_allowed:
             all_invoices = [
@@ -1393,7 +1395,7 @@ def get_invoices_for_pmo(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_pending_invoices_for_pmo(request):
     try:
-        all_invoices = fetch_invoices_db(organization_id)
+        all_invoices = fetch_invoices_db()
         pmos_allowed = json.loads(env("PMOS_ALLOWED_TO_VIEW_ALL_INVOICES_AND_POS"))
         if not request.user.username in pmos_allowed:
             all_invoices = [
@@ -1413,7 +1415,7 @@ def get_pending_invoices_for_pmo(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_invoices_for_sales(request):
     try:
-        all_invoices = fetch_invoices_db(organization_id)
+        all_invoices = fetch_invoices_db()
         return Response(all_invoices, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
@@ -1424,7 +1426,7 @@ def get_invoices_for_sales(request):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance")])
 def get_invoices_by_status(request, status):
     try:
-        all_invoices = fetch_invoices_db(organization_id)
+        all_invoices = fetch_invoices_db()
         res = []
         for invoice_data in all_invoices:
             if status == "approved":
@@ -1465,7 +1467,7 @@ def get_purchase_order_ids_for_project(project_id, project_type):
 @permission_classes([IsAuthenticated, IsInRoles("pmo", "finance", "sales")])
 def get_invoices_by_status_for_founders(request, status):
     try:
-        all_invoices = fetch_invoices_db(organization_id)
+        all_invoices = fetch_invoices_db()
         project_id = request.query_params.get("project_id")
         project_type = request.query_params.get("projectType")
         if project_id and project_type:
@@ -2348,7 +2350,7 @@ def get_coach_wise_finances(request):
         # Fetch all invoices and purchase orders
         coach_id = request.query_params.get("coach_id")
         facilitator_id = request.query_params.get("facilitator_id")
-        all_invoices = fetch_invoices_db(organization_id)
+        all_invoices = fetch_invoices_db()
         all_purchase_orders = PurchaseOrderGetSerializer(
             PurchaseOrder.objects.filter(
                 Q(created_time__year__gte=2024)
@@ -2468,7 +2470,7 @@ def get_facilitator_wise_finances(request):
         # Fetch all invoices and purchase orders
         coach_id = request.query_params.get("coach_id")
         facilitator_id = request.query_params.get("facilitator_id")
-        all_invoices = fetch_invoices_db(organization_id)
+        all_invoices = fetch_invoices_db()
         all_purchase_orders = PurchaseOrderGetSerializer(
             PurchaseOrder.objects.filter(
                 Q(created_time__year__gte=2024)
@@ -2610,7 +2612,7 @@ def create_purchase_order_project_mapping():
 def get_project_wise_finances(request):
     try:
         purchase_order_project_mapping = create_purchase_order_project_mapping()
-        all_invoices = fetch_invoices_db(organization_id)
+        all_invoices = fetch_invoices_db()
         all_purchase_orders = PurchaseOrderGetSerializer(
             PurchaseOrder.objects.filter(
                 Q(created_time__year__gte=2024)
@@ -2705,7 +2707,7 @@ def get_project_wise_finances(request):
 @permission_classes([IsAuthenticated])
 def get_all_the_invoices_counts(request):
     try:
-        all_invoices = fetch_invoices_db(organization_id)
+        all_invoices = fetch_invoices_db()
         res = []
         status_counts = defaultdict(int)
         for invoice_data in all_invoices:
@@ -4920,3 +4922,52 @@ def get_sales_of_each_program(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"})
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_line_items_detail_in_excel(request):
+    line_items = SalesOrderLineItem.objects.filter(salesorder__isnull=False)
+    data = line_items.values(
+        "salesorder__salesorder_number",
+        "description",
+        "rate",
+        "quantity",
+        "quantity_invoiced",
+        "tax_percentage",
+        "item_total",
+    )
+    df = pd.DataFrame(data)
+    df = df.rename(
+        columns={
+            "salesorder__salesorder_number": "Sales Order Number",
+            "description": "Items and description",
+            "rate": "Rate",
+            "quantity": "Quantity",
+            "quantity_invoiced": "Quantity Invoiced",
+            "tax_percentage": "Tax Percentage",
+            "item_total": "Item Total",
+        }
+    )
+
+    # Convert Quantity and Quantity Invoiced columns to floating-point numbers
+    df["Quantity"] = df["Quantity"].astype(float)
+    df["Quantity Invoiced"] = df["Quantity Invoiced"].astype(float)
+
+    # Round the floating-point numbers to integers
+    df["Quantity"] = df["Quantity"].round(0).astype(int)
+    df["Quantity Invoiced"] = df["Quantity Invoiced"].round(0).astype(int)
+
+    # Save the DataFrame to an Excel file in-memory
+    excel_data = BytesIO()
+    df.to_excel(excel_data, index=False)
+    excel_data.seek(0)
+
+    # Create the response with the Excel file
+    response = HttpResponse(
+        excel_data.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f"attachment; filename=line_items_details.xlsx"
+
+    return response
