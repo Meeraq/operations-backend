@@ -265,7 +265,7 @@ class CoachContract(models.Model):
     )
     name_inputed = models.CharField(max_length=100, blank=True)
     project = models.ForeignKey(
-        Project, on_delete=models.CASCADE, blank=True,  null=True
+        Project, on_delete=models.CASCADE, blank=True, null=True
     )
     schedular_project = models.ForeignKey(
         SchedularProject, on_delete=models.CASCADE, blank=True, null=True
@@ -356,6 +356,7 @@ class Expense(models.Model):
     def __str__(self):
         return f"{self.name}"
 
+
 class Assets(models.Model):
     STATUS_CHOICES = [
         ("idle", "Idle"),
@@ -363,9 +364,9 @@ class Assets(models.Model):
         ("lost", "Lost"),
         ("damaged", "Damaged"),
     ]
-    name = models.CharField(max_length=255, default="",blank=True)
-    category = models.CharField(max_length=255, default="",blank=True)
-    assigned_to = models.CharField(max_length=255, default="",blank=True)
+    name = models.CharField(max_length=255, default="", blank=True)
+    category = models.CharField(max_length=255, default="", blank=True)
+    assigned_to = models.CharField(max_length=255, default="", blank=True)
     update_at = models.DateTimeField(auto_now=True)
     description = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="idle")
@@ -382,8 +383,8 @@ class Benchmark(models.Model):
 
 class GmSheet(models.Model):
     PROJECT_TYPE_CHOICES = [
-        ("Coaching", "CAAS"),
-        ("Skill Training", "Skill Training"),
+        ("CAAS", "CAAS"),
+        ("SEEQ", "Skill Training"),
         ("Coaching + Traning", "Coaching+Training"),
     ]
     DEAL_STATUS_CHOICES = [
@@ -393,10 +394,8 @@ class GmSheet(models.Model):
         ("deferred", "Deferred"),
     ]
     client_name = models.TextField(blank=True, null=True)
-    project_type = models.CharField(
-        max_length=255,  blank=True, null=True
-    )
-    product_type = models.CharField(max_length=255,blank=True, null=True, default="")
+    project_type = models.CharField(max_length=255, blank=True, null=True)
+    product_type = models.CharField(max_length=255, blank=True, null=True, default="")
     currency = models.CharField(max_length=255, blank=True, null=True)
     project_name = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -409,10 +408,11 @@ class GmSheet(models.Model):
     )
     benchmark = models.ForeignKey(Benchmark, null=True, on_delete=models.SET_NULL)
     participant_level = models.CharField(max_length=255, blank=True, null=True)
-    start_date = models.DateField(null=True, blank=True) 
+    start_date = models.DateField(null=True, blank=True)
 
     def _str_(self):
         return f"{self.client_name} for {self.product_type}"
+
 
 class Offering(models.Model):
     MODE_CHOICES = [
@@ -421,20 +421,20 @@ class Offering(models.Model):
         ("hybrid", "Hybrid"),
     ]
     gm_sheet = models.ForeignKey(GmSheet, on_delete=models.CASCADE)
-    mode = models.CharField(max_length=100, choices=MODE_CHOICES,blank=True,null=True,default="")
+    mode = models.CharField(
+        max_length=100, choices=MODE_CHOICES, blank=True, null=True, default=""
+    )
     revenue_structure = models.JSONField(default=list, blank=True, null=True)
     cost_structure = models.JSONField(default=list, blank=True, null=True)
-    gross_margin = models.CharField(max_length=100,blank=True,null=True)
+    gross_margin = models.CharField(max_length=100, blank=True, null=True)
 
 
-    
 class HandoverDetails(models.Model):
     PROJECT_TYPE_CHOICES = [
         ("caas", "CAAS"),
         ("skill_training", "Skill Training"),
         ("COD", "COD"),
         ("assessment", "Assessment"),
-    
     ]
     DELIVERY_MODE_CHOICES = [
         ("online", "Online"),
@@ -634,4 +634,3 @@ class Task(models.Model):
 
     def __str__(self):
         return self.task
-
