@@ -237,6 +237,12 @@ class BenchmarkSerializer(serializers.ModelSerializer):
         model = Benchmark
         fields = "__all__"
 
+class GmSheetDetailedSerializer(serializers.ModelSerializer):
+    sales_name = serializers.CharField(source="sales.name", allow_null=True)   
+    class Meta:
+        model = GmSheet
+        fields = "__all__"
+
 class GmSheetSerializer(serializers.ModelSerializer):
     class Meta:
         model = GmSheet
