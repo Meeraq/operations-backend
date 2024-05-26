@@ -26,7 +26,6 @@ from .models import (
     FacilitatorLesson,
     Feedback,
     CttFeedback,
-    CourseCompetencyAssignment,
 )
 from schedularApi.models import LiveSession
 from django.core.files.storage import default_storage
@@ -415,17 +414,4 @@ class CourseEnrollmentWithNamesSerializer(serializers.ModelSerializer):
 class CttFeedbackDepthOneSerializer(serializers.ModelSerializer):
     class Meta:
         model = CttFeedback
-        fields = "__all__"
-
-
-class CourseCompetencyAssignmentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CourseCompetencyAssignment
-        fields = "__all__"
-
-
-class CourseCompetencyAssignmentDepthOneSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CourseCompetencyAssignment
-        depth = 1
         fields = "__all__"

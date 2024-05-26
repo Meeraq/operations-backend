@@ -465,24 +465,4 @@ urlpatterns = [
         "update-ctt-feedback-status/",
         views.update_ctt_feedback_status,
     ),
-    path(
-        "add-competency-to-course/<int:course_id>/",
-        views.add_competency_to_course,
-        name="add_competency_to_course",
-    ),
-    path(
-        "edit-competency-assignment/<int:course_id>/<int:assignment_id>/",
-        views.edit_competency_assignment,
-        name="edit_competency_assignment",
-    ),
-    path(
-        "get-course-competency-assignments/<int:course_id>/",
-        views.get_course_competency_assignments,
-        name="get_course_competency_assignments",
-    ),
-    path(
-        "delete-course-competency/<int:course_competency_id>/",
-        views.delete_course_competency,
-        name="delete_course_competency",
-    ),
 ]

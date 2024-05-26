@@ -15,6 +15,7 @@ from .models import (
     ParticipantObserverMapping,
     ActionItem,
     Behavior,
+    BatchCompetencyAssignment,
 )
 
 
@@ -168,3 +169,16 @@ class ActionItemDetailedSerializer(serializers.ModelSerializer):
         if obj.batch and obj.batch.project:
             return obj.batch.project.name
         return None
+
+
+class BatchCompetencyAssignmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BatchCompetencyAssignment
+        fields = "__all__"
+
+
+class BatchCompetencyAssignmentDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BatchCompetencyAssignment
+        depth = 1
+        fields = "__all__"

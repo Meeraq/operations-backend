@@ -150,7 +150,6 @@ from courses.models import (
     Lesson,
     Certificate,
     Answer,
-    CourseCompetencyAssignment
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import (
@@ -173,6 +172,7 @@ from assessmentApi.models import (
     Competency,
     Behavior,
     ActionItem,
+    BatchCompetencyAssignment
 )
 from io import BytesIO
 from api.serializers import LearnerSerializer
@@ -7989,7 +7989,7 @@ def learner_batches(request, pk):
 @permission_classes([IsAuthenticated])
 def batch_competencies_and_behaviours(request, batch_id):
     try:
-        competency_assignments = CourseCompetencyAssignment.objects.filter(course__batch__id=batch_id)
+        competency_assignments = BatchCompetencyAssignment.objects.filter(batch__id=batch_id)
         res = []
         for competency_assignment in competency_assignments:
             competency_serializer = CompetencySerializer(competency_assignment.competency) 

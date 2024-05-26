@@ -356,13 +356,3 @@ class CttFeedbackResponse(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-
-class CourseCompetencyAssignment(models.Model):
-    course = models.ForeignKey(Course, on_delete=models.CASCADE)
-    competency = models.ForeignKey(Competency, on_delete=models.CASCADE)
-    selected_behaviors = models.ManyToManyField(Behavior, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"{self.course.name} - {self.competency.name}"
