@@ -103,6 +103,8 @@ from assessmentApi.models import (
     Assessment as AssessmentModal,
     ParticipantResponse,
     ParticipantUniqueId,
+    Competency,
+    Behavior,
 )
 from rest_framework.decorators import api_view, permission_classes
 from django.db import transaction
@@ -4539,3 +4541,4 @@ def update_ctt_feedback_status(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update status"}, status=500)
+
