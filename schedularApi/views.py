@@ -8027,7 +8027,17 @@ def learner_action_items_in_batch(request, batch_id, learner_id):
     action_items = ActionItem.objects.filter(
         batch__id=batch_id, learner__id=learner_id
     ).order_by("-created_at")
-    action_items_serializer = ActionItemSerializer(action_items, many=True)
+    action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
+    return Response(action_items_serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def action_items_in_batch(request, batch_id):
+    action_items = ActionItem.objects.filter(
+        batch__id=batch_id
+    ).order_by("-created_at")
+    action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
     return Response(action_items_serializer.data, status=status.HTTP_200_OK)
 
 
@@ -8232,8 +8242,18 @@ def batch_competency_behavior_movement(request, batch_id, competency_id, behavio
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_action_items(request):
     action_items = ActionItem.objects.all()
+    serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
+    return Response(serialized_data)
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_action_items_hr(request, hr_id):
+    action_items = ActionItem.objects.filter(batch__project__hr=hr_id)
     serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
     return Response(serialized_data)
 
@@ -8310,3 +8330,72 @@ def get_upcoming_past_live_session_facilitator(request, user_id):
         return Response({"error": "Facilitator not found"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=400)
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def batch_competency_movement(request, batch_id, competency_id):
+    # Define initial and current status integer mappings
+    initial_status_int = Case(
+        *[
+            When(initial_status=status, then=Value(status_choices_dict.get(status, 0)))
+            for status in status_choices_dict
+        ],
+        default=Value(0),  # Default value if status not found
+        output_field=IntegerField(),
+    )
+    current_status_int = Case(
+        *[
+            When(current_status=status, then=Value(status_choices_dict.get(status, 0)))
+            for status in status_choices_dict
+        ],
+        default=Value(0),  # Default value if status not found
+        output_field=IntegerField(),
+    )
+
+    # Fetch behaviors associated with the competency
+    competency_behaviors = []
+    batch_competency_assignment =  BatchCompetencyAssignment.objects.filter(batch__id=batch_id, competency__id=competency_id).first()
+    if batch_competency_assignment:
+        competency_behaviors = batch_competency_assignment.selected_behaviors.all()
+    # Competency.objects.get(id=competency_id).behaviors.all()
+
+    # Annotate the queryset with the movement between initial and current statuses
+    movement_counts = (
+        ActionItem.objects.filter(
+            batch__id=batch_id, competency__id=competency_id, behavior__in=competency_behaviors
+        )
+        .annotate(
+            initial_status_int=initial_status_int,
+            current_status_int=current_status_int,
+            movement=F("current_status_int") - F("initial_status_int"),
+        )
+        .values("behavior__name", "movement")
+        .annotate(count=Count("id"))
+    )
+
+    print(movement_counts)
+
+    # Prepare data for response
+    data = [
+        {
+            "movement": i,
+            **{behavior.name: 0 for behavior in competency_behaviors}
+        }
+        for i in range(5)  # Initialize with default count of 0 for all movements (0 to 4)
+    ]
+    
+    # Update the counts from the queryset
+    for item in movement_counts:
+        behavior_name = item["behavior__name"]
+        movement = item["movement"]
+        count = item["count"]
+        # if only +ve movement exist 
+        if movement >= 0:
+            data[movement][behavior_name] += count
+        # if someone does negative movemtn than assuming it as 0 movement
+        else:
+            data[0][behavior_name] += count
+
+    return Response(data)
