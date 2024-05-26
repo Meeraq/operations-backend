@@ -173,7 +173,7 @@ from assessmentApi.models import (
     Competency,
     Behavior,
     ActionItem,
-    BatchCompetencyAssignment
+    BatchCompetencyAssignment,
 )
 from io import BytesIO
 from api.serializers import LearnerSerializer
@@ -189,7 +189,13 @@ from django.db.models import Max
 import io
 from time import sleep
 from assessmentApi.views import delete_participant_from_assessments
-from assessmentApi.serializers import CompetencySerializerDepthOne,ActionItemSerializer, ActionItemDetailedSerializer,CompetencySerializer,BehaviorSerializer
+from assessmentApi.serializers import (
+    CompetencySerializerDepthOne,
+    ActionItemSerializer,
+    ActionItemDetailedSerializer,
+    CompetencySerializer,
+    BehaviorSerializer,
+)
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
     get_current_date_timestamps,
@@ -8002,13 +8008,19 @@ def learner_batches(request, pk):
 @permission_classes([IsAuthenticated])
 def batch_competencies_and_behaviours(request, batch_id):
     try:
-        competency_assignments = BatchCompetencyAssignment.objects.filter(batch__id=batch_id)
+        competency_assignments = BatchCompetencyAssignment.objects.filter(
+            batch__id=batch_id
+        )
         res = []
         for competency_assignment in competency_assignments:
-            competency_serializer = CompetencySerializer(competency_assignment.competency) 
-            behaviors_serializer = BehaviorSerializer(competency_assignment.selected_behaviors, many=True)
+            competency_serializer = CompetencySerializer(
+                competency_assignment.competency
+            )
+            behaviors_serializer = BehaviorSerializer(
+                competency_assignment.selected_behaviors, many=True
+            )
             data = competency_serializer.data
-            data['behaviors'] = behaviors_serializer.data
+            data["behaviors"] = behaviors_serializer.data
             res.append(data)
         return Response(res, status=status.HTTP_200_OK)
     except Exception as e:
@@ -8047,9 +8059,7 @@ def learner_action_items_in_batch(request, batch_id, learner_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def action_items_in_batch(request, batch_id):
-    action_items = ActionItem.objects.filter(
-        batch__id=batch_id
-    ).order_by("-created_at")
+    action_items = ActionItem.objects.filter(batch__id=batch_id).order_by("-created_at")
     action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
     return Response(action_items_serializer.data, status=status.HTTP_200_OK)
 
@@ -8078,6 +8088,15 @@ MOVEMENT_TYPES = {
     3: "Significant Movement",
     4: "Excellent Movement",
 }
+
+STATUS_LABELS =  {
+    'not_started': 'Not Started',
+    'occasionally_doing': 'Occasionally Doing',
+    'regularly_doing': 'Regularly Doing',
+    'actively_pursuing': 'Actively Pursuing',
+    'consistently_achieving': 'Consistently Achieving'
+}
+
 
 
 @api_view(["GET"])
@@ -8262,7 +8281,6 @@ def get_all_action_items(request):
     return Response(serialized_data)
 
 
-
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_all_action_items_hr(request, hr_id):
@@ -8316,13 +8334,21 @@ def get_upcoming_past_live_session_facilitator(request, user_id):
     print("hello")
     try:
         status = request.query_params.get("status")
+        project_id = request.query_params.get("project_id")
+
         facilitator = Facilitator.objects.get(id=user_id)
+
+        all_live_sessions = LiveSession.objects.all()
+
+        if project_id and not project_id == "all":
+            all_live_sessions = all_live_sessions.filter(batch__project__id=project_id)
+
         if status == "Upcoming":
-            live_sessions = LiveSession.objects.filter(
+            live_sessions = all_live_sessions.filter(
                 facilitator=facilitator, date_time__gt=timezone.now()
             ).order_by("date_time")
         elif status == "Past":
-            live_sessions = LiveSession.objects.filter(
+            live_sessions = all_live_sessions.filter(
                 facilitator=facilitator, date_time__lt=timezone.now()
             ).order_by("-date_time")
         # For upcoming live sessions
@@ -8343,7 +8369,6 @@ def get_upcoming_past_live_session_facilitator(request, user_id):
         return Response({"error": "Facilitator not found"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=400)
-
 
 
 @api_view(["GET"])
@@ -8369,7 +8394,9 @@ def batch_competency_movement(request, batch_id, competency_id):
 
     # Fetch behaviors associated with the competency
     competency_behaviors = []
-    batch_competency_assignment =  BatchCompetencyAssignment.objects.filter(batch__id=batch_id, competency__id=competency_id).first()
+    batch_competency_assignment = BatchCompetencyAssignment.objects.filter(
+        batch__id=batch_id, competency__id=competency_id
+    ).first()
     if batch_competency_assignment:
         competency_behaviors = batch_competency_assignment.selected_behaviors.all()
     # Competency.objects.get(id=competency_id).behaviors.all()
@@ -8377,7 +8404,9 @@ def batch_competency_movement(request, batch_id, competency_id):
     # Annotate the queryset with the movement between initial and current statuses
     movement_counts = (
         ActionItem.objects.filter(
-            batch__id=batch_id, competency__id=competency_id, behavior__in=competency_behaviors
+            batch__id=batch_id,
+            competency__id=competency_id,
+            behavior__in=competency_behaviors,
         )
         .annotate(
             initial_status_int=initial_status_int,
@@ -8392,23 +8421,51 @@ def batch_competency_movement(request, batch_id, competency_id):
 
     # Prepare data for response
     data = [
-        {
-            "movement": i,
-            **{behavior.name: 0 for behavior in competency_behaviors}
-        }
-        for i in range(5)  # Initialize with default count of 0 for all movements (0 to 4)
+        {"movement": i, **{behavior.name: 0 for behavior in competency_behaviors}}
+        for i in range(
+            5
+        )  # Initialize with default count of 0 for all movements (0 to 4)
     ]
-    
+
     # Update the counts from the queryset
     for item in movement_counts:
         behavior_name = item["behavior__name"]
         movement = item["movement"]
         count = item["count"]
-        # if only +ve movement exist 
+        # if only +ve movement exist
         if movement >= 0:
             data[movement][behavior_name] += count
         # if someone does negative movemtn than assuming it as 0 movement
         else:
             data[0][behavior_name] += count
 
-    return Response(data)
+    # Fetch behavior names associated with the competency
+    behavior_names = {behavior.name: behavior.id for behavior in competency_behaviors}
+
+    # Initialize a dictionary to store counts for each behavior in each status
+    behavior_status_counts = {behavior_name: {status[0]: 0 for status in STATUS_CHOICES} for behavior_name in behavior_names}
+
+    # Fetch status counts for each behavior from the database
+    for behavior_name, behavior_id in behavior_names.items():
+        status_counts_queryset = (
+            ActionItem.objects.filter(
+                batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+            )
+            .values("current_status")
+            .annotate(count=Count("id"))
+        )
+
+        # Update counts for existing statuses for the current behavior
+        for item in status_counts_queryset:
+            behavior_status_counts[behavior_name][item["current_status"]] = item["count"]
+
+    # Prepare data for response
+    action_item_counts = [
+        {
+            "status": STATUS_LABELS[status],
+            **{behavior_name: counts[status] for behavior_name, counts in behavior_status_counts.items()}
+        }
+        for status, _ in STATUS_CHOICES
+    ]
+
+    return Response({"action_item_movement":  data ,  "action_item_counts" : action_item_counts })
