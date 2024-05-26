@@ -4384,6 +4384,49 @@ def create_ctt_feedback(request):
         return Response({"error": "Failed to create feedback"}, status=500)
 
 
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated])
+def edit_ctt_feedback(request,feedback_id):
+    try:
+        feedback = CttFeedback.objects.get(id = feedback_id)
+
+        questions = request.data.get("questions")
+        name = request.data.get("name")
+        session_number = request.data.get("session")
+        batch_id = request.data.get("batch")
+
+        question_ids = []
+        for question in questions:
+            options = question.get("options", [])
+            question_instance = Question.objects.filter(
+                text=question.get("text"),
+                options=options,
+                type=question.get("type"),
+            ).first()
+            if not question_instance:
+                question_instance = Question.objects.create(
+                    text=question.get("text"),
+                    options=options,
+                    type=question.get("type"),
+                )
+            question_ids.append(question_instance.id)
+
+        unique_id = uuid.uuid4()
+
+        feedback.name=name
+        feedback.unique_id=unique_id
+        feedback.ctt_batch=batch_id
+        feedback.session_number=session_number
+        # Add questions to the CttFeedback instance
+        feedback.questions.set(question_ids)
+        feedback.save()
+        return Response({"message": "Feedback updated successfully!"}, status=200)
+    
+    except Exception as e:
+        print(str(e))
+        return Response({"error": "Failed to update feedback"}, status=500)
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_ctt_feedback(request):

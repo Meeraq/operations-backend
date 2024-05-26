@@ -43,6 +43,7 @@ from django.db.models import (
 )
 
 from zohoapi.models import InvoiceData, Vendor, ZohoVendor
+from zohoapi.views import fetch_invoices_db
 
 
 def get_month_start_end_dates():
@@ -520,6 +521,15 @@ def get_faculties(request):
     for batch_faculty in batch_faculties:
         batch_id = batch_faculty.batch.id
         batch_name = batch_faculty.batch.name
+        vendor = Vendor.objects.filter(email=batch_faculty.faculty.email).first()
+        total_invoiced = 0
+        if vendor:
+            total_invoiced = (
+                InvoiceData.objects.filter(vendor__id=vendor.id).aggregate(
+                    Sum("total")
+                )["total__sum"]
+                or 0
+            )
 
         obj = {
             "index": index,
@@ -537,6 +547,7 @@ def get_faculties(request):
             "completed_sessions_count": completed_sessions_counts_dict.get(batch_id, 0),
             "salesorders": salesorders_counts_dict.get(batch_name, 0),
             "created_at": batch_faculty.batch.created_at,
+            "total_invoiced": total_invoiced,
         }
         index += 1
         res.append(obj)
@@ -866,12 +877,12 @@ def get_all_ctt_faculties(request):
             vendor = Vendor.objects.filter(email=faculty.email).first()
             total_invoiced = 0
             if vendor:
-                total_invoiced = (
-                    InvoiceData.objects.filter(vendor__id=vendor.id).aggregate(
-                        Sum("total")
-                    )["total__sum"]
-                    or 0
-                )
+                all_invoices = fetch_invoices_db()
+                for invoice in all_invoices:
+                    total_invoiced += invoice["total"] * (
+                        invoice["bill"]["exchange_rate"] if invoice["bill"] else 1
+                    )
+
             batch_faculties = BatchFaculty.objects.using("ctt").filter(faculty=faculty)
             total_batches = batch_faculties.count()
             batch_names = list(batch_faculties.values_list("batch__name", flat=True))
