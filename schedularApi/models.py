@@ -382,8 +382,8 @@ class Benchmark(models.Model):
 
 class GmSheet(models.Model):
     PROJECT_TYPE_CHOICES = [
-        ("CAAS", "CAAS"),
-        ("SEEQ", "Skill Training"),
+        ("Coaching", "CAAS"),
+        ("Skill Training", "Skill Training"),
         ("Coaching + Traning", "Coaching+Training"),
     ]
     DEAL_STATUS_CHOICES = [
