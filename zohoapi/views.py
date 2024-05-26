@@ -4929,8 +4929,8 @@ def get_sales_of_each_program(request):
 def get_line_items_detail_in_excel(request):
     line_items = SalesOrderLineItem.objects.filter(salesorder__isnull=False)
     data = line_items.values(
-        "description",
         "salesorder__salesorder_number",
+        "description",
         "rate",
         "quantity",
         "quantity_invoiced",
@@ -4940,8 +4940,8 @@ def get_line_items_detail_in_excel(request):
     df = pd.DataFrame(data)
     df = df.rename(
         columns={
-            "description": "Items and description",
             "salesorder__salesorder_number": "Sales Order Number",
+            "description": "Items and description",
             "rate": "Rate",
             "quantity": "Quantity",
             "quantity_invoiced": "Quantity Invoiced",
