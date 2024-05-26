@@ -646,7 +646,7 @@ def update_is_accepted_status(request, pk):
         # Call send_mail_templates if is_accepted is True
         if data["is_accepted"]:
             template_name = "gm_sheet_approved.html"
-
+           
             subject = "GM Sheet approved"
             context_data = {
                 "projectName": gm_sheet.project_name,
@@ -961,8 +961,20 @@ def update_status(request):
         asset.status = new_status
         if new_status == "idle":
             asset.assigned_to = ""
+
+        # Append the update to the updates field
+        update_entry = {
+            "date": str(datetime.now()),
+            "status": new_status,
+            "assigned_to": asset.assigned_to,
+        }
+        if not hasattr(asset, 'updates'):
+            asset.updates = []  # Initialize if 'updates' field does not exist
+        asset.updates.append(update_entry)
+
         asset.save()
         return Response({"success": "Status updated successfully"})
+    return Response({"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @api_view(["GET"])
@@ -8076,6 +8088,15 @@ MOVEMENT_TYPES = {
     4: "Excellent Movement",
 }
 
+STATUS_LABELS =  {
+    'not_started': 'Not Started',
+    'occasionally_doing': 'Occasionally Doing',
+    'regularly_doing': 'Regularly Doing',
+    'actively_pursuing': 'Actively Pursuing',
+    'consistently_achieving': 'Consistently Achieving'
+}
+
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -8417,4 +8438,33 @@ def batch_competency_movement(request, batch_id, competency_id):
         else:
             data[0][behavior_name] += count
 
-    return Response(data)
+    # Fetch behavior names associated with the competency
+    behavior_names = {behavior.name: behavior.id for behavior in competency_behaviors}
+
+    # Initialize a dictionary to store counts for each behavior in each status
+    behavior_status_counts = {behavior_name: {status[0]: 0 for status in STATUS_CHOICES} for behavior_name in behavior_names}
+
+    # Fetch status counts for each behavior from the database
+    for behavior_name, behavior_id in behavior_names.items():
+        status_counts_queryset = (
+            ActionItem.objects.filter(
+                batch__id=batch_id, competency__id=competency_id, behavior__id=behavior_id
+            )
+            .values("current_status")
+            .annotate(count=Count("id"))
+        )
+
+        # Update counts for existing statuses for the current behavior
+        for item in status_counts_queryset:
+            behavior_status_counts[behavior_name][item["current_status"]] = item["count"]
+
+    # Prepare data for response
+    action_item_counts = [
+        {
+            "status": STATUS_LABELS[status],
+            **{behavior_name: counts[status] for behavior_name, counts in behavior_status_counts.items()}
+        }
+        for status, _ in STATUS_CHOICES
+    ]
+
+    return Response({"action_item_movement":  data ,  "action_item_counts" : action_item_counts })
