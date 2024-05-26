@@ -15,7 +15,6 @@ from api.models import (
     Sales,
     Project,
 )
-
 from django.utils import timezone
 from django.contrib.auth.models import User
 
@@ -357,7 +356,78 @@ class Expense(models.Model):
     def __str__(self):
         return f"{self.name}"
 
+class Assets(models.Model):
+    STATUS_CHOICES = [
+        ("idle", "Idle"),
+        ("assigned", "Assigned"),
+        ("lost", "Lost"),
+        ("damaged", "Damaged"),
+    ]
+    name = models.CharField(max_length=255, default="",blank=True)
+    category = models.CharField(max_length=255, default="",blank=True)
+    assigned_to = models.CharField(max_length=255, default="",blank=True)
+    update_at = models.DateTimeField(auto_now=True)
+    description = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="idle")
+    updates = models.JSONField(default=list, blank=True)
 
+
+class Benchmark(models.Model):
+    year = models.CharField(max_length=9, blank=True, null=True)
+    caas_benchmark = models.CharField(max_length=3, blank=True, null=True)
+    seeq_benchmark = models.CharField(max_length=3, blank=True, null=True)
+    both_benchmark = models.CharField(max_length=3, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class GmSheet(models.Model):
+    PROJECT_TYPE_CHOICES = [
+        ("CAAS", "CAAS"),
+        ("SEEQ", "Skill Training"),
+        ("Coaching + Traning", "Coaching+Training"),
+    ]
+    DEAL_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("won", "Won"),
+        ("lost", "Lost"),
+        ("deferred", "Deferred"),
+    ]
+    client_name = models.TextField(blank=True, null=True)
+    project_type = models.CharField(
+        max_length=255,  blank=True, null=True
+    )
+    product_type = models.CharField(max_length=255,blank=True, null=True, default="")
+    currency = models.CharField(max_length=255, blank=True, null=True)
+    project_name = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    gmsheet_number = models.CharField(max_length=6, blank=True, null=True)
+    other_details = models.TextField(blank=True, null=True)
+    sales = models.ForeignKey(Sales, null=True, on_delete=models.SET_NULL)
+    is_accepted = models.BooleanField(default=False)
+    deal_status = models.CharField(
+        max_length=255, choices=DEAL_STATUS_CHOICES, default="pending"
+    )
+    benchmark = models.ForeignKey(Benchmark, null=True, on_delete=models.SET_NULL)
+    participant_level = models.CharField(max_length=255, blank=True, null=True)
+    start_date = models.DateField(null=True, blank=True) 
+
+    def _str_(self):
+        return f"{self.client_name} for {self.product_type}"
+
+class Offering(models.Model):
+    MODE_CHOICES = [
+        ("in_person", "In Person"),
+        ("virtual", "Virtual"),
+        ("hybrid", "Hybrid"),
+    ]
+    gm_sheet = models.ForeignKey(GmSheet, on_delete=models.CASCADE)
+    mode = models.CharField(max_length=100, choices=MODE_CHOICES,blank=True,null=True,default="")
+    revenue_structure = models.JSONField(default=list, blank=True, null=True)
+    cost_structure = models.JSONField(default=list, blank=True, null=True)
+    gross_margin = models.CharField(max_length=100,blank=True,null=True)
+
+
+    
 class HandoverDetails(models.Model):
     PROJECT_TYPE_CHOICES = [
         ("caas", "CAAS"),
@@ -450,6 +520,7 @@ class HandoverDetails(models.Model):
     pre_post_assessment_details = models.TextField(blank=True, null=True)
     other_feedback = models.TextField(blank=True, null=True)
     assessment_details = models.TextField(blank=True, null=True)
+    session_details = models.TextField(blank=True, null=True)
 
     class Meta:
         verbose_name = "Handover Detail"

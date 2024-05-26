@@ -230,7 +230,7 @@ from django.http import HttpResponse
 import environ
 from time import sleep
 from django.db.models import Max
-
+from openai import OpenAI
 
 env = environ.Env()
 
@@ -1030,6 +1030,9 @@ FIELD_NAME_VALUES = {
     "city": "City",
     "country": "Country",
     "topic": "Topic",
+    "project_type":"Project Type",
+    "product_type":"Product Type",
+    "category" : "Category"
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -6301,7 +6304,7 @@ def create_goal(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_engagement_goals(request, engagement_id):
-    goals = Goal.objects.filter(engagement__id=engagement_id)
+    goals = Goal.objects.filter(engagement__id=engagement_id).order_by("-created_at")
     serializer = GetGoalSerializer(goals, many=True)
     return Response(serializer.data, status=200)
 
@@ -6420,7 +6423,9 @@ def delete_competency(request, competency_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_engagement_competency(request, engagement_id):
-    competentcy = Competency.objects.filter(goal__engagement__id=engagement_id)
+    competentcy = Competency.objects.filter(
+        goal__engagement__id=engagement_id
+    ).order_by("-created_at")
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
     return Response(serializer.data, status=200)
 
@@ -6456,7 +6461,7 @@ def add_score_to_competency(request, competency_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_competency_by_goal(request, goal_id):
-    competentcy = Competency.objects.filter(goal__id=goal_id)
+    competentcy = Competency.objects.filter(goal__id=goal_id).order_by("-created_at")
     serializer = CompetencyDepthOneSerializer(competentcy, many=True)
     return Response(serializer.data, status=200)
 
@@ -6484,7 +6489,7 @@ def create_action_item(request):
 def get_engagement_action_items(request, engagement_id):
     action_items = ActionItem.objects.filter(
         competency__goal__engagement__id=engagement_id
-    )
+    ).order_by("-created_at")
     serializer = GetActionItemDepthOneSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
 
@@ -6492,7 +6497,9 @@ def get_engagement_action_items(request, engagement_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("learner", "coach", "hr", "pmo")])
 def get_action_items_by_competency(request, competency_id):
-    action_items = ActionItem.objects.filter(competency__id=competency_id)
+    action_items = ActionItem.objects.filter(competency__id=competency_id).order_by(
+        "-created_at"
+    )
     serializer = GetActionItemDepthOneSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
 
@@ -7364,7 +7371,7 @@ def add_past_session(request, session_id):
 def get_pending_action_items_by_competency(request, learner_id):
     action_items = ActionItem.objects.filter(
         competency__goal__engagement__learner_id=learner_id, status="not_done"
-    )
+    ).order_by("-created_at")
     serializer = PendingActionItemSerializer(action_items, many=True)
     return Response(serializer.data, status=200)
 
@@ -8753,20 +8760,21 @@ class StandardizedFieldRequestAPI(APIView):
 
 
 class StandardFieldAddValue(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo","finance","leader")]
 
     def post(self, request):
         try:
             with transaction.atomic():
                 # Extracting data from request body
                 field_name = request.data.get("field_name")
+                print(field_name)
                 option_value = request.data.get("optionValue").strip()
 
                 # Get or create the StandardizedField instance for the given field_name
                 standardized_field, created = StandardizedField.objects.get_or_create(
                     field=field_name
                 )
-
+                print(standardized_field, option_value, standardized_field.values)
                 # Check if the option_value already exists in the values list of the standardized_field
                 if option_value not in standardized_field.values:
                     # Add the option_value to the values list and save the instance
@@ -8785,7 +8793,7 @@ class StandardFieldAddValue(APIView):
                 )
 
         except Exception as e:
-            print(str(e))
+            print('hello',str(e))
             # Return error response if any exception occurs
             return Response(
                 {"error": "Failed to add value."},
@@ -9113,7 +9121,9 @@ class ProjectContractListWithDepth(APIView):
 
     def get(self, request, format=None):
         try:
+
             contracts = ProjectContract.objects.all()
+
             data = []
             for contract in contracts:
                 if contract.project:
@@ -9124,11 +9134,13 @@ class ProjectContractListWithDepth(APIView):
                 coach_contracts = CoachContract.objects.filter(
                     project_contract=contract
                 )
+
                 coaches_selected_count = coach_contracts.count()
                 pending_contracts = []
                 approved_contracts = []
                 rejected_contracts = []
                 for coach_contract in coach_contracts:
+
                     contract_object = {
                         "name": coach_contract.coach.first_name
                         + " "
@@ -9140,6 +9152,7 @@ class ProjectContractListWithDepth(APIView):
                             else None
                         ),
                     }
+
                     if coach_contract.status == "pending":
                         pending_contracts.append(contract_object)
                     elif coach_contract.status == "approved":
@@ -9155,11 +9168,11 @@ class ProjectContractListWithDepth(APIView):
                     "project_id": project.id,
                     "project_name": project.name,
                     "organisation_name": project.organisation.name,
-                    "organisation_image": (
-                        project.organisation.image_url
-                        if project.organisation.image_url
-                        else None
-                    ),
+                    # "organisation_image": (
+                    #     project.organisation.image_url
+                    #     if project.organisation.image_url
+                    #     else None
+                    # ),
                     "created_at": contract.created_at,
                     "updated_at": contract.updated_at,
                     "reminder_timestamp": contract.reminder_timestamp,
@@ -9178,6 +9191,7 @@ class ProjectContractListWithDepth(APIView):
                     "approved_contracts_count": len(approved_contracts),
                     "rejected_contracts_count": len(rejected_contracts),
                 }
+
                 data.append(temp)
             return Response(data)
         except Exception as e:
@@ -11099,7 +11113,7 @@ def archive_project(request):
     try:
         project_id = request.data.get("project_id")
         project_type = request.data.get("project_type")
-        if project_type == "SEEQ":
+        if project_type == "skill_training" or project_type == "assessment":
             project = SchedularProject.objects.get(id=project_id)
         elif project_type == "CAAS":
             project = Project.objects.get(id=project_id)
@@ -11478,7 +11492,7 @@ def edit_remark(request):
 @permission_classes([IsAuthenticated])
 def get_all_goals(request):
     try:
-        goals = Goal.objects.all()
+        goals = Goal.objects.all().order_by("-created_at")
         serializer = GoalDescriptionSerializer(goals, many=True)
         return Response(serializer.data)
     except Exception as e:
@@ -11603,7 +11617,7 @@ def add_new_user(request):
 @permission_classes([IsAuthenticated])
 def get_competency_of_goal(request, goal_id):
     try:
-        competency = Competency.objects.filter(goal__id=goal_id)
+        competency = Competency.objects.filter(goal__id=goal_id).order_by("-created_at")
         serializer = CompetencySerializer(competency, many=True)
         return Response(serializer.data)
     except Exception as e:
@@ -11651,7 +11665,9 @@ def get_goal_detail(request, goal_id):
 @permission_classes([IsAuthenticated])
 def get_competency_action_items(request, comp_id):
     try:
-        action_items = ActionItem.objects.filter(competency__id=comp_id)
+        action_items = ActionItem.objects.filter(competency__id=comp_id).order_by(
+            "-created_at"
+        )
         serializer = ActionItemSerializer(action_items, many=True)
         return Response(serializer.data)
 
@@ -11688,7 +11704,7 @@ def edit_pmo_goal(request):
 @permission_classes([IsAuthenticated])
 def get_all_competency(request):
     try:
-        competency = Competency.objects.all()
+        competency = Competency.objects.all().order_by("-created_at")
         serializer = CompetencySerializer(competency, many=True)
         return Response(serializer.data)
     except Exception as e:
@@ -12367,3 +12383,24 @@ def get_coach_shared_links(request):
             {"error": "Failed to get coach profile shares."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def rewrite(request):
+    coaching_experience = request.data.get("coaching_experience", "")
+    client = OpenAI()
+    completion = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "Hi! I'm Meeraq's AI assistant. We help individuals and organizations unlock their full potential through personalized learning and development programs. Ask me anything about soft skills training, our approach, or how we can empower your team. Write the experiences such that the profiles are impressive to the meeraq's client",
+            },
+            {
+                "role": "user",
+                "content": f"Refine the provided coaching professional's experience profile. Ensure the revised content maintains the structure and format. Also dont add any conversational text for the user, just provide the final output experience. Here is the experience {coaching_experience}",
+            },
+        ],
+    )
+    return Response(completion.choices[0].message.content, status=status.HTTP_200_OK)

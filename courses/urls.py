@@ -460,6 +460,7 @@ urlpatterns = [
         "get-ctt-feedbacks/",
         views.get_ctt_feedback,
     ),
+    path("ctt/feedbacks/<int:feedback_id>/report/", views.get_ctt_feedback_report),
     path(
         "update-ctt-feedback-status/",
         views.update_ctt_feedback_status,

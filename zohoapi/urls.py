@@ -173,10 +173,6 @@ urlpatterns = [
         views.create_purchase_order_for_outside_vendors,
     ),
     path(
-        "purchase-order/outside/create/",
-        views.create_purchase_order_for_outside_vendors,
-    ),
-    path(
         "coching-purchase-order/update/<int:purchase_order_id>/<int:project_id>/",
         views.coching_purchase_order_update,
     ),
@@ -244,6 +240,11 @@ urlpatterns = [
         "get-ctt-sales-orders/",
         views.get_ctt_sales_orders,
         name="get_ctt_sales_orders/",
+    ),
+    path(
+        "get-ctt-client-invoices-for-participant/<str:participant_email>/<str:batch_name>/",
+        views.get_ctt_client_invoices_for_participant,
+        name="get_ctt_client_invoices_for_participant",
     ),
     path(
         "get-ctt-client-invoices/",
@@ -410,9 +411,14 @@ urlpatterns = [
     path(
         "get-ctt-revenue-data/", views.get_ctt_revenue_data, name="get_ctt_revenue_data"
     ),
-     path(
+    path(
         "get-sales-of-each-program/",
         views.get_sales_of_each_program,
         name="get_sales_of_each_program",
+    ),
+    path(
+        "get-line-items-detail-in-excel/",
+        views.get_line_items_detail_in_excel,
+        name="get_line_items_detail_in_excel",
     ),
 ]

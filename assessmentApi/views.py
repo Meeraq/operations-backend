@@ -2224,7 +2224,7 @@ class GetObserverTypes(APIView):
             )
 
 
-def calculate_average(question_with_answers, assessment_type):
+def calculate_average(question_with_answers, assessment):
     competency_averages = []
 
     for competency_data in question_with_answers:
@@ -2235,12 +2235,26 @@ def calculate_average(question_with_answers, assessment_type):
         total_observer_responses = {}
 
         for question in questions:
+            participant_response = None
+            present_que = assessment.questionnaire.questions.filter(
+                self_question=question["question"]
+            ).first()
+            if not present_que.reverse_question:
+                label_count = sum(
+                    1 for key in present_que.label.keys() if present_que.label[key]
+                )
+
+                swap_dict = swap_positions(label_count)
+                participant_response = swap_dict[question["participant_response"]]
+            else:
+                participant_response = question["participant_response"]
+
             total_observers = (
                 len(question.keys()) - 2
             )  # two columns substracted question and participant response for number of observer
-            if assessment_type == "self":
+            if assessment.assessment_type == "self":
                 total_observers = 1
-            total_participant_responses += question["participant_response"]
+            total_participant_responses += participant_response
 
             # Sum observer responses for each question
             for key, value in question.items():
@@ -2319,7 +2333,9 @@ def generate_graph(data, assessment_type):
             color="#3b64ad",
         )
 
-        plt.title(f"Average Responses by Competency (Graph {i + 1})")
+        plt.title(
+            f"Average Responses by Competency {f'(Graph {i + 1})' if num_graphs > 1 else ''}"
+        )
         plt.xlabel("Competency")
         plt.ylabel("Average Response")
         plt.xticks(
@@ -2499,7 +2515,24 @@ def get_total_observer_types(participant_observer, participant_id):
     return observer_types_total
 
 
-def get_data_for_score_analysis(question_with_answer):
+def get_data_for_score_analysis(question_with_answer, assessment):
+
+    for competency in question_with_answer:
+        for question in competency["questions"]:
+            present_que = assessment.questionnaire.questions.filter(
+                self_question=question["question"]
+            ).first()
+            if not present_que.reverse_question:
+                label_count = sum(
+                    1 for key in present_que.label.keys() if present_que.label[key]
+                )
+
+                swap_dict = swap_positions(label_count)
+
+                question["participant_response"] = swap_dict[
+                    question["participant_response"]
+                ]
+
     res = []
 
     for competency in question_with_answer:
@@ -2593,6 +2626,21 @@ def get_frequency_analysis_data(
     return question_with_labels
 
 
+def convert_numeric_values_to_int(data):
+    new_data = []
+    for item in data:
+        new_item = item.copy()
+        new_item['questions'] = []
+        for question in item.get('questions', []):
+            new_question = question.copy()
+            for key, value in new_question.items():
+                if isinstance(value, (int, float)):
+                    new_question[key] = int(value)
+            new_item['questions'].append(new_question)
+        new_data.append(new_item)
+    return new_data
+
+
 class DownloadParticipantResultReport(APIView):
     permission_classes = [AllowAny]
 
@@ -2646,10 +2694,8 @@ class DownloadParticipantResultReport(APIView):
                     labels = question.label
                     question_object = {
                         "question": question.self_question,
-                        "participant_response": float(
-                            participant_response.participant_response.get(
-                                str(question.id)
-                            )
+                        "participant_response": participant_response.participant_response.get(
+                            str(question.id)
                         ),
                     }
 
@@ -2706,16 +2752,26 @@ class DownloadParticipantResultReport(APIView):
 
                 question_with_answers.append(competency_object)
 
-            averages = calculate_average(
-                question_with_answers, assessment.assessment_type
-            )
+            averages = calculate_average(question_with_answers, assessment)
 
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
-            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+            
+            if assessment.number_of_observers == 1:
+                question_with_answers = convert_numeric_values_to_int(
+                    question_with_answers
+                )
+
+            data_for_score_analysis = get_data_for_score_analysis(
+                question_with_answers, assessment
+            )
+
+            labels = {
+                str(len(labels) - int(key) + 1): value for key, value in labels.items()
+            }
 
             html_message = html_for_pdf_preview(
                 "assessment/report/assessment_report.html",
@@ -2734,6 +2790,10 @@ class DownloadParticipantResultReport(APIView):
                     "competency_array": competency_array,
                     "assessment_rating_type": assessment_rating_type,
                     "labels": labels,
+                    "comment_page_number": (
+                        10 + (len(competency_array))
+                    ),  # this is for page number thats why 10 + is there
+                    "issue_date": timezone.now().strftime("%d %B %Y"),
                 },
                 f"This new report generated for {participant.name}",
             )
@@ -2800,10 +2860,8 @@ class DownloadParticipantResultReport(APIView):
                     labels = question.label
                     question_object = {
                         "question": question.self_question,
-                        "participant_response": float(
-                            participant_response.participant_response.get(
-                                str(question.id)
-                            )
+                        "participant_response": participant_response.participant_response.get(
+                            str(question.id)
                         ),
                     }
                     assessment_rating_type = question.rating_type
@@ -2860,15 +2918,25 @@ class DownloadParticipantResultReport(APIView):
 
                 question_with_answers.append(competency_object)
 
-            averages = calculate_average(
-                question_with_answers, assessment.assessment_type
-            )
+            averages = calculate_average(question_with_answers, assessment)
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
-            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+            
+            if assessment.number_of_observers == 1:
+                question_with_answers = convert_numeric_values_to_int(
+                    question_with_answers
+                )
+            
+            data_for_score_analysis = get_data_for_score_analysis(
+                question_with_answers, assessment
+            )
+
+            labels = {
+                str(len(labels) - int(key) + 1): value for key, value in labels.items()
+            }
 
             pdf = generate_report_for_participant(
                 "assessment/report/assessment_report.html",
@@ -2885,6 +2953,10 @@ class DownloadParticipantResultReport(APIView):
                     "competency_array": competency_array,
                     "assessment_rating_type": assessment_rating_type,
                     "labels": labels,
+                    "comment_page_number": (
+                        10 + (len(competency_array))
+                    ),  # this is for page number thats why 10+ is there
+                    "issue_date": timezone.now().strftime("%d %B %Y"),
                 },
             )
             # pdf_path = "graphsAndReports/Report.pdf"
@@ -3011,10 +3083,8 @@ class DownloadWordReport(APIView):
 
                     question_object = {
                         "question": question.self_question,
-                        "participant_response": float(
-                            participant_response.participant_response.get(
-                                str(question.id)
-                            )
+                        "participant_response": participant_response.participant_response.get(
+                            str(question.id)
                         ),
                     }
                     assessment_rating_type = question.rating_type
@@ -3070,16 +3140,26 @@ class DownloadWordReport(APIView):
 
                 question_with_answers.append(competency_object)
 
-            averages = calculate_average(
-                question_with_answers, assessment.assessment_type
-            )
+            averages = calculate_average(question_with_answers, assessment)
 
             graph_images = generate_graph(averages, assessment.assessment_type)
 
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
-            data_for_score_analysis = get_data_for_score_analysis(question_with_answers)
+
+            if assessment.number_of_observers == 1:
+                question_with_answers = convert_numeric_values_to_int(
+                    question_with_answers
+                )
+
+            data_for_score_analysis = get_data_for_score_analysis(
+                question_with_answers, assessment
+            )
+
+            labels = {
+                str(len(labels) - int(key) + 1): value for key, value in labels.items()
+            }
 
             word_generate_report_for_participant(
                 "assessment/report/assessment_report.html",
@@ -3096,6 +3176,10 @@ class DownloadWordReport(APIView):
                     "competency_array": competency_array,
                     "assessment_rating_type": assessment_rating_type,
                     "labels": labels,
+                    "comment_page_number": (
+                        10 + (len(competency_array))
+                    ),  # this is for page number thats why 10+ is there
+                    "issue_date": timezone.now().strftime("%d %B %Y"),
                 },
             )
             pdf_path = "graphsAndReports/Report.pdf"
@@ -3677,7 +3761,7 @@ def generate_graph_for_participant_for_post_assessment(
                             )
 
                     if participant_response_value:
-                        if question.reverse_question:
+                        if not question.reverse_question:
                             competency_object[question.competency.name] = (
                                 competency_object[question.competency.name]
                                 + (swap_dict[participant_response_value] / label_count)
@@ -4538,13 +4622,16 @@ class GetAllAssessments(APIView):
             assessment_lesson = AssessmentLesson.objects.filter(
                 assessment_modal=assessment
             ).first()
-
+            if assessment.batch is not None:
+                organisation = assessment.batch.project.organisation.name
+            else:
+                organisation = (
+                    assessment.organisation.name if assessment.organisation else ""
+                )
             assessment_data = {
                 "id": assessment.id,
                 "name": assessment.name,
-                "organisation": (
-                    assessment.organisation.name if assessment.organisation else ""
-                ),
+                "organisation": organisation,
                 "assessment_type": assessment.assessment_type,
                 "assessment_timing": assessment.assessment_timing,
                 "assessment_start_date": assessment.assessment_start_date,
@@ -4599,9 +4686,18 @@ class GetAssessmentsOfHr(APIView):
     def get(self, request, hr_id):
         assessments = Assessment.objects.filter(
             Q(hr__id=hr_id), Q(status="ongoing") | Q(status="completed")
-        )
+        ).order_by("-created_at")
         assessment_list = []
         for assessment in assessments:
+            assessment_lesson = AssessmentLesson.objects.filter(
+                assessment_modal=assessment
+            ).first()
+            if assessment_lesson:
+                batch = assessment_lesson.lesson.course.batch.name
+                project = assessment_lesson.lesson.course.batch.project.name
+            else:
+                batch = "N/A"
+                project = "N/A"
             total_responses_count = ParticipantResponse.objects.filter(
                 assessment=assessment
             ).count()
@@ -4617,6 +4713,8 @@ class GetAssessmentsOfHr(APIView):
                 "total_learners_count": assessment.participants_observers.count(),
                 "total_responses_count": total_responses_count,
                 "created_at": assessment.created_at,
+                "project": assessment.batch.project.name if assessment.batch else None,
+                "batch": assessment.batch.name if assessment.batch else None,
             }
 
             assessment_list.append(assessment_data)

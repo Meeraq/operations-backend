@@ -42,6 +42,8 @@ from django.db.models import (
     Sum,
 )
 
+from zohoapi.models import InvoiceData, Vendor, ZohoVendor
+
 
 def get_month_start_end_dates():
     today = datetime.today()
@@ -118,6 +120,7 @@ def batch_details(request):
             "no_of_sessions": no_of_sessions,
             "faculty": faculty_names,
             "mentor_coaches": mentor_coach_names,
+            "created_at": batch.created_at,
         }
         index = index + 1
         data.append(batch_data)
@@ -318,12 +321,17 @@ def sales_persons_finances(request):
             l3_batches.append(batch.name)
         elif batch.program.certification_level.name == "ACTC":
             actc_batches.append(batch.name)
-    date_query = ""
+
     if start_date and end_date:
-        date_query = f"&date_start={start_date}&date_end={end_date}"
+        sales_orders = SalesOrder.objects.filter(
+            salesorder_number__startswith="CTT",
+            date__gte=start_date,
+            date__lte=end_date,
+        )
+    else:
+        sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT")
     # query_params = f"&salesorder_number_contains=CTT{date_query}"
     # sales_orders = fetch_sales_orders(organization_id, query_params)
-    sales_orders = SalesOrder.objects.filter(salesorder_number__startswith="CTT")
     salesperson_totals = defaultdict(
         lambda: {
             "l1": 0,
@@ -417,11 +425,22 @@ def participant_finances(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_faculties(request):
-    batch_faculties = (
-        BatchFaculty.objects.using("ctt")
-        .select_related("faculty", "batch", "batch__program")
-        .all()
-    )
+
+    faculty_id = request.query_params.get("faculty_id")
+    batch_faculties = None
+    if faculty_id:
+        batch_faculties = (
+            BatchFaculty.objects.using("ctt")
+            .select_related("faculty", "batch", "batch__program")
+            .filter(faculty__id=int(faculty_id))
+        )
+    else:
+
+        batch_faculties = (
+            BatchFaculty.objects.using("ctt")
+            .select_related("faculty", "batch", "batch__program")
+            .all()
+        )
 
     batch_ids = batch_faculties.values_list("batch_id", flat=True)
 
@@ -517,6 +536,7 @@ def get_faculties(request):
             "total_sessions_count": total_sessions_counts_dict.get(batch_id, 0),
             "completed_sessions_count": completed_sessions_counts_dict.get(batch_id, 0),
             "salesorders": salesorders_counts_dict.get(batch_name, 0),
+            "created_at": batch_faculty.batch.created_at,
         }
         index += 1
         res.append(obj)
@@ -540,6 +560,8 @@ def get_all_faculties(request):
 @permission_classes([IsAuthenticated])
 def get_all_finance(request):
     try:
+        salesperson_id = request.query_params.get("salesperson_id", None)
+
         batch_users = (
             BatchUsers.objects.using("ctt")
             .select_related("user", "batch__program")
@@ -549,10 +571,14 @@ def get_all_finance(request):
 
         # Convert batch_users emails to a list to avoid subquery across different databases
         user_emails = list(batch_users.values_list("user__email", flat=True))
-
-        salesorders = SalesOrder.objects.filter(
-            zoho_customer__email__in=user_emails
-        ).select_related("zoho_customer")
+        if salesperson_id:
+            salesorders = SalesOrder.objects.filter(
+                zoho_customer__email__in=user_emails, salesperson_id=salesperson_id
+            ).select_related("zoho_customer")
+        else:
+            salesorders = SalesOrder.objects.filter(
+                zoho_customer__email__in=user_emails
+            ).select_related("zoho_customer")
 
         data = []
         index = 1
@@ -606,7 +632,6 @@ def get_all_finance(request):
             certificate_status = (
                 "released" if batch_user.certificate else "not released"
             )
-
             temp = {
                 "index": index,
                 "participant_name": f"{batch_user.user.first_name} {batch_user.user.last_name}",
@@ -624,14 +649,18 @@ def get_all_finance(request):
                 "pending_amount": pending_amount,
                 "paid_amount": paid_amount,
                 "currency_code": currency_code,
-                # "assignment_completion": assignment_completion,
                 "total_assignments_in_batch": total_assignments_in_batch,
                 "no_of_sales_orders": len(user_salesorders),
                 "organisation": batch_user.user.current_organisation_name,
                 "certificate_status": certificate_status,
             }
             index += 1
-            data.append(temp)
+            # assuming that the user is the salespersons user only if sales order exists
+            if salesperson_id:
+                if len(user_salesorders) > 0:
+                    data.append(temp)
+            else:
+                data.append(temp)
 
         return Response(data)
     except Exception as e:
@@ -647,7 +676,9 @@ def get_all_client_invoice_of_participant_for_batch(request, participant_id, bat
         user = Users.objects.using("ctt").get(id=participant_id)
         batch = Batches.objects.using("ctt").get(id=batch_id)
         client_invoices = ClientInvoice.objects.filter(
-            custom_field_hash__cf_ctt_batch=batch.name, zoho_customer__email=user.email
+            custom_field_hash__cf_ctt_batch=batch.name,
+            zoho_customer__email=user.email,
+            sales_order__custom_field_hash__cf_ctt_batch=batch.name,
         )
         for client_invoice in client_invoices:
             payment_status = "Paid" if client_invoice.status == "paid" else "Not Paid"
@@ -823,3 +854,40 @@ def get_card_data_for_dashboard_ctt(request):
     except Exception as e:
         print(str(e))
 
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_ctt_faculties(request):
+    try:
+        faculties = Faculties.objects.using("ctt").all()
+        faculties_data = []
+
+        for faculty in faculties:
+            vendor = Vendor.objects.filter(email=faculty.email).first()
+            total_invoiced = 0
+            if vendor:
+                total_invoiced = (
+                    InvoiceData.objects.filter(vendor__id=vendor.id).aggregate(
+                        Sum("total")
+                    )["total__sum"]
+                    or 0
+                )
+            batch_faculties = BatchFaculty.objects.using("ctt").filter(faculty=faculty)
+            total_batches = batch_faculties.count()
+            batch_names = list(batch_faculties.values_list("batch__name", flat=True))
+
+            faculties_data.append(
+                {
+                    "index": faculty.id,
+                    "name": faculty.first_name + " " + faculty.last_name,
+                    "email": faculty.email,
+                    "phone": faculty.phone,
+                    "total_invoiced": total_invoiced,
+                    "total_batches": total_batches,
+                    "batch_names": batch_names,
+                }
+            )
+
+        return Response(faculties_data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
