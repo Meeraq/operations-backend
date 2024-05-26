@@ -185,7 +185,7 @@ urlpatterns = [
         "new/sessions/past/<str:user_type>/<int:user_id>/",
         views.new_get_past_sessions_of_user,
     ),
-     path(
+    path(
         "get-session-count/<str:user_type>/<int:user_id>/",
         views.get_count_sessions,
     ),
@@ -563,7 +563,6 @@ urlpatterns = [
         views.get_available_credits_without_project_structure,
     ),
     path(
-
         "get-available-credits-of-all-cod-projects/",
         views.get_available_credits_of_all_cod_projects,
     ),
@@ -587,5 +586,6 @@ urlpatterns = [
     ),
     path("get-coach-profile-shared-with/", views.get_coach_profile_shared_with),
     path("coach-share-links/", views.get_coach_shared_links),
-    path("coach-profile-share/edit/<int:pk>/",views.update_coach_profile_share)
+    path("coach-profile-share/edit/<int:pk>/", views.update_coach_profile_share),
+    path("rewrite/", views.rewrite),
 ]
