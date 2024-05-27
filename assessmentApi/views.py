@@ -91,7 +91,7 @@ from time import sleep
 from django.http import HttpResponse
 from datetime import datetime
 import io
-from api.views import add_contact_in_wati
+from api.views import add_contact_in_wati, create_learner
 from schedularApi.tasks import (
     send_assessment_invitation_mail,
     send_whatsapp_message,
@@ -203,56 +203,6 @@ def send_mail_templates(file_name, user_email, email_subject, content, bcc_email
 
 
 from django.core.exceptions import ObjectDoesNotExist
-
-
-def create_learner(learner_name, learner_email):
-    try:
-        with transaction.atomic():
-            if not learner_email:
-                raise ValueError("Username field is required")
-
-            user = User.objects.filter(username=learner_email).first()
-            learner = None
-            if user:
-                learner = Learner.objects.filter(user__user=user).first()
-                if learner:
-                    profile = Profile.objects.get(user=user)
-                    learner_role, created = Role.objects.get_or_create(name="learner")
-                    profile.roles.add(learner_role)
-                    learner.name = learner_name.strip().title()
-                    learner.save()
-                    return learner
-                else:
-                    profile = Profile.objects.get(user=user)
-            else:
-                temp_password = "".join(
-                    random.choices(
-                        string.ascii_uppercase + string.ascii_lowercase + string.digits,
-                        k=8,
-                    )
-                )
-                user = User.objects.create_user(
-                    username=learner_email,
-                    password=temp_password,
-                    email=learner_email,
-                )
-
-                user.save()
-                profile = Profile.objects.create(user=user)
-            learner_role, created = Role.objects.get_or_create(name="learner")
-            profile.roles.add(learner_role)
-            profile.save()
-            learner = Learner.objects.create(
-                user=profile,
-                name=learner_name.strip().title(),
-                email=learner_email,
-            )
-            return learner
-    except ValueError as e:
-        raise ValueError(str(e))
-
-    except Exception as e:
-        raise Exception(str(e))
 
 
 class CompetencyView(APIView):
@@ -2743,13 +2693,13 @@ def convert_numeric_values_to_int(data):
     new_data = []
     for item in data:
         new_item = item.copy()
-        new_item['questions'] = []
-        for question in item.get('questions', []):
+        new_item["questions"] = []
+        for question in item.get("questions", []):
             new_question = question.copy()
             for key, value in new_question.items():
                 if isinstance(value, (int, float)):
                     new_question[key] = int(value)
-            new_item['questions'].append(new_question)
+            new_item["questions"].append(new_question)
         new_data.append(new_item)
     return new_data
 
@@ -2872,7 +2822,7 @@ class DownloadParticipantResultReport(APIView):
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
-            
+
             if assessment.number_of_observers == 1:
                 question_with_answers = convert_numeric_values_to_int(
                     question_with_answers
@@ -3037,12 +2987,12 @@ class DownloadParticipantResultReport(APIView):
             data_for_assessment_overview_table = process_question_data(
                 question_with_answers, assessment
             )
-            
+
             if assessment.number_of_observers == 1:
                 question_with_answers = convert_numeric_values_to_int(
                     question_with_answers
                 )
-            
+
             data_for_score_analysis = get_data_for_score_analysis(
                 question_with_answers, assessment
             )
@@ -5626,6 +5576,7 @@ def add_user_as_a_participant_of_assessment(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def add_competency_to_batch(request, batch_id):
@@ -5679,14 +5630,18 @@ def add_competency_to_batch(request, batch_id):
     if serializer.is_valid():
         instance = serializer.save()
         if add_to_all_batches:
-            batches = SchedularBatch.objects.filter(project=instance.batch.project).exclude(id=instance.batch.id)
+            batches = SchedularBatch.objects.filter(
+                project=instance.batch.project
+            ).exclude(id=instance.batch.id)
             for batch in batches:
                 batch_competency_assignment_data = {
                     "batch": batch.id,
                     "competency": competency_id,
                     "selected_behaviors": selected_behaviors,
                 }
-                existing_batch_competency = BatchCompetencyAssignment.objects.filter(competency__id = competency_id, batch__id=batch.id)
+                existing_batch_competency = BatchCompetencyAssignment.objects.filter(
+                    competency__id=competency_id, batch__id=batch.id
+                )
                 if not existing_batch_competency.exists():
                     serializer = BatchCompetencyAssignmentSerializer(
                         data=batch_competency_assignment_data
@@ -5759,12 +5714,10 @@ def edit_competency_assignment(request, batch_id, assignment_id):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
-def get_batch_competency_assignments(request,batch_id):
+def get_batch_competency_assignments(request, batch_id):
     try:
         assignments = BatchCompetencyAssignment.objects.filter(batch__id=batch_id)
-        serializer = BatchCompetencyAssignmentDepthOneSerializer(
-            assignments, many=True
-        )
+        serializer = BatchCompetencyAssignmentDepthOneSerializer(assignments, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -5778,11 +5731,16 @@ def delete_batch_competency(request, batch_competency_id):
         batch_competency = BatchCompetencyAssignment.objects.get(pk=batch_competency_id)
     except BatchCompetencyAssignment.DoesNotExist:
         # If the Batch competency does not exist, return a 404 response
-        return Response({"error": "Batch competency not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {"error": "Batch competency not found"}, status=status.HTTP_404_NOT_FOUND
+        )
     # Delete the Batch competency
     batch_competency.delete()
     # Return a success response
-    return Response({"message": "Batch competency deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+    return Response(
+        {"message": "Batch competency deleted successfully"},
+        status=status.HTTP_204_NO_CONTENT,
+    )
 
 
 class GetAssessmentOfCoachingProject(APIView):
@@ -5839,12 +5797,19 @@ class GetAssessmentOfCoachingProject(APIView):
                     "whatsapp_reminder": assessment.whatsapp_reminder,
                     "email_reminder": assessment.email_reminder,
                     "reminders": assessment.reminders,
-                    "questionnaire": assessment.questionnaire.id,
-                    "organisation": assessment.organisation.id,
+                    "questionnaire": (
+                        assessment.questionnaire.id
+                        if assessment.questionnaire
+                        else None
+                    ),
+                    "organisation": (
+                        assessment.organisation.id if assessment.organisation else None
+                    ),
                     "hr": list(assessment.hr.all().values_list("id", flat=True)),
                     "pre_assessment": (
                         assessment.pre_assessment.id
                         if assessment.assessment_timing == "post"
+                        and assessment.pre_assessment
                         else None
                     ),
                 }

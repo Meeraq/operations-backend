@@ -185,6 +185,7 @@ from api.views import (
     delete_outlook_calendar_invite,
     create_teams_meeting,
     delete_teams_meeting,
+    create_learner,
 )
 from django.db.models import Max
 import io
@@ -192,7 +193,7 @@ from time import sleep
 from assessmentApi.views import (
     delete_participant_from_assessments,
     add_multiple_participants_for_project,
-    create_learner,
+  
 )
 from assessmentApi.serializers import (
     CompetencySerializerDepthOne,
