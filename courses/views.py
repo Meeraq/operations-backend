@@ -80,7 +80,7 @@ from .serializers import (
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 
 from rest_framework.views import APIView
-from api.models import User, Learner, Profile, Role, Coach, SessionRequestCaas,Project
+from api.models import User, Learner, Profile, Role, Coach, SessionRequestCaas, Project
 from api.serializers import ProjectSerializer
 from schedularApi.models import (
     LiveSession,
@@ -648,44 +648,48 @@ def download_nudge_file(request, nudge_id):
 
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
-def add_nudges_date_frequency_to_batch(request, batch_id):
+def add_nudges_date_frequency_to_batch(request, instance_type, instance_id):
     try:
-        batch = SchedularBatch.objects.get(id=batch_id)
+        if instance_type == "batch":
+            instance = SchedularBatch.objects.get(id=instance_id)
+        elif instance_type == "project":
+            instance = Project.objects.get(id=instance_id)
+
         nudge_start_date = request.data.get("nudge_start_date")
         nudge_frequency = request.data.get("nudge_frequency")
-        batch.nudge_start_date = nudge_start_date
-        batch.nudge_frequency = nudge_frequency
-        batch.save()
-        if batch.nudge_periodic_task:
-            batch.nudge_periodic_task.enabled = False
-            batch.nudge_periodic_task.save()
+        instance.nudge_start_date = nudge_start_date
+        instance.nudge_frequency = nudge_frequency
+        instance.save()
+        if instance.nudge_periodic_task:
+            instance.nudge_periodic_task.enabled = False
+            instance.nudge_periodic_task.save()
         desired_time = time(18, 31)
         datetime_comined = datetime.combine(
-            datetime.strptime(batch.nudge_start_date, "%Y-%m-%d"), desired_time
+            datetime.strptime(instance.nudge_start_date, "%Y-%m-%d"), desired_time
         )
         scheduled_for = datetime_comined - timedelta(days=1)
         clocked = ClockedSchedule.objects.create(clocked_time=scheduled_for)
         periodic_task = PeriodicTask.objects.create(
             name=uuid.uuid1(),
             task="schedularApi.tasks.schedule_nudges",
-            args=[batch.id],
+            args=[instance.id],
             clocked=clocked,
             one_off=True,
         )
-        batch.nudge_periodic_task = periodic_task
-        batch.save()
+        instance.nudge_periodic_task = periodic_task
+        instance.save()
         # complete tasks for nudge
-        try:
-            tasks = Task.objects.filter(
-                task="add_nudge_date_and_frequency",
-                status="pending",
-                schedular_batch=batch,
-            )
-            tasks.update(status="completed")
-        except Exception as e:
-            print(str(e))
-            pass
-
+        if instance_type == "batch":
+            try:
+                tasks = Task.objects.filter(
+                    task="add_nudge_date_and_frequency",
+                    status="pending",
+                    schedular_batch=instance,
+                )
+                tasks.update(status="completed")
+            except Exception as e:
+                print(str(e))
+                pass
         return Response({"message": "Updated successfully"}, status=201)
     except Course.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
@@ -2633,7 +2637,7 @@ class AssignCourseTemplateToBatch(APIView):
 
                 create_lessons_for_batch(batch)
 
-                if  batch.project.post_assessment:
+                if batch.project.post_assessment:
                     max_order = (
                         Lesson.objects.filter(course=new_course).aggregate(
                             Max("order")
@@ -3760,6 +3764,7 @@ def get_nudges_by_project_id(request, project_id):
     serializer = NudgeSerializer(nudges, many=True)
     return Response(serializer.data)
 
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
 def get_nudges_of_coaching_project(request, project_id):
@@ -4354,7 +4359,6 @@ def update_completion_nudge_status(request, nudge_id):
     )
 
 
-
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_nudge(request, nudge_id):
@@ -4404,12 +4408,11 @@ def create_ctt_feedback(request):
         return Response({"error": "Failed to create feedback"}, status=500)
 
 
-
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
-def edit_ctt_feedback(request,feedback_id):
+def edit_ctt_feedback(request, feedback_id):
     try:
-        feedback = CttFeedback.objects.get(id = feedback_id)
+        feedback = CttFeedback.objects.get(id=feedback_id)
 
         questions = request.data.get("questions")
         name = request.data.get("name")
@@ -4434,18 +4437,19 @@ def edit_ctt_feedback(request,feedback_id):
 
         unique_id = uuid.uuid4()
 
-        feedback.name=name
-        feedback.unique_id=unique_id
-        feedback.ctt_batch=batch_id
-        feedback.session_number=session_number
+        feedback.name = name
+        feedback.unique_id = unique_id
+        feedback.ctt_batch = batch_id
+        feedback.session_number = session_number
         # Add questions to the CttFeedback instance
         feedback.questions.set(question_ids)
         feedback.save()
         return Response({"message": "Feedback updated successfully!"}, status=200)
-    
+
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update feedback"}, status=500)
+
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -4508,14 +4512,12 @@ def get_ctt_feedback_report(request, feedback_id):
                     question_data[question_id]["descriptive_answers"].append(
                         answer.text_answer
                     )
-                elif  answer.question.type == "single_correct_answer":
+                elif answer.question.type == "single_correct_answer":
                     print(answer.selected_options, answer.text_answer)
                     question_data[question_id]["selected_options"].append(
                         [answer.text_answer]
                     )
-                elif (
-                   answer.question.type == "multiple_correct_answer"
-                ):
+                elif answer.question.type == "multiple_correct_answer":
                     question_data[question_id]["selected_options"].append(
                         answer.selected_options
                     )
@@ -4561,5 +4563,3 @@ def update_ctt_feedback_status(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to update status"}, status=500)
-
-

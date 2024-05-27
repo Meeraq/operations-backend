@@ -102,7 +102,7 @@ urlpatterns = [
     path("nudges/<int:nudge_id>/update/", views.update_nudge),
     path("nudges/<int:nudge_id>/file/download/", views.download_nudge_file),
     path(
-        "batches/<int:batch_id>/update-nudge-date-frequency/",
+        "<str:instance_type>/<int:instance_id>/update-nudge-date-frequency/",
         views.add_nudges_date_frequency_to_batch,
     ),
     path(

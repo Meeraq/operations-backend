@@ -491,6 +491,11 @@ class Project(models.Model):
     nudges = models.BooleanField(blank=True, default=True)
     pre_assessment = models.BooleanField(blank=True, default=True)
     post_assessment = models.BooleanField(blank=True, default=True)
+    nudge_start_date = models.DateField(default=None, blank=True, null=True)
+    nudge_frequency = models.CharField(max_length=50, default="", blank=True, null=True)
+    nudge_periodic_task = models.ForeignKey(
+        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
+    )
 
     class Meta:
         ordering = ["-created_at"]
