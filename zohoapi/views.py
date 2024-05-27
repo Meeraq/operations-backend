@@ -723,12 +723,25 @@ def get_line_items_for_template(line_items):
     return res
 
 
+
+def get_financial_year(date):
+    # Assuming financial year starts from April
+    if date.month >= 4:
+        return date.year, date.year + 1
+    else:
+        return date.year - 1, date.year
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def add_invoice_data(request):
+    invoice_date = datetime.strptime(request.data["invoice_date"], "%Y-%m-%d").date()
+    start_year, end_year = get_financial_year(invoice_date)
     invoices = InvoiceData.objects.filter(
         vendor_id=request.data["vendor_id"],
         invoice_number=request.data["invoice_number"],
+        invoice_date__year__gte=start_year,
+        invoice_date__year__lte=end_year
     )
     hsn_or_sac = request.data.get("hsn_or_sac", None)
     if hsn_or_sac:
@@ -741,7 +754,7 @@ def add_invoice_data(request):
             return Response({"error": "Vendor not found."}, status=400)
 
     if invoices.count() > 0:
-        return Response({"error": "Invoice number should be unique."}, status=400)
+        return Response({"error": "Invoice number should be unique for a financial year."}, status=400)
 
     vendor = Vendor.objects.get(vendor_id=request.data["vendor_id"])
 
