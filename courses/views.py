@@ -589,34 +589,47 @@ def create_new_nudge(request):
         nudge_instance.unique_id = uuid.uuid4()
         nudge_instance.save()
         # complete add nudge task
-        try:
-            tasks = Task.objects.filter(
-                task="add_nudges",
-                status="pending",
-                schedular_batch=nudge_instance.batch,
-            )
-            tasks.update(status="completed")
-        except Exception as e:
-            print(str(e))
-            pass
-        nudges_start_date = nudge_instance.batch.nudge_start_date
-        today_date = datetime.today().date()
-        if nudges_start_date and nudges_start_date <= today_date:
+        if nudge_instance.batch:
+            nudges_start_date = nudge_instance.batch.nudge_start_date
             last_nudge = (
                 Nudge.objects.filter(batch=nudge_instance.batch)
                 .exclude(id=nudge_instance.id)
                 .order_by("-order")
                 .first()
             )
+            nudge_frequency = nudge_instance.batch.nudge_frequency
+            try:
+                tasks = Task.objects.filter(
+                    task="add_nudges",
+                    status="pending",
+                    schedular_batch=nudge_instance.batch,
+                )
+                tasks.update(status="completed")
+            except Exception as e:
+                print(str(e))
+                pass
+        elif nudge_instance.caas_project:
+            nudges_start_date = nudge_instance.caas_project.nudge_start_date
+            last_nudge = (
+                Nudge.objects.filter(caas_project=nudge_instance.caas_project)
+                .exclude(id=nudge_instance.id)
+                .order_by("-order")
+                .first()
+            )
+            nudge_frequency = nudge_instance.caas_project.nudge_frequency
+
+        today_date = datetime.today().date()
+
+        if nudges_start_date and nudges_start_date <= today_date:
             if last_nudge:
                 last_nudge_date = last_nudge.trigger_date
                 nudge_instance.trigger_date = last_nudge_date + timedelta(
-                    int(nudge_instance.batch.nudge_frequency)
+                    int(nudge_frequency)
                 )
                 nudge_instance.save()
             else:
                 nudge_instance.trigger_date = nudges_start_date + timedelta(
-                    int(nudge_instance.batch.nudge_frequency)
+                    int(nudge_frequency)
                 )
                 nudge_instance.save()
         serializer = NudgeSerializer(nudge_instance)
@@ -672,7 +685,7 @@ def add_nudges_date_frequency_to_batch(request, instance_type, instance_id):
         periodic_task = PeriodicTask.objects.create(
             name=uuid.uuid1(),
             task="schedularApi.tasks.schedule_nudges",
-            args=[instance.id],
+            args=[instance.id, instance_type],
             clocked=clocked,
             one_off=True,
         )
@@ -3801,17 +3814,25 @@ def send_nudge_to_email(request, nudge_id):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])
-def duplicate_nudge(request, nudge_id, batch_id):
+def duplicate_nudge(request, nudge_id, instance_type, instance_id):
     order = request.data.get("order")
     try:
         original_nudge = Nudge.objects.get(id=nudge_id)
-        batch = SchedularBatch.objects.get(id=batch_id)  # Fetch the batch instance
+        batch = None
+        project = None
+        if instance_type == "batch":
+            batch = SchedularBatch.objects.get(
+                id=instance_id
+            )  # Fetch the batch instance
+        elif instance_type == "project":
+            project = Project.objects.get(id=instance_id)  # Fetch the batch instance
         duplicated_nudge = Nudge.objects.create(
             name=f"{original_nudge.name}",
             content=original_nudge.content,
             file=original_nudge.file,
             order=order,
             batch=batch,
+            caas_project=project,
             is_sent=False,
             unique_id=str(uuid.uuid4()),
         )
@@ -4312,8 +4333,8 @@ def get_released_certificates_for_learner(request, learner_id):
 def get_all_nudges_for_that_learner(request, learner_id):
     try:
         nudges = Nudge.objects.filter(
-            is_sent=True, is_switched_on=True, batch__learners__id=learner_id
-        )
+            Q(is_sent=True), Q(is_switched_on=True),Q(batch__learners__id=learner_id) | Q(caas_project__engagement__learner__id=learner_id)
+        ).distinct()
         serializer = NudgeSerializer(nudges, many=True)
         return Response({"nudges": serializer.data})
     except Nudge.DoesNotExist:
