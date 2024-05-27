@@ -82,6 +82,7 @@ from .serializers import (
     SalesDepthOneSerializer,
     GoalDescriptionSerializer,
     CoachProfileShareSerializer,
+    UserFeedbackSerializer,
 )
 from zohoapi.serializers import (
     VendorDepthOneSerializer,
@@ -162,6 +163,7 @@ from .models import (
     Sales,
     TableHiddenColumn,
     CoachProfileShare,
+    UserFeedback,
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.authtoken.models import Token
@@ -12404,3 +12406,34 @@ def rewrite(request):
         ],
     )
     return Response(completion.choices[0].message.content, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def user_feedback_response(request):
+    try:
+        feedback_serializer = UserFeedbackSerializer(data=request.data)
+        if feedback_serializer.is_valid():
+            feedback_serializer.save()
+            return Response(
+                {"success": "User feedback submitted successfully"}, status=201
+            )
+        return Response(feedback_serializer.errors, status=400)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_user_feedback_repsonses(request):
+    try:
+        all_user_feedback_data = UserFeedback.objects.all()
+        all_user_feedback_data_serializer = UserFeedbackSerializer(
+            all_user_feedback_data, many=True
+        )
+        return Response(all_user_feedback_data_serializer.data)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+

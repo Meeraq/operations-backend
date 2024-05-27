@@ -588,4 +588,6 @@ urlpatterns = [
     path("coach-share-links/", views.get_coach_shared_links),
     path("coach-profile-share/edit/<int:pk>/", views.update_coach_profile_share),
     path("rewrite/", views.rewrite),
+     path("user-feedback-response/", views.user_feedback_response),
+    path("get-user-feedback-responses/",views.get_user_feedback_repsonses),
 ]
