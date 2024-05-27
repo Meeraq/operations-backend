@@ -14,6 +14,7 @@ from django.db.models import Q
 from datetime import datetime, timedelta
 from django_celery_beat.models import PeriodicTask, ClockedSchedule
 import uuid
+from .models import Coach, Facilitator
 
 
 def get_start_and_end_of_current_month():
@@ -124,7 +125,7 @@ def schedule_request_expiry_for_session():
             project__project_type="COD",
             project__is_project_structure=False,
             status="requested",
-            project__is_session_expiry=True
+            project__is_session_expiry=True,
         )
 
         for session in sessions:
@@ -154,5 +155,18 @@ def schedule_request_expiry_for_session():
                     )
                     print(session)
 
+    except Exception as e:
+        print(str(e))
+
+
+@shared_task
+def delete_not_verified_coaches_and_facilitators():
+    try:
+        coaches = Coach.objects.filter(is_otp_verified=False)
+        print("Coach Deleted", coaches)
+        coaches.delete()
+        facilitators = Facilitator.objects.filter(is_otp_verified=False).delete()
+        print("Facilitators Deleted", facilitators)
+        facilitators.delete()
     except Exception as e:
         print(str(e))

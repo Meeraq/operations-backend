@@ -1030,9 +1030,9 @@ FIELD_NAME_VALUES = {
     "city": "City",
     "country": "Country",
     "topic": "Topic",
-    "project_type":"Project Type",
-    "product_type":"Product Type",
-    "category" : "Category"
+    "project_type": "Project Type",
+    "product_type": "Product Type",
+    "category": "Category",
 }
 
 SESSIONS_WITH_STAKEHOLDERS = [
@@ -2638,12 +2638,21 @@ def validate_otp(request):
     user = otp_obj.user
     # token, created = Token.objects.get_or_create(user=learner.user.user)
     # Delete the OTP object after it has been validated
-    user_email = request.data["email"]
+    user_email = request.data["email"].strip().lower()
     otp_obj.delete()
     last_login = user.last_login
     login(request, user)
     user_data = get_user_data(user)
     if user_data:
+        coach = Coach.objects.filter(email=user_email).first()
+        facilitator = Facilitator.objects.filter(email=user_email).first()
+        if coach:
+            coach.is_otp_verified = True
+            coach.save()
+        if facilitator:
+            facilitator.is_otp_verified = True
+            facilitator.save()
+
         login_timestamp = timezone.now()
         UserLoginActivity.objects.create(
             user=user, timestamp=login_timestamp, platform=platform
@@ -7917,6 +7926,7 @@ class AddRegisteredCoach(APIView):
                     phone_country_code=phone_country_code,
                     is_approved=is_approved,
                     active_inactive=True,
+                    is_otp_verified=False,
                 )
 
                 # Approve coach
@@ -8037,6 +8047,7 @@ class AddRegisteredFacilitator(APIView):
                     phone=phone,
                     phone_country_code=phone_country_code,
                     is_approved=is_approved,
+                    is_otp_verified=False,
                 )
                 # Approve facilitator
                 facilitator = Facilitator.objects.get(id=facilitator_user.id)
@@ -8760,21 +8771,20 @@ class StandardizedFieldRequestAPI(APIView):
 
 
 class StandardFieldAddValue(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","finance","leader")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "finance", "leader")]
 
     def post(self, request):
         try:
             with transaction.atomic():
                 # Extracting data from request body
                 field_name = request.data.get("field_name")
-                print(field_name)
+                
                 option_value = request.data.get("optionValue").strip()
 
                 # Get or create the StandardizedField instance for the given field_name
                 standardized_field, created = StandardizedField.objects.get_or_create(
                     field=field_name
                 )
-                print(standardized_field, option_value, standardized_field.values)
                 # Check if the option_value already exists in the values list of the standardized_field
                 if option_value not in standardized_field.values:
                     # Add the option_value to the values list and save the instance
@@ -8793,7 +8803,7 @@ class StandardFieldAddValue(APIView):
                 )
 
         except Exception as e:
-            print('hello',str(e))
+            print(str(e))
             # Return error response if any exception occurs
             return Response(
                 {"error": "Failed to add value."},

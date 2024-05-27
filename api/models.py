@@ -310,6 +310,7 @@ class Coach(models.Model):
     is_coach = models.BooleanField(blank=True, default=False)
     is_mentor = models.BooleanField(blank=True, default=False)
     is_consultant = models.BooleanField(blank=True, default=False)
+    is_otp_verified = models.BooleanField(blank=True, default=True)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -358,6 +359,7 @@ class Facilitator(models.Model):
     is_approved = models.BooleanField(blank=True, default=False)
     is_rejected = models.BooleanField(blank=True, default=False)
     active_inactive = models.BooleanField(default=True)
+    is_otp_verified = models.BooleanField(blank=True, default=True)
 
     def __str__(self):
         return self.first_name + " " + self.last_name
@@ -764,8 +766,8 @@ class StandardizedField(models.Model):
         ("city", "City"),
         ("country", "Country"),
         ("topic", "Topic"),
-        ("product_type","Product Type"),
-        ("category","Category")
+        ("product_type", "Product Type"),
+        ("category", "Category"),
     )
 
     field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
