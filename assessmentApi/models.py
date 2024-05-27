@@ -154,7 +154,7 @@ class Assessment(models.Model):
     assessment_start_date = models.CharField(max_length=255, blank=True)
     assessment_end_date = models.CharField(max_length=255, blank=True)
     questionnaire = models.ForeignKey(
-        Questionnaire, on_delete=models.CASCADE, blank=True
+        Questionnaire, on_delete=models.CASCADE, blank=True, null=True
     )
     descriptive_questions = models.JSONField(default=list, blank=True)
     participants_observers = models.ManyToManyField(

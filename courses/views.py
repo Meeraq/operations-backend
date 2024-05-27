@@ -2531,20 +2531,20 @@ class AssignCourseTemplateToBatch(APIView):
                     lesson=facilitator_lesson_creation,
                 )
                 assessment_creation = False
-                if not original_lessons.filter(lesson_type="assessment").exists():
-                    if batch.project.pre_assessment:
-                        assessment_creation = True
-                        lesson1 = Lesson.objects.create(
-                            course=new_course,
-                            name="Pre Assessment",
-                            status="draft",
-                            lesson_type="assessment",
-                            # Duplicate specific lesson types
-                            order=2,
-                        )
-                        assessment1 = Assessment.objects.create(
-                            lesson=lesson1, type="pre"
-                        )
+                
+                if batch.project.pre_assessment:
+                    assessment_creation = True
+                    lesson1 = Lesson.objects.create(
+                        course=new_course,
+                        name="Pre Assessment",
+                        status="draft",
+                        lesson_type="assessment",
+                        # Duplicate specific lesson types
+                        order=2,
+                    )
+                    assessment1 = Assessment.objects.create(
+                        lesson=lesson1, type="pre"
+                    )
                 for original_lesson in original_lessons:
                     new_lesson = None
                     # Create a new lesson only if the type is 'text', 'quiz', or 'feedback'
@@ -2585,12 +2585,6 @@ class AssignCourseTemplateToBatch(APIView):
                                 lesson=new_lesson,
                                 file=original_lesson.downloadablelesson.file,
                                 description=original_lesson.downloadablelesson.description,
-                            )
-                        elif original_lesson.lesson_type == "assignment":
-                            AssignmentLesson.objects.create(
-                                lesson=new_lesson,
-                                name=original_lesson.assignmentlesson.name,
-                                description=original_lesson.assignmentlesson.description,
                             )
                         elif original_lesson.lesson_type == "assessment":
                             assessment = Assessment.objects.filter(
