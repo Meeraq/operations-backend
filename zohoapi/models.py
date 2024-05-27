@@ -2,7 +2,7 @@ from django.db import models
 from django.utils import timezone
 from api.models import Profile, validate_pdf_extension, Project,Engagement, Coach, Facilitator
 from django.contrib.auth.models import User
-from schedularApi.models import SchedularProject
+from schedularApi.models import SchedularProject,GmSheet
 
 # Create your models here.
 
@@ -664,6 +664,7 @@ class SalesOrder(models.Model):
         ZohoCustomer, on_delete=models.SET_NULL, blank=True, null=True, default=None
     )
     so_line_items = models.ManyToManyField(SalesOrderLineItem, blank=True)
+    gm_sheet = models.ForeignKey(GmSheet,on_delete=models.SET_NULL, blank=True, null=True, default=None)
     salesorder_id = models.CharField(max_length=100, blank=True, null=True)
     documents = models.JSONField(default=list, blank=True, null=True)
     crm_owner_id = models.CharField(max_length=100, blank=True, null=True)
