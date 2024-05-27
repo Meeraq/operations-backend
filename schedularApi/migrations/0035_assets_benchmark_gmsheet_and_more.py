@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0064_project_nudge_frequency_project_nudge_periodic_task_and_more'),
+        ('api', '0063_alter_standardizedfield_field'),
         ('schedularApi', '0034_handoverdetails_assessment_details_and_more'),
     ]
 

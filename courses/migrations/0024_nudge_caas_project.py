@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0064_project_nudge_frequency_project_nudge_periodic_task_and_more'),
+      
         ('courses', '0023_cttfeedback_feedback_name_cttfeedbackresponse'),
     ]
 
