@@ -24,7 +24,7 @@ class Migration(migrations.Migration):
     dependencies = [
         (
             "schedularApi",
-            "0025_remove_handoverdetails_billing_process_details_and_more",
+            "0035_assets_benchmark_gmsheet_and_more",
         ),
     ]
 
