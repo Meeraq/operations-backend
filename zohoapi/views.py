@@ -740,8 +740,7 @@ def add_invoice_data(request):
     invoices = InvoiceData.objects.filter(
         vendor_id=request.data["vendor_id"],
         invoice_number=request.data["invoice_number"],
-        invoice_date__year__gte=start_year,
-        invoice_date__year__lte=end_year
+        invoice_date__range=(f"{start_year}-04-01", f"{end_year}-03-31")
     )
     hsn_or_sac = request.data.get("hsn_or_sac", None)
     if hsn_or_sac:
