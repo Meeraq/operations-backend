@@ -102,7 +102,7 @@ urlpatterns = [
     path("nudges/<int:nudge_id>/update/", views.update_nudge),
     path("nudges/<int:nudge_id>/file/download/", views.download_nudge_file),
     path(
-        "batches/<int:batch_id>/update-nudge-date-frequency/",
+        "<str:instance_type>/<int:instance_id>/update-nudge-date-frequency/",
         views.add_nudges_date_frequency_to_batch,
     ),
     path(
@@ -365,9 +365,14 @@ urlpatterns = [
         views.get_nudges_by_project_id,
         name="get_nudges_by_project_id",
     ),
+    path(
+        "coaching-project/<int:project_id>/nudges/",
+        views.get_nudges_of_coaching_project,
+        name="get_nudges_of_coaching_project",
+    ),
     path("send-test-nudge/<int:nudge_id>/", views.send_nudge_to_email),
     path(
-        "nudges/<int:nudge_id>/duplicate/<int:batch_id>/",
+        "nudges/<int:nudge_id>/duplicate/<str:instance_type>/<int:instance_id>/",
         views.duplicate_nudge,
         name="duplicate_nudge",
     ),

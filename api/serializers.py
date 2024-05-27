@@ -41,6 +41,7 @@ from .models import (
     CTTPmo,
     Leader,
     CoachProfileShare,
+    UserFeedback,
 )
 from django.contrib.auth.models import User
 from schedularApi.models import ProjectContract, CoachContract
@@ -558,6 +559,11 @@ class SalesSerializer(serializers.ModelSerializer):
 class CoachProfileShareSerializer(serializers.ModelSerializer):
     class Meta:
         model = CoachProfileShare
+        fields = "__all__"
+        
+class UserFeedbackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserFeedback
         fields = "__all__"
 
 
