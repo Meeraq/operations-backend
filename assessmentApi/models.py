@@ -2,6 +2,7 @@ from django.db import models
 from api.models import Learner, Profile, Organisation, HR
 from schedularApi.models import SchedularBatch
 from django.contrib.auth.models import User
+from api.models import Project
 
 # Create your models here.
 
@@ -153,7 +154,7 @@ class Assessment(models.Model):
     assessment_start_date = models.CharField(max_length=255, blank=True)
     assessment_end_date = models.CharField(max_length=255, blank=True)
     questionnaire = models.ForeignKey(
-        Questionnaire, on_delete=models.CASCADE, blank=True
+        Questionnaire, on_delete=models.CASCADE, blank=True, null=True
     )
     descriptive_questions = models.JSONField(default=list, blank=True)
     participants_observers = models.ManyToManyField(
@@ -295,3 +296,10 @@ class BatchCompetencyAssignment(models.Model):
 
     def __str__(self):
         return f"{self.batch.name} - {self.competency.name}"
+
+
+class ProjectAssessmentMapping(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, blank=True)
+    assessments = models.ManyToManyField(Assessment, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
