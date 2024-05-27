@@ -98,7 +98,12 @@ from .serializers import (
     SchedularProjectSerializerArchiveCheck,
     HandoverDetailsSerializer,
     TaskSerializer,
+    BenchmarkSerializer,
+    GmSheetSerializer,
+    OfferingSerializer,
     HandoverDetailsSerializerWithOrganisationName,
+    AssetsSerializer,
+    GmSheetDetailedSerializer,
 )
 from .models import (
     SchedularBatch,
@@ -120,6 +125,10 @@ from .models import (
     Expense,
     HandoverDetails,
     Task,
+    Offering,
+    GmSheet,
+    Benchmark,
+    Assets,
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -142,6 +151,7 @@ from courses.models import (
     Lesson,
     Certificate,
     Answer,
+    Assessment as AssessmentLesson,
 )
 from courses.models import Course, CourseEnrollment
 from courses.serializers import (
@@ -164,6 +174,7 @@ from assessmentApi.models import (
     Competency,
     Behavior,
     ActionItem,
+    BatchCompetencyAssignment,
 )
 from io import BytesIO
 from api.serializers import LearnerSerializer
@@ -174,15 +185,23 @@ from api.views import (
     delete_outlook_calendar_invite,
     create_teams_meeting,
     delete_teams_meeting,
+    create_learner,
 )
 from django.db.models import Max
 import io
 from time import sleep
-from assessmentApi.views import delete_participant_from_assessments
+from assessmentApi.views import (
+    delete_participant_from_assessments,
+    add_multiple_participants_for_project,
+  
+)
 from assessmentApi.serializers import (
     CompetencySerializerDepthOne,
     ActionItemSerializer,
     ActionItemDetailedSerializer,
+    CompetencySerializer,
+    BehaviorSerializer,
+    AssessmentSerializer,
 )
 from schedularApi.tasks import (
     celery_send_unbooked_coaching_session_mail,
@@ -354,7 +373,8 @@ def create_project_schedular(request):
             whatsapp_reminder=project_details["whatsapp_reminder"],
             calendar_invites=project_details["calendar_invites"],
             nudges=project_details["nudges"],
-            pre_post_assessment=project_details["pre_post_assessment"],
+            pre_assessment=project_details["pre_assessment"],
+            post_assessment=project_details["post_assessment"],
             is_finance_enabled=project_details["finance"],
             teams_enabled=project_details["teams_enabled"],
             project_type=project_details["project_type"],
@@ -451,7 +471,11 @@ def create_handover(request):
         res_serializer = HandoverDetailsSerializer(handover_instance)
         return Response(
             {
-                "message": "Handover created successfully. Please contact the PMO team for acceptance of the handover.",
+                "message": (
+                    "The Handover has been saved as draft successfully"
+                    if handover_instance.is_drafted
+                    else "Handover created successfully. Please contact the PMO team for acceptance of the handover."
+                ),
                 "handover": res_serializer.data,
             },
             status=status.HTTP_200_OK,
@@ -469,6 +493,267 @@ PROJECT_TYPE_VALUES = {
     "COD": "COD",
     "assessment": "Assessment",
 }
+
+
+from django.utils import timezone
+
+
+@api_view(["GET"])
+def get_current_or_next_year(request):
+    try:
+        latest_benchmark = Benchmark.objects.latest("created_at")
+        if latest_benchmark:
+            current_year = int(latest_benchmark.year.split("-")[0])
+            print("curr", current_year)
+            next_year = f"{current_year + 1}-{str(current_year + 2)[2:]}"
+            print(next_year)
+            return Response({"year": next_year})
+    except Benchmark.DoesNotExist:
+        # If no benchmark exists, return the current year
+        current_year = timezone.now().year
+        next_year = f"{current_year}-{str(current_year + 1)[2:]}"
+        return Response({"year": next_year}, status=status.HTTP_200_OK)
+
+
+@api_view(["PUT"])
+@permission_classes([IsAuthenticated, IsInRoles("leader")])
+def edit_benchmark(request):
+    try:
+        benchmarks_data = request.data.get("lineItems")
+        updated_benchmarks = []
+
+        with transaction.atomic():
+            for benchmark_data in benchmarks_data:
+                benchmark_id = benchmark_data.get("id")
+                if not benchmark_id:
+                    return Response(
+                        {"error": "Benchmark ID is required for updating"}, status=400
+                    )
+
+                try:
+                    benchmark = Benchmark.objects.get(id=benchmark_id)
+                except Benchmark.DoesNotExist:
+                    return Response(
+                        {"error": f"Benchmark with ID {benchmark_id} does not exist"},
+                        status=404,
+                    )
+
+                serializer = BenchmarkSerializer(
+                    benchmark, data=benchmark_data, partial=True
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                    updated_benchmarks.append(serializer.data)
+                else:
+                    return Response(serializer.errors, status=400)
+
+        return Response(updated_benchmarks, status=200)  # Return the updated benchmarks
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsInRoles("leader")])
+def create_benchmark(request):
+    try:
+        benchmarks_data = request.data.get("lineItems")
+        created_benchmarks = []
+
+        with transaction.atomic():
+            for benchmark_data in benchmarks_data:
+                serializer = BenchmarkSerializer(data=benchmark_data)
+                if serializer.is_valid():
+                    serializer.save()
+                    created_benchmarks.append(serializer.data)
+                else:
+                    # If any benchmark data is invalid, return the errors
+                    return Response(serializer.errors, status=400)
+
+        return Response(created_benchmarks, status=201)  # Return the created benchmarks
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes(
+    [IsAuthenticated]
+)  # Assuming authenticated users can access all benchmarks
+def get_all_benchmarks(request):
+    if request.method == "GET":
+        try:
+            benchmarks = Benchmark.objects.all()
+            serializer = BenchmarkSerializer(benchmarks, many=True)
+            return Response(serializer.data, status=200)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
+
+@api_view(["POST"])
+@transaction.atomic
+def create_gmsheet(request):
+    try:
+        if request.method == "POST":
+            gmsheet_data = request.data.get("gmsheet")
+            gm_sheet_serializer = GmSheetSerializer(data=gmsheet_data)
+            if gm_sheet_serializer.is_valid():
+                gm_sheet = gm_sheet_serializer.save()
+                offerings_data = request.data.get("offerings")
+                if offerings_data:
+                    for offering_data in offerings_data:
+                        offering_data["gm_sheet"] = gm_sheet.id
+                        offering_serializer = OfferingSerializer(data=offering_data)
+                        if offering_serializer.is_valid():
+                            offering_serializer.save()
+                        else:
+                            return Response(
+                                offering_serializer.errors,
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+
+                # Sending email notification
+                send_mail_templates(
+                    "leader_emails/gm_sheet_created.html",
+                    (
+                        ["sujata@meeraq.com"]
+                        if env("ENVIRONMENT") == "PRODUCTION"
+                        else ["naveen@meeraq.com"]
+                    ),  # Update with the recipient's email address
+                    "New GM Sheet created",
+                    {
+                        "projectName": gm_sheet.project_name,
+                        "clientName": gm_sheet.client_name,
+                        "startdate": gm_sheet.start_date,
+                        "projectType": gm_sheet.project_type,
+                        "salesName": gm_sheet.sales.name,
+                    },
+                    [],  # No BCC
+                )
+
+                return Response(
+                    gm_sheet_serializer.data, status=status.HTTP_201_CREATED
+                )
+            return Response(
+                gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+            )
+    except Exception as e:
+        # Handle any exceptions here
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["PUT"])
+def update_is_accepted_status(request, pk):
+    try:
+        gm_sheet = GmSheet.objects.get(pk=pk)
+    except GmSheet.DoesNotExist:
+        return Response(
+            {"error": "GmSheet not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+    data = {}
+    # Check if is_accepted is present in request data
+    if "is_accepted" in request.data:
+        data["is_accepted"] = request.data.get("is_accepted")
+        # Call send_mail_templates if is_accepted is True
+        if data["is_accepted"]:
+            template_name = "gm_sheet_approved.html"
+
+            subject = "GM Sheet approved"
+            context_data = {
+                "projectName": gm_sheet.project_name,
+                "clientName": gm_sheet.client_name,
+                "startdate": gm_sheet.start_date,
+                "projectType": gm_sheet.project_type,
+                "salesName": gm_sheet.sales.name,
+            }
+            bcc_list = []  # No BCC
+            send_mail_templates(
+                template_name,
+                (
+                    [gm_sheet.sales.email]
+                    if env("ENVIRONMENT") == "PRODUCTION"
+                    else ["naveen@meeraq.com"]
+                ),
+                subject,
+                context_data,
+                bcc_list,
+            )
+
+    # Check if deal_status is present in request data
+    if "deal_status" in request.data:
+        data["deal_status"] = request.data.get("deal_status")
+
+    gm_sheet_serializer = GmSheetSerializer(gm_sheet, data=data, partial=True)
+    if gm_sheet_serializer.is_valid():
+        gm_sheet_serializer.save()
+        return Response(gm_sheet_serializer.data, status=status.HTTP_200_OK)
+    return Response(gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+@transaction.atomic
+def update_gmsheet(request, id):
+    try:
+        gm_sheet = GmSheet.objects.get(id=id)
+        gmsheet_data = request.data.get("gmsheet")
+        gm_sheet_serializer = GmSheetSerializer(
+            gm_sheet, data=gmsheet_data, partial=True
+        )
+
+        if gm_sheet_serializer.is_valid():
+            gm_sheet = gm_sheet_serializer.save()
+
+            # Handle offerings update
+            offerings_data = request.data.get("offerings", [])
+
+            for offering_data in offerings_data:
+                offering_id = offering_data.get("id")
+                if offering_id:
+                    try:
+                        offering_instance = Offering.objects.get(
+                            id=offering_id, gm_sheet=gm_sheet
+                        )
+                        offering_serializer = OfferingSerializer(
+                            offering_instance, data=offering_data, partial=True
+                        )
+                        if offering_serializer.is_valid():
+                            offering_serializer.save()
+                        else:
+                            print(offering_serializer.errors)
+                            return Response(
+                                offering_serializer.errors,
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                    except Offering.DoesNotExist:
+                        return Response(
+                            {"error": "Offering not found"},
+                            status=status.HTTP_404_NOT_FOUND,
+                        )
+                else:
+                    offering_data["gm_sheet"] = gm_sheet.id
+                    offering_serializer = OfferingSerializer(data=offering_data)
+                    if offering_serializer.is_valid():
+                        offering_serializer.save()
+                    else:
+                        print("he2", offering_serializer.errors)
+                        return Response(
+                            offering_serializer.errors,
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+            return Response(
+                {"message": "Update Successfully"}, status=status.HTTP_200_OK
+            )
+        else:
+            print("hey", gm_sheet_serializer.errors)
+            return Response(
+                gm_sheet_serializer.errors, status=status.HTTP_400_BAD_REQUEST
+            )
+
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to update data"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(["POST"])
@@ -590,6 +875,117 @@ def get_project_handover(request, project_type, project_id):
         handover = HandoverDetails.objects.get(caas_project=project_id)
     serializer = HandoverDetailsSerializer(handover)
     return Response(serializer.data)
+
+
+@api_view(["POST"])
+def create_asset(request):
+    serializer = AssetsSerializer(data=request.data)
+    if serializer.is_valid():
+        instance = serializer.save()
+        # Set default values for update_entry
+        update_entry = {
+            "date": str(datetime.now()),
+            "status": instance.status,
+            "assigned_to": instance.assigned_to,
+        }
+        instance.updates.append(update_entry)
+        instance.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+def get_all_assets(request):
+    if request.method == "GET":
+        assets = Assets.objects.all().order_by("-update_at")
+        serializer = AssetsSerializer(assets, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["DELETE"])
+def delete_asset(request):
+    id = request.data.get("id")
+    if not id:
+        return Response({"error": "ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        asset = Assets.objects.get(pk=id)
+    except Assets.DoesNotExist:
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
+    asset.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["PUT"])
+def update_asset(request):
+    payload = request.data
+    values = payload.get("values")
+    asset_id = payload.get("id")
+    if not asset_id:
+        return Response(
+            {"error": "Asset ID is required"}, status=status.HTTP_400_BAD_REQUEST
+        )
+    try:
+        asset = Assets.objects.get(id=asset_id)
+    except Assets.DoesNotExist:
+        return Response({"error": "Asset not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = AssetsSerializer(
+        asset, data=values, partial=True
+    )  # Use partial=True for partial updates
+    if serializer.is_valid():
+        instance = serializer.save()
+        update_entry = {
+            "date": str(datetime.now()),
+            "status": instance.status,
+            "assigned_to": instance.assigned_to,
+        }
+        instance.updates.append(update_entry)
+        instance.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["PUT"])
+def update_status(request):
+    if request.method == "PUT":
+        asset_id = request.data.get("id")
+        if asset_id is None:
+            return Response(
+                {"error": "Asset ID is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            asset = Assets.objects.get(pk=asset_id)
+        except Assets.DoesNotExist:
+            return Response(
+                {"error": "Asset does not exist"}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        new_status = request.data.get("status")
+        if new_status not in [choice[0] for choice in Assets.STATUS_CHOICES]:
+            return Response(
+                {"error": "Invalid status value"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        asset.status = new_status
+        if new_status == "idle":
+            asset.assigned_to = ""
+
+        # Append the update to the updates field
+        update_entry = {
+            "date": str(datetime.now()),
+            "status": new_status,
+            "assigned_to": asset.assigned_to,
+        }
+        if not hasattr(asset, "updates"):
+            asset.updates = []  # Initialize if 'updates' field does not exist
+        asset.updates.append(update_entry)
+
+        asset.save()
+        return Response({"success": "Status updated successfully"})
+    return Response(
+        {"error": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
+    )
 
 
 @api_view(["GET"])
@@ -4330,66 +4726,253 @@ def delete_learner_from_course(request):
 @transaction.atomic
 def edit_schedular_project(request, project_id):
     try:
-        project = SchedularProject.objects.get(pk=project_id)
-    except SchedularProject.DoesNotExist:
+        with transaction.atomic():
+            project = SchedularProject.objects.get(pk=project_id)
+
+            prev_pre_assessment = project.pre_assessment
+            prev_post_assessment = project.post_assessment
+            project_details = request.data
+            junior_pmo = None
+            if "junior_pmo" in project_details:
+                junior_pmo = Pmo.objects.filter(
+                    id=project_details["junior_pmo"]
+                ).first()
+
+            project_name = project_details.get("project_name")
+            organisation_id = project_details.get("organisation_id")
+            hr_ids = project_details.get("hr", [])
+            if project_name:
+                project.name = project_name
+            if organisation_id:
+                try:
+                    organisation = Organisation.objects.get(pk=organisation_id)
+                    project.organisation = organisation
+
+                except Organisation.DoesNotExist:
+                    return Response(
+                        {"error": "Organisation not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            # Clear existing HR associations and add the provided ones
+            project.hr.clear()
+            for hr_id in hr_ids:
+                try:
+                    hr = HR.objects.get(pk=hr_id)
+                    project.hr.add(hr)
+                except HR.DoesNotExist:
+                    return Response(
+                        {"error": f"HR with ID {hr_id} not found"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+            project.email_reminder = project_details.get("email_reminder")
+            project.whatsapp_reminder = project_details.get("whatsapp_reminder")
+            project.calendar_invites = project_details.get("calendar_invites")
+            project.nudges = project_details.get("nudges")
+            project.pre_assessment = project_details.get("pre_assessment")
+            project.post_assessment = project_details.get("post_assessment")
+            project.is_finance_enabled = project_details.get("finance")
+            project.junior_pmo = junior_pmo
+            project.teams_enabled = request.data.get("teams_enabled")
+            project.project_type = request.data.get("project_type")
+            project.save()
+
+            pre_assessment = None
+            post_assessment = None
+
+            batches = SchedularBatch.objects.filter(project=project)
+
+            if not prev_pre_assessment == project.pre_assessment:
+                for batch in batches:
+                    course = Course.objects.filter(batch=batch).first()
+                    if course:
+
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+
+                        lesson1 = Lesson.objects.create(
+                            course=course,
+                            name="Pre Assessment",
+                            status="draft",
+                            lesson_type="assessment",
+                            # Duplicate specific lesson types
+                            order=max_order + 1,
+                        )
+                        assessment1 = AssessmentLesson.objects.create(
+                            lesson=lesson1, type="pre"
+                        )
+                        post_assessment_lesson = AssessmentLesson.objects.filter(
+                            lesson__course=course, type="post"
+                        ).first()
+
+                        pre_assessment = Assessment.objects.create(
+                            name=batch.name + " " + "Pre",
+                            participant_view_name=batch.name + " " + "Pre",
+                            assessment_type="self",
+                            organisation=batch.project.organisation,
+                            assessment_timing="pre",
+                            unique_id=str(uuid.uuid4()),
+                            batch=batch,
+                        )
+                        pre_assessment.hr.set(batch.project.hr.all())
+                        pre_assessment.save()
+                        for learner in batch.learners.all():
+
+                            if pre_assessment.participants_observers.filter(
+                                participant__email=learner.email
+                            ).exists():
+                                continue
+                            new_participant = create_learner(name, learner.email)
+                            if learner.phone:
+                                new_participant.phone = learner.phone
+                            new_participant.save()
+                            mapping = ParticipantObserverMapping.objects.create(
+                                participant=new_participant
+                            )
+                            if learner.phone:
+                                add_contact_in_wati(
+                                    "learner",
+                                    new_participant.name,
+                                    new_participant.phone,
+                                )
+                            unique_id = uuid.uuid4()  # Generate a UUID4
+                            # Creating a ParticipantUniqueId instance with a UUID as unique_id
+                            unique_id_instance = ParticipantUniqueId.objects.create(
+                                participant=new_participant,
+                                assessment=pre_assessment,
+                                unique_id=unique_id,
+                            )
+                            mapping.save()
+                            pre_assessment.participants_observers.add(mapping)
+                            pre_assessment.save()
+
+                        if post_assessment_lesson:
+                            pre_assessment.questionnaire = (
+                                post_assessment_lesson.assessment_modal.questionnaire
+                            )
+                            pre_assessment.email_reminder = (
+                                post_assessment_lesson.assessment_modal.email_reminder
+                            )
+                            pre_assessment.whatsapp_reminder = (
+                                post_assessment_lesson.assessment_modal.whatsapp_reminder
+                            )
+
+                            pre_assessment.save()
+
+                            post_assessment_lesson.assessment_modal.pre_assessment = (
+                                pre_assessment
+                            )
+
+                            post_assessment_lesson.assessment_modal.save()
+
+                        assessment1.assessment_modal = pre_assessment
+                        assessment1.save()
+
+            if not prev_post_assessment == project.post_assessment:
+                for batch in batches:
+                    course = Course.objects.filter(batch=batch).first()
+                    if course:
+                        max_order = (
+                            Lesson.objects.filter(course=course).aggregate(
+                                Max("order")
+                            )["order__max"]
+                            or 0
+                        )
+                        lesson1 = Lesson.objects.create(
+                            course=course,
+                            name="Post Assessment",
+                            status="draft",
+                            lesson_type="assessment",
+                            # Duplicate specific lesson types
+                            order=max_order + 1,
+                        )
+                        assessment1 = AssessmentLesson.objects.create(
+                            lesson=lesson1, type="post"
+                        )
+                        pre_assessment_lesson = AssessmentLesson.objects.filter(
+                            lesson__course=course, type="pre"
+                        ).first()
+                        post_assessment = Assessment.objects.create(
+                            name=batch.name + " " + "Post",
+                            participant_view_name=batch.name + " " + "Post",
+                            assessment_type="self",
+                            organisation=batch.project.organisation,
+                            assessment_timing="post",
+                            unique_id=str(uuid.uuid4()),
+                            batch=batch,
+                        )
+                        post_assessment.hr.set(batch.project.hr.all())
+                        post_assessment.save()
+                        for learner in batch.learners.all():
+
+                            if post_assessment.participants_observers.filter(
+                                participant__email=learner.email
+                            ).exists():
+                                continue
+                            new_participant = create_learner(name, learner.email)
+                            if learner.phone:
+                                new_participant.phone = learner.phone
+                            new_participant.save()
+                            mapping = ParticipantObserverMapping.objects.create(
+                                participant=new_participant
+                            )
+                            if learner.phone:
+                                add_contact_in_wati(
+                                    "learner",
+                                    new_participant.name,
+                                    new_participant.phone,
+                                )
+                            unique_id = uuid.uuid4()  # Generate a UUID4
+                            # Creating a ParticipantUniqueId instance with a UUID as unique_id
+                            unique_id_instance = ParticipantUniqueId.objects.create(
+                                participant=new_participant,
+                                assessment=post_assessment,
+                                unique_id=unique_id,
+                            )
+                            mapping.save()
+                            post_assessment.participants_observers.add(mapping)
+                            post_assessment.save()
+
+                        if pre_assessment_lesson:
+                            post_assessment.questionnaire = (
+                                pre_assessment_lesson.assessment_modal.questionnaire
+                            )
+                            post_assessment.email_reminder = (
+                                pre_assessment_lesson.assessment_modal.email_reminder
+                            )
+                            post_assessment.whatsapp_reminder = (
+                                pre_assessment_lesson.assessment_modal.whatsapp_reminder
+                            )
+                            post_assessment.pre_assessment = (
+                                pre_assessment_lesson.assessment_modal
+                            )
+                            post_assessment.save()
+                        assessment1.assessment_modal = post_assessment
+                        assessment1.save()
+
+            if not project.pre_assessment and not project.post_assessment:
+                batches = SchedularBatch.objects.filter(project=project)
+                if batches:
+                    for batch in batches:
+                        course = Course.objects.filter(batch=batch).first()
+                        if course:
+                            lessons = Lesson.objects.filter(course=course)
+                            for lesson in lessons:
+                                if lesson.lesson_type == "assessment":
+                                    lesson.status = "draft"
+                                    lesson.save()
+            return Response(
+                {"message": "Project updated successfully"}, status=status.HTTP_200_OK
+            )
+    except Exception as e:
+        print(str(e))
         return Response(
-            {"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND
+            {"error": "Failed to updated project"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
-    project_details = request.data
-    junior_pmo = None
-    if "junior_pmo" in project_details:
-        junior_pmo = Pmo.objects.filter(id=project_details["junior_pmo"]).first()
-
-    project_name = project_details.get("project_name")
-    organisation_id = project_details.get("organisation_id")
-    hr_ids = project_details.get("hr", [])
-    if project_name:
-        project.name = project_name
-    if organisation_id:
-        try:
-            organisation = Organisation.objects.get(pk=organisation_id)
-            project.organisation = organisation
-
-        except Organisation.DoesNotExist:
-            return Response(
-                {"error": "Organisation not found"}, status=status.HTTP_404_NOT_FOUND
-            )
-    # Clear existing HR associations and add the provided ones
-    project.hr.clear()
-    for hr_id in hr_ids:
-        try:
-            hr = HR.objects.get(pk=hr_id)
-            project.hr.add(hr)
-        except HR.DoesNotExist:
-            return Response(
-                {"error": f"HR with ID {hr_id} not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-    project.email_reminder = project_details.get("email_reminder")
-    project.whatsapp_reminder = project_details.get("whatsapp_reminder")
-    project.calendar_invites = project_details.get("calendar_invites")
-    project.nudges = project_details.get("nudges")
-    project.pre_post_assessment = project_details.get("pre_post_assessment")
-    project.is_finance_enabled = project_details.get("finance")
-    project.junior_pmo = junior_pmo
-    project.teams_enabled = request.data.get("teams_enabled")
-    project.project_type = request.data.get("project_type")
-    project.save()
-
-    if not project.pre_post_assessment:
-        batches = SchedularBatch.objects.filter(project=project)
-        if batches:
-            for batch in batches:
-                course = Course.objects.filter(batch=batch).first()
-                if course:
-                    lessons = Lesson.objects.filter(course=course)
-                    for lesson in lessons:
-                        if lesson.lesson_type == "assessment":
-                            lesson.status = "draft"
-                            lesson.save()
-    return Response(
-        {"message": "Project updated successfully"}, status=status.HTTP_200_OK
-    )
 
 
 @api_view(["POST"])
@@ -6205,7 +6788,7 @@ def get_project_wise_progress_data(request, project_id):
                     assessment=post_assessment, participant=participant
                 ).first()
 
-                if project and project.pre_post_assessment:
+                if project and project.pre_assessment:
                     temp["pre_assessment"] = "Yes" if pre_participant_response else "No"
 
                 for session in project.project_structure:
@@ -6261,7 +6844,7 @@ def get_project_wise_progress_data(request, project_id):
                         else:
                             temp[f"{session_type} {session['order']}"] = "No"
 
-                if project and project.pre_post_assessment:
+                if project and project.post_assessment:
                     temp["post_assessment"] = (
                         "Yes" if post_participant_response else "No"
                     )
@@ -7383,6 +7966,92 @@ def get_pmo_handovers(request):
         )
 
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def max_gmsheet_number(request):
+    try:
+        # Get the latest gmsheet_number
+        latest_gmsheet = GmSheet.objects.latest("created_at")
+        latest_number = int(
+            latest_gmsheet.gmsheet_number[3:]
+        )  # Extract the number part and convert to integer
+        next_number = latest_number + 1
+        next_gmsheet_number = (
+            f"PRO{next_number:03}"  # Format the next number to match 'PRO001' format
+        )
+    except GmSheet.DoesNotExist:
+        # If no GmSheet objects exist, create the first gmsheet_number as 'PRO001'
+        next_gmsheet_number = "PRO001"
+        # GmSheet.objects.create(gmsheet_number=next_gmsheet_number)
+
+    return JsonResponse({"max_number": next_gmsheet_number})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_gmsheet_by_sales(request, sales_person_id):
+    try:
+        gmsheet = GmSheet.objects.filter(sales__id=sales_person_id).order_by(
+            "-created_at"
+        )
+        serializer = GmSheetSerializer(gmsheet, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get GM Sheets for the specified salesperson."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_gmsheet(request):
+    try:
+        gmsheet_id = request.data.get("gmSheetId")
+        gmsheet = GmSheet.objects.get(id=gmsheet_id)
+        gmsheet.delete()
+        return Response(
+            {"success": "GM Sheet deleted successfully."},
+            status=status.HTTP_204_NO_CONTENT,
+        )
+    except GmSheet.DoesNotExist:
+        return Response(
+            {"error": "GM Sheet does not exist."}, status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to delete GM Sheet."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_offerings_by_gmsheet_id(request, gmsheet_id):
+    print(gmsheet_id)
+    offerings = Offering.objects.filter(gm_sheet=gmsheet_id)
+    print(offerings)
+    serializer = OfferingSerializer(offerings, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_gmsheet(request):
+    try:
+        gmsheet = GmSheet.objects.all().order_by("-created_at")
+        serializer = GmSheetDetailedSerializer(gmsheet, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response(
+            {"error": "Failed to get GM Sheet."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated])
 def update_reminder_in_batch(request, batch_id):
@@ -7536,14 +8205,21 @@ def learner_batches(request, pk):
 @permission_classes([IsAuthenticated])
 def batch_competencies_and_behaviours(request, batch_id):
     try:
-        assessments = Assessment.objects.filter(
-            assessment_modal__lesson__course__batch__id=batch_id
+        competency_assignments = BatchCompetencyAssignment.objects.filter(
+            batch__id=batch_id
         )
-        competencies = Competency.objects.filter(
-            question__questionnaire__assessment__in=assessments
-        ).distinct()
-        serializer = CompetencySerializerDepthOne(competencies, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        res = []
+        for competency_assignment in competency_assignments:
+            competency_serializer = CompetencySerializer(
+                competency_assignment.competency
+            )
+            behaviors_serializer = BehaviorSerializer(
+                competency_assignment.selected_behaviors, many=True
+            )
+            data = competency_serializer.data
+            data["behaviors"] = behaviors_serializer.data
+            res.append(data)
+        return Response(res, status=status.HTTP_200_OK)
     except Exception as e:
         print(str(e))
         return Response(
@@ -7573,7 +8249,15 @@ def learner_action_items_in_batch(request, batch_id, learner_id):
     action_items = ActionItem.objects.filter(
         batch__id=batch_id, learner__id=learner_id
     ).order_by("-created_at")
-    action_items_serializer = ActionItemSerializer(action_items, many=True)
+    action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
+    return Response(action_items_serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def action_items_in_batch(request, batch_id):
+    action_items = ActionItem.objects.filter(batch__id=batch_id).order_by("-created_at")
+    action_items_serializer = ActionItemDetailedSerializer(action_items, many=True)
     return Response(action_items_serializer.data, status=status.HTTP_200_OK)
 
 
@@ -7600,6 +8284,14 @@ MOVEMENT_TYPES = {
     2: "Some Movement",
     3: "Significant Movement",
     4: "Excellent Movement",
+}
+
+STATUS_LABELS = {
+    "not_started": "Not Started",
+    "occasionally_doing": "Occasionally Doing",
+    "regularly_doing": "Regularly Doing",
+    "actively_pursuing": "Actively Pursuing",
+    "consistently_achieving": "Consistently Achieving",
 }
 
 
@@ -7778,8 +8470,17 @@ def batch_competency_behavior_movement(request, batch_id, competency_id, behavio
 
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def get_all_action_items(request):
     action_items = ActionItem.objects.all()
+    serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
+    return Response(serialized_data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_action_items_hr(request, hr_id):
+    action_items = ActionItem.objects.filter(batch__project__hr=hr_id)
     serialized_data = ActionItemDetailedSerializer(action_items, many=True).data
     return Response(serialized_data)
 
@@ -7821,3 +8522,158 @@ def get_all_assessments_of_batch(request, type, pk):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"}, status=500)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_upcoming_past_live_session_facilitator(request, user_id):
+    print("hello")
+    try:
+        status = request.query_params.get("status")
+        project_id = request.query_params.get("project_id")
+
+        facilitator = Facilitator.objects.get(id=user_id)
+
+        all_live_sessions = LiveSession.objects.all()
+
+        if project_id and not project_id == "all":
+            all_live_sessions = all_live_sessions.filter(batch__project__id=project_id)
+
+        if status == "Upcoming":
+            live_sessions = all_live_sessions.filter(
+                facilitator=facilitator, date_time__gt=timezone.now()
+            ).order_by("date_time")
+        elif status == "Past":
+            live_sessions = all_live_sessions.filter(
+                facilitator=facilitator, date_time__lt=timezone.now()
+            ).order_by("-date_time")
+        # For upcoming live sessions
+        live_session_data = []
+        for session in live_sessions:
+            session_name = get_live_session_name(session.session_type)
+            session_data = {
+                "batch_name": session.batch.name,
+                "project_name": session.batch.project.name,
+                "session_name": f"{session_name} {session.live_session_number}",
+                "date_time": session.date_time,
+                "meeting_link": session.meeting_link,
+            }
+            live_session_data.append(session_data)
+
+        return Response({"live_session_data": live_session_data})
+    except ObjectDoesNotExist:
+        return Response({"error": "Facilitator not found"}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def batch_competency_movement(request, batch_id, competency_id):
+    # Define initial and current status integer mappings
+    initial_status_int = Case(
+        *[
+            When(initial_status=status, then=Value(status_choices_dict.get(status, 0)))
+            for status in status_choices_dict
+        ],
+        default=Value(0),  # Default value if status not found
+        output_field=IntegerField(),
+    )
+    current_status_int = Case(
+        *[
+            When(current_status=status, then=Value(status_choices_dict.get(status, 0)))
+            for status in status_choices_dict
+        ],
+        default=Value(0),  # Default value if status not found
+        output_field=IntegerField(),
+    )
+
+    # Fetch behaviors associated with the competency
+    competency_behaviors = []
+    batch_competency_assignment = BatchCompetencyAssignment.objects.filter(
+        batch__id=batch_id, competency__id=competency_id
+    ).first()
+    if batch_competency_assignment:
+        competency_behaviors = batch_competency_assignment.selected_behaviors.all()
+    # Competency.objects.get(id=competency_id).behaviors.all()
+
+    # Annotate the queryset with the movement between initial and current statuses
+    movement_counts = (
+        ActionItem.objects.filter(
+            batch__id=batch_id,
+            competency__id=competency_id,
+            behavior__in=competency_behaviors,
+        )
+        .annotate(
+            initial_status_int=initial_status_int,
+            current_status_int=current_status_int,
+            movement=F("current_status_int") - F("initial_status_int"),
+        )
+        .values("behavior__name", "movement")
+        .annotate(count=Count("id"))
+    )
+
+    print(movement_counts)
+
+    # Prepare data for response
+    data = [
+        {"movement": i, **{behavior.name: 0 for behavior in competency_behaviors}}
+        for i in range(
+            5
+        )  # Initialize with default count of 0 for all movements (0 to 4)
+    ]
+
+    # Update the counts from the queryset
+    for item in movement_counts:
+        behavior_name = item["behavior__name"]
+        movement = item["movement"]
+        count = item["count"]
+        # if only +ve movement exist
+        if movement >= 0:
+            data[movement][behavior_name] += count
+        # if someone does negative movemtn than assuming it as 0 movement
+        else:
+            data[0][behavior_name] += count
+
+    # Fetch behavior names associated with the competency
+    behavior_names = {behavior.name: behavior.id for behavior in competency_behaviors}
+
+    # Initialize a dictionary to store counts for each behavior in each status
+    behavior_status_counts = {
+        behavior_name: {status[0]: 0 for status in STATUS_CHOICES}
+        for behavior_name in behavior_names
+    }
+
+    # Fetch status counts for each behavior from the database
+    for behavior_name, behavior_id in behavior_names.items():
+        status_counts_queryset = (
+            ActionItem.objects.filter(
+                batch__id=batch_id,
+                competency__id=competency_id,
+                behavior__id=behavior_id,
+            )
+            .values("current_status")
+            .annotate(count=Count("id"))
+        )
+
+        # Update counts for existing statuses for the current behavior
+        for item in status_counts_queryset:
+            behavior_status_counts[behavior_name][item["current_status"]] = item[
+                "count"
+            ]
+
+    # Prepare data for response
+    action_item_counts = [
+        {
+            "status": STATUS_LABELS[status],
+            **{
+                behavior_name: counts[status]
+                for behavior_name, counts in behavior_status_counts.items()
+            },
+        }
+        for status, _ in STATUS_CHOICES
+    ]
+
+    return Response(
+        {"action_item_movement": data, "action_item_counts": action_item_counts}
+    )

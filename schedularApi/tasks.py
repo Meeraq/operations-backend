@@ -8,7 +8,7 @@ from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 from django.core.mail import EmailMessage
 from django.conf import settings
-from api.models import Coach, User, UserToken, SessionRequestCaas, Learner
+from api.models import Coach, User, UserToken, SessionRequestCaas, Learner,Project
 from schedularApi.models import (
     CoachingSession,
     SchedularSessions,
@@ -59,7 +59,13 @@ from assessmentApi.models import Assessment, ParticipantResponse
 import environ
 from time import sleep
 import requests
-from zohoapi.models import Vendor, PoReminder,SalesOrder,SalesOrderLineItem,OrdersAndProjectMapping
+from zohoapi.models import (
+    Vendor,
+    PoReminder,
+    SalesOrder,
+    SalesOrderLineItem,
+    OrdersAndProjectMapping,
+)
 from zohoapi.views import (
     filter_purchase_order_data,
 )
@@ -1660,15 +1666,23 @@ def coach_has_to_give_slots_availability_reminder():
 
 
 @shared_task
-def schedule_nudges(batch_id):
-    batch = SchedularBatch.objects.get(id=batch_id)
-    nudges = Nudge.objects.filter(batch__id=batch_id).order_by("order")
-    nudge_scheduled_for = batch.nudge_start_date
+def schedule_nudges(instance_id, instance_type=None):
+    if instance_type == "project":
+        project = Project.objects.get(id=instance_id)  
+        nudge_scheduled_for = project.nudge_start_date
+        nudge_frequency = project.nudge_frequency
+        nudges = Nudge.objects.filter(caas_project=project).order_by("order")
+    elif instance_type == "batch" or not instance_type:
+        batch = SchedularBatch.objects.get(id=instance_id)
+        nudge_scheduled_for = batch.nudge_start_date
+        nudge_frequency = batch.nudge_frequency
+        nudges = Nudge.objects.filter(batch=batch).order_by("order")
+
     for nudge in nudges:
         nudge.trigger_date = nudge_scheduled_for
         nudge.save()
         nudge_scheduled_for = nudge_scheduled_for + timedelta(
-            int(batch.nudge_frequency)
+            int(nudge_frequency)
         )
 
 
@@ -2703,9 +2717,10 @@ def schedule_assessment_reminders():
                         one_off=True,
                     )
 
+
 @shared_task
 def invoice_due_email_reminder():
-    try:  
+    try:
         current_date = datetime.now().date()
         line_items = SalesOrderLineItem.objects.filter(
             custom_field_hash__cf_due_date__isnull=False, is_invoiced=False
@@ -2730,14 +2745,27 @@ def invoice_due_email_reminder():
                     }
                     line_item_data.append(line_item)
         send_mail_templates(
-             "due_invoice_email_reminder.html",
-             ["finance@meeraq.com","kumar@meeraq.com","raju@coachtotransformation.com"] if env("ENVIRONMENT") == "PRODUCTION" else ["tech@meeraq.com"],
-             "Invoices due today",
-             {'line_item_data' : line_item_data},
-             ["rajat@meeraq.com","sujata@meeraq.com"] if env("ENVIRONMENT") == "PRODUCTION" else ["naveen@meeraq.com"]
-        )           
+            "due_invoice_email_reminder.html",
+            (
+                [
+                    "finance@meeraq.com",
+                    "kumar@coachtotransformation.com",
+                    "raju@coachtotransformation.com",
+                ]
+                if env("ENVIRONMENT") == "PRODUCTION"
+                else ["tech@meeraq.com"]
+            ),
+            "Invoices due today",
+            {"line_item_data": line_item_data},
+            (
+                ["rajat@meeraq.com", "sujata@meeraq.com"]
+                if env("ENVIRONMENT") == "PRODUCTION"
+                else ["naveen@meeraq.com"]
+            ),
+        )
     except Exception as e:
         print(str(e))
+
 
 @shared_task
 def send_live_session_link_whatsapp_to_facilitators_30_min_before(id):
@@ -3175,14 +3203,19 @@ def add_batch_to_project(data):
 def send_nudge_reminder_on_trigger_date_at_6pm():
     today = datetime.now().date()
     nudges = Nudge.objects.filter(
-        trigger_date=today,
-        is_sent=False,
-        is_switched_on=True,
-        batch__project__nudges=True,
-        batch__project__status="ongoing",
+        Q(trigger_date=today),
+        Q(is_sent=False),
+        Q(is_switched_on=True),
+        Q(batch__project__nudges=True, batch__project__status="ongoing") | Q(caas_project__nudges=True)
     )
     for nudge in nudges:
-        learners = nudge.batch.learners.all() if nudge.batch else []
+        learners = (
+            nudge.batch.learners.all() 
+            if nudge.batch 
+            else Learner.objects.filter(engagement__project=nudge.caas_project).distinct() 
+            if nudge.caas_project 
+            else []
+        )
         for learner in learners:
             if learner.id not in nudge.learner_ids:
                 nudge_id = nudge.unique_id

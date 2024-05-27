@@ -422,6 +422,11 @@ urlpatterns = [
         name="get_sales_of_each_program",
     ),
     path(
+        "get-line-items-detail-in-excel/",
+        views.get_line_items_detail_in_excel,
+        name="get_line_items_detail_in_excel",
+    ),
+    path(
         "get-po-data-of-project/<int:project_id>/<str:project_type>/",
         views.get_po_data_of_project,
         name="get_po_data_of_project",

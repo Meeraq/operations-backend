@@ -488,6 +488,14 @@ class Project(models.Model):
     )
     credit_history = models.JSONField(default=list, blank=True)
     is_session_expiry = models.BooleanField(blank=True, default=False)
+    nudges = models.BooleanField(blank=True, default=True)
+    pre_assessment = models.BooleanField(blank=True, default=True)
+    post_assessment = models.BooleanField(blank=True, default=True)
+    nudge_start_date = models.DateField(default=None, blank=True, null=True)
+    nudge_frequency = models.CharField(max_length=50, default="", blank=True, null=True)
+    nudge_periodic_task = models.ForeignKey(
+        PeriodicTask, blank=True, null=True, on_delete=models.SET_NULL
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -764,6 +772,8 @@ class StandardizedField(models.Model):
         ("city", "City"),
         ("country", "Country"),
         ("topic", "Topic"),
+        ("product_type", "Product Type"),
+        ("category", "Category"),
     )
 
     field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)

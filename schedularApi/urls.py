@@ -8,6 +8,31 @@ urlpatterns = [
         views.get_all_Schedular_Projects,
         name="get-all-schedular-projects",
     ),
+    path("create-benchmark/", views.create_benchmark, name="create_benchmark"),
+    path("edit-benchmark/", views.edit_benchmark, name="edit_benchmark"),
+    path("get-benchmark/", views.get_all_benchmarks),
+    path("create-gmsheet/", views.create_gmsheet, name="create_gmsheet"),
+    path("update-status/", views.update_status, name="update-status"),
+    path("update-gmsheet/<int:id>/", views.update_gmsheet),
+    path(
+        "accept-gmsheet/<int:pk>/",
+        views.update_is_accepted_status,
+        name="update_is_accepted_status",
+    ),
+    path("delete-gmsheet/", views.delete_gmsheet, name="delete_gmsheet"),
+    path("all-gmsheet/", views.get_all_gmsheet),
+    path(
+        "offerings/<int:gmsheet_id>/",
+        views.get_offerings_by_gmsheet_id,
+        name="offerings-list",
+    ),
+    path("gmsheet/maxNumber/", views.max_gmsheet_number, name="max_gmsheet_number"),
+    path("gmsheet-by-sales/<int:sales_person_id>", views.get_gmsheet_by_sales),
+    path(
+        "current-or-next-year/",
+        views.get_current_or_next_year,
+        name="current_or_next_year",
+    ),
     path(
         "create_project_structure/<int:project_id>/",
         views.create_project_structure,
@@ -18,6 +43,10 @@ urlpatterns = [
     path("handover/create/", views.create_handover),
     path("handover/update/", views.update_handover),
     path("handover/<int:handover_id>/salesorders/", views.get_handover_salesorders),
+    path("create-assets/", views.create_asset),
+    path("assets/", views.get_all_assets),
+    path("delete-asset/", views.delete_asset, name="delete_asset"),
+    path("update-asset/", views.update_asset, name="update_asset"),
     path(
         "schedular-batches/",
         views.get_schedular_batches,
@@ -418,6 +447,11 @@ urlpatterns = [
         name="learner_action_items_in_batch",
     ),
     path(
+        "batch/action-items/<int:batch_id>/",
+        views.action_items_in_batch,
+        name="action_items_in_batch",
+    ),
+    path(
         "batch/competencies-and-behaviours/<int:batch_id>/",
         views.batch_competencies_and_behaviours,
         name="batch_competencies_and_behaviours",
@@ -427,12 +461,24 @@ urlpatterns = [
         views.batch_competency_behavior_movement,
     ),
     path(
+        "batch/<int:batch_id>/competency/<int:competency_id>/movement/",
+        views.batch_competency_movement,
+    ),
+    path(
         "all-actions/",
         views.get_all_action_items,
+    ),
+    path(
+        "actions/<int:hr_id>/",
+        views.get_all_action_items_hr,
     ),
     path(
         "get-batch-wise-assessment-data/<str:type>/<int:pk>/",
         views.get_all_assessments_of_batch,
         name="get_all_assessments_of_batch",
+    ),
+    path(
+        "get-upcoming-past-live-session-facilitator/<int:user_id>/",
+        views.get_upcoming_past_live_session_facilitator,
     ),
 ]

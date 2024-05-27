@@ -74,6 +74,8 @@ from .views import (
     GetAssessmentBatchAndProject,
     DownloadQuestionWiseExcelForProject,
     ResponseDownloadForAllParticipants,
+    CreateCoachingAssessmentAndAddMultipleParticipants,
+    GetAssessmentOfCoachingProject,
 )
 
 
@@ -334,5 +336,33 @@ urlpatterns = [
     path(
         "add-user-as-a-participant-of-assessment/",
         views.add_user_as_a_participant_of_assessment,
+    ),
+    path(
+        "add-competency-to-batch/<int:batch_id>/",
+        views.add_competency_to_batch,
+        name="add_competency_to_batch",
+    ),
+    path(
+        "edit-competency-assignment/<int:batch_id>/<int:assignment_id>/",
+        views.edit_competency_assignment,
+        name="edit_competency_assignment",
+    ),
+    path(
+        "get-batch-competency-assignments/<int:batch_id>/",
+        views.get_batch_competency_assignments,
+        name="get_batch_competency_assignments",
+    ),
+    path(
+        "delete-batch-competency/<int:course_competency_id>/",
+        views.delete_batch_competency,
+        name="delete_batch_competency",
+    ),
+    path(
+        "create-coaching-assessment-and-add-multiple-participants/",
+        CreateCoachingAssessmentAndAddMultipleParticipants.as_view(),
+    ),
+    path(
+        "get-assessment-of-coaching-project/<int:project_id>/",
+        GetAssessmentOfCoachingProject.as_view(),
     ),
 ]
