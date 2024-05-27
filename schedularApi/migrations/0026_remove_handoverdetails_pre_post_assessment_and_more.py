@@ -9,13 +9,13 @@ def copy_pre_post_assessment_to_pre_and_post(apps, schema_editor):
 
     # Copy pre_post_assessment values to pre_assessment and post_assessment
     for handover_details in HandoverDetails.objects.all():
-        handover_details.pre_assessment = handover_details.pre_assessment
-        handover_details.post_assessment = handover_details.post_assessment
+        handover_details.pre_assessment = handover_details.pre_post_assessment
+        handover_details.post_assessment = handover_details.pre_post_assessment
         handover_details.save()
 
     for schedular_project in SchedularProject.objects.all():
-        schedular_project.pre_assessment = schedular_project.pre_assessment
-        schedular_project.post_assessment = schedular_project.post_assessment
+        schedular_project.pre_assessment = schedular_project.pre_post_assessment
+        schedular_project.post_assessment = schedular_project.pre_post_assessment
         schedular_project.save()
 
 

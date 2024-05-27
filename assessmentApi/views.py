@@ -23,7 +23,7 @@ from .models import (
     AssessmentNotification,
     ParticipantUniqueId,
     ParticipantReleasedResults,
-    BatchCompetencyAssignment
+    BatchCompetencyAssignment,
     ProjectAssessmentMapping,
 )
 from .serializers import (
