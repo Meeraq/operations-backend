@@ -44,4 +44,25 @@ urlpatterns = [
         views.get_all_client_invoice_of_participant_for_batch,
         name="get_all_client_invoice_of_participant_for_batch",
     ),
+    path(
+        "get-participants-of-batch/<int:batch_id>/",
+        views.get_participants_of_that_batch,
+        name="get_participants_of_that_batch",
+    ),
+    path(
+        "get-ctt-salesperson-individual/<int:salesperson_id>/",
+        views.get_ctt_salesperson_individual,
+        name="get_ctt_salesperson_individual",
+    ),
+    path(
+        "get-card-data-for-dashboard-ctt/",
+        views.get_card_data_for_dashboard_ctt,
+        name="get_card_data_for_dashboard_ctt",
+    ),
+      path(
+        "get-all-ctt-faculties/",
+        views.get_all_ctt_faculties,
+        name="get_all_ctt_faculties",
+    ),
+   
 ]

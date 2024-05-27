@@ -276,7 +276,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "send_feedback_lesson_reminders": {
         "task": "schedularApi.tasks.send_feedback_lesson_reminders",
-        "schedule": crontab(hour=13, minute=0),  # 8 AM
+        "schedule": crontab(hour=13, minute=0),  # 8 PM
     },
     "send_reminder_to_book_slots_to_coachee": {
         "task": "schedularApi.tasks.send_reminder_to_book_slots_to_coachee",
@@ -334,9 +334,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "schedularApi.tasks.schedule_assessment_reminders",
         "schedule": crontab(hour=0, minute=1),  # Run every day at midnight in UTC
     },
-    "send_nudges": {
-        "task": "schedularApi.tasks.send_nudges",
-        "schedule": crontab(hour=3, minute=0, day_of_week="*"),  # 8:30 AM IST
+    # "send_nudges": {
+    #     "task": "schedularApi.tasks.send_nudges",
+    #     "schedule": crontab(hour=3, minute=0, day_of_week="*"),  # 8:30 AM IST
+    # },
+    "invoice_due_email_reminder": {
+        "task": "schedularApi.tasks.invoice_due_email_reminder",
+        "schedule": crontab(hour=3, minute=30),  # 9:00 AM
     },
     "send_live_session_reminder_to_facilitator_one_day_before": {
         "task": "schedularApi.tasks.send_live_session_reminder_to_facilitator_one_day_before",
@@ -349,6 +353,14 @@ CELERY_BEAT_SCHEDULE = {
     "update_zoho_data": {
         "task": "zohoapi.tasks.update_zoho_data",
         "schedule": crontab(hour=0, minute=1),
+    },
+    "schedule_request_expiry_for_session": {
+        "task": "api.tasks.schedule_request_expiry_for_session",
+        "schedule": crontab(hour=0, minute=1),  # Run every day at midnight in UTC
+    },
+    "send_nudge_reminder_on_trigger_date_at_6pm": {
+        "task": "schedularApi.tasks.send_nudge_reminder_on_trigger_date_at_6pm",
+        "schedule": crontab(hour=12, minute=30, day_of_week="*"),  # 6:00 PM IST
     },
 }
 

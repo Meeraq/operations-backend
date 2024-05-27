@@ -1,6 +1,6 @@
 from django.db import models
 from django.utils import timezone
-from api.models import Profile, validate_pdf_extension, Project
+from api.models import Profile, validate_pdf_extension, Project,Engagement, Coach, Facilitator
 from django.contrib.auth.models import User
 from schedularApi.models import SchedularProject
 
@@ -344,6 +344,9 @@ class ZohoCustomer(models.Model):
     zohopeople_client_id = models.CharField(max_length=50, blank=True, null=True)
     customer_currency_summaries = models.JSONField(blank=True, null=True)
 
+    class Meta:
+        ordering = ["-created_time"]
+
     def __str__(self):
         return self.contact_name
 
@@ -551,6 +554,9 @@ class ZohoVendor(models.Model):
     zohopeople_client_id = models.CharField(max_length=100, blank=True, null=True)
     vendor_currency_summaries = models.JSONField(default=list, blank=True, null=True)
 
+    class Meta:
+        ordering = ["-created_time"]
+
     def __str__(self):
         return self.contact_name
 
@@ -586,7 +592,7 @@ class SalesOrderLineItem(models.Model):
     )
     sales_rate_formatted = models.CharField(max_length=20, blank=True, null=True)
     quantity = models.DecimalField(
-        max_digits=15, decimal_places=2, blank=True, null=True
+        max_digits=19, decimal_places=6, blank=True, null=True
     )
     unit = models.CharField(max_length=50, blank=True, null=True)
     pricebook_id = models.CharField(max_length=100, blank=True, null=True)
@@ -636,13 +642,13 @@ class SalesOrderLineItem(models.Model):
     item_custom_fields = models.JSONField(default=list, blank=True, null=True)
     custom_field_hash = models.JSONField(default=dict, blank=True, null=True)
     quantity_invoiced = models.DecimalField(
-        max_digits=15, decimal_places=2, default=0.00, blank=True, null=True
+        max_digits=19, decimal_places=6, default=0.00, blank=True, null=True
     )
     quantity_backordered = models.DecimalField(
-        max_digits=15, decimal_places=2, default=0.00, blank=True, null=True
+        max_digits=19, decimal_places=6, default=0.00, blank=True, null=True
     )
     quantity_cancelled = models.DecimalField(
-        max_digits=15, decimal_places=2, default=0.00, blank=True, null=True
+        max_digits=19, decimal_places=6, default=0.00, blank=True, null=True
     )
     is_fulfillable = models.DecimalField(
         max_digits=15, decimal_places=2, default=0.00, blank=True, null=True
@@ -738,7 +744,7 @@ class SalesOrder(models.Model):
     branch_id = models.CharField(max_length=100, blank=True, null=True)
     branch_name = models.CharField(max_length=255, blank=True, null=True)
     total_quantity = models.DecimalField(
-        max_digits=15, decimal_places=2, blank=True, null=True
+        max_digits=19, decimal_places=6, blank=True, null=True
     )
     total_quantity_formatted = models.CharField(max_length=20, blank=True, null=True)
     is_portal_enabled = models.BooleanField(default=False)
@@ -908,8 +914,11 @@ class SalesOrder(models.Model):
     balance_formatted = models.CharField(max_length=20, blank=True, null=True)
     approvers_list = models.JSONField(default=list, blank=True, null=True)
 
+    class Meta:
+        ordering = ["-created_time"]
+
     def __str__(self):
-        return f"Sales Order {self.salesorder_id}"
+        return f"Sales Order {self.salesorder_number} {self.salesorder_id}"
 
 
 class ClientInvoiceLineItem(models.Model):
@@ -927,7 +936,7 @@ class ClientInvoiceLineItem(models.Model):
     description = models.TextField(blank=True, null=True)
     unit = models.CharField(max_length=255, blank=True, null=True)
     quantity = models.DecimalField(
-        max_digits=15, decimal_places=2, blank=True, null=True
+        max_digits=19, decimal_places=6, blank=True, null=True
     )
     discount_amount = models.DecimalField(
         max_digits=10, decimal_places=2, blank=True, null=True
@@ -1343,6 +1352,9 @@ class ClientInvoice(models.Model):
     approvers_list = models.JSONField(default=list, null=True, blank=True)
     qr_code = models.JSONField(default=dict, null=True, blank=True)
 
+    class Meta:
+        ordering = ["-created_time"]
+
     def __str__(self):
         return f"Invoice {self.invoice_number}"
 
@@ -1356,7 +1368,7 @@ class PurchaseOrderLineItem(models.Model):
     account_id = models.CharField(max_length=100, null=True, blank=True)
     account_name = models.CharField(max_length=100, null=True, blank=True)
     name = models.CharField(max_length=100, null=True, blank=True)
-    description = models.CharField(max_length=255, null=True, blank=True)
+    description = models.TextField(blank=True, null=True)
     item_order = models.IntegerField(null=True, blank=True)
     bcy_rate = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
@@ -1368,7 +1380,7 @@ class PurchaseOrderLineItem(models.Model):
     rate = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     rate_formatted = models.CharField(max_length=20, null=True, blank=True)
     quantity = models.DecimalField(
-        max_digits=15, decimal_places=2, blank=True, null=True
+        max_digits=19, decimal_places=6, blank=True, null=True
     )
     discount = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
@@ -1377,10 +1389,10 @@ class PurchaseOrderLineItem(models.Model):
         default=list, null=True, blank=True
     )  # New field for discounts
     quantity_cancelled = models.DecimalField(
-        max_digits=15, decimal_places=2, blank=True, null=True
+        max_digits=19, decimal_places=6, blank=True, null=True
     )
     quantity_billed = models.DecimalField(
-        max_digits=15, decimal_places=2, blank=True, null=True
+        max_digits=19, decimal_places=6, blank=True, null=True
     )
     unit = models.CharField(max_length=50, null=True, blank=True)
     item_total = models.DecimalField(
@@ -1424,6 +1436,22 @@ class PurchaseOrder(models.Model):
         ZohoVendor, on_delete=models.SET_NULL, blank=True, null=True, default=None
     )
     po_line_items = models.ManyToManyField(PurchaseOrderLineItem, blank=True)
+    schedular_project = models.ForeignKey(
+        SchedularProject,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+    )
+    caas_project = models.ForeignKey(
+        Project, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    coach = models.ForeignKey(
+        Coach, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    facilitator = models.ForeignKey(
+        Facilitator, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    engagements = models.ManyToManyField(Engagement, blank=True)
     purchaseorder_id = models.CharField(max_length=100, null=True, blank=True)
     branch_id = models.CharField(max_length=100, null=True, blank=True)
     branch_name = models.CharField(max_length=100, null=True, blank=True)
@@ -1579,9 +1607,14 @@ class PurchaseOrder(models.Model):
     can_mark_as_unbill = models.BooleanField(default=False)
     salesorders = models.JSONField(default=list, null=True, blank=True)
     bills = models.JSONField(default=list, null=True, blank=True)
+    is_guest_ctt = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created_time"]
 
     def __str__(self):
         return self.purchaseorder_number
+    
 
 
 class BillLineItem(models.Model):
@@ -1607,7 +1640,7 @@ class BillLineItem(models.Model):
     header_name = models.CharField(max_length=100, null=True, blank=True)
     tags = models.JSONField(default=list, null=True, blank=True)
     quantity = models.DecimalField(
-        max_digits=15, decimal_places=2, blank=True, null=True
+        max_digits=19, decimal_places=6, blank=True, null=True
     )
     discount = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
@@ -1848,8 +1881,8 @@ class Bill(models.Model):
     last_modified_time = models.DateTimeField(blank=True, null=True)
     warn_create_vendor_credits = models.BooleanField(default=True)
     reference_id = models.CharField(max_length=100, blank=True, null=True)
-    notes = models.CharField(max_length=100, blank=True, null=True)
-    terms = models.CharField(max_length=100, blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+    terms = models.TextField(blank=True, null=True)
     attachment_name = models.CharField(max_length=100, blank=True, null=True)
     open_purchaseorders_count = models.IntegerField(blank=True, null=True)
     un_billed_items = models.JSONField(default=dict, blank=True, null=True)
@@ -1870,6 +1903,9 @@ class Bill(models.Model):
     reference_bill_id = models.CharField(max_length=100, blank=True, null=True)
     can_send_in_mail = models.BooleanField(default=False)
     approvers_list = models.JSONField(default=list, blank=True, null=True)
+
+    class Meta:
+        ordering = ["-created_time"]
 
     def __str__(self):
         return self.bill_id

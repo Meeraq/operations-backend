@@ -20,6 +20,7 @@ from .serializers import (
     ZohoCustomerSerializer,
     ZohoVendorSerializer,
     SalesOrderSerializer,
+    SalesOrderGetSerializer,
     SalesOrderLineItemSerializer,
     PurchaseOrderSerializer,
     PurchaseOrderLineItemSerializer,
@@ -154,7 +155,7 @@ purchase_orders_allowed = [
     "Meeraq/PO/22-23/0021",
     "Meeraq/PO/22-23/0034",
     "Meeraq/PO/22-23/0036",
-    "Meeraq/PO/Caas/23-24/0021",
+    "Meeraq/PO/CaaS/23-24/0021",
     "Meeraq/PO/23-24/T/0014",
     "Meeraq/PO/23-24/T/0018",
     "Meeraq/PO/CaaS/23-24/0079",
@@ -164,6 +165,8 @@ purchase_orders_allowed = [
     "Meeraq/PO/CaaS/23-24/0028",
     "Meeraq/PO/CaaS/23-24/0093",
     "Meeraq/PO/CaaS/23-24/0091",
+    "Meeraq/PO/CaaS/23-24/0025",
+    "Meeraq/PO/CaaS/23-24/0029",
 ]
 
 
@@ -172,7 +175,6 @@ def get_all_so_of_po(purchase_order_id):
         mapping_instance = None
         for order_project_mapping in OrdersAndProjectMapping.objects.all():
             if str(purchase_order_id) in order_project_mapping.purchase_order_ids:
-
                 mapping_instance = order_project_mapping
                 break
         return mapping_instance
@@ -277,7 +279,6 @@ def fetch_sales_orders(organization_id, queryParams=""):
         if response.status_code == 200:
 
             sales_orders = response.json().get("salesorders", [])
-            # sales_orders = filter_sales_order_data(sales_orders)
             all_sales_orders.extend(sales_orders)
 
             page_context = response.json().get("page_context", {})
@@ -808,7 +809,7 @@ def add_multiple_so(data):
         sleep(1)
 
 
-def create_po_with_line_items(purchase_order_id):
+def create_po_with_line_items(purchase_order_id, is_guest_ctt=False):
     try:
         purchaseorder = get_purchase_order(purchase_order_id)
         if "shipment_date" in purchaseorder and not purchaseorder["shipment_date"]:
@@ -817,6 +818,7 @@ def create_po_with_line_items(purchase_order_id):
         serializer = PurchaseOrderSerializer(data=purchaseorder)
         if serializer.is_valid():
             po_instance = serializer.save()
+            po_instance.is_guest_ctt = is_guest_ctt
             for line_item in purchaseorder["line_items"]:
                 line_item_serializer = PurchaseOrderLineItemSerializer(data=line_item)
                 if line_item_serializer.is_valid():
@@ -1444,7 +1446,7 @@ def update_client_invoice_with_line_items(clientinvoice_id):
 def update_bill_with_line_items(bill_id):
     try:
         bill = get_bill(bill_id)
-        existing_bill = Bill.objects.get(invoice_id=bill_id)
+        existing_bill = Bill.objects.get(bill_id=bill_id)
         existing_line_items = existing_bill.bill_line_items.all()
         existing_line_item_ids = [
             line_item.line_item_id for line_item in existing_line_items
@@ -1519,9 +1521,9 @@ def create_or_update_so(so_id):
         update_so_with_line_items(so_id)
 
 
-def create_or_update_po(po_id):
+def create_or_update_po(po_id, is_guest_ctt=False):
     if not PurchaseOrder.objects.filter(purchaseorder_id=po_id).exists():
-        create_po_with_line_items(po_id)
+        create_po_with_line_items(po_id, is_guest_ctt)
     else:
         update_po_with_line_items(po_id)
 

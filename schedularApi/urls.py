@@ -8,6 +8,31 @@ urlpatterns = [
         views.get_all_Schedular_Projects,
         name="get-all-schedular-projects",
     ),
+    path("create-benchmark/", views.create_benchmark, name="create_benchmark"),
+    path("edit-benchmark/", views.edit_benchmark, name="edit_benchmark"),
+    path("get-benchmark/", views.get_all_benchmarks),
+    path("create-gmsheet/", views.create_gmsheet, name="create_gmsheet"),
+    path("update-status/", views.update_status, name="update-status"),
+    path("update-gmsheet/<int:id>/", views.update_gmsheet),
+    path(
+        "accept-gmsheet/<int:pk>/",
+        views.update_is_accepted_status,
+        name="update_is_accepted_status",
+    ),
+    path("delete-gmsheet/", views.delete_gmsheet, name="delete_gmsheet"),
+    path("all-gmsheet/", views.get_all_gmsheet),
+    path(
+        "offerings/<int:gmsheet_id>/",
+        views.get_offerings_by_gmsheet_id,
+        name="offerings-list",
+    ),
+    path("gmsheet/maxNumber/", views.max_gmsheet_number, name="max_gmsheet_number"),
+    path("gmsheet-by-sales/<int:sales_person_id>", views.get_gmsheet_by_sales),
+    path(
+        "current-or-next-year/",
+        views.get_current_or_next_year,
+        name="current_or_next_year",
+    ),
     path(
         "create_project_structure/<int:project_id>/",
         views.create_project_structure,
@@ -18,6 +43,10 @@ urlpatterns = [
     path("handover/create/", views.create_handover),
     path("handover/update/", views.update_handover),
     path("handover/<int:handover_id>/salesorders/", views.get_handover_salesorders),
+    path("create-assets/", views.create_asset),
+    path("assets/", views.get_all_assets),
+    path("delete-asset/", views.delete_asset, name="delete_asset"),
+    path("update-asset/", views.update_asset, name="update_asset"),
     path(
         "schedular-batches/",
         views.get_schedular_batches,
@@ -362,6 +391,18 @@ urlpatterns = [
         views.check_if_project_structure_edit_allowed,
     ),
     path(
+        "get-upcoming-coaching-and-live-session-data-for-learner/<int:user_id>/",
+        views.get_upcoming_coaching_and_live_session_data_for_learner,
+    ),
+    path(
+        "get-upcoming-assessment-data/<int:user_id>/",
+        views.get_upcoming_assessment_data,
+    ),
+    path(
+        "get-just-upcoming-session-data/<int:user_id>/",
+        views.get_just_upcoming_session_data,
+    ),
+    path(
         "get-all-project-purchase-orders-for-finance/<int:project_id>/<str:project_type>/",
         views.get_all_project_purchase_orders_for_finance,
     ),
@@ -371,11 +412,73 @@ urlpatterns = [
         name="get_project_and_handover",
     ),
     path("handovers/<int:sales_id>/", views.get_handovers, name="get_handovers"),
-    path("send-mail-to-coaches/", views.send_mail_to_coaches, name="send_mail_to_coaches"),
+    path(
+        "send-mail-to-coaches/", views.send_mail_to_coaches, name="send_mail_to_coaches"
+    ),
     path("handovers/pmo/", views.get_pmo_handovers, name="get_handovers"),
     path(
         "update-reminder-in-batch/<int:batch_id>/",
         views.update_reminder_in_batch,
         name="update_reminder_in_batch",
+    ),
+    path("action-items/add/", views.add_action_item, name="add_action_item"),
+    path(
+        "action-items/edit/<int:pk>/", views.edit_action_item, name="edit_action_item"
+    ),
+    path(
+        "action-items/update-status/<int:pk>/",
+        views.update_action_item_status,
+        name="update_action_item_status",
+    ),
+    path(
+        "action-items/delete/<int:pk>/",
+        views.delete_action_item,
+        name="delete_action_item",
+    ),
+    path("batches/learner/<int:pk>/", views.learner_batches, name="learner_batches"),
+    path(
+        "batch/action-items/<int:batch_id>/<int:learner_id>/<int:competency_id>/<int:behavior_id>/",
+        views.learner_action_items_in_batch_of_competency_and_behavior,
+        name="learner_action_items_in_batch",
+    ),
+    path(
+        "batch/action-items/<int:batch_id>/<int:learner_id>/",
+        views.learner_action_items_in_batch,
+        name="learner_action_items_in_batch",
+    ),
+    path(
+        "batch/action-items/<int:batch_id>/",
+        views.action_items_in_batch,
+        name="action_items_in_batch",
+    ),
+    path(
+        "batch/competencies-and-behaviours/<int:batch_id>/",
+        views.batch_competencies_and_behaviours,
+        name="batch_competencies_and_behaviours",
+    ),
+    path(
+        "batch/<int:batch_id>/competency/<int:competency_id>/behavior/<int:behavior_id>/movement/",
+        views.batch_competency_behavior_movement,
+    ),
+    path(
+        "batch/<int:batch_id>/competency/<int:competency_id>/movement/",
+        views.batch_competency_movement,
+    ),
+    path(
+        "all-actions/",
+        views.get_all_action_items,
+    ),
+    path(
+        "actions/<int:hr_id>/",
+        views.get_all_action_items_hr,
+    ),
+    path(
+        "get-batch-wise-assessment-data/<str:type>/<int:pk>/",
+        views.get_all_assessments_of_batch,
+        name="get_all_assessments_of_batch",
+    ),
+    path(
+        "get-upcoming-past-live-session-facilitator/<int:user_id>/",
+        views.get_upcoming_past_live_session_facilitator,
     ),
 ]
