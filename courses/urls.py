@@ -372,7 +372,7 @@ urlpatterns = [
     ),
     path("send-test-nudge/<int:nudge_id>/", views.send_nudge_to_email),
     path(
-        "nudges/<int:nudge_id>/duplicate/<int:batch_id>/",
+        "nudges/<int:nudge_id>/duplicate/<str:instance_type>/<int:instance_id>/",
         views.duplicate_nudge,
         name="duplicate_nudge",
     ),

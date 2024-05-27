@@ -22,7 +22,7 @@ from api.models import (
     Project,
     Engagement,
 )
-from schedularApi.models import HandoverDetails
+from schedularApi.models import HandoverDetails,GmSheet
 from api.serializers import CoachDepthOneSerializer
 from openpyxl import Workbook
 import json
@@ -3188,7 +3188,11 @@ def get_sales_order_data(request, salesorder_id):
         response = requests.get(api_url, headers=auth_header)
         if response.status_code == 200:
             sales_order = response.json().get("salesorder")
-            return Response(sales_order, status=status.HTTP_200_OK)
+            gm_sheet = None
+            existing_sales_order= SalesOrder.objects.filter(salesorder_id = sales_order['salesorder_id']).first()
+            if existing_sales_order:
+                gm_sheet = existing_sales_order.gm_sheet.id if existing_sales_order.gm_sheet else None
+            return Response({**sales_order, 'gm_sheet' : gm_sheet}, status=status.HTTP_200_OK)
         else:
             return Response(
                 {"error": "Failed to fetch sales order data"},
@@ -3355,6 +3359,15 @@ def create_sales_order(request):
         if response.status_code == 201:
             salesorder_created = response.json().get("salesorder")
             create_or_update_so(salesorder_created["salesorder_id"])
+            gm_sheet_id = request.data.get("gm_sheet", "")
+            if gm_sheet_id:
+                try:
+                    existing_sales_order = SalesOrder.objects.get(salesorder_id=salesorder_created["salesorder_id"])
+                    gm_sheet = GmSheet.objects.get(id = gm_sheet_id)
+                    existing_sales_order.gm_sheet = gm_sheet
+                    existing_sales_order.save()
+                except Exception as e:
+                    print(str(e))
             project_id = request.data.get("project_id", "")
             project_type = request.data.get("project_type", "")
             status = request.data.get("status", "")
