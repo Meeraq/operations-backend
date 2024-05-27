@@ -227,6 +227,11 @@ urlpatterns = [
         name="get_all_sales_orders",
     ),
     path(
+        "get-all-sales-orders-for-a-batch/<int:batch>/",
+        views.get_all_sales_orders_for_a_batch,
+        name="get_all_sales_orders_for_a_batch",
+    ),
+    path(
         "sales-orders/<str:sales_person_id>/",
         views.get_sales_persons_sales_orders,
         name="get_sales_persons_sales_orders",
@@ -421,4 +426,10 @@ urlpatterns = [
         views.get_line_items_detail_in_excel,
         name="get_line_items_detail_in_excel",
     ),
+    path(
+        "get-po-data-of-project/<int:project_id>/<str:project_type>/",
+        views.get_po_data_of_project,
+        name="get_po_data_of_project",
+    ),
+    
 ]

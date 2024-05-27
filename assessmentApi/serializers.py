@@ -16,6 +16,7 @@ from .models import (
     ActionItem,
     Behavior,
     BatchCompetencyAssignment,
+    ProjectAssessmentMapping,
 )
 
 
@@ -182,3 +183,47 @@ class BatchCompetencyAssignmentDepthOneSerializer(serializers.ModelSerializer):
         model = BatchCompetencyAssignment
         depth = 1
         fields = "__all__"
+
+
+class ActionItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ActionItem
+        fields = "__all__"
+
+
+class ActionItemDetailedSerializer(serializers.ModelSerializer):
+    learner_name = serializers.CharField(source="learner.name", allow_null=True)
+    batch_name = serializers.CharField(source="batch.name", allow_null=True)
+    competency_name = serializers.CharField(source="competency.name", allow_null=True)
+    behavior_name = serializers.CharField(source="behavior.name", allow_null=True)
+    project_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ActionItem
+        fields = "__all__"
+
+    def get_project_name(self, obj):
+        # Assuming project is related to batch, adjust accordingly if it's related differently
+        if obj.batch and obj.batch.project:
+            return obj.batch.project.name
+        return None
+
+
+class BatchCompetencyAssignmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BatchCompetencyAssignment
+        fields = "__all__"
+
+
+class BatchCompetencyAssignmentDepthOneSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BatchCompetencyAssignment
+        depth = 1
+        fields = "__all__"
+
+
+class ProjectAssessmentMappingSerializerDepthOne(serializers.ModelSerializer):
+    class Meta:
+        model = ProjectAssessmentMapping
+        fields = "__all__"
+        depth = 1
