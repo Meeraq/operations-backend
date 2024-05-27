@@ -131,7 +131,7 @@ from decimal import Decimal
 from collections import defaultdict
 from api.permissions import IsInRoles
 from time import sleep
-from ctt.models import Faculties, Batches
+from ctt.models import Faculties, Batches, BatchUsers
 
 env = environ.Env()
 
@@ -2136,7 +2136,7 @@ def create_purchase_order_for_outside_vendors(request):
         )
         if response.status_code == 201:
             purchaseorder_created = response.json().get("purchaseorder")
-
+            create_or_update_po(purchaseorder_created["purchaseorder_id"])
             try:
                 purchase_order = PurchaseOrder.objects.get(
                     purchaseorder_id=purchaseorder_created["purchaseorder_id"]
@@ -2150,7 +2150,7 @@ def create_purchase_order_for_outside_vendors(request):
                 )
                 if serializer.is_valid():
                     po_instance = serializer.save()
-                    ctt_pmo = CTTPmo.objects.filter(emai=request.user.username).first()
+                    ctt_pmo = CTTPmo.objects.filter(email=request.user.username).first()
                     po_instance.is_guest_ctt = True if ctt_pmo else False
                 else:
                     print(serializer.errors)
@@ -2929,6 +2929,28 @@ def get_all_sales_orders(request):
         ).data
         res = get_sales_orders_with_project_details(all_sales_orders)
         return Response(res, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_all_sales_orders_for_a_batch(request, batch):
+    try:
+        batch_user = BatchUsers.objects.using("ctt").get(id=batch)
+        sales_orders_queryset = SalesOrder.objects.filter(
+            custom_field_hash__cf_ctt_batch=batch_user.batch.name
+        )
+        all_sales_orders = SalesOrderGetSerializer(
+            sales_orders_queryset, many=True
+        ).data
+        res = get_sales_orders_with_project_details(all_sales_orders)
+        return Response(res, status=status.HTTP_200_OK)
+    except BatchUsers.DoesNotExist:
+        return Response(
+            {"error": "Batch user not found"}, status=status.HTTP_404_NOT_FOUND
+        )
     except Exception as e:
         print(str(e))
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -4920,3 +4942,32 @@ def get_sales_of_each_program(request):
     except Exception as e:
         print(str(e))
         return Response({"error": "Failed to get data"})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_po_data_of_project(request, project_id, project_type):
+    try:
+        all_po_id = set()
+        expenses = None
+        if project_type == "skill_training":
+            expenses = Expense.objects.filter(batch__project__id=project_id)
+        elif project_type == "CAAS":
+            expenses = Expense.objects.filter(session__project__id=project_id)
+        else:
+            return Response(
+                {"error": "Invalid project_type"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        for expense in expenses:
+            all_po_id.add(expense.purchase_order_id)
+        total_sum=0
+        purchase_orders = PurchaseOrder.objects.filter(purchaseorder_id__in=all_po_id)
+        for purchase_order in purchase_orders:
+            total_sum += purchase_order.total * purchase_order.exchange_rate
+        purchase_orders_data = {
+            "total_sum": total_sum
+        }
+        return Response(purchase_orders_data, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -64,5 +64,10 @@ urlpatterns = [
         views.get_all_ctt_faculties,
         name="get_all_ctt_faculties",
     ),
+        path(
+        "get-the-profitability-of-a-batch/<int:batch_id>/",
+        views.get_the_profitability_of_a_batch,
+        name="get_the_profitability_of_a_batch",
+    ),
    
 ]
