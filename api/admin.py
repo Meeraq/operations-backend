@@ -43,6 +43,7 @@ from .models import (
     TableHiddenColumn,
     CTTPmo,
     CoachProfileShare,
+    UserFeedback,
 )
 
 from schedularApi.models import ProjectContract, CoachContract
@@ -94,3 +95,4 @@ admin.site.register(Sales)
 admin.site.register(TableHiddenColumn)
 admin.site.register(CTTPmo)
 admin.site.register(CoachProfileShare)
+admin.site.register(UserFeedback)
