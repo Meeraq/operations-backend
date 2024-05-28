@@ -4893,7 +4893,6 @@ class SessionCountsForAllLearners(APIView):
 
                 completed_sessions_count = SessionRequestCaas.objects.filter(
                     status="completed",
-                    billable_session_number__isnull=False,
                     learner__id=learner_id,
                     is_archive=False,
                 ).count()
@@ -4901,7 +4900,6 @@ class SessionCountsForAllLearners(APIView):
                 total_sessions_count = SessionRequestCaas.objects.filter(
                     learner__id=learner_id,
                     # project_id = engagement.project_id
-                    billable_session_number__isnull=False,
                     is_archive=False,
                 ).count()
 
@@ -8522,9 +8520,7 @@ def edit_project_caas(request, project_id):
                             assessment_timing="post"
                         ).first()
                     )
-                    pre_assessment.questionnaire = (
-                        mapping_post_assessment.questionnaire
-                    )
+                    pre_assessment.questionnaire = mapping_post_assessment.questionnaire
                     pre_assessment.email_reminder = (
                         mapping_post_assessment.email_reminder
                     )
@@ -8596,9 +8592,7 @@ def edit_project_caas(request, project_id):
                             assessment_timing="pre"
                         ).first()
                     )
-                    post_assessment.questionnaire = (
-                        mapping_pre_assessment.questionnaire
-                    )
+                    post_assessment.questionnaire = mapping_pre_assessment.questionnaire
                     post_assessment.email_reminder = (
                         mapping_pre_assessment.email_reminder
                     )
@@ -12655,5 +12649,3 @@ def get_user_feedback_repsonses(request):
         return Response(all_user_feedback_data_serializer.data)
     except Exception as e:
         return Response({"error": str(e)}, status=500)
-
-
