@@ -76,6 +76,8 @@ from .views import (
     ResponseDownloadForAllParticipants,
     CreateCoachingAssessmentAndAddMultipleParticipants,
     GetAssessmentOfCoachingProject,
+    StoreTempResponseParticipantObserver,
+    GetTempResponseParticipantObserver,
 )
 
 
@@ -364,5 +366,13 @@ urlpatterns = [
     path(
         "get-assessment-of-coaching-project/<int:project_id>/",
         GetAssessmentOfCoachingProject.as_view(),
+    ),
+    path(
+        "store-temp-password/<str:user_type>/<str:unique_id>/",
+        StoreTempResponseParticipantObserver.as_view(),
+    ),
+    path(
+        "get-temp-password/<str:user_type>/<str:unique_id>/",
+        GetTempResponseParticipantObserver.as_view(),
     ),
 ]
