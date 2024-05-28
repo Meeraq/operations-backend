@@ -17,6 +17,7 @@ from api.models import (
 )
 from django.utils import timezone
 from django.contrib.auth.models import User
+from datetime import datetime
 
 
 # Create your models here.
@@ -371,22 +372,14 @@ class Assets(models.Model):
     description = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=255, choices=STATUS_CHOICES, default="idle")
     updates = models.JSONField(default=list, blank=True)
-
-
+    
 class Benchmark(models.Model):
-    year = models.CharField(max_length=9, blank=True, null=True)
-    caas_benchmark = models.CharField(max_length=3, blank=True, null=True)
-    seeq_benchmark = models.CharField(max_length=3, blank=True, null=True)
-    both_benchmark = models.CharField(max_length=3, blank=True, null=True)
+    year = models.CharField(max_length=9, default=str(datetime.now().year))
+    project_type = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    updated_at = models.DateTimeField(auto_now=True)  # Add the updated_at field
 
 class GmSheet(models.Model):
-    PROJECT_TYPE_CHOICES = [
-        ("CAAS", "CAAS"),
-        ("SEEQ", "Skill Training"),
-        ("Coaching + Traning", "Coaching+Training"),
-    ]
     DEAL_STATUS_CHOICES = [
         ("pending", "Pending"),
         ("won", "Won"),
@@ -427,6 +420,7 @@ class Offering(models.Model):
     revenue_structure = models.JSONField(default=list, blank=True, null=True)
     cost_structure = models.JSONField(default=list, blank=True, null=True)
     gross_margin = models.CharField(max_length=100, blank=True, null=True)
+    is_won = models.BooleanField(default=False)
 
 
 class HandoverDetails(models.Model):

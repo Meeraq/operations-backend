@@ -200,6 +200,7 @@ from schedularApi.models import (
     Expense,
     CoachContract,
     ProjectContract,
+    Benchmark
 )
 from schedularApi.serializers import (
     SchedularProjectSerializer,
@@ -8758,47 +8759,85 @@ class StandardizedFieldRequestAPI(APIView):
             }
         )
 
-
 class StandardFieldAddValue(APIView):
-    permission_classes = [IsAuthenticated, IsInRoles("pmo","finance","leader")]
+    permission_classes = [IsAuthenticated, IsInRoles("pmo", "finance", "leader")]
 
     def post(self, request):
         try:
             with transaction.atomic():
                 # Extracting data from request body
                 field_name = request.data.get("field_name")
-                print(field_name)
                 option_value = request.data.get("optionValue").strip()
+
+                # Validate the input data
+                if not field_name or not option_value:
+                    return Response({"error": "Field name and option value are required."}, status=400)
 
                 # Get or create the StandardizedField instance for the given field_name
                 standardized_field, created = StandardizedField.objects.get_or_create(
                     field=field_name
                 )
-                print(standardized_field, option_value, standardized_field.values)
+
                 # Check if the option_value already exists in the values list of the standardized_field
                 if option_value not in standardized_field.values:
                     # Add the option_value to the values list and save the instance
                     standardized_field.values.append(option_value)
                     standardized_field.save()
+
+                    # Check if the field_name is 'project_type'
+                    if field_name == 'project_type':
+                        # Check if there are Benchmark instances
+                        if not Benchmark.objects.exists():
+                            # Create a Benchmark instance with the project_type key
+                            Benchmark.objects.create(project_type={option_value: ""})
+                            return Response(
+                                {"message": f"Benchmark created with {option_value} in project_type."},
+                                status=200,
+                            )
+
+                        # Filter Benchmark instances by the current year
+                        current_year = datetime.now().year
+                        benchmarks = Benchmark.objects.filter(year=current_year)
+
+                        if benchmarks.exists():
+                            # Update the project_type field of existing Benchmark instances
+                            for benchmark in benchmarks:
+                                if not benchmark.project_type:
+                                    benchmark.project_type = {}  # Ensure project_type is a dictionary
+                                benchmark.project_type[option_value] = ""
+                                benchmark.save()
+
+                            return Response(
+                                {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field for the current year."},
+                                status=200,
+                            )
+                        else:
+                            # No Benchmark instances for the current year, create one and update project_type
+                            Benchmark.objects.create(year=current_year, project_type={option_value: ""})
+                            return Response(
+                                {"message": f"Benchmark created with {option_value} in project_type for the current year."},
+                                status=200,
+                            )
+
+                    # Return success response for other field names
+                    return Response(
+                        {"message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."},
+                        status=200,
+                    )
+
                 else:
                     # Return error response if the option_value already exists
                     return Response({"error": "Value already present."}, status=400)
 
-                # Return success response
-                return Response(
-                    {
-                        "message": f"Value Added to {FIELD_NAME_VALUES[field_name]} field."
-                    },
-                    status=200,
-                )
-
         except Exception as e:
-            print('hello',str(e))
+            # Log the exception
+            print('hello', str(e))
             # Return error response if any exception occurs
             return Response(
                 {"error": "Failed to add value."},
                 status=500,
             )
+
 
 
 class StandardFieldEditValue(APIView):
@@ -8822,10 +8861,17 @@ class StandardFieldEditValue(APIView):
                     # Check if the previous_value exists in the values list of the standardized_field
                     if previous_value in standardized_field.values:
                         # Update the value if it exists
-
                         index = standardized_field.values.index(previous_value)
                         standardized_field.values[index] = new_value
                         standardized_field.save()
+
+                        # If the field_name is 'project_type', update the corresponding key in the project_type field of Benchmark instances
+                        if field_name == 'project_type':
+                            benchmarks = Benchmark.objects.all()
+                            for benchmark in benchmarks:
+                                if previous_value in benchmark.project_type:
+                                    benchmark.project_type[new_value] = benchmark.project_type.pop(previous_value)
+                                    benchmark.save()
 
                         # Return success response
                         return Response(
@@ -8850,6 +8896,7 @@ class StandardFieldEditValue(APIView):
                     )
 
         except Exception as e:
+            # Log the exception
             print(str(e))
             # Return error response if any exception occurs
             return Response(
@@ -8971,6 +9018,17 @@ class StandardFieldDeleteValue(APIView):
                 # Retrieve the StandardizedField instance for the given field_name
                 standardized_field = StandardizedField.objects.get(field=field_name)
 
+                # Check if the field_name is 'project_type'
+                if field_name == 'project_type':
+                    # Retrieve all Benchmark instances
+                    benchmarks = Benchmark.objects.all()
+                    for benchmark in benchmarks:
+                        # Check if the option_value exists in the project_type field of the Benchmark instance
+                        if option_value in benchmark.project_type:
+                            # Remove the option_value from the project_type field and save the Benchmark instance
+                            del benchmark.project_type[option_value]
+                            benchmark.save()
+
                 # Check if the option_value exists in the values list of the standardized_field
                 if option_value in standardized_field.values:
                     # Remove the option_value from the values list and save the instance
@@ -8993,13 +9051,13 @@ class StandardFieldDeleteValue(APIView):
             return Response({"error": "Field not found."}, status=404)
 
         except Exception as e:
+            # Log the exception
             print(str(e))
             # Return error response if any other exception occurs
             return Response(
                 {"error": "Failed to delete value."},
                 status=500,
             )
-
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated, IsInRoles("pmo")])

@@ -765,7 +765,8 @@ class StandardizedField(models.Model):
         ("country", "Country"),
         ("topic", "Topic"),
         ("product_type","Product Type"),
-        ("category","Category")
+        ("category","Category"),
+        ("project_type","Project Type"),
     )
 
     field = models.CharField(max_length=50, choices=FIELD_CHOICES, blank=True)
