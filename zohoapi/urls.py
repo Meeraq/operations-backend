@@ -362,7 +362,7 @@ urlpatterns = [
         name="update_sales_order_status",
     ),
     path(
-        "get-total-revenue-and-cost",
+        "get-total-revenue-and-cost/<int:project_id>/<str:project_type>/",
         views.get_total_revenue_and_cost,
         name="get_total_revenue_and_cost",
     ),
