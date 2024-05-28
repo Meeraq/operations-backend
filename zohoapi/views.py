@@ -584,7 +584,7 @@ def get_invoices_with_status(request, vendor_id, purchase_order_id):
                         if (
                             bill.get(env("INVOICE_FIELD_NAME"))
                             == invoice["invoice_number"]
-                            and bill.get("vendor_id") == invoice["vendor_id"]
+                            and bill.get("vendor_id") == invoice["vendor_id"] and bill.get('date') == invoice['invoice_date']
                         )
                     ),
                     None,
@@ -722,13 +722,23 @@ def get_line_items_for_template(line_items):
         line_item["igst_tax"] = get_tax(line_item, "IGST")
     return res
 
+def get_financial_year(date):
+    # Assuming financial year starts from April
+    if date.month >= 4:
+        return date.year, date.year + 1
+    else:
+        return date.year - 1, date.year
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsInRoles("vendor")])
 def add_invoice_data(request):
+    invoice_date = datetime.strptime(request.data["invoice_date"], "%Y-%m-%d").date()
+    start_year, end_year = get_financial_year(invoice_date)
     invoices = InvoiceData.objects.filter(
         vendor_id=request.data["vendor_id"],
         invoice_number=request.data["invoice_number"],
+        invoice_date__range=(f"{start_year}-04-01", f"{end_year}-03-31")
     )
     hsn_or_sac = request.data.get("hsn_or_sac", None)
     if hsn_or_sac:
@@ -1292,7 +1302,7 @@ def fetch_invoices(organization_id):
                 for bill in all_bills
                 if (
                     bill.get(env("INVOICE_FIELD_NAME")) == invoice["invoice_number"]
-                    and bill.get("vendor_id") == invoice["vendor_id"]
+                    and bill.get("vendor_id") == invoice["vendor_id"] and bill.get('date') == invoice['invoice_date']
                 )
             ),
             None,
@@ -1313,6 +1323,7 @@ def fetch_invoices_db():
         bills = Bill.objects.filter(
             vendor_id=invoice["vendor_id"],
             custom_field_hash__cf_invoice=invoice["invoice_number"],
+            date=invoice['invoice_date']
         )
         matching_bill = bills.first()
         all_invoices.append(
@@ -1364,6 +1375,7 @@ def get_invoice(request, invoice_id):
         bills = Bill.objects.filter(
             vendor_id=res["vendor_id"],
             custom_field_hash__cf_invoice=res["invoice_number"],
+            date=invoice['invoice_date']
         )
         matching_bill = bills.first()
         res["bill"] = {"status": matching_bill.status} if matching_bill else None
@@ -2801,7 +2813,7 @@ def get_invoices_for_vendor(request, vendor_id, purchase_order_id):
                         if (
                             bill.get(env("INVOICE_FIELD_NAME"))
                             == invoice["invoice_number"]
-                            and bill.get("vendor_id") == invoice["vendor_id"]
+                            and bill.get("vendor_id") == invoice["vendor_id"] and bill.get('date') == invoice['invoice_date']
                         )
                     ),
                     None,
@@ -3150,6 +3162,7 @@ def get_ctt_invoices(request):
             bills = Bill.objects.filter(
                 vendor_id=invoice["vendor_id"],
                 custom_field_hash__cf_invoice=invoice["invoice_number"],
+                date=invoice['invoice_date']
             )
             matching_bill = bills.first()
             all_invoices.append(
