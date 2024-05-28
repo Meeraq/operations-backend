@@ -578,7 +578,7 @@ def weekly_invoice_approval_reminder():
                         if (
                             bill.get(env("INVOICE_FIELD_NAME"))
                             == invoice["invoice_number"]
-                            and bill.get("vendor_id") == invoice["vendor_id"]
+                            and bill.get("vendor_id") == invoice["vendor_id"] and bill.get('date') == invoice['invoice_date']
                         )
                     ),
                     None,
