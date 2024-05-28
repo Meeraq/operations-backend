@@ -1822,6 +1822,64 @@ def send_assessment_invitation_mail_on_click(data):
         print(str(e))
 
 
+@shared_task
+def send_whatsapp_reminder_assessment_on_click(data):
+    participant_observer_ids = data.get("participant_observers")
+    assessment = Assessment.objects.get(id=data.get("assessment_id"))
+    participants_observers = assessment.participants_observers.filter(id__in=participant_observer_ids)
+    for participant_observer_mapping in participants_observers:
+        participant = participant_observer_mapping.participant
+        try:
+            participant_response = ParticipantResponse.objects.filter(
+                participant=participant, assessment=assessment
+            )
+            if not participant_response.exists():
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    participant=participant, assessment=assessment
+                )
+                unique_id = participant_unique_id.unique_id
+                assessment_link = (
+                    f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{unique_id}"
+                )
+                send_whatsapp_message("learner", participant, assessment, unique_id)
+        except ObjectDoesNotExist:
+            print(f"No unique ID found for participant {participant.name}")
+        sleep(2)
+
+@shared_task
+def send_email_reminder_assessment_on_click(data):
+    participant_observer_ids = data.get("participant_observers")
+    assessment = Assessment.objects.get(id=data.get("assessment_id"))
+    participants_observers = assessment.participants_observers.filter(id__in=participant_observer_ids)
+    for participant_observer_mapping in participants_observers:
+        participant = participant_observer_mapping.participant
+        try:
+            participant_response = ParticipantResponse.objects.filter(
+                participant=participant, assessment=assessment
+            )
+            if not participant_response.exists():
+                participant_unique_id = ParticipantUniqueId.objects.get(
+                    participant=participant, assessment=assessment
+                )
+                unique_id = participant_unique_id.unique_id
+                assessment_link = (
+                    f"{env('ASSESSMENT_URL')}/observer/meeraq/assessment/{unique_id}"
+                )
+                send_mail_templates(
+                    "assessment/assessment_reminder_mail_to_participant.html",
+                    [participant.email],
+                    "Meeraq - Assessment Reminder !",
+                    {
+                        "assessment_name": assessment.participant_view_name,
+                        "participant_name": participant.name.capitalize(),
+                        "link": assessment_link,
+                    },
+                    [],
+                )
+        except ObjectDoesNotExist:
+            print(f"No unique ID found for participant {participant.name}")
+        sleep(2)
+
 # returns start and end time of today in format - YYYY-MM-DDTHH:mm:ss.sssZ
 def get_current_date_start_and_end_time_in_string():
     now = timezone.now()
