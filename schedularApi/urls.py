@@ -28,7 +28,10 @@ urlpatterns = [
         name="offerings-list",
     ),
     path("gmsheet/maxNumber/", views.max_gmsheet_number, name="max_gmsheet_number"),
+    path("asset/maxNumber/", views.max_asset_number, name="max_asset_number"),
     path("gmsheet-by-sales/<int:sales_person_id>", views.get_gmsheet_by_sales),
+    path('create-employee/', views.create_employee, name='employee-create'),
+    path('employees/', views.get_employees, name='get_employees'),
     path(
         "current-or-next-year/",
         views.get_current_or_next_year,

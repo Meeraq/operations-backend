@@ -1375,7 +1375,7 @@ def get_invoice(request, invoice_id):
         bills = Bill.objects.filter(
             vendor_id=res["vendor_id"],
             custom_field_hash__cf_invoice=res["invoice_number"],
-            date=invoice['invoice_date']
+            date=invoice.invoice_date
         )
         matching_bill = bills.first()
         res["bill"] = {"status": matching_bill.status} if matching_bill else None
