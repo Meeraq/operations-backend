@@ -679,7 +679,7 @@ def update_is_accepted_status(request, pk):
                 template_name,
                 (
                     [gm_sheet.sales.email]
-                    if settings.ENVIRONMENT == "PRODUCTION"
+                    if env("ENVIRONMENT") == "PRODUCTION"
                     else ["naveen@meeraq.com"]
                 ),
                 subject,
