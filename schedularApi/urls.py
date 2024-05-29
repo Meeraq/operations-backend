@@ -9,7 +9,8 @@ urlpatterns = [
         name="get-all-schedular-projects",
     ),
     path("create-benchmark/", views.create_benchmark, name="create_benchmark"),
-    path("edit-benchmark/", views.edit_benchmark, name="edit_benchmark"),
+    # path("edit-benchmark/", views.edit_benchmark, name="edit_benchmark"),
+    path('update-benchmark/', views.update_benchmark, name='update_benchmark'),
     path("get-benchmark/", views.get_all_benchmarks),
     path("create-gmsheet/", views.create_gmsheet, name="create_gmsheet"),
     path("update-status/", views.update_status, name="update-status"),
@@ -445,6 +446,11 @@ urlpatterns = [
         "batch/action-items/<int:batch_id>/<int:learner_id>/",
         views.learner_action_items_in_batch,
         name="learner_action_items_in_batch",
+    ),
+    path(
+        "action-items/session/<int:session_id>/",
+        views.learner_action_items_in_session,
+        name="learner_action_items_in_session",
     ),
     path(
         "batch/action-items/<int:batch_id>/",
