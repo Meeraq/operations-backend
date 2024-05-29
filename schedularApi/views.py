@@ -104,6 +104,8 @@ from .serializers import (
     HandoverDetailsSerializerWithOrganisationName,
     AssetsSerializer,
     GmSheetDetailedSerializer,
+    AssetsDetailedSerializer,
+    EmployeeSerializer,
     GmSheetSalesOrderExistsSerializer
 )
 from .models import (
@@ -130,6 +132,8 @@ from .models import (
     GmSheet,
     Benchmark,
     Assets,
+    Employee
+    
 )
 from api.serializers import (
     FacilitatorSerializer,
@@ -909,7 +913,8 @@ def create_asset(request):
         update_entry = {
             "date": str(datetime.now()),
             "status": instance.status,
-            "assigned_to": instance.assigned_to,
+            "assigned_to": instance.assigned_to.id,
+            "assigned_to_name" : instance.assigned_to.first_name + " " + instance.assigned_to.last_name  
         }
         instance.updates.append(update_entry)
         instance.save()
@@ -921,7 +926,7 @@ def create_asset(request):
 def get_all_assets(request):
     if request.method == "GET":
         assets = Assets.objects.all().order_by("-update_at")
-        serializer = AssetsSerializer(assets, many=True)
+        serializer = AssetsDetailedSerializer(assets, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -8009,6 +8014,45 @@ def max_gmsheet_number(request):
 
     return JsonResponse({"max_number": next_gmsheet_number})
 
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def max_asset_number(request):
+    try:
+        # Get the latest gmsheet_number
+        latest_asset = Assets.objects.latest("created_at")
+
+        latest_number = int(
+            latest_asset.asset_id[3:]
+        )  # Extract the number part and convert to integer
+        next_number = latest_number + 1
+        next_asset_number = (
+            f"NUM{next_number:03}"  # Format the next number to match 'PRO001' format
+        )
+    except Assets.DoesNotExist:
+        # If no GmSheet objects exist, create the first gmsheet_number as 'PRO001'
+        next_asset_number = "NUM001"
+        print(next_asset_number)
+    return JsonResponse({"max_number": next_asset_number})
+
+@api_view(['GET'])
+def get_employees(request):
+    try:
+        employees = Employee.objects.all()
+        serializer = EmployeeSerializer(employees, many=True)
+        return JsonResponse(serializer.data, safe=False)
+    except ObjectDoesNotExist:
+        return JsonResponse({'error': 'Employees not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+def create_employee(request):
+    serializer = EmployeeSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
