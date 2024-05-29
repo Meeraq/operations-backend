@@ -421,6 +421,7 @@ class Offering(models.Model):
     cost_structure = models.JSONField(default=list, blank=True, null=True)
     gross_margin = models.CharField(max_length=100, blank=True, null=True)
     is_won = models.BooleanField(default=False)
+    total_profit = models.CharField(max_length=100, blank=True, null=True)
 
 
 class HandoverDetails(models.Model):
