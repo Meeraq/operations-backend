@@ -8797,7 +8797,7 @@ class StandardFieldAddValue(APIView):
 
                         # Filter Benchmark instances by the current year
                         current_year = datetime.now().year
-                        benchmarks = Benchmark.objects.filter(year=current_year)
+                        benchmarks = Benchmark.objects.all()
 
                         if benchmarks.exists():
                             # Update the project_type field of existing Benchmark instances

@@ -526,6 +526,34 @@ def update_benchmark(request):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+@api_view(['POST'])
+def create_benchmark(request):
+    year = request.data.get('year')
+    if not year:
+        return Response({'error': 'Year is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Fetch all existing benchmarks
+    existing_benchmarks = Benchmark.objects.all()
+    
+    # Gather project_type keys from existing benchmarks
+    project_type_keys = set()
+    for benchmark in existing_benchmarks:
+        project_type_keys.update(benchmark.project_type.keys())
+    
+    # Create new project_type with keys and empty string values
+    project_type = {key: "" for key in project_type_keys}
+    
+    data = {
+        'year': year,
+        'project_type': project_type,
+    }
+
+    serializer = BenchmarkSerializer(data=data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 # @api_view(["POST"])
 # @permission_classes([IsAuthenticated, IsInRoles("leader")])

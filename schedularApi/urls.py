@@ -8,7 +8,7 @@ urlpatterns = [
         views.get_all_Schedular_Projects,
         name="get-all-schedular-projects",
     ),
-    # path("create-benchmark/", views.create_benchmark, name="create_benchmark"),
+    path("create-benchmark/", views.create_benchmark, name="create_benchmark"),
     # path("edit-benchmark/", views.edit_benchmark, name="edit_benchmark"),
     path('update-benchmark/', views.update_benchmark, name='update_benchmark'),
     path("get-benchmark/", views.get_all_benchmarks),
